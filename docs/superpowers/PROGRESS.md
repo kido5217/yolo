@@ -1,10 +1,10 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-17 (T10–T12 done, executing M3 — active: Task 13)
+**Updated:** 2026-08-17 (T10–T13 done, executing M3 — active: Task 14)
 
 ## Where we are
 
-Plan approved by user ("LGTM"). Executing inline on branch `plan`, one task at a time, strict 5-step TDD per plan, commit per task. **M0, M1, M2 COMPLETE.** M3 in progress: **Tasks 10–12 DONE** (glob+permission, tool framework + truncation + read, write + edit); active is **Task 13: internal/tool — glob + grep tools**.
+Plan approved by user ("LGTM"). Executing inline on branch `plan`, one task at a time, strict 5-step TDD per plan, commit per task. **M0, M1, M2 COMPLETE.** M3 in progress: **Tasks 10–13 DONE** (glob+permission, tool framework + truncation + read, write + edit, glob + grep tools); active is **Task 14: internal/tool — bash + todowrite tools**.
 
 ## Resume instructions (next session)
 
@@ -33,6 +33,7 @@ Plan approved by user ("LGTM"). Executing inline on branch `plan`, one task at a
 | M3 Task 10: internal/glob matcher + internal/permission (Evaluate findLast, Hidden, DoomLoopDue, build/plan/yolo matrices, ask/reply Service with park/persist/cascade) | `e4f23cd` |
 | M3 Task 11: internal/tool — framework (Limits/Env/Output/Tool/Registry/Visible/SchemaFor), Truncate (upstream tail() port, UTF-8-boundary cut), read tool (file/dir/binary/miss-suggest, desc sha256-pinned) | `7130344` |
 | M3 Task 12: internal/tool — write (MkdirAll, meta {added,removed} via LCS line diff in write.go) + edit (exact-match replacer, per-file sync.Map mutex per upstream Semaphore, upstream error strings verbatim, empty-oldString→create path kept); desc/write.txt + desc/edit.txt byte-verbatim (hash-verified) | `3ad74dc` |
+| M3 Task 13: internal/tool — glob (WalkDir, hidden entries skipped, sorted, limit 100, missing/`File` path → error `glob path must be a directory: {search}`) + grep (RE2, hidden-skipped walk per Step-3 deviation note, >10MB + NUL-binary skips, include via `glob.Match` on rel, limit 100 with pinned "Found N matches (more matches available)" + truncation note, file root → its dir, missing root → "No files found"); desc/glob.txt + desc/grep.txt byte-verbatim (hash-verified). In-plan contradictions resolved per last-stated call: grep skips dotfiles (Step-3 deviation note overrides "dotfiles searched"); glob missing dir → explicit error (spec parenthetical overrides "empty result") | `cc29f28` |
 
 ## Plan resolutions & flags to raise at handoff (severity)
 
@@ -57,7 +58,7 @@ Plan approved by user ("LGTM"). Executing inline on branch `plan`, one task at a
 
 ## Active
 
-**Task 13 (M3): `internal/tool` — glob + grep tools.** Consumes Task 11 framework + `internal/glob` (Task 10 matcher). Creates `glob.go`, `grep.go`, `globgrep_test.go`, `desc/glob.txt`, `desc/grep.txt`. Upstream refs: `/tmp/opencode-upstream/packages/opencode/src/tool/{glob.ts,glob.txt,grep.ts,grep.txt}` (re-clone with `git clone --depth 1 https://github.com/sst/opencode /tmp/opencode-upstream` and pin v1.18.18 if wiped). NOTE: any new `//go:embed` scalar target on this host must use `import _ "embed"` (see deviation 12).
+**Task 14 (M3): `internal/tool` — bash + todowrite tools.** Consumes Task 11 framework + `storage`; modifies `internal/protocol/session.go` (add `Todo`), `internal/storage/migrate.go` (schema v2: todo table), `internal/storage/dao.go` (`SaveTodos`/`GetTodos`); Env gains `Storage *storage.DB` + `SessionID string`. Creates `bash.go`, `shell.go` (persistent `Shell`: Exec/Cwd/Close, test-overridable executable), `todowrite.go`, `bash_test.go`, `todowrite_test.go`, `desc/bash.txt`, `desc/todowrite.txt`. `Registry()` = all 7. Upstream refs: `/tmp/opencode-upstream/packages/opencode/src/tool/{bash.ts,bash.txt,todo.ts,todowrite.txt}` (re-clone with `git clone --depth 1 https://github.com/sst/opencode /tmp/opencode-upstream` and pin v1.18.18 if wiped). NOTE: any new `//go:embed` scalar target on this host must use `import _ "embed"` (see deviation 12).
 
 ## Plan deviations logged so far (established pattern: tests define contract)
 
@@ -74,10 +75,11 @@ Plan approved by user ("LGTM"). Executing inline on branch `plan`, one task at a
 11. T11: test I authored (plan left it to the implementer) `TestTruncateSingleLineUTF8Cut` — verified against upstream `shell.ts tail()`: a single over-long line keeps its **last** MaxBytes bytes advanced to a UTF-8 boundary (40000×U+00E9 → keep 51200B = 25600 runes; 17100×U+65E5 mid-rune cut → 51198B = 17066 runes). Initial expectation of 14400 was the *removed* rune count, not kept.
 12. T11 (environmental): on this host, a **plain** `import "embed"` + a scalar (`string`/`[]byte`) `//go:embed` fails typecheck with `embed imported and not used` under **both** installed toolchains (go1.26.5 via mise, and go1.25.10 via GOTOOLCHAIN) — an upstream-unused-import exemption is missing from the bundled types2 for scalar embed targets here (`embed.FS` targets work). Workaround used in `read.go`: `import _ "embed"` (still embeds content verbatim; runtime-verified on both toolchains). Flag: revisit if a future toolchain restores the plain-import path; the pinned sha256 pin in `TestDescPinned` guards against silent content drift regardless. `write.go`/`edit.go` reuse the same blank-import workaround.
 13. T12: plan test bug — `TestEditPatternsAndExternal` expected `Patterns(raw)` to return the env.Dir-relative path (`sub/f.txt`), but the committed Task 11 interface (tool.go:72-73) takes raw args only: paths are emitted **as given**; the engine (Task 17) resolves/relativizes against Env.Dir (read does the same). Test fixed to assert as-given. Corollary design: edit `Patterns`/`External` parse only `filePath` (via `editFilePath`), matching the plan test's `{"filePath": f}`-only args and upstream (patterns built from the path alone); full old/new validation happens in `Run`.
+14. T13: plan test bugs — (a) `TestGlobTool` expected 3 lines for `**/*.go`, but only 2 files can match (`.git/skip.go` is excluded by the hidden-skip rule the same test asserts; `a/z.md` is not `.go`) → fixed to 2. (b) `TestGrepTool` carried a dead `lines` variable (Go compile error: declared and not used) + a stray leading space in `joined :=` → dropped the dead loop, kept `joined`. Implementation note: `Patterns`/`External` for glob/grep emit the as-given `path` (or `["*"]` when omitted) per the raw-args-only interface; the engine resolves in Task 17.
 
 ## Open items
 
-- [ ] Execute Tasks 13–30 inline (per task commit messages in the plan)
+- [ ] Execute Tasks 14–30 inline (per task commit messages in the plan)
 - [ ] Task 30 tag `v0.1.0` ONLY with explicit user go-ahead (versioning: 0.1.0 = current scope; out-of-scope features → 0.2.0, …)
 - [ ] On-demand live e2e vs `ai.kido.ws` (scripts/e2e-live.sh) — user-run, never CI
 - [ ] Flags for user at handoff: plan-matrix third `edit` rule moved to engine (T10 note); CallID not persisted (T5); host toolchain scalar `//go:embed` typecheck gap → `import _ "embed"` workaround (T11 note 12)
