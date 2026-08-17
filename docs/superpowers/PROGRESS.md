@@ -1,10 +1,10 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-17 (M0–M2 done, executing M3)
+**Updated:** 2026-08-17 (M0–M2 done + T10 done, executing M3)
 
 ## Where we are
 
-Plan approved by user ("LGTM"). Executing inline on branch `plan`, one task at a time, strict 5-step TDD per plan, commit per task. **M0, M1, M2 COMPLETE.** Currently starting **M3 (Task 10: internal/glob + internal/permission)**.
+Plan approved by user ("LGTM"). Executing inline on branch `plan`, one task at a time, strict 5-step TDD per plan, commit per task. **M0, M1, M2 COMPLETE.** M3 in progress: **Task 10 (glob + permission) DONE**; next is **Task 11: internal/tool — framework, truncation, read tool**.
 
 ## Resume instructions (next session)
 
@@ -29,6 +29,7 @@ Plan approved by user ("LGTM"). Executing inline on branch `plan`, one task at a
 | M2 Task 7: llm Driver interface + OpenAI chat-completions SSE driver | `03fdb36` |
 | M2 Task 8: Anthropic Messages SSE driver (+ shared test helpers) | `765293c` |
 | M2 Task 9: provider registry — kido live/fallback, zen catalog filter+cache (frozen fixture; 91/64/57/42+15/7 gate verified) | `62edde5` |
+| M3 Task 10: internal/glob matcher + internal/permission (Evaluate findLast, Hidden, DoomLoopDue, build/plan/yolo matrices, ask/reply Service with park/persist/cascade) | `e4f23cd` |
 
 ## Plan resolutions & flags to raise at handoff (severity)
 
@@ -53,7 +54,7 @@ Plan approved by user ("LGTM"). Executing inline on branch `plan`, one task at a
 
 ## Active
 
-**Task 10 (M3): `internal/glob` + `internal/permission`** — matcher, evaluation, matrices, ask/reply service. Plan slice starts ~line 2752. Key plan notes inside the slice: `internal/glob` is a new tiny package (imports only strings/regexp); permission matrix order is significant; `yolo = {"*","*","allow"}` only; PLAN FIX: the third plan `edit` rule (worktree-relative) is added by the **engine** at session start, not in `LoadBuiltins`. DDL gap #2 (todo table, migration v2) is OWNED by Task 14, not this one.
+**Task 11 (M3): `internal/tool` — framework, truncation, read tool.** Plan slice starts ~line 3136. Interfaces to produce: `Limits`, `Env{Dir,Shell,Limits}`, `Output{Title,Text,Meta}`, `Tool` interface (ID/Permission/Patterns/External/Schema/Desc/Run), `Registry()`, `Visible()`, `SchemaFor()`, `Truncate(text,Limits)` (UTF-8-safe tail-keep), `desc/read.txt` (go:embed; verbatim upstream text from `/tmp/opencode-upstream/packages/opencode/src/tool/read.txt`). Plan contains an inline fix note: the test helper must call `Registry()["read"].Run(...)` directly (no `Must` wrapper). read output format is pinned exactly by `TestReadFileExactFormat`/`TestReadFileOffsetLimit` (see slice).
 
 ## Plan deviations logged so far (established pattern: tests define contract)
 
@@ -64,10 +65,12 @@ Plan approved by user ("LGTM"). Executing inline on branch `plan`, one task at a
 5. T7: `Part` gained `Args json.RawMessage`; test uses local `stream()` helper instead of plan's `.must`/`drainFinal` placeholders; midstream test drains from the same PartStream.
 6. T8: plan's `common_test.go` was missing the `encoding/json` import — added.
 7. T9: plan's fixture generator wrote the bare `opencode` entry, but both the test and parser expect the `{"opencode": ...}` wrapper — fixture regenerated with the wrapper (matches what the real fetch caches). `TestKidoParsesLlamacpp` passes `srv.URL+"/v1"` to keep its `/v1/models` path assertion meaningful. Zen auth test isolates via `XDG_DATA_HOME` + `OPENCODE_API_KEY=""`.
+8. T10: two rule vocabularies — `protocol.Rule.Action` uses config/wire "allow"|"deny"|"ask" (new `RuleAllow/RuleDeny/RuleAsk` consts), while the `Decision` constants are "allow"|"denied"|"ask" (`Allow/Deny/AskAction`). Evaluations compare against the Rule consts. Auto-answered pendings (via `always` coverage) are stored `"once"` so only explicit `always` replies mint always rules. Plan's `service_test` had a dead `done <- Allow` goroutine before the real `Reply`; cleaned to a single `Reply` call.
+9. T10: `Service` gained `SetConfigRules`/`SetDataDir` so `DecisionFor` can evaluate builtins + config rules + DB always rules without changing `New(db,bus)`; `DecisionPre==""||AskAction` triggers a fresh `decisionFor`; the catch-all `*`-permission rule only applies to known core actions on the decision path (unknown actions default to ask, matching upstream no-rule behavior).
 
 ## Open items
 
-- [ ] Execute Tasks 10–30 inline (per task commit messages in the plan)
+- [ ] Execute Tasks 11–30 inline (per task commit messages in the plan)
 - [ ] Task 30 tag `v1.0.0` ONLY with explicit user go-ahead
 - [ ] On-demand live e2e vs `ai.kido.ws` (scripts/e2e-live.sh) — user-run, never CI
 - [ ] Flags for user at handoff: plan-matrix third `edit` rule moved to engine (T10 note); CallID not persisted (T5)
