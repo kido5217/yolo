@@ -1,10 +1,10 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-17 (T10–T11 done, executing M3 — active: Task 12)
+**Updated:** 2026-08-17 (T10–T12 done, executing M3 — active: Task 13)
 
 ## Where we are
 
-Plan approved by user ("LGTM"). Executing inline on branch `plan`, one task at a time, strict 5-step TDD per plan, commit per task. **M0, M1, M2 COMPLETE.** M3 in progress: **Task 10 (glob + permission) and Task 11 (tool framework + truncation + read) DONE**; active is **Task 12: internal/tool — write + edit tools**.
+Plan approved by user ("LGTM"). Executing inline on branch `plan`, one task at a time, strict 5-step TDD per plan, commit per task. **M0, M1, M2 COMPLETE.** M3 in progress: **Tasks 10–12 DONE** (glob+permission, tool framework + truncation + read, write + edit); active is **Task 13: internal/tool — glob + grep tools**.
 
 ## Resume instructions (next session)
 
@@ -32,6 +32,7 @@ Plan approved by user ("LGTM"). Executing inline on branch `plan`, one task at a
 | M2 Task 9: provider registry — kido live/fallback, zen catalog filter+cache (frozen fixture; 91/64/57/42+15/7 gate verified) | `62edde5` |
 | M3 Task 10: internal/glob matcher + internal/permission (Evaluate findLast, Hidden, DoomLoopDue, build/plan/yolo matrices, ask/reply Service with park/persist/cascade) | `e4f23cd` |
 | M3 Task 11: internal/tool — framework (Limits/Env/Output/Tool/Registry/Visible/SchemaFor), Truncate (upstream tail() port, UTF-8-boundary cut), read tool (file/dir/binary/miss-suggest, desc sha256-pinned) | `7130344` |
+| M3 Task 12: internal/tool — write (MkdirAll, meta {added,removed} via LCS line diff in write.go) + edit (exact-match replacer, per-file sync.Map mutex per upstream Semaphore, upstream error strings verbatim, empty-oldString→create path kept); desc/write.txt + desc/edit.txt byte-verbatim (hash-verified) | `3ad74dc` |
 
 ## Plan resolutions & flags to raise at handoff (severity)
 
@@ -56,7 +57,7 @@ Plan approved by user ("LGTM"). Executing inline on branch `plan`, one task at a
 
 ## Active
 
-**Task 12 (M3): `internal/tool` — write + edit tools.** Consumes Task 11 framework (`Tool`/`Registry`/`Truncate`, already committed as `7130344` with read). Creates `write.go`, `edit.go`, `edit_test.go`, `write_test.go`, `desc/write.txt`, `desc/edit.txt`. Upstream refs: `/tmp/opencode-upstream/packages/opencode/src/tool/{write.ts,write.txt,edit.ts,edit.txt}` (re-clone with `git clone --depth 1 https://github.com/sst/opencode /tmp/opencode-upstream` and pin v1.18.18 if wiped). NOTE: any new `//go:embed` scalar target on this host must use `import _ "embed"` (see deviation 12).
+**Task 13 (M3): `internal/tool` — glob + grep tools.** Consumes Task 11 framework + `internal/glob` (Task 10 matcher). Creates `glob.go`, `grep.go`, `globgrep_test.go`, `desc/glob.txt`, `desc/grep.txt`. Upstream refs: `/tmp/opencode-upstream/packages/opencode/src/tool/{glob.ts,glob.txt,grep.ts,grep.txt}` (re-clone with `git clone --depth 1 https://github.com/sst/opencode /tmp/opencode-upstream` and pin v1.18.18 if wiped). NOTE: any new `//go:embed` scalar target on this host must use `import _ "embed"` (see deviation 12).
 
 ## Plan deviations logged so far (established pattern: tests define contract)
 
@@ -71,11 +72,12 @@ Plan approved by user ("LGTM"). Executing inline on branch `plan`, one task at a
 9. T10: `Service` gained `SetConfigRules`/`SetDataDir` so `DecisionFor` can evaluate builtins + config rules + DB always rules without changing `New(db,bus)`; `DecisionPre==""||AskAction` triggers a fresh `decisionFor`; the catch-all `*`-permission rule only applies to known core actions on the decision path (unknown actions default to ask, matching upstream no-rule behavior).
 10. T11: two plan test bugs — `TestReadByteCap` used 3000×9-byte lines (27000B total) which can never trip the 50KB cap under any accounting (changed to 3000×40-byte lines = 120000B so it cuts ~line 1305, before the 2000-line limit, as the test promises); `TestReadMissingFileSuggests` used siblings `app.go`/missing `ap.go` which never substring-match either direction under the pinned algorithm (changed to sibling `myapp.go`/missing `app.go`).
 11. T11: test I authored (plan left it to the implementer) `TestTruncateSingleLineUTF8Cut` — verified against upstream `shell.ts tail()`: a single over-long line keeps its **last** MaxBytes bytes advanced to a UTF-8 boundary (40000×U+00E9 → keep 51200B = 25600 runes; 17100×U+65E5 mid-rune cut → 51198B = 17066 runes). Initial expectation of 14400 was the *removed* rune count, not kept.
-12. T11 (environmental): on this host, a **plain** `import "embed"` + a scalar (`string`/`[]byte`) `//go:embed` fails typecheck with `embed imported and not used` under **both** installed toolchains (go1.26.5 via mise, and go1.25.10 via GOTOOLCHAIN) — an upstream-unused-import exemption is missing from the bundled types2 for scalar embed targets here (`embed.FS` targets work). Workaround used in `read.go`: `import _ "embed"` (still embeds content verbatim; runtime-verified on both toolchains). Flag: revisit if a future toolchain restores the plain-import path; the pinned sha256 pin in `TestDescPinned` guards against silent content drift regardless.
+12. T11 (environmental): on this host, a **plain** `import "embed"` + a scalar (`string`/`[]byte`) `//go:embed` fails typecheck with `embed imported and not used` under **both** installed toolchains (go1.26.5 via mise, and go1.25.10 via GOTOOLCHAIN) — an upstream-unused-import exemption is missing from the bundled types2 for scalar embed targets here (`embed.FS` targets work). Workaround used in `read.go`: `import _ "embed"` (still embeds content verbatim; runtime-verified on both toolchains). Flag: revisit if a future toolchain restores the plain-import path; the pinned sha256 pin in `TestDescPinned` guards against silent content drift regardless. `write.go`/`edit.go` reuse the same blank-import workaround.
+13. T12: plan test bug — `TestEditPatternsAndExternal` expected `Patterns(raw)` to return the env.Dir-relative path (`sub/f.txt`), but the committed Task 11 interface (tool.go:72-73) takes raw args only: paths are emitted **as given**; the engine (Task 17) resolves/relativizes against Env.Dir (read does the same). Test fixed to assert as-given. Corollary design: edit `Patterns`/`External` parse only `filePath` (via `editFilePath`), matching the plan test's `{"filePath": f}`-only args and upstream (patterns built from the path alone); full old/new validation happens in `Run`.
 
 ## Open items
 
-- [ ] Execute Tasks 12–30 inline (per task commit messages in the plan)
+- [ ] Execute Tasks 13–30 inline (per task commit messages in the plan)
 - [ ] Task 30 tag `v0.1.0` ONLY with explicit user go-ahead (versioning: 0.1.0 = current scope; out-of-scope features → 0.2.0, …)
 - [ ] On-demand live e2e vs `ai.kido.ws` (scripts/e2e-live.sh) — user-run, never CI
 - [ ] Flags for user at handoff: plan-matrix third `edit` rule moved to engine (T10 note); CallID not persisted (T5); host toolchain scalar `//go:embed` typecheck gap → `import _ "embed"` workaround (T11 note 12)
