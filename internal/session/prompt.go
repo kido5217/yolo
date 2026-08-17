@@ -21,7 +21,13 @@ var prompts embed.FS
 var (
 	planReminder   = mustEmbed("prompt/plan.txt")
 	buildSwitchMsg = mustEmbed("prompt/build-switch.txt")
+	titlePrompt    = mustEmbed("prompt/title.txt")
 )
+
+// TitlePrompt returns the title-generation system prompt (prompt/title.txt).
+func TitlePrompt() string {
+	return titlePrompt
+}
 
 func mustEmbed(path string) string {
 	b, err := prompts.ReadFile(path)

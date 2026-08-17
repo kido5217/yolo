@@ -40,6 +40,7 @@ type Registry struct {
 	defProvider string
 	defModel    string
 	client      *http.Client
+	seam        func(providerID string) (Info, Model, error) // test seam (NewWithSeams)
 }
 
 // Dirs carries catalog locations; zero fields fall back to production.
@@ -248,6 +249,9 @@ func (r *Registry) Resolve(ref string) (Info, Model, error) {
 	pid, mid, ok := splitRef(ref)
 	if !ok {
 		return Info{}, Model{}, fmt.Errorf("bad model ref %q", ref)
+	}
+	if i, m, ok, err := r.resolveSeam(pid, mid); ok {
+		return i, m, err
 	}
 	for _, i := range r.info {
 		if i.ID != pid {
