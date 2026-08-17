@@ -1,0 +1,6 @@
+data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"a"}}]}
+
+data: {"choices":[{"index":0,"delta":{"content":"b"}}]}
+
+data: [DONE]
+
