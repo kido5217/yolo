@@ -417,6 +417,47 @@ func (d *DB) ReplyPermission(requestID, response string) error {
 	return nil
 }
 
+// SaveTodos replaces a session's todo list wholesale: delete then insert in
+// order, position = index. An empty list clears the session's todos.
+func (d *DB) SaveTodos(sessionID string, todos []protocol.Todo) error {
+	tx, err := d.Begin()
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM todo WHERE session_id=?`, sessionID); err != nil {
+		tx.Rollback()
+		return err
+	}
+	for i, t := range todos {
+		if _, err := tx.Exec(
+			`INSERT INTO todo (session_id, content, status, priority, position) VALUES (?,?,?,?,?)`,
+			sessionID, t.Content, t.Status, t.Priority, i); err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// GetTodos lists a session's todos in stable position order.
+func (d *DB) GetTodos(sessionID string) ([]protocol.Todo, error) {
+	rows, err := d.Query(
+		`SELECT content, status, priority FROM todo WHERE session_id=? ORDER BY position ASC`, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []protocol.Todo{}
+	for rows.Next() {
+		var t protocol.Todo
+		if err := rows.Scan(&t.Content, &t.Status, &t.Priority); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
 // AlwaysRules derives allow rules from response='always' rows: one rule per
 // pattern in always_json, permission taken from the row's action.
 func (d *DB) AlwaysRules(sessionID string) ([]protocol.Rule, error) {

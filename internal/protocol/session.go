@@ -49,3 +49,10 @@ const (
 	StatusBusy  = "busy"
 	StatusRetry = "retry"
 )
+
+// Todo is one item in a session's todo list (todowrite tool).
+type Todo struct {
+	Content  string `json:"content"`
+	Status   string `json:"status"`
+	Priority string `json:"priority,omitempty"`
+}

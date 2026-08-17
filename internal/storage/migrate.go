@@ -53,6 +53,17 @@ CREATE TABLE permission (
   time_created INTEGER NOT NULL
 );
 `,
+	2: `
+CREATE TABLE IF NOT EXISTS todo (
+    id INTEGER PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES session(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    status TEXT NOT NULL,
+    priority TEXT NOT NULL DEFAULT 'medium',
+    position INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_todo_session ON todo(session_id);
+`,
 }
 
 // migrate applies any unapplied migrations in ascending version order.

@@ -9,6 +9,7 @@ import (
 
 	"github.com/kido5217/yolo/internal/permission"
 	"github.com/kido5217/yolo/internal/protocol"
+	"github.com/kido5217/yolo/internal/storage"
 )
 
 // Defaults mirror upstream truncate.ts (MAX_LINES / MAX_BYTES); config
@@ -32,21 +33,20 @@ func (l Limits) def() Limits {
 	return l
 }
 
-// Shell is the per-session persistent shell. Task 14 (shell.go) adds the
-// process state and NewShell/Exec/Cwd/Close; tools that don't run commands
-// must tolerate a nil Env.Shell.
-type Shell struct {
-	Executable string // default "bash"; test override
-	Dir        string
-	limits     Limits
-}
+// Shell is the per-session persistent shell (shell.go: NewShell/Exec/Cwd/
+// Close). Tools that don't run commands must tolerate a nil Env.Shell.
 
 // Env is what Run receives: the session project dir (permission anchor and
-// base for relative paths), the session shell, and output limits.
+// base for relative paths), the session shell, output limits, and — for
+// tools that persist (todowrite) — the session storage. Dir/Shell/Limits
+// are the engine's concern to populate; Storage/SessionID may be nil/empty
+// for tools that ignore them.
 type Env struct {
-	Dir    string
-	Shell  *Shell
-	Limits Limits
+	Dir       string
+	Shell     *Shell
+	Limits    Limits
+	Storage   *storage.DB
+	SessionID string
 }
 
 // Output is a tool result: Title for the TUI, Text for the model, Meta for
@@ -81,15 +81,16 @@ type Tool interface {
 	Run(ctx context.Context, raw json.RawMessage, env *Env) (Output, error)
 }
 
-// Registry returns the built-in tools keyed by ID (Task 14 adds
-// bash + todowrite).
+// Registry returns the built-in tools keyed by ID.
 func Registry() map[string]Tool {
 	return map[string]Tool{
-		"read":  readTool{},
-		"write": writeTool{},
-		"edit":  editTool{},
-		"glob":  globTool{},
-		"grep":  grepTool{},
+		"read":      readTool{},
+		"write":     writeTool{},
+		"edit":      editTool{},
+		"glob":      globTool{},
+		"grep":      grepTool{},
+		"bash":      bashTool{},
+		"todowrite": todoWriteTool{},
 	}
 }
 
