@@ -81,13 +81,15 @@ type Tool interface {
 	Run(ctx context.Context, raw json.RawMessage, env *Env) (Output, error)
 }
 
-// Registry returns the built-in tools keyed by ID (Tasks 13-14 add the
-// remaining glob/grep/bash/todowrite tools).
+// Registry returns the built-in tools keyed by ID (Task 14 adds
+// bash + todowrite).
 func Registry() map[string]Tool {
 	return map[string]Tool{
 		"read":  readTool{},
 		"write": writeTool{},
 		"edit":  editTool{},
+		"glob":  globTool{},
+		"grep":  grepTool{},
 	}
 }
 
