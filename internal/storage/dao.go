@@ -291,8 +291,9 @@ func (d *DB) listPartsBy(messageID, typ string) ([]PartRow, error) {
 }
 
 // ProtocolToPart encodes a wire part into a row. Text/reasoning parts store
-// {"text":..., "end":n} (end omitted when 0); tool parts store the full
-// protocol.ToolState JSON. CallID is transient and not persisted.
+// {"text":..., "end":n, "synthetic":true} (end/synthetic omitted when unset);
+// tool parts store the full protocol.ToolState JSON. CallID is transient and
+// not persisted.
 func ProtocolToPart(p protocol.Part) PartRow {
 	r := PartRow{
 		ID:          p.ID,
@@ -310,6 +311,9 @@ func ProtocolToPart(p protocol.Part) PartRow {
 		m := map[string]any{"text": p.Text}
 		if p.Time.End != 0 {
 			m["end"] = p.Time.End
+		}
+		if p.Synthetic != nil && *p.Synthetic {
+			m["synthetic"] = true
 		}
 		b, _ := json.Marshal(m)
 		r.StateJSON = string(b)
@@ -335,14 +339,16 @@ func PartToProtocol(r PartRow) (protocol.Part, error) {
 		p.State = st
 	default:
 		var st struct {
-			Text string `json:"text"`
-			End  int64  `json:"end"`
+			Text      string `json:"text"`
+			End       int64  `json:"end"`
+			Synthetic *bool  `json:"synthetic"`
 		}
 		if err := json.Unmarshal([]byte(r.StateJSON), &st); err != nil {
 			return p, err
 		}
 		p.Text = st.Text
 		p.Time = protocol.PartTime{End: st.End}
+		p.Synthetic = st.Synthetic
 	}
 	return p, nil
 }

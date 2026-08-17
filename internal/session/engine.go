@@ -8,8 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
+	"math/rand"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -31,6 +34,13 @@ var ErrSessionBusy = errors.New("session busy")
 // maxToolRounds caps the tool round-trips of one turn.
 const maxToolRounds = 50
 
+// maxRetryAttempts caps stream attempts per round (initial request included).
+const maxRetryAttempts = 4
+
+// maxToolSteps caps tool calls per turn; the remaining calls of the final
+// stream beyond the budget are dropped and the turn ends idle.
+const maxToolSteps = 50
+
 // Deps is the engine's dependency set.
 type Deps struct {
 	DB   *storage.DB
@@ -47,6 +57,9 @@ type Deps struct {
 	Drivers map[string]llm.Driver
 	// Clock returns ms timestamps; nil = time.Now.
 	Clock func() int64
+	// Backoff returns the delay before retry attempt n (1-based); nil =
+	// 1s × 2^(n-1) × jitter uniform(0.8, 1.2).
+	Backoff func(attempt int) time.Duration
 }
 
 type Engine struct {
@@ -59,6 +72,7 @@ type Engine struct {
 	cfg     func(projectDir string) (*protocol.Config, error)
 	drivers map[string]llm.Driver
 	clock   func() int64
+	backoff func(attempt int) time.Duration
 
 	mu     sync.Mutex
 	busy   map[string]context.CancelFunc
@@ -70,6 +84,10 @@ func New(d Deps) *Engine {
 	if clock == nil {
 		clock = func() int64 { return time.Now().UnixMilli() }
 	}
+	backoff := d.Backoff
+	if backoff == nil {
+		backoff = defaultBackoff
+	}
 	return &Engine{
 		db:      d.DB,
 		bus:     d.Bus,
@@ -80,9 +98,18 @@ func New(d Deps) *Engine {
 		cfg:     d.Cfg,
 		drivers: d.Drivers,
 		clock:   clock,
+		backoff: backoff,
 		busy:    map[string]context.CancelFunc{},
 		shells:  map[string]*tool.Shell{},
 	}
+}
+
+// defaultBackoff is the production retry delay after a failed attempt
+// (1-based): 1s × 2^(attempt-1) scaled by a uniform jitter in [0.8, 1.2].
+func defaultBackoff(attempt int) time.Duration {
+	base := time.Second << uint(attempt-1)
+	jitter := 0.8 + 0.4*rand.Float64()
+	return time.Duration(float64(base) * jitter)
 }
 
 // SendResult identifies the persisted user message and its text part.
@@ -274,6 +301,9 @@ func (e *Engine) runTurn(ctx context.Context, sessionID string, row storage.Sess
 	// Per-turn doom history (resets each Send): every model-issued tool call
 	// appends one CallKey, identical runs detected on the last-3 window.
 	var doomHist []permission.CallKey
+	// Per-turn tool call budget (resets each Send; distinct from the
+	// model round-trip cap above).
+	toolCalls := 0
 
 	for round := 0; round < maxToolRounds; round++ {
 		req, err := e.buildRequest(sessionID, agent, row, info, model, cfg)
@@ -281,8 +311,13 @@ func (e *Engine) runTurn(ctx context.Context, sessionID string, row storage.Sess
 			turnErr = err
 			return
 		}
-		more, err := e.runRound(ctx, sessionID, agent, row, cfg, cfgRules, info, model, req, &doomHist)
+		more, err := e.runRound(ctx, sessionID, agent, row, cfg, cfgRules, info, model, req, &doomHist, &toolCalls)
 		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				// Abort: non-fatal (log only); the TUI already got the
+				// part-level finalization.
+				slog.Info("session: turn aborted", "sessionID", sessionID)
+			}
 			turnErr = err
 			return
 		}
@@ -370,6 +405,11 @@ func (e *Engine) messagesFor(sessionID, agent string, row storage.SessionRow, in
 			p, err := storage.PartToProtocol(pr)
 			if err != nil {
 				return nil, err
+			}
+			if isSyntheticPart(p) {
+				// Engine-generated notes (error/overflow) are excluded from
+				// history replay: the model must never see them.
+				continue
 			}
 			parts = append(parts, p)
 		}
@@ -466,12 +506,17 @@ func appendReminders(content string, reminders []string) string {
 // "completed"/"error" afterwards. The tool part id IS the model call id:
 // call ids are not persisted elsewhere, and the history replay needs them to
 // pair assistant ToolCalls with RoleTool results.
-func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row storage.SessionRow, cfg *protocol.Config, cfgRules []protocol.Rule, info provider.Info, model provider.Model, req llm.Request, doomHist *[]permission.CallKey) (bool, error) {
+//
+// Lifecycle (LOCKED, plan Task 18): pre-stream transient failures retry up
+// to maxRetryAttempts with backoff (emitting session.status retry) while
+// no part of the round is persisted; a mid-stream failure fails the turn
+// (no retry) keeping the partial text; context overflow (usage or API 400)
+// stops the turn with a synthetic note; the per-turn tool step budget ends
+// the turn idle before the next call beyond it is executed.
+func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row storage.SessionRow, cfg *protocol.Config, cfgRules []protocol.Rule, info provider.Info, model provider.Model, req llm.Request, doomHist *[]permission.CallKey, toolCalls *int) (bool, error) {
 	drv := e.driverFor(info.ID, model)
-	stream, err := drv.Stream(ctx, req)
-	if err != nil {
-		return false, err
-	}
+	// The assistant row exists before the first stream attempt so a failed
+	// round still finalizes a (possibly empty) assistant message.
 	now := e.clock()
 	asstID := protocol.NewID("msg")
 	if err := e.db.CreateMessage(storage.MessageRow{
@@ -485,6 +530,51 @@ func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row stor
 		Model: &protocol.MessageModel{ProviderID: info.ID, ModelID: model.ID},
 	}
 	e.publish(protocol.EventTypeMessageUpdated, protocol.MessageUpdatedProps{SessionID: sessionID, Info: asstMsg})
+
+	// Pre-stream retry: transient failures (429/5xx/net) retry with
+	// backoff while nothing of the round is persisted; non-transient
+	// failures fail the round immediately (overflow 400s take the
+	// graceful path below).
+	var stream llm.PartStream
+	for attempt := 1; ; attempt++ {
+		var sErr error
+		stream, sErr = drv.Stream(ctx, req)
+		if sErr == nil {
+			break
+		}
+		if ctx.Err() != nil {
+			e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, nil, "")
+			return false, ctx.Err()
+		}
+		if !llm.IsTransient(sErr) {
+			if isOverflowError(sErr) {
+				e.saveSynthetic(sessionID, asstID, overflowNote(model, 0, sErr))
+				e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, nil, "")
+				return false, nil
+			}
+			e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, nil, "")
+			return false, sErr
+		}
+		if attempt >= maxRetryAttempts {
+			slog.Warn("session: transient retries exhausted", "sessionID", sessionID, "err", sErr)
+			e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, nil, "")
+			return false, sErr
+		}
+		delay := e.backoff(attempt)
+		e.publish(protocol.EventTypeSessionStatus, protocol.SessionStatusProps{
+			SessionID: sessionID,
+			Status: protocol.SessionStatus{
+				Type: protocol.StatusRetry, Attempt: attempt,
+				Message: sErr.Error(), Next: delay.Milliseconds(),
+			},
+		})
+		select {
+		case <-time.After(delay):
+		case <-ctx.Done():
+			e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, nil, "")
+			return false, ctx.Err()
+		}
+	}
 
 	type textState struct {
 		id    string
@@ -548,8 +638,11 @@ func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row stor
 			break
 		}
 		if err != nil {
+			// Stream loss (in practice ctx cancel: Abort). Partial text is
+			// kept; the turn ends with the ctx error (log only, non-fatal).
 			finalizePart(&textSt, "text")
 			finalizePart(&reasonSt, "reasoning")
+			e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, usage, finish)
 			return false, err
 		}
 		if p.Usage != nil {
@@ -561,6 +654,20 @@ func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row stor
 		if p.Err != nil {
 			finalizePart(&textSt, "text")
 			finalizePart(&reasonSt, "reasoning")
+			if ctx.Err() != nil {
+				e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, usage, finish)
+				return false, ctx.Err()
+			}
+			if isOverflowError(p.Err) {
+				e.saveSynthetic(sessionID, asstID, overflowNote(model, 0, p.Err))
+				e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, usage, finish)
+				return false, nil
+			}
+			// Mid-stream failure after content: keep the partial text, note
+			// the error on a synthetic part (excluded from history replay —
+			// the model never sees it) and fail the turn (no retry).
+			e.saveSynthetic(sessionID, asstID, p.Err.Error())
+			e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, usage, finish)
 			return false, fmt.Errorf("llm stream error: %w", p.Err)
 		}
 		switch p.Kind {
@@ -586,6 +693,15 @@ func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row stor
 			sawToolPart = true
 			finalizePart(&textSt, "text")
 			finalizePart(&reasonSt, "reasoning")
+			if *toolCalls >= maxToolSteps {
+				// Step budget exhausted: the remaining calls of this stream
+				// are dropped (not persisted, not executed); the turn ends
+				// idle and onDone(nil).
+				slog.Warn("session: max tool steps reached", "sessionID", sessionID, "steps", maxToolSteps)
+				e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, usage, finish)
+				return false, nil
+			}
+			*toolCalls++
 			e.executeTool(ctx, sessionID, agent, row, cfg, cfgRules, asstID, doomHist, p)
 		}
 	}
@@ -594,7 +710,25 @@ func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row stor
 	if finish == "" {
 		finish = "stop"
 	}
+	// Overflow: the round's input already exceeds the model context; the
+	// turn ends with a synthetic note (v1 has no compaction).
+	if usage != nil && model.Context > 0 && usage.Input > model.Context {
+		e.saveSynthetic(sessionID, asstID, overflowNote(model, usage.Input, nil))
+		e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, usage, finish)
+		return false, nil
+	}
+	e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, usage, finish)
 
+	// A round continues when the model finished with tool_calls or emitted
+	// any tool part (scripted drivers set Finish inconsistently).
+	return finish == "tool_calls" || sawToolPart, nil
+}
+
+// finishRound completes the assistant message row and re-publishes
+// message.updated with the final state, deriving cost/tokens from the round's
+// usage (nil-safe). It is called on every round-exit path (success, failure,
+// abort, retry exhaustion, overflow, max-steps).
+func (e *Engine) finishRound(asstID, sessionID, agent string, now int64, model provider.Model, asstMsg *protocol.Message, usage *llm.Usage, finish string) {
 	var tok protocol.Tokens
 	cost := 0.0
 	if usage != nil {
@@ -612,17 +746,61 @@ func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row stor
 		ID: asstID, SessionID: sessionID, Role: "assistant", Agent: agent,
 		Cost: cost, Tokens: tok, TimeCreated: now, TimeCompleted: &end,
 	}); err != nil {
-		return false, err
+		return
 	}
 	asstMsg.Cost = cost
 	asstMsg.Tokens = &tok
-	asstMsg.Finish = finish
+	if finish != "" {
+		asstMsg.Finish = finish
+	}
 	asstMsg.Time.Completed = end
-	e.publish(protocol.EventTypeMessageUpdated, protocol.MessageUpdatedProps{SessionID: sessionID, Info: asstMsg})
+	e.publish(protocol.EventTypeMessageUpdated, protocol.MessageUpdatedProps{SessionID: sessionID, Info: *asstMsg})
+}
 
-	// A round continues when the model finished with tool_calls or emitted
-	// any tool part (scripted drivers set Finish inconsistently).
-	return finish == "tool_calls" || sawToolPart, nil
+// saveSynthetic persists an engine-generated text part (mid-stream error
+// note, overflow note) flagged Synthetic: it shows in the TUI but
+// messagesFor excludes it from history replay, so the model never sees it.
+func (e *Engine) saveSynthetic(sessionID, asstID, text string) {
+	syn := true
+	start := e.clock()
+	p := protocol.Part{
+		ID: protocol.NewID("prt"), SessionID: sessionID, MessageID: asstID,
+		Type: "text", Text: text, Synthetic: &syn,
+		Time: protocol.PartTime{Start: start, End: e.clock()},
+	}
+	_ = e.db.UpsertPart(storage.ProtocolToPart(p))
+	e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{SessionID: sessionID, Part: p, Time: e.clock()})
+}
+
+// isSyntheticPart reports whether a part is engine-generated and excluded
+// from history replay.
+func isSyntheticPart(p protocol.Part) bool {
+	return p.Synthetic != nil && *p.Synthetic
+}
+
+// overflowRe matches provider-side context-overflow API errors (400 "prompt
+// too long" and friends). NOTE: "context" also matches context.Canceled —
+// callers MUST check ctx.Err() first.
+var overflowRe = regexp.MustCompile(`(?i)(context|tokens?|too long|exceeds)`)
+
+// isOverflowError reports whether an API (non-stream) error is a
+// context-overflow rejection.
+func isOverflowError(err error) bool {
+	return err != nil && overflowRe.MatchString(err.Error())
+}
+
+// overflowNote renders the fixed overflow text. input > 0 comes from the
+// round's usage; otherwise apiErr carries the provider message.
+func overflowNote(model provider.Model, input int, apiErr error) string {
+	txt := fmt.Sprintf(
+		"context overflow: model context %d exceeded by input %d tokens; the turn stopped. "+
+			"(v1 has no compaction — shorten the conversation or pick a larger-context model.)",
+		model.Context, input,
+	)
+	if apiErr != nil {
+		txt += "\nupstream: " + apiErr.Error()
+	}
+	return txt
 }
 
 // executeTool runs one model-issued tool call through the LOCKED permission
@@ -780,7 +958,13 @@ func (e *Engine) executeTool(ctx context.Context, sessionID, agent string, row s
 	}
 	out, runErr := t.Run(ctx, raw, env)
 	if runErr != nil {
-		e.saveToolPart(sessionID, asstID, callID, name, input, "error", out.Title, out.Text, runErr.Error(), out.Meta, start, e.clock())
+		msg := runErr.Error()
+		if ctx.Err() != nil {
+			// Abort while the tool ran: label it plainly; the process was
+			// already force-killed via ctx.
+			msg = "aborted"
+		}
+		e.saveToolPart(sessionID, asstID, callID, name, input, "error", out.Title, out.Text, msg, out.Meta, start, e.clock())
 		return
 	}
 	e.saveToolPart(sessionID, asstID, callID, name, input, "completed", out.Title, out.Text, "", out.Meta, start, e.clock())

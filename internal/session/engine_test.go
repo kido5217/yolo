@@ -1,6 +1,7 @@
 package session_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -33,6 +34,15 @@ type harness struct {
 	// after build, before Send).
 	cfgPermission []protocol.Rule
 
+	// fastBackoff makes the engine's retry backoff 1ms (read lazily per
+	// retry, so it may be set after build, before Send).
+	fastBackoff bool
+	// slowTurn holds each scripted stream open for 500ms (fake driver
+	// Delay), so a concurrent Send hits the busy flag.
+	slowTurn bool
+
+	sessions []string // created via startSession; shells closed on cleanup
+
 	eventsMu sync.Mutex
 	events   []protocol.Event
 
@@ -59,6 +69,11 @@ func newHarness(t *testing.T) *harness {
 		close(h.done) // let the watcher exit a pending reply wait before it can fire its timer
 		unsubAsked()
 		unsub()
+		if h.eng != nil {
+			for _, s := range h.sessions {
+				h.eng.Close(s) // release the session's bash shell
+			}
+		}
 		db.Close()
 	})
 	go func() {
@@ -132,9 +147,39 @@ func (h *harness) build(t *testing.T) {
 		Tools:   tool.Registry(),
 		DataDir: t.TempDir(),
 		Cfg:     h.cfgLoader(),
-		Drivers: map[string]llm.Driver{"kido": drv},
+	// slowDriver reads h.slowTurn per Stream call (the test sets it
+	// after build) and slows the call by sleeping in the wrapper before
+	// forwarding — not via a fake field, because the title side-call and
+	// the turn call Stream concurrently and a shared field would race.
+	Drivers: map[string]llm.Driver{"kido": slowDriver{h: h, inner: drv}},
 		Clock:   func() int64 { return time.Now().UnixMilli() },
+		Backoff: func(attempt int) time.Duration {
+			if h.fastBackoff {
+				return time.Millisecond
+			}
+			return time.Second << uint(attempt-1)
+		},
 	})
+}
+
+// slowDriver slows each Stream call (ctx-aware sleep) while h.slowTurn is
+// set, so a concurrent Send observes the busy flag (the seam lags behind
+// build by design). The sleep stays in the wrapper: the title side-call and
+// the turn call Stream concurrently, and a shared fake field would race.
+type slowDriver struct {
+	h     *harness
+	inner llm.Driver
+}
+
+func (s slowDriver) Stream(ctx context.Context, req llm.Request) (llm.PartStream, error) {
+	if s.h.slowTurn {
+		select {
+		case <-time.After(500 * time.Millisecond):
+		case <-ctx.Done():
+			return llm.PartStream{}, ctx.Err()
+		}
+	}
+	return s.h.drv.Stream(ctx, req)
 }
 
 // cfgLoader mirrors h.cfgPermission into the config permission map. The
@@ -169,6 +214,7 @@ func (h *harness) startSession(t *testing.T, dir string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
+	h.sessions = append(h.sessions, id)
 	return id
 }
 
@@ -228,6 +274,47 @@ func waitIdle(t *testing.T, h *harness, ses string, fn func()) {
 			t.Fatal("engine did not go idle")
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// waitPart polls the DB until a part of kind (tool parts: in state status)
+// exists in the session; timeout -> fail.
+func waitPart(t *testing.T, h *harness, ses, kind, status string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for {
+		found := false
+		msgs, err := h.db.ListMessages(ses)
+		if err == nil {
+			for _, m := range msgs {
+				var rows []storage.PartRow
+				if kind == "tool" {
+					rows, _ = h.db.ListToolParts(m.ID)
+				} else {
+					rows, _ = h.db.ListParts(m.ID)
+				}
+				for _, r := range rows {
+					p, err := storage.PartToProtocol(r)
+					if err != nil {
+						continue
+					}
+					if p.Type != kind {
+						continue
+					}
+					if (kind == "tool" && p.State != nil && p.State.Status == status) ||
+						(kind != "tool" && status == "") {
+						found = true
+					}
+				}
+			}
+		}
+		if found {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no %s part with status %q within %v", kind, status, timeout)
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 
