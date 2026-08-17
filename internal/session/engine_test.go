@@ -22,13 +22,22 @@ import (
 )
 
 type harness struct {
+	t   *testing.T
 	db  *storage.DB
 	bus *bus.Bus
 	eng *session.Engine
 	drv *fakellm.Driver
+	svc *permission.Service
+
+	// cfgPermission feeds the Cfg seam (read per turn, so it may be set
+	// after build, before Send).
+	cfgPermission []protocol.Rule
 
 	eventsMu sync.Mutex
 	events   []protocol.Event
+
+	replies chan string
+	done    chan struct{} // closed on cleanup; lets the watcher exit a pending wait
 }
 
 func newHarness(t *testing.T) *harness {
@@ -39,8 +48,16 @@ func newHarness(t *testing.T) *harness {
 	}
 	b := bus.New()
 	ch, unsub := b.Subscribe()
-	h := &harness{db: db, bus: b}
+	h := &harness{
+		t: t, db: db, bus: b,
+		svc:     permission.New(db, b),
+		replies: make(chan string, 32),
+		done:    make(chan struct{}),
+	}
+	askCh, unsubAsked := b.Subscribe()
 	t.Cleanup(func() {
+		close(h.done) // let the watcher exit a pending reply wait before it can fire its timer
+		unsubAsked()
 		unsub()
 		db.Close()
 	})
@@ -51,7 +68,49 @@ func newHarness(t *testing.T) *harness {
 			h.eventsMu.Unlock()
 		}
 	}()
+	go h.replyWatcher(askCh)
 	return h
+}
+
+// replyWatcher answers permission.asked events with the test-queued replies
+// (FIFO). An ask that finds no queued reply fails the test after 3s — a
+// prompt the test did not expect.
+func (h *harness) replyWatcher(ch <-chan protocol.Event) {
+	for e := range ch {
+		if e.Type != protocol.EventTypePermissionAsked {
+			continue
+		}
+		var p protocol.PermissionAskedProps
+		if err := json.Unmarshal(e.Properties, &p); err != nil {
+			h.t.Fatalf("decode permission.asked: %v", err)
+		}
+		select {
+		case resp := <-h.replies:
+			if err := h.svc.Reply(p.ID, resp); err != nil {
+				h.t.Errorf("reply %q to %s: %v", resp, p.ID, err)
+			}
+		case <-h.done:
+			return
+		case <-time.After(3 * time.Second):
+			h.t.Fatalf("permission.asked %s (permission %q) has no queued reply", p.ID, p.Permission)
+		}
+	}
+}
+
+// queueReplies queues permission replies (FIFO) consumed by replyWatcher.
+func (h *harness) queueReplies(responses ...string) {
+	for _, r := range responses {
+		h.replies <- r
+	}
+}
+
+// setAgent re-points the session's agent row (the engine has no per-session
+// cache to clear; it re-reads the row per turn and per tool call).
+func (h *harness) setAgent(t *testing.T, ses, agent string) {
+	t.Helper()
+	if err := h.db.UpdateSession(ses, storage.SessionRow{Agent: agent, TimeUpdated: time.Now().UnixMilli()}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func (h *harness) build(t *testing.T) {
@@ -69,13 +128,34 @@ func (h *harness) build(t *testing.T) {
 		DB:      h.db,
 		Bus:     h.bus,
 		Prov:    reg,
-		Perm:    permission.New(h.db, h.bus),
+		Perm:    h.svc,
 		Tools:   tool.Registry(),
 		DataDir: t.TempDir(),
-		Cfg:     func(string) (*protocol.Config, error) { return &protocol.Config{}, nil },
+		Cfg:     h.cfgLoader(),
 		Drivers: map[string]llm.Driver{"kido": drv},
 		Clock:   func() int64 { return time.Now().UnixMilli() },
 	})
+}
+
+// cfgLoader mirrors h.cfgPermission into the config permission map. The
+// closure is called per turn by the engine, so rules set after build apply.
+func (h *harness) cfgLoader() func(string) (*protocol.Config, error) {
+	return func(string) (*protocol.Config, error) {
+		cfg := &protocol.Config{}
+		if len(h.cfgPermission) > 0 {
+			m := map[string]any{}
+			for _, r := range h.cfgPermission {
+				inner, ok := m[r.Permission].(map[string]any)
+				if !ok {
+					inner = map[string]any{}
+					m[r.Permission] = inner
+				}
+				inner[r.Pattern] = r.Action
+			}
+			cfg.Permission = m
+		}
+		return cfg, nil
+	}
 }
 
 func (h *harness) startSession(t *testing.T, dir string) string {

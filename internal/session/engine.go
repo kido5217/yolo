@@ -2,13 +2,14 @@ package session
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -270,14 +271,17 @@ func (e *Engine) runTurn(ctx context.Context, sessionID string, row storage.Sess
 	if agent == "" {
 		agent = "build"
 	}
+	// Per-turn doom history (resets each Send): every model-issued tool call
+	// appends one CallKey, identical runs detected on the last-3 window.
+	var doomHist []permission.CallKey
 
 	for round := 0; round < maxToolRounds; round++ {
-		req, err := e.buildRequest(sessionID, agent, row, info, model, cfg, cfgRules)
+		req, err := e.buildRequest(sessionID, agent, row, info, model, cfg)
 		if err != nil {
 			turnErr = err
 			return
 		}
-		more, err := e.runRound(ctx, sessionID, agent, row, cfg, cfgRules, info, model, req)
+		more, err := e.runRound(ctx, sessionID, agent, row, cfg, cfgRules, info, model, req, &doomHist)
 		if err != nil {
 			turnErr = err
 			return
@@ -295,40 +299,16 @@ func (e *Engine) runTurn(ctx context.Context, sessionID string, row storage.Sess
 
 // buildRequest assembles the next model request: system prompt entries, the
 // persisted history (LOCKED mapping, see messagesFor) and the tool schemas
-// visible under the session ruleset.
-func (e *Engine) buildRequest(sessionID, agent string, row storage.SessionRow, info provider.Info, model provider.Model, cfg *protocol.Config, cfgRules []protocol.Rule) (llm.Request, error) {
+// visible under the session ruleset (re-read each round so "always" replies
+// and rule changes apply from the next round).
+func (e *Engine) buildRequest(sessionID, agent string, row storage.SessionRow, info provider.Info, model provider.Model, cfg *protocol.Config) (llm.Request, error) {
 	messages, err := e.messagesFor(sessionID, agent, row, info, model, cfg)
 	if err != nil {
 		return llm.Request{}, err
 	}
-	builtins, err := permission.LoadBuiltins(agent, e.dataDir)
+	tools, err := e.toolSchemaList(sessionID)
 	if err != nil {
-		// unknown (custom) agent: fall back to the build matrix, merged with
-		// config permission rules (v1 custom-agent behavior).
-		builtins, err = permission.LoadBuiltins("build", e.dataDir)
-		if err != nil {
-			return llm.Request{}, err
-		}
-	}
-	ruleset := append(append([]protocol.Rule{}, builtins...), cfgRules...)
-	if always, err := e.db.AlwaysRules(sessionID); err == nil {
-		ruleset = append(ruleset, always...)
-	}
-
-	visible := tool.Visible(ruleset, e.tools)
-	ids := make([]string, 0, len(visible))
-	for id := range visible {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	tools := []llm.ToolDef{}
-	for _, id := range ids {
-		t := visible[id]
-		params, err := json.Marshal(t.Schema())
-		if err != nil {
-			return llm.Request{}, err
-		}
-		tools = append(tools, llm.ToolDef{Name: t.ID(), Description: t.Desc(), Parameters: params})
+		return llm.Request{}, err
 	}
 	return llm.Request{
 		Model:    model.ID,
@@ -486,7 +466,7 @@ func appendReminders(content string, reminders []string) string {
 // "completed"/"error" afterwards. The tool part id IS the model call id:
 // call ids are not persisted elsewhere, and the history replay needs them to
 // pair assistant ToolCalls with RoleTool results.
-func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row storage.SessionRow, cfg *protocol.Config, cfgRules []protocol.Rule, info provider.Info, model provider.Model, req llm.Request) (bool, error) {
+func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row storage.SessionRow, cfg *protocol.Config, cfgRules []protocol.Rule, info provider.Info, model provider.Model, req llm.Request, doomHist *[]permission.CallKey) (bool, error) {
 	drv := e.driverFor(info.ID, model)
 	stream, err := drv.Stream(ctx, req)
 	if err != nil {
@@ -606,7 +586,7 @@ func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row stor
 			sawToolPart = true
 			finalizePart(&textSt, "text")
 			finalizePart(&reasonSt, "reasoning")
-			e.executeTool(ctx, sessionID, agent, row, cfg, cfgRules, asstID, p)
+			e.executeTool(ctx, sessionID, agent, row, cfg, cfgRules, asstID, doomHist, p)
 		}
 	}
 	finalizePart(&textSt, "text")
@@ -645,10 +625,20 @@ func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row stor
 	return finish == "tool_calls" || sawToolPart, nil
 }
 
-// executeTool runs one model-issued tool call: permission gate first (the
-// tool part goes "running" before Ask so the TUI shows the pending state),
-// then the tool itself. Every path finalizes the part.
-func (e *Engine) executeTool(ctx context.Context, sessionID, agent string, row storage.SessionRow, cfg *protocol.Config, cfgRules []protocol.Rule, asstID string, p llm.Part) {
+// executeTool runs one model-issued tool call through the LOCKED permission
+// gates, then the tool itself:
+//
+//  1. doom check (sliding 3-identical window on the turn's call history;
+//     the doom ask fires BEFORE the part goes "running");
+//  2. hidden guard (a tool denied by a wildcard rule is not offered to the
+//     model; if it is called anyway, the part errors "tool not available");
+//  3. external-directory gate on tool.External paths outside the session
+//     dir (the part is "running" first so the TUI shows the pending state);
+//  4. core ask with Resources/Always from tool.Patterns.
+//
+// Every path finalizes the part. Deny -> "permission rejected"; a ctx
+// cancel while parked (Abort) -> "aborted"; the model continues either way.
+func (e *Engine) executeTool(ctx context.Context, sessionID, agent string, row storage.SessionRow, cfg *protocol.Config, cfgRules []protocol.Rule, asstID string, doomHist *[]permission.CallKey, p llm.Part) {
 	name := p.Name
 	callID := p.CallID
 	if callID == "" {
@@ -661,6 +651,15 @@ func (e *Engine) executeTool(ctx context.Context, sessionID, agent string, row s
 	}
 	fail := func(stage int64, msg string) {
 		e.saveToolPart(sessionID, asstID, callID, name, map[string]any{}, "error", "", "", msg, nil, e.clock(), stage)
+	}
+	// gateFail finalizes the part for a failed permission gate (service
+	// error, deny, or ctx cancel while parked).
+	gateFail := func() {
+		msg := "permission rejected"
+		if ctx.Err() != nil {
+			msg = "aborted"
+		}
+		fail(e.clock(), msg)
 	}
 
 	input := map[string]any{}
@@ -676,6 +675,16 @@ func (e *Engine) executeTool(ctx context.Context, sessionID, agent string, row s
 		fail(start, "unknown tool "+name)
 		return
 	}
+	rules, err := e.rulesetForRow(row)
+	if err != nil {
+		fail(e.clock(), err.Error())
+		return
+	}
+	if hidden, _ := permission.Hidden(rules, []string{name})[name]; hidden {
+		start := e.clock()
+		fail(start, "tool not available")
+		return
+	}
 	resources, always, err := t.Patterns(raw)
 	if err != nil {
 		fail(e.clock(), err.Error())
@@ -687,9 +696,39 @@ func (e *Engine) executeTool(ctx context.Context, sessionID, agent string, row s
 		return
 	}
 
+	// (1) doom check: the third identical call of the turn asks before it
+	// runs (sliding window; a "once" reply does not extend the exemption).
+	key := permission.CallKey{Tool: name, Hash: callKeyHash(raw)}
+	if permission.DoomLoopDue(*doomHist, key) {
+		d := e.perm.EvaluateRules(agent, e.dataDir, cfgRules, "doom_loop", []string{name})
+		doomReq := permission.Request{
+			RequestID: protocol.NewID("perm"), SessionID: sessionID, Agent: agent,
+			Permission: "doom_loop", Tool: t.ID(),
+			Resources:   []string{name},
+			DecisionPre: d, CreatedAt: e.clock(),
+		}
+		decision, err := e.perm.Ask(ctx, doomReq)
+		if err != nil {
+			fail(e.clock(), err.Error())
+			return
+		}
+		if decision != permission.Allow {
+			msg := "permission rejected"
+			if ctx.Err() != nil {
+				msg = "aborted"
+			}
+			now := e.clock()
+			e.saveToolPart(sessionID, asstID, callID, name, input, "error", "", "", msg, map[string]any{"reason": "doom_loop"}, now, now)
+			*doomHist = append(*doomHist, key)
+			return
+		}
+	}
+	*doomHist = append(*doomHist, key)
+
 	start := e.clock()
 	e.saveToolPart(sessionID, asstID, callID, name, input, "running", "", "", "", nil, start, 0)
 
+	// (3) external-directory gate.
 	for _, ext := range external {
 		abs := ext
 		if !filepath.IsAbs(abs) {
@@ -709,11 +748,12 @@ func (e *Engine) executeTool(ctx context.Context, sessionID, agent string, row s
 		}
 		decision, aerr := e.perm.Ask(ctx, extReq)
 		if aerr != nil || decision != permission.Allow {
-			fail(e.clock(), "permission denied")
+			gateFail()
 			return
 		}
 	}
 
+	// (4) core permission.
 	d := e.perm.EvaluateRules(agent, e.dataDir, cfgRules, t.Permission(), resources)
 	preq := permission.Request{
 		RequestID: protocol.NewID("perm"), SessionID: sessionID, Agent: agent,
@@ -727,7 +767,7 @@ func (e *Engine) executeTool(ctx context.Context, sessionID, agent string, row s
 		return
 	}
 	if decision != permission.Allow {
-		fail(e.clock(), "permission denied")
+		gateFail()
 		return
 	}
 
@@ -840,6 +880,25 @@ func (e *Engine) generateTitle(ctx context.Context, cancel context.CancelFunc, s
 		SessionID: sessionID,
 		Info:      storage.SessionFromRow(updated, msgs),
 	})
+}
+
+// callKeyHash returns the sha256 hex of the canonical (sorted-key) JSON form
+// of the tool args, so deep-equal inputs hash equal regardless of key order.
+func callKeyHash(raw json.RawMessage) string {
+	var v any
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, &v); err != nil {
+			// unparseable args fall through to the raw bytes; the doom window
+			// only ever sees well-formed calls (validated before use).
+			v = string(raw)
+		}
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		b = raw
+	}
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
 }
 
 // withinDir reports whether p is inside (or is) root.
