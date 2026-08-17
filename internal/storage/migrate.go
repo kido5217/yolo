@@ -29,6 +29,7 @@ CREATE TABLE message (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL REFERENCES session(id) ON DELETE CASCADE,
   role TEXT NOT NULL,
+  agent TEXT NOT NULL DEFAULT 'build',
   cost REAL NOT NULL DEFAULT 0,
   tokens TEXT NOT NULL DEFAULT '{}',
   time_created INTEGER NOT NULL,

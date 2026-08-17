@@ -19,11 +19,19 @@ type SessionRow struct {
 
 // MessageRow is one stored message; Tokens is the JSON in message.tokens.
 type MessageRow struct {
-	ID, SessionID, Role string
-	Cost                float64
-	Tokens              protocol.Tokens
-	TimeCreated         int64
-	TimeCompleted       *int64
+	ID, SessionID, Role, Agent string
+	Cost                       float64
+	Tokens                     protocol.Tokens
+	TimeCreated                int64
+	TimeCompleted              *int64
+}
+
+// agentOrDefault normalizes the per-message agent ("build" when unset).
+func agentOrDefault(a string) string {
+	if a == "" {
+		return "build"
+	}
+	return a
 }
 
 // PartRow is one stored part; StateJSON per PartToProtocol/ProtocolToPart.
@@ -157,8 +165,8 @@ func (d *DB) CreateMessage(r MessageRow) error {
 		return err
 	}
 	_, err = d.Exec(
-		`INSERT INTO message (id, session_id, role, cost, tokens, time_created, time_completed) VALUES (?,?,?,?,?,?,?)`,
-		r.ID, r.SessionID, r.Role, r.Cost, string(tok), r.TimeCreated, nullStrPtr(r.TimeCompleted))
+	`INSERT INTO message (id, session_id, role, agent, cost, tokens, time_created, time_completed) VALUES (?,?,?,?,?,?,?,?)`,
+	r.ID, r.SessionID, r.Role, agentOrDefault(r.Agent), r.Cost, string(tok), r.TimeCreated, nullStrPtr(r.TimeCompleted))
 	return err
 }
 
@@ -169,8 +177,8 @@ func (d *DB) UpdateMessage(r MessageRow) error {
 		return err
 	}
 	res, err := d.Exec(
-		`UPDATE message SET session_id=?, role=?, cost=?, tokens=?, time_created=?, time_completed=? WHERE id=?`,
-		r.SessionID, r.Role, r.Cost, string(tok), r.TimeCreated, nullStrPtr(r.TimeCompleted), r.ID)
+		`UPDATE message SET session_id=?, role=?, agent=?, cost=?, tokens=?, time_created=?, time_completed=? WHERE id=?`,
+		r.SessionID, r.Role, agentOrDefault(r.Agent), r.Cost, string(tok), r.TimeCreated, nullStrPtr(r.TimeCompleted), r.ID)
 	if err != nil {
 		return err
 	}
@@ -189,7 +197,7 @@ func (d *DB) DeleteMessage(id string) error {
 // ListMessages lists a session's messages, earliest first.
 func (d *DB) ListMessages(sessionID string) ([]MessageRow, error) {
 	rows, err := d.Query(
-		`SELECT id, session_id, role, cost, tokens, time_created, time_completed FROM message WHERE session_id=? ORDER BY time_created ASC`, sessionID)
+		`SELECT id, session_id, role, agent, cost, tokens, time_created, time_completed FROM message WHERE session_id=? ORDER BY time_created ASC`, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +207,7 @@ func (d *DB) ListMessages(sessionID string) ([]MessageRow, error) {
 		var r MessageRow
 		var tok string
 		var tc sql.NullInt64
-		if err := rows.Scan(&r.ID, &r.SessionID, &r.Role, &r.Cost, &tok, &r.TimeCreated, &tc); err != nil {
+		if err := rows.Scan(&r.ID, &r.SessionID, &r.Role, &r.Agent, &r.Cost, &tok, &r.TimeCreated, &tc); err != nil {
 			return nil, err
 		}
 		if tc.Valid {

@@ -71,6 +71,26 @@ func TestCascadeDelete(t *testing.T) {
 	}
 }
 
+func TestMessageAgentRoundTrip(t *testing.T) {
+	db := openDB(t)
+	_ = db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1})
+	_ = db.CreateMessage(storage.MessageRow{ID: "msg_1", SessionID: "ses_1", Role: "user", Agent: "plan", TimeCreated: 2})
+	_ = db.CreateMessage(storage.MessageRow{ID: "msg_2", SessionID: "ses_1", Role: "assistant", TimeCreated: 3})
+	msgs, err := db.ListMessages("ses_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 2 {
+		t.Fatalf("len = %d", len(msgs))
+	}
+	if msgs[0].Agent != "plan" {
+		t.Fatalf("agent = %q, want plan", msgs[0].Agent)
+	}
+	if msgs[1].Agent != "build" {
+		t.Fatalf("default agent = %q, want build", msgs[1].Agent)
+	}
+}
+
 func TestTextAndToolPartRoundTrip(t *testing.T) {
 	db := openDB(t)
 	_ = db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1})
