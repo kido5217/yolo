@@ -42,13 +42,13 @@ Single Go binary `yolo` (Go 1.26; module `github.com/kido5217/yolo`):
 - `yolo auth [list|add <provider> [key]|remove <provider>]` — credential management (stdlib `flag` + manual subcommand dispatch; no Cobra).
 - `yolo <sessionID>` — resume a session (TUI opens session route directly).
 
-**Key invariant:** TUI ↔ server communicates *only* via the wire protocol (Section 4). The TUI is a drop-in substitute for opencode's TUI.
+**Key invariant:** TUI ↔ server communicates *only* via the wire protocol (Section 3). The TUI is a drop-in substitute for opencode's TUI.
 
 **Built-in agents (three):**
 
 | Agent | Mode | Permissions (resolved ruleset) |
 |---|---|---|
-| `build` (default) | primary | opencode semantics: blanket allow; `read` on `*.env`/`*.env.*` → **ask** (`*.env.example` allow); `question` allow; `plan_enter` allow; external-directory writes → ask (whitelist exceptions) |
+| `build` (default) | primary | opencode v1.18.18 semantics: blanket allow; `read` on `*.env`/`*.env.*` → **ask** (`*.env.example` allow); `question` allow; `plan_enter` allow; `plan_exit` deny; `doom_loop` ask; external directory → ask (whitelist exceptions) — full table in §4.5 |
 | `plan` | primary | build base, but `edit`/`write` → **deny** except plan-note files (`plans/*.md` under the data dir and `.yolo/plans/*.md`); `plan_exit` allow |
 | `yolo` (new) | primary | `{action: "*", resource: "*", effect: "allow"}` — everything permitted, unconditionally: no prompt for bash, edits, `.env` reads, external dirs, anything |
 
@@ -82,7 +82,7 @@ internal/tui/        # bubbletea v2 app + client/ home/ session/ components
 | `modernc.org/sqlite` | v1.56.0 | pure-Go SQLite (no cgo) |
 | `tidwall/jsonc` | v0.3.3 | JSONC comment stripping → stdlib `encoding/json` |
 
-Everything else is **stdlib**: `net/http` (Go 1.22+ `ServeMux` method+pattern routing — no router framework), SSE via `http.Flusher`, hand-rolled LLM HTTP/SSE clients (no LLM SDK), `flag` for the CLI. Dev-only: `charmbracelet/x/exp/teatest` for TUI e2e tests.
+Everything else is **stdlib**: `net/http` (Go 1.22+ `ServeMux` method+pattern routing — no router framework), SSE via `http.Flusher`, hand-rolled LLM HTTP/SSE clients (no LLM SDK), `flag` for the CLI. Dev-only: `charm.land/x/exp/teatest` for TUI e2e tests.
 
 ---
 
@@ -150,7 +150,7 @@ Per-turn usage (input/output/cache tokens) is captured for cost display.
 ### 4.2 Providers (`internal/provider`)
 
 - **`kido`** (default provider). Base URL `https://ai.kido.ws/v1`. Key **optional** (`KIDO_API_KEY` env → `auth.json` → config). Model list fetched from `GET https://ai.kido.ws/v1/models` (llamacpp shape: `data[].meta.n_ctx` → context limit, etc.); static metadata fallback for `Qwen3.8-27B` (context 262144, `tool_call` + `reasoning` enabled) so startup never blocks on the network. Default model: `kido/Qwen3.8-27B`.
-- **`opencode`** (OpenCode Zen). Base URL `https://opencode.ai/zen/v1`. Key **required** (`OPENCODE_API_KEY` env → `auth.json` → config). Catalog fetched from `https://models.opencode.ai/api.json`, cached at `~/.cache/yolo/models.json` (TTL 60 min, like opencode). **Filters:** paid models only (`cost.input > 0`; drops ~40 `-free` variants) and Google-adapter models excluded (7) ⇒ **57 models** with per-model adapter → driver mapping.
+- **`opencode`** (OpenCode Zen). Base URL `https://opencode.ai/zen/v1`. Key **required** (`OPENCODE_API_KEY` env → `auth.json` → config). Catalog fetched from `https://models.opencode.ai/api.json`, cached at `~/.cache/yolo/models.json` (consult cache file; refetch + atomic rewrite when mtime older than 5 min — opencode's `models-dev` cache behavior). **Filters:** paid models only (`cost.input > 0`; drops ~40 `-free` variants) and Google-adapter models excluded (7) ⇒ **57 models** with per-model adapter → driver mapping.
 - Config may override built-ins or add providers (`provider.<id>`: `baseURL`, `apiKey`, `options`, custom `models` map) with opencode's schema.
 - `GET /provider` exposes per-provider auth state (loaded / key-required) for the TUI dialog.
 
@@ -194,10 +194,19 @@ Tool output truncation matches opencode (size cap + truncation marker).
 
 ### 4.5 Permissions (`internal/permission`)
 
-- Ruleset entries `{action, resource-glob, effect: allow|ask|deny}`; evaluation **most-specific first** (longest glob), then config `permission` defaults, then the agent base ruleset.
-- Agents as in Section 2 (`build` / `plan` / **`yolo`**).
-- `ask` → engine pauses, emits `permission.asked` (full request: action, resource, tool, input); TUI shows the prompt (1 allow once / 2 always allow this pattern / 3 reject) → `POST /permission/{id}/reply`. `always` appends a session-scoped ruleset entry. `reject` → tool part `error` ("permission denied"), loop continues so the model can adapt.
-- `permission` table doubles as an audit trail (Section 6).
+Faithful port of opencode's engine (`packages/opencode/src/permission/index.ts` + built-in agent rules in `agent/agent.ts`), verified against v1.18.18 source:
+
+- Rule entries `{action, pattern (resource glob), effect}`. Evaluation = flatten the effective ruleset, **last matching rule wins** (`findLast`); **no rule matches → `ask`**.
+- Effective order (last wins): `[…agent base rules, …user config `permission` rules, …interactive "always" approvals]` — user config overrides agent base; "always" approvals override everything. Within an agent base, broad rules come first, narrow rules later (e.g. `read *` before `read *.env`).
+- A request may carry several patterns: any pattern `deny` → whole call denied; else any `ask` → ask; else allow.
+- **`build` base = opencode v1.18.18 defaults:** `*` allow; `doom_loop` ask; `external_directory` ask (whitelisted dirs allow); `question` allow; `plan_enter` allow; `plan_exit` deny; `read`: `*` allow, `*.env` + `*.env.*` ask, `*.env.example` allow. **`plan`** = build base + `plan_exit` allow, `edit` deny except plan-note files, plans dir whitelisted under `external_directory`. **`yolo`** = solely `{* → allow}` (no prompts for anything).
+- **Doom loop:** before executing a tool call, if the assistant message's last 3 tool parts are the same tool with deep-equal inputs, a `doom_loop` ask fires first (pattern = tool name); outcome flows through the normal ask path.
+- `ask` → engine pauses the turn, stores the pending request, emits `permission.asked` (`{id, sessionID, permission (action), patterns[], metadata{tool, input, …}, always[] (tool-suggested pattern suggestions), tool}`). TUI dialog: **1 = once · 2 = always · 3 = reject** → `POST /permission/{id}/reply`:
+  - `once` → the call proceeds.
+  - `always` → proceeds; each suggested `always` pattern is added as `{action, pattern, effect: allow}` (persisted with the session, Section 6.3); other pending requests in the same session whose patterns are then fully covered are auto-answered `always`.
+  - `reject` → the call fails (tool part `error`: "permission rejected", user feedback if given is fed to the model); **all other pending requests in the same session are cascade-rejected** (opencode behavior).
+- In every case the agent loop continues — the model sees the error and adapts.
+- Tools whose permission action carries a wildcard-deny rule (`pattern "*"`) are **hidden from the model** entirely (excluded from its tool list).
 
 ---
 
@@ -316,14 +325,15 @@ CREATE TABLE permission (
   request_id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL,
   action TEXT NOT NULL,
-  resource TEXT NOT NULL,
+  resource TEXT NOT NULL,         -- requested pattern
   response TEXT,                  -- once | always | reject
+  always_json TEXT,               -- JSON array: patterns approved when response='always'
   time_created INTEGER NOT NULL
 );
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);  -- schema_version, ...
 ```
 
-Migrations: versioned SQL list tracked in `meta.schema_version`, applied at boot. IDs follow opencode's formats (`ses_*`, `msg_*`, `prt_*`). Concurrency: single process, per-session turn mutex, WAL for the rest. `DELETE /session/{id}` cascades.
+Migrations: versioned SQL list tracked in `meta.schema_version`, applied at boot. IDs follow opencode's formats (`ses_*`, `msg_*`, `prt_*`). Concurrency: single process, per-session turn mutex, WAL for the rest. `DELETE /session/{id}` cascades. On session resume, `permission` rows with `response='always'` are re-registered as `{action, pattern, allow}` rules (opencode keeps these in instance memory; Yolo persists them so they survive restarts).
 
 **On-disk layout:**
 
