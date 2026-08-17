@@ -71,6 +71,6 @@ Plan approved by user ("LGTM"). Executing inline on branch `plan`, one task at a
 ## Open items
 
 - [ ] Execute Tasks 11–30 inline (per task commit messages in the plan)
-- [ ] Task 30 tag `v1.0.0` ONLY with explicit user go-ahead
+- [ ] Task 30 tag `v0.1.0` ONLY with explicit user go-ahead (versioning: 0.1.0 = current scope; out-of-scope features → 0.2.0, …)
 - [ ] On-demand live e2e vs `ai.kido.ws` (scripts/e2e-live.sh) — user-run, never CI
 - [ ] Flags for user at handoff: plan-matrix third `edit` rule moved to engine (T10 note); CallID not persisted (T5)

@@ -5997,7 +5997,7 @@ kido/q · build · ↑123 ↓45 · $0.0002 · ● live · ▸ busy 2/…
 - README: what/why, prereq (Go ≥1.25), build (`go build ./cmd/yolo`), run (`yolo`, `yolo serve`, `yolo <session>`), config files (project `yolo.jsonc` + global, fields table minimal), auth (`yolo auth add opencode`? LOCKED v1: auth via `auth.json` or `OPENCODE_API_KEY`/config `provider.X.apiKey`; `/auth` API only — document that), keymap table, data dir layout (`~/.local/share/yolo/{auth.json,storage/yolo.db,plans,log}`), test commands, env (`YOLO_LLM=fake` dev mode), v1 non-goals.
 - Lint: `.golangci.yml` (run: govet, staticcheck, errcheck (exclude `tea.Cmd`/`fmt.Fprint` to stdout), unused, misspell, gocritic (default -tag)) → `golangci-lint run` clean (install via `go install` if missing; note in plan).
 - Live e2e (ON-DEMAND ONLY — never in CI): `scripts/e2e-live.sh` — boots `yolo serve` against real kido (needs `KIDO_BASE_URL` or config), runs a scripted HTTP client doing: create session → send "list files in /tmp" with agent=yolo → assert one `read`/`glob` tool call + text reply → abort test → print PASS/FAIL exit code. Flagged in README as manual.
-- Tag `v1.0.0`: **only after explicit user go-ahead** (plan step: ask; do not auto-tag).
+- Tag `v0.1.0`: **only after explicit user go-ahead** (plan step: ask; do not auto-tag). Versioning: `0.1.0` covers the full scope of this plan; a release adding features outside the current scope bumps to `0.2.0`, and so on.
 
 **Verification (final gate):** `go vet ./... && golangci-lint run && go test ./...` all green + user dogfoods real task on `kido/Qwen3.8-27B` (spec v1 success criteria) — recorded in PROGRESS.md.
 
