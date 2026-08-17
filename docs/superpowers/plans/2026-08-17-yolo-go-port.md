@@ -1,6 +1,8 @@
 # Yolo Go Port Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **Project skills:** `.agents/skills/` holds 15 golang skills (samber/cc-skills-golang, hashes in `skills-lock.json`) — invoke the relevant one(s) per task: `golang-naming`/`golang-code-style` for new code, `golang-error-handling` for error flow, `golang-testing` for tests, `golang-concurrency` for concurrent code, `golang-safety` for defensive review, `golang-data-structures`/`golang-performance`/`golang-benchmark` for hot paths, `golang-database` (storage pkg), `golang-security`, `golang-troubleshooting` (bugs), `golang-design-patterns` (interfaces/DI), `golang-cli` (cmd/yolo), `golang-refactoring`.
 
 **Goal:** Build `yolo`, a faithful Go port of opencode v1.18.18's TUI + core server (bubbletea v2 TUI as a pure wire-protocol client over an in-process REST+SSE server with SQLite storage, dual-protocol LLM drivers, and opencode-faithful permissions/agents/tools).
 
