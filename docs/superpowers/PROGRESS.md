@@ -30,6 +30,7 @@ Plan approved by user ("LGTM"). Executing inline on branch `plan`, one task at a
 | M2 Task 8: Anthropic Messages SSE driver (+ shared test helpers) | `765293c` |
 | M2 Task 9: provider registry — kido live/fallback, zen catalog filter+cache (frozen fixture; 91/64/57/42+15/7 gate verified) | `62edde5` |
 | M3 Task 10: internal/glob matcher + internal/permission (Evaluate findLast, Hidden, DoomLoopDue, build/plan/yolo matrices, ask/reply Service with park/persist/cascade) | `e4f23cd` |
+| M3 Task 11: internal/tool — framework (Limits/Env/Output/Tool/Registry/Visible/SchemaFor), Truncate (upstream tail() port, UTF-8-boundary cut), read tool (file/dir/binary/miss-suggest, desc sha256-pinned) | `7130344` |
 
 ## Plan resolutions & flags to raise at handoff (severity)
 
@@ -54,7 +55,7 @@ Plan approved by user ("LGTM"). Executing inline on branch `plan`, one task at a
 
 ## Active
 
-**Task 11 (M3): `internal/tool` — framework, truncation, read tool.** Plan slice starts ~line 3136. Interfaces to produce: `Limits`, `Env{Dir,Shell,Limits}`, `Output{Title,Text,Meta}`, `Tool` interface (ID/Permission/Patterns/External/Schema/Desc/Run), `Registry()`, `Visible()`, `SchemaFor()`, `Truncate(text,Limits)` (UTF-8-safe tail-keep), `desc/read.txt` (go:embed; verbatim upstream text from `/tmp/opencode-upstream/packages/opencode/src/tool/read.txt`). Plan contains an inline fix note: the test helper must call `Registry()["read"].Run(...)` directly (no `Must` wrapper). read output format is pinned exactly by `TestReadFileExactFormat`/`TestReadFileOffsetLimit` (see slice).
+**Task 12 (M3): `internal/tool` — write + edit tools.** Consumes Task 11 framework (`Tool`/`Registry`/`Truncate`, already committed as `7130344` with read). Creates `write.go`, `edit.go`, `edit_test.go`, `write_test.go`, `desc/write.txt`, `desc/edit.txt`. Upstream refs: `/tmp/opencode-upstream/packages/opencode/src/tool/{write.ts,write.txt,edit.ts,edit.txt}` (re-clone with `git clone --depth 1 https://github.com/sst/opencode /tmp/opencode-upstream` and pin v1.18.18 if wiped). NOTE: any new `//go:embed` scalar target on this host must use `import _ "embed"` (see deviation 12).
 
 ## Plan deviations logged so far (established pattern: tests define contract)
 
@@ -67,10 +68,13 @@ Plan approved by user ("LGTM"). Executing inline on branch `plan`, one task at a
 7. T9: plan's fixture generator wrote the bare `opencode` entry, but both the test and parser expect the `{"opencode": ...}` wrapper — fixture regenerated with the wrapper (matches what the real fetch caches). `TestKidoParsesLlamacpp` passes `srv.URL+"/v1"` to keep its `/v1/models` path assertion meaningful. Zen auth test isolates via `XDG_DATA_HOME` + `OPENCODE_API_KEY=""`.
 8. T10: two rule vocabularies — `protocol.Rule.Action` uses config/wire "allow"|"deny"|"ask" (new `RuleAllow/RuleDeny/RuleAsk` consts), while the `Decision` constants are "allow"|"denied"|"ask" (`Allow/Deny/AskAction`). Evaluations compare against the Rule consts. Auto-answered pendings (via `always` coverage) are stored `"once"` so only explicit `always` replies mint always rules. Plan's `service_test` had a dead `done <- Allow` goroutine before the real `Reply`; cleaned to a single `Reply` call.
 9. T10: `Service` gained `SetConfigRules`/`SetDataDir` so `DecisionFor` can evaluate builtins + config rules + DB always rules without changing `New(db,bus)`; `DecisionPre==""||AskAction` triggers a fresh `decisionFor`; the catch-all `*`-permission rule only applies to known core actions on the decision path (unknown actions default to ask, matching upstream no-rule behavior).
+10. T11: two plan test bugs — `TestReadByteCap` used 3000×9-byte lines (27000B total) which can never trip the 50KB cap under any accounting (changed to 3000×40-byte lines = 120000B so it cuts ~line 1305, before the 2000-line limit, as the test promises); `TestReadMissingFileSuggests` used siblings `app.go`/missing `ap.go` which never substring-match either direction under the pinned algorithm (changed to sibling `myapp.go`/missing `app.go`).
+11. T11: test I authored (plan left it to the implementer) `TestTruncateSingleLineUTF8Cut` — verified against upstream `shell.ts tail()`: a single over-long line keeps its **last** MaxBytes bytes advanced to a UTF-8 boundary (40000×U+00E9 → keep 51200B = 25600 runes; 17100×U+65E5 mid-rune cut → 51198B = 17066 runes). Initial expectation of 14400 was the *removed* rune count, not kept.
+12. T11 (environmental): on this host, a **plain** `import "embed"` + a scalar (`string`/`[]byte`) `//go:embed` fails typecheck with `embed imported and not used` under **both** installed toolchains (go1.26.5 via mise, and go1.25.10 via GOTOOLCHAIN) — an upstream-unused-import exemption is missing from the bundled types2 for scalar embed targets here (`embed.FS` targets work). Workaround used in `read.go`: `import _ "embed"` (still embeds content verbatim; runtime-verified on both toolchains). Flag: revisit if a future toolchain restores the plain-import path; the pinned sha256 pin in `TestDescPinned` guards against silent content drift regardless.
 
 ## Open items
 
-- [ ] Execute Tasks 11–30 inline (per task commit messages in the plan)
+- [ ] Execute Tasks 12–30 inline (per task commit messages in the plan)
 - [ ] Task 30 tag `v0.1.0` ONLY with explicit user go-ahead (versioning: 0.1.0 = current scope; out-of-scope features → 0.2.0, …)
 - [ ] On-demand live e2e vs `ai.kido.ws` (scripts/e2e-live.sh) — user-run, never CI
-- [ ] Flags for user at handoff: plan-matrix third `edit` rule moved to engine (T10 note); CallID not persisted (T5)
+- [ ] Flags for user at handoff: plan-matrix third `edit` rule moved to engine (T10 note); CallID not persisted (T5); host toolchain scalar `//go:embed` typecheck gap → `import _ "embed"` workaround (T11 note 12)
