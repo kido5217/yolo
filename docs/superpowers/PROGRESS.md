@@ -1,39 +1,53 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-17 (session restart checkpoint)
+**Updated:** 2026-08-17 (plan complete)
 
 ## Where we are
 
-Superpowers **brainstorming** is COMPLETE. The design spec is written, source-verified, self-reviewed, and committed. We are at the **"user reviews written spec"** gate. After user approval, the ONLY next step per the superpowers flow is the **`writing-plans` skill** (spec → implementation plan). No implementation code exists yet.
+Superpowers **writing-plans** is COMPLETE. The implementation plan is written (30 tasks, M0–M8), grounded against upstream v1.18.18, self-reviewed, and committed. We are at the **"user reviews written plan"** gate. Per the superpowers flow, execution starts ONLY after user approval. Execution preference (user): inline in this repo, tasks executed one-by-one, no subagent delegation.
 
 ## Resume instructions (next session)
 
-1. Repo: `/home/kido/network/projects/yolo` (branch `brainstorm`). State is fully in git — see `git log`.
-2. Ask the user to review the spec (`docs/superpowers/specs/2026-08-17-yolo-go-port-design.md`), or if already reviewed/approved go straight to step 3.
-3. On approval: invoke the `writing-plans` skill and produce the implementation plan from the spec (milestones M0–M8 in spec §8 define the skeleton). Do NOT start writing code before the plan exists.
-4. Upstream reference clone (`/tmp/opencode-upstream`, tag `v1.18.18`) lives in /tmp and is likely gone after restart. Recreate if needed:
+1. Repo: `/home/kido/network/projects/yolo` (branch `plan`). Plan: `docs/superpowers/plans/2026-08-17-yolo-go-port.md` (~6000 lines). Spec: `docs/superpowers/specs/2026-08-17-yolo-go-port-design.md`.
+2. Ask the user to review the plan. If approved → execute: start at Task 1 (go.mod + skeleton) and follow each task's 5-step TDD loop exactly; commit per task as specified in the plan.
+3. Upstream reference clone (`/tmp/opencode-upstream`, tag `v1.18.18`) is likely gone after restart. Recreate if needed:
    `git clone --depth 1 --branch v1.18.18 https://github.com/anomalyco/opencode /tmp/opencode-upstream`
    (`/tmp/opencode` is pre-existing user data — never touch it.)
+4. GitHub MCP is NOT yet authorized if needed for repo/PR work (OAuth URL was surfaced earlier; user action required). Not needed for plan writing.
 
 ## Completed work this session
 
 | Item | Where |
 |---|---|
-| Requirements gathered (6 decision questions): TUI-only, bubbletea **v2** (`charm.land/*`), opencode provider = paid models only, 7 Google-adapter zen models excluded (57/64 kept), `kido` provider default (`ai.kido.ws/v1`, model `Qwen3.8-27B`, key optional), opencode config schema under `yolo.json`/`yolo.jsonc` names, auth = env → `auth.json` → config + `yolo auth` CLI, agents `build`/`plan`/`yolo` (yolo = permit-all), header rename `x-yolo-directory` (only deliberate wire deviation) | spec §1 |
-| All 7 design sections presented and approved (LGTM) by user | spec §2–§8 |
-| Spec written + committed | `f54991c` |
-| Self-review vs v1.18.18 source; fixed: permission semantics (last-match-wins, ask fallback, doom-loop × 3 identical inputs, reject cascade, wildcard-deny hides tool from model — upstream docs' `.env` "deny" is stale vs code's "ask"), zen catalog TTL 60min→**5min**, teatest path `charm.land/x/exp/teatest`, cross-ref bug, `always_json` permission column | `cec9a8f` |
+| Requirements gathered + 7 design sections approved by user | spec (§1–§8), commits `f54991c`, `cec9a8f` |
+| Spec written, source-verified, self-reviewed, committed | `docs/superpowers/specs/2026-08-17-yolo-go-port-design.md` |
+| Implementation plan: 30 tasks over M0–M8, each with Files/Interfaces/5-step TDD/commit; grounded verbatim against v1.18.18 (permission matrices, tool output formats, prompt txt files + sha256 pins, agent descriptions, SSE event shapes) | `docs/superpowers/plans/2026-08-17-yolo-go-port.md` |
+| Plan self-review: spec coverage M0–M8 check, placeholder scan clean, cross-task type consistency (protocol DTOs, testutil seams, fake-LLM wiring, import-direction guard) | plan "Self-Review Notes" (end of file) |
+
+## Plan resolutions & flags to raise at handoff (severity)
+
+1. **important** — teatest: spec's `charm.land/x/exp/teatest` is the v1 module and cannot build a v2 TUI; plan pins `charm.land/x/exp/teatest/v2` v2.0.0-20260816001655-68d539dca504 (dev-only).
+2. **important** — spec DDL lacked per-message cost/tokens; plan adds `message.cost REAL` + `message.tokens TEXT` (Task 5) and session-level aggregates at read time (Task 19).
+3. **important** — spec DDL lacked todo persistence; plan adds migration v2 `todo` table + DAOs + `protocol.Todo` (Task 14).
+4. minor — `title.txt` actually lives in `agent/prompt/` (spec said `session/prompt/`); Task 15 embeds 14 prompt files (13 session + title).
+5. minor — config `agents` map vs spec's `agent` string ambiguity resolved to `agents` (Task 3/20); custom agents v1 = permission merge + description stub.
+6. minor — SSE frames include `id` beyond the spec envelope example (type+properties).
+7. minor — JSONC comments are not preserved when config PATCH rewrites the file.
+8. minor — v1 keymap: pgup/pgdn scroll viewport, `\`+enter newline (spec's ↑/↓ viewport scroll replaced; noted in /help text).
 
 ## Key verified facts (so they don't get re-litigated)
 
-- Permission engine = port of `packages/opencode/src/permission/index.ts` + agent rules in `agent/agent.ts` (v1 permission system is what v1.18.18 runs). `evaluate()` = `findLast` match, fallback `ask`; effective order: `[…agent base, …user config permission, …always-approvals]` (last wins).
-- Build agent base: `*` allow, `doom_loop` ask, `external_directory` ask (+whitelist), `question` allow, `plan_enter` allow, `plan_exit` deny, read `*.env`/`*.env.*` ask.
-- Pinned deps: `charm.land/bubbletea/v2` v2.0.8, `charm.land/lipgloss/v2` v2.0.6, `charm.land/bubbles/v2` v2.1.1, `modernc.org/sqlite` v1.56.0, `tidwall/jsonc` v0.3.3. Dev-only: `charm.land/x/exp/teatest`. Everything else stdlib (`net/http` ServeMux, `flag`).
-- Module `github.com/kido5217/yolo`, Go ≥ 1.25 (bubbletea v2 requirement; installed 1.26.5).
+- Permission engine = port of `packages/opencode/src/permission/index.ts` + matrices in `agent/agent.ts` (build/plan/yolo verbatim in Task 10).
+- Doom loop = sliding 3-identical window; wildcard-deny hides tool iff last matching rule is `*` deny; write+edit both map to permission `edit`.
+- Pinned deps: `charm.land/bubbletea/v2` v2.0.8, `charm.land/lipgloss/v2` v2.0.6, `charm.land/bubbles/v2` v2.1.1, `modernc.org/sqlite` v1.56.0, `tidwall/jsonc` v0.3.3; dev-only `teatest/v2`.
+- Module `github.com/kido5217/yolo`, Go ≥ 1.25 (installed 1.26.5).
 - Single deliberate wire deviation: `x-yolo-directory` header.
+- Test gating: unit tests never hit network; `YOLO_LLM=fake` + `YOLO_FAKE_SCRIPT` selects the scripted fake driver (wired in Task 19, e2e in Task 21); zen fixture gate = 57 models (42 openai + 15 anthropic, 7 google excluded).
+- TUI import rule: non-test files under `internal/tui/` import only `internal/protocol` + `internal/tui/*`; `_test.go` may use `internal/server/testutil` (escape hatch). Enforced by Task 29.
 
 ## Open items
 
-- [ ] User review of the spec
-- [ ] `writing-plans` skill: turn spec into an implementation plan (follow milestones M0-M8)
-- [ ] Then execute the plan (fresh session or this one, per plan)
+- [ ] User review of the PLAN (next gate)
+- [ ] Execute Tasks 1–30 inline (per task commit messages in the plan)
+- [ ] Task 30 tag `v1.0.0` ONLY with explicit user go-ahead
+- [ ] On-demand live e2e vs `ai.kido.ws` (scripts/e2e-live.sh) — user-run, never CI
