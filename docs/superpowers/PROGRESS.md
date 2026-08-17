@@ -1,10 +1,10 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-17 (M0–M2 done + T10 done, executing M3)
+**Updated:** 2026-08-17 (T10–T11 done, executing M3 — active: Task 12)
 
 ## Where we are
 
-Plan approved by user ("LGTM"). Executing inline on branch `plan`, one task at a time, strict 5-step TDD per plan, commit per task. **M0, M1, M2 COMPLETE.** M3 in progress: **Task 10 (glob + permission) DONE**; next is **Task 11: internal/tool — framework, truncation, read tool**.
+Plan approved by user ("LGTM"). Executing inline on branch `plan`, one task at a time, strict 5-step TDD per plan, commit per task. **M0, M1, M2 COMPLETE.** M3 in progress: **Task 10 (glob + permission) and Task 11 (tool framework + truncation + read) DONE**; active is **Task 12: internal/tool — write + edit tools**.
 
 ## Resume instructions (next session)
 
@@ -12,6 +12,7 @@ Plan approved by user ("LGTM"). Executing inline on branch `plan`, one task at a
 2. Continue at the Active task below. Per task: Step 1 failing test → Step 2 confirm FAIL → Step 3 minimal impl → Step 4 `go vet ./... && go test ./...` PASS → Step 5 commit with the plan's message.
 3. LSP diagnostics for `cmd/yolo/main.go` re `loadStore`/`store` are STALE — the file builds and all tests pass.
 4. Zen catalog CDN blocks python-urllib (403); fetch with curl + browser UA.
+5. Golang skills: 15 project skills in `.agents/skills/` (samber/cc-skills-golang, hashes in `skills-lock.json`) — invoke the relevant one(s) per task: `golang-naming`/`golang-code-style` for new code, `golang-error-handling` for error flow, `golang-testing` for tests, `golang-concurrency` for concurrent code, `golang-safety` for defensive review, `golang-data-structures`/`golang-performance`/`golang-benchmark` for hot paths, `golang-database` (storage pkg), `golang-security`, `golang-troubleshooting` (bugs), `golang-design-patterns` (interfaces/DI), `golang-cli` (cmd/yolo), `golang-refactoring`.
 
 ## Completed work this session
 
