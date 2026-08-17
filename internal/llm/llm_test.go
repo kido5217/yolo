@@ -1,77 +1,25 @@
 package llm
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"testing"
-	"time"
 )
 
-func sseServer(t *testing.T, fixture string, split bool) *httptest.Server {
-	t.Helper()
-	data, err := os.ReadFile(filepath.Join("testdata", "openai", fixture))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func openAIChecks(t *testing.T) func(*http.Request) {
+	return func(r *http.Request) {
 		if r.URL.Path != "/chat/completions" {
 			t.Errorf("path = %s", r.URL.Path)
 		}
 		if r.Header.Get("Authorization") != "Bearer test-key" {
 			t.Errorf("auth header = %q", r.Header.Get("Authorization"))
 		}
-		fl, _ := w.(http.Flusher)
-		if !split {
-			_, _ = w.Write(data)
-			fl.Flush()
-			return
-		}
-		// flush mid-frame (1 byte at a time) to exercise the incremental reader
-		for _, b := range data {
-			_, _ = w.Write([]byte{b})
-		}
-		fl.Flush()
-	}))
-}
-
-func ctx0(t *testing.T) context.Context {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	t.Cleanup(cancel)
-	return ctx
-}
-
-func stream(t *testing.T, d Driver, req Request) PartStream {
-	t.Helper()
-	s, err := d.Stream(ctx0(t), req)
-	if err != nil {
-		t.Fatalf("Stream: %v", err)
 	}
-	return s
-}
-
-func collect(t *testing.T, s PartStream) []Part {
-	t.Helper()
-	var out []Part
-	for {
-		p, err := s.Next(context.Background())
-		if err != nil {
-			break
-		}
-		out = append(out, p)
-		if p.Finish != "" {
-			break
-		}
-	}
-	return out
 }
 
 func TestOpenAIBasicStream(t *testing.T) {
-	srv := sseServer(t, "stream_basic.txt", false)
+	srv := sseServer(t, "openai", "stream_basic.txt", openAIChecks(t))
 	defer srv.Close()
 	parts := collect(t, stream(t, NewOpenAI(srv.Client()), Request{
 		Model: "m", APIKey: "test-key", BaseURL: srv.URL,
@@ -89,7 +37,7 @@ func TestOpenAIBasicStream(t *testing.T) {
 }
 
 func TestOpenAIMidFrameSplits(t *testing.T) {
-	srv := sseServer(t, "stream_split_frames.txt", true)
+	srv := sseServerSplit(t, "openai", "stream_split_frames.txt", openAIChecks(t))
 	defer srv.Close()
 	parts := collect(t, stream(t, NewOpenAI(srv.Client()), Request{
 		Model: "m", APIKey: "test-key", BaseURL: srv.URL,
@@ -107,7 +55,7 @@ func TestOpenAIMidFrameSplits(t *testing.T) {
 }
 
 func TestOpenAIReasoningAndToolCalls(t *testing.T) {
-	srv := sseServer(t, "stream_reasoning_tools.txt", false)
+	srv := sseServer(t, "openai", "stream_reasoning_tools.txt", openAIChecks(t))
 	defer srv.Close()
 	parts := collect(t, stream(t, NewOpenAI(srv.Client()), Request{
 		Model: "m", APIKey: "test-key", BaseURL: srv.URL,
@@ -143,7 +91,7 @@ func TestOpenAIReasoningAndToolCalls(t *testing.T) {
 }
 
 func TestOpenAIUsageFinal(t *testing.T) {
-	srv := sseServer(t, "stream_usage_only_final.txt", false)
+	srv := sseServer(t, "openai", "stream_usage_only_final.txt", openAIChecks(t))
 	defer srv.Close()
 	parts := collect(t, stream(t, NewOpenAI(srv.Client()), Request{
 		Model: "m", APIKey: "test-key", BaseURL: srv.URL,
@@ -168,7 +116,7 @@ func TestOpenAIUsageFinal(t *testing.T) {
 }
 
 func TestOpenAIMidStreamError(t *testing.T) {
-	srv := sseServer(t, "midstream_error.txt", false)
+	srv := sseServer(t, "openai", "midstream_error.txt", openAIChecks(t))
 	defer srv.Close()
 	s := stream(t, NewOpenAI(srv.Client()), Request{
 		Model: "m", APIKey: "test-key", BaseURL: srv.URL,
