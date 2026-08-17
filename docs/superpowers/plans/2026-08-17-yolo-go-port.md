@@ -38,6 +38,7 @@
 - TUI: pure client, tree-of-models, SSE reconnect backoff 1 s → 30 s with REST re-hydration. Keymap per spec §5.
 - Verification per task (the CI gate, run on the module root): `go vet ./... && go test ./...` — every task ends with both green and a commit.
 - Live services are test-gated: unit/integration tests never hit the network; live checks run only behind env vars (`YOLO_LLM=fake` selects the scripted fake LLM driver; e2e smoke vs `ai.kido.ws` is on-demand, never CI-gated).
+- **Zero telemetry (core principle):** yolo runs on the end user's machine and never sends any usage or telemetry data to any remote server; there is no opt-in telemetry. Upstream telemetry surfaces are NOT ported: the OTEL/OTLP exporter (`packages/core/src/observability/otlp.ts`), OpenTelemetry spans on LLM calls (`experimental.openTelemetry` / `experimental_telemetry` in `packages/opencode/src/session/llm.ts`), and the telemetry-identity username field. `OTEL_*` environment variables are inert; the ported config schema omits `experimental.openTelemetry`. This applies to every task.
 
 ---
 
