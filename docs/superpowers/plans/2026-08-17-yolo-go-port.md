@@ -985,7 +985,7 @@ func TestGlobalProjectYoloDiscoveryAndMerge(t *testing.T) {
 
 	// Loader needs a root override for testability:
 	l := config.Loader{Env: map[string]string{"MY_KEY": "sekret"}}
-	cfg, err := l.LoadAt(work, "yolo.jsonc", global, filepath.Join(mid))
+	cfg, err := l.LoadAt(global, filepath.Join(mid))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1037,7 +1037,7 @@ func TestJSONCCommentsAndUnknownFieldsIgnored(t *testing.T) {
   "instructions": ["a.md"] // trailing
 }
 `)
-	cfg, err := config.Loader{Env: nil}.LoadAt(work, "yolo.jsonc", t.TempDir(), work)
+	cfg, err := config.Loader{Env: nil}.LoadAt(t.TempDir(), work)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1047,7 +1047,7 @@ func TestJSONCCommentsAndUnknownFieldsIgnored(t *testing.T) {
 }
 
 func TestNoConfigFilesIsValid(t *testing.T) {
-	cfg, err := config.Loader{Env: nil}.LoadAt(t.TempDir(), "yolo.jsonc", t.TempDir(), t.TempDir())
+	cfg, err := config.Loader{Env: nil}.LoadAt(t.TempDir(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1059,7 +1059,7 @@ func TestNoConfigFilesIsValid(t *testing.T) {
 func TestMalformedJSONIsError(t *testing.T) {
 	work := t.TempDir()
 	write(t, filepath.Join(work, "yolo.json"), `{broken`)
-	_, err := config.Loader{Env: nil}.LoadAt(work, "yolo.json", t.TempDir(), work)
+	_, err := config.Loader{Env: nil}.LoadAt(t.TempDir(), work)
 	if err == nil {
 		t.Fatal("expected error for malformed JSON")
 	}
@@ -1075,7 +1075,7 @@ Expected: FAIL — package does not exist.
 
 `internal/config/config.go` implements the interface. Required behavior:
 
-1. `LoadAt(globalsRoot, projectFileName, globalDir, startDir string)` — deterministic test entry point (`Load(workDir)` wraps it with real XDG/HOME dirs and `workDir`). Merge order (later wins): global `config.json` → global `yolo.json` → global `yolo.jsonc` → project files walked from `startDir` up to filesystem root (`yolo.json` then `yolo.jsonc` per directory, innermost last) → `<startDir>/.yolo/yolo.json` → `<startDir>/.yolo/yolo.jsonc`.
+1. `LoadAt(globalDir, startDir string)` — deterministic test entry point (`Load(workDir)` wraps it with `globalDir = GlobalYoloDir()` and `startDir = workDir`). (PLAN FIX 2026-08-17: the originally documented 4-arg `(globalsRoot, projectFileName, globalDir, startDir)` was inconsistent with its own tests — two params had no behavior; collapsed to the two params the tests actually exercise. Test call sites updated accordingly.) Merge order (later wins): global `config.json` → global `yolo.json` → global `yolo.jsonc` (in `globalDir` = `<Home>/yolo`) → project files walked from `startDir` up to filesystem root (`yolo.json` then `yolo.jsonc` per directory, innermost last) → `<startDir>/.yolo/yolo.json` → `<startDir>/.yolo/yolo.jsonc`.
 2. Each file: read → `UnmarshalJSONC` (tidwall/jsonc strip → `encoding/json` into `map[string]any`) → `Merge` into accumulated result.
 3. `Merge`: maps recurse; arrays: key `instructions` concatenates (preserving order, dedupe by value first-seen); other arrays: src replaces dst.
 4. After the full merge: `Substitute` walks the map replacing strings of the form `{env:NAME}` or a bare string that is exactly an env var name and set (e.g. `"apiKey": "MY_KEY"` — only whole-string substitution; `{env:NAME}` anywhere in the string), then `json.Marshal` → `json.Unmarshal` into `protocol.Config` (unknown fields are then naturally ignored).
@@ -4971,7 +4971,7 @@ Locked server decisions (supersede nothing in spec §3; fill its gaps):
 - `/auth/{providerID}`: PUT `{"key": "…"}` → auth store (Task 4 API) + `Provider` auth state refreshes; DELETE removes. `GET /provider` carries each provider's auth as `protocol.ProviderAuth` (Task 2 wire shape): `{"type":"api"|"none","status":"loaded"|"missing"|"not-required","key_required":bool}` — no separate `source` field; TUI renders loaded/not-required/missing from `status`.
 - **Fake-LLM env wiring** (spec §8 test gating; implementation lives in the server-deps builder, tested here): `YOLO_LLM=fake` + `YOLO_FAKE_SCRIPT=<path.json>` → engine `Drivers` map overridden for ALL providers with a `llm/fake` driver loaded from the script file (JSON: `[{"parts":[{"kind":"text","text":"hi","finish":"stop","usage":{"input":1,"output":1}}], "delay_ms": 0}]`; `delay_ms` optional per turn). `YOLO_LLM` set to anything else → 500 at boot with a clear message. Unit tests set these in-process (httptest), never as shell env.
 - Unknown route → 404 envelope (covers the spec's "skipped endpoint families"). Recover middleware: any panic → 500 envelope + log, connection kept.
-- **Injectable-path helpers (M5 additions; M1 behavior/tests unchanged):** `auth.LoadFrom(path) (Store, error)` / `auth.SaveTo(s Store, path string) error` — the fixed `auth.Path()/Load()/Save()` delegate to these; `config.LoadGlobal(homeDir string) (*protocol.Config, error)` / `config.SaveGlobal(homeDir string, *protocol.Config) error` — read/write `<homeDir>/yolo/global.jsonc`. The server resolves: auth path = `<Dirs.Data>/auth.json`, global config = `<Dirs.Home>/yolo/global.jsonc`; zero `Dirs` → real XDG (Task 3/4 functions). `PUT/DELETE /auth` mutates a boot-lifetime in-memory `auth.Store` and persists via `SaveTo`. These five functions are added in Task 19 step 3 (same commit).
+- **Injectable-path helpers (M5 additions; M1 behavior/tests unchanged):** `auth.LoadFrom(path) (Store, error)` / `auth.SaveTo(s Store, path string) error` — the fixed `auth.Path()/Load()/Save()` delegate to these; `config.LoadGlobal(globalDir string) (*protocol.Config, error)` / `config.SaveGlobal(globalDir string, *protocol.Config) error` — read (Task-3 discovery over `<globalDir>/{config.json,yolo.json,yolo.jsonc}`) / write-merge into `<globalDir>/yolo.jsonc` (highest-precedence global file; created if absent). The server resolves: auth path = `<Dirs.Data>/auth.json`, global config dir = `<Dirs.Home>/yolo`; zero `Dirs` → real XDG (Task 3/4 functions). `PUT/DELETE /auth` mutates a boot-lifetime in-memory `auth.Store` and persists via `SaveTo`. These five functions are added in Task 19 step 3 (same commit).
 - **Wire DTO addition (M5):** `protocol.CommandResponse struct{ SessionID string \`json:"session_id,omitempty"\`; Handled string \`json:"handled,omitempty"\` }` — added to `internal/protocol` in Task 19 (same commit); consumed by T22 client `Command()`.
 
 ### Task 19: `internal/server` — handler, scoping, session endpoints, SSE
@@ -4994,7 +4994,7 @@ type Deps struct {
 	Perm    *permission.Service
 	Config  config.Loader
 	WorkDir string   // default dir when header absent
-	Dirs    config.Dirs // Home/Data/Cache roots (zero = real XDG); auth path = <Data>/auth.json, global config = <Home>/yolo/global.jsonc
+	Dirs    config.Dirs // Home/Data/Cache roots (zero = real XDG); auth path = <Data>/auth.json, global config dir = <Home>/yolo
 }
 func New(d Deps) http.Handler
 // helpers (unexported): scope(r) (dir string, ok error), envelope(w, status, message, data), decode(r, v)
