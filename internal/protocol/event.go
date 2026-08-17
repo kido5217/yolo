@@ -97,4 +97,5 @@ type PermissionRepliedProps struct {
 	SessionID string `json:"sessionID"`
 	RequestID string `json:"requestID"`
 	Reply     string `json:"reply"` // "once" | "always" | "reject"
+	Auto      bool   `json:"auto,omitempty"`
 }
