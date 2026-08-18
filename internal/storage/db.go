@@ -83,6 +83,9 @@ func projectIDFromDir(dir string) string {
 	return "prj_" + hex.EncodeToString(sum[:])[:24]
 }
 
+// ProjectID derives a deterministic project ID from a directory path.
+func ProjectID(dir string) string { return projectIDFromDir(dir) }
+
 // modelRefFromString parses "provider/model" into a ModelRef.
 func modelRefFromString(s string) *protocol.ModelRef {
 	if s == "" {

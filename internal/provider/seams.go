@@ -13,6 +13,39 @@ func NewWithSeams(ctx context.Context, dataDir string, seam func(providerID stri
 	return &Registry{client: http.DefaultClient, defProvider: "kido", defModel: "q", seam: seam}, nil
 }
 
+// NewStaticForTest builds a fully offline registry: kido/q (default; no key)
+// plus opencode/gpt-5-nano (key-required placeholder). Server tests use it so
+// no test ever touches the network.
+func NewStaticForTest() *Registry {
+	return &Registry{
+		client:      http.DefaultClient,
+		defProvider: "kido",
+		defModel:    "q",
+		info: []Info{
+			{
+				ID: "kido", Name: "Kido", Source: "builtin",
+				BaseURL: "https://ai.kido.ws/v1",
+				KeyRequired: false, KeyLoaded: true,
+				Models: []Model{{
+					ID: "q", Name: "Qwen", Family: "qwen", Adapter: "openai",
+					ToolCall: true, Reasoning: true,
+					Context: 100000, Output: 16384,
+				}},
+			},
+			{
+				ID: "opencode", Name: "OpenCode Zen", Source: "builtin",
+				BaseURL: "https://opencode.ai/zen/v1",
+				KeyRequired: true, Env: []string{"OPENCODE_API_KEY"},
+				Models: []Model{{
+					ID: "gpt-5-nano", Name: "GPT-5 Nano", Family: "openai", Adapter: "openai",
+					ToolCall: true, Reasoning: true,
+					Context: 400000, Output: 16384,
+				}},
+			},
+		},
+	}
+}
+
 // resolveSeam resolves ref through the test seam, if set.
 func (r *Registry) resolveSeam(pid, mid string) (Info, Model, bool, error) {
 	if r.seam == nil {

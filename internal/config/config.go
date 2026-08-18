@@ -70,6 +70,79 @@ const (
 	yoloFilesC    = "yolo.jsonc"
 )
 
+// LoadGlobal reads the global config layer in globalDir: config.json, then
+// yolo.json, then yolo.jsonc (later wins); missing files are skipped (M5
+// injectable path). No env substitution; Loader.LoadAt applies it for the
+// effective config.
+func LoadGlobal(globalDir string) (*protocol.Config, error) {
+	l := Loader{}
+	merged := map[string]any{}
+	for _, f := range []string{globalFiles, yoloFilesJSON, yoloFilesC} {
+		m, err := l.readFile(filepath.Join(globalDir, f))
+		if err != nil {
+			return nil, err
+		}
+		merged = Merge(merged, m)
+	}
+	cfg, err := cfgFromMap(merged)
+	if err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
+
+// SaveGlobal merges cfg over the existing global config in globalDir and
+// rewrites <globalDir>/yolo.jsonc (highest-precedence global file; created
+// if absent). JSONC comments are NOT preserved (parse -> merge ->
+// MarshalIndent 2-space; flagged deviation, TUI never relies on comments).
+func SaveGlobal(globalDir string, cfg *protocol.Config) error {
+	cur, err := LoadGlobal(globalDir)
+	if err != nil {
+		return err
+	}
+	curMap, err := mapFromCfg(cur)
+	if err != nil {
+		return err
+	}
+	cfgMap, err := mapFromCfg(cfg)
+	if err != nil {
+		return err
+	}
+	merged := Merge(curMap, cfgMap)
+	if err := os.MkdirAll(globalDir, 0o755); err != nil {
+		return err
+	}
+	b, err := json.MarshalIndent(merged, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(globalDir, yoloFilesC), b, 0o644)
+}
+
+func cfgFromMap(merged map[string]any) (*protocol.Config, error) {
+	b, err := json.Marshal(merged)
+	if err != nil {
+		return nil, err
+	}
+	var cfg protocol.Config
+	if err := json.Unmarshal(b, &cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+func mapFromCfg(cfg *protocol.Config) (map[string]any, error) {
+	b, err := json.Marshal(cfg)
+	if err != nil {
+		return nil, err
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // LoadAt deterministically merges global (globalDir) and project (startDir,
 // walked up to filesystem root, innermost last, plus <startDir>/.yolo).
 func (l Loader) LoadAt(globalDir, startDir string) (*protocol.Config, error) {

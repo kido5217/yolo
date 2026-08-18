@@ -27,9 +27,10 @@ func Path() string {
 	return filepath.Join(config.DataYoloDir(), "auth.json")
 }
 
-// Load reads the store; a missing file is an empty store.
-func Load() (Store, error) {
-	data, err := os.ReadFile(Path())
+// LoadFrom reads a store at path; a missing file is an empty store (M5
+// injectable path; Load delegates here).
+func LoadFrom(path string) (Store, error) {
+	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return Store{}, nil
@@ -46,17 +47,24 @@ func Load() (Store, error) {
 	return s, nil
 }
 
-// Save writes the store dir 0700, file 0600.
-func Save(s Store) error {
-	if err := os.MkdirAll(filepath.Dir(Path()), 0o700); err != nil {
+// Load reads the store; a missing file is an empty store.
+func Load() (Store, error) { return LoadFrom(Path()) }
+
+// SaveTo writes the store at path: dir 0700, file 0600 (M5 injectable path;
+// Save delegates here).
+func SaveTo(s Store, path string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(Path(), data, 0o600)
+	return os.WriteFile(path, data, 0o600)
 }
+
+// Save writes the store dir 0700, file 0600.
+func Save(s Store) error { return SaveTo(s, Path()) }
 
 // Set upserts a provider's key.
 func (s Store) Set(providerID, key string) {

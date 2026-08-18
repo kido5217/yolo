@@ -48,12 +48,12 @@ Usage:
 
 func serve(args []string) int {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
-	port := fs.Int("port", 0, "port to listen on (0 = ephemeral)")
+	port := fs.Int("port", 4096, "port to listen on (0 = ephemeral)")
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 2
 	}
-	s := server.New(mustGetwd())
+	s := server.NewServer(server.Deps{WorkDir: mustGetwd()})
 	addr, err := s.Start(fmt.Sprintf("127.0.0.1:%d", *port))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "listen:", err)
