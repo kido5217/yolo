@@ -28,7 +28,7 @@ func TestDispatchServeFlag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("help exit err: %v\n%s", err, out)
 	}
-	for _, want := range []string{"serve", "auth"} {
+	for _, want := range []string{"serve", "auth", "version", "help"} {
 		if !strings.Contains(string(out), want) {
 			t.Fatalf("help output missing %q:\n%s", want, out)
 		}

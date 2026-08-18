@@ -69,6 +69,7 @@ Usage:
   yolo [<sessionID>] [--dir DIR]   start the TUI (optionally resume a session)
   yolo serve [--addr ADDR]         run the core server only (default http://127.0.0.1:4096)
   yolo auth <subcommand>           manage credentials (list | add <provider> [key] | remove <provider>)
+  yolo version                     print version
   yolo help                        this help
 `)
 }

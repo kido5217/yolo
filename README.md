@@ -25,6 +25,7 @@ yolo serve --addr 127.0.0.1:0
 yolo auth list       # list stored credentials
 yolo auth add <provider> [key]   # add (key omitted = prompt on stdin)
 yolo auth remove <provider>
+yolo version
 yolo help
 ```
 
@@ -64,9 +65,9 @@ Example project `yolo.jsonc`:
 
 v1 credential sources, in precedence order used at request time:
 
-1. `provider.<id>.apiKey` in config (literal or `{env:NAME}`)
-2. environment variable — the `opencode` provider reads `OPENCODE_API_KEY`
-3. `yolo auth add <provider> [key]` (stored in `~/.local/share/yolo/auth.json`)
+1. environment variable `<PROVIDER>_API_KEY` — `kido` reads `KIDO_API_KEY`, `opencode` reads `OPENCODE_API_KEY`
+2. `yolo auth add <provider> [key]` (stored in `~/.local/share/yolo/auth.json`)
+3. `provider.<id>.apiKey` in config (literal or `{env:NAME}`, or `provider.<id>.options.apiKey`)
 
 The in-process server also exposes the opencode `/auth` API (`GET /provider/auth`, `PUT|DELETE /auth/{providerID}`) for parity; yolo has no other credential UI.
 
@@ -83,7 +84,7 @@ The builtin `kido` provider (default) points at `https://ai.kido.ws/v1` with mod
 | ctrl+a | agent dialog |
 | / | command menu |
 | ↑/↓ / pgup/pgdn | viewport scroll |
-| 1/2/3 | permission reply (allow once / always / deny) |
+| 1/2/3 | permission reply (once / always / reject) |
 | e / t | expand tool part / toggle reasoning |
 
 `pgup/pgdn` scroll · `\`+enter newline.
@@ -96,9 +97,11 @@ The builtin `kido` provider (default) points at `https://ai.kido.ws/v1` with mod
   storage/yolo.db    # sessions, messages, parts, permissions, todos (SQLite)
   plans/             # plan-agent files (writable by the engine without asking)
   log/yolo.log       # logger (info/error), rotated at 5 MiB to yolo.log.1
+~/.cache/yolo/
+  models.json        # cached Zen model catalog (opencode provider)
 ```
 
-Global config lives in `~/.config/yolo/yolo.jsonc` (XDG: honor `XDG_DATA_HOME` / `XDG_CONFIG_HOME`).
+Global config lives in `~/.config/yolo/yolo.jsonc` (XDG: honor `XDG_CONFIG_HOME`; `XDG_DATA_HOME` / `XDG_CACHE_HOME` shift the data and cache roots).
 
 ## Tests
 
@@ -108,7 +111,7 @@ go vet ./... && go test ./...     # the CI gate — never hits the network
 
 Dev mode: `YOLO_LLM=fake` (+ optional `YOLO_FAKE_SCRIPT=path.json`) swaps the LLM drivers for a scripted fake (one scripted turn per model request; `"delay_ms"` per turn for slow-turn tests). The e2e suite exercises the full TUI against this.
 
-**Live e2e (manual, never in CI)**: `scripts/e2e-live.sh` boots `yolo serve` against the real `kido` provider, sends "list files in /tmp" to a `yolo`-agent session, asserts one `read`/`glob` tool call plus a text reply, and aborts. Needs a working `kido` endpoint (key via `provider.kido.apiKey`/`{env:...}` in a project `yolo.jsonc`, or `KIDO_BASE_URL` to override the endpoint).
+**Live e2e (manual, never in CI)**: `scripts/e2e-live.sh` builds the binary, boots `yolo serve` from a scratch project pinned to the real `kido` endpoint, and drives the wire contract: health check → create a `yolo`-agent session → send "list files in /tmp" (asserts a completed `read`/`glob`/`grep`/`bash` tool call plus a non-empty text reply) → abort tests (idle → `aborted:false`, busy → `aborted:true`) → SIGTERM → graceful exit 0. Requires `KIDO_API_KEY`; `KIDO_BASE_URL` (default `https://ai.kido.ws/v1`) and `E2E_TIMEOUT` (default 180 s) are optional.
 
 ## v1 non-goals
 
