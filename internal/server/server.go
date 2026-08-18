@@ -1,0 +1,215 @@
+// Package server exposes the core REST + SSE API as a plain http.Handler
+// (M5). cmd/yolo wraps it in a listener.
+package server
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"net"
+	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
+
+	"github.com/kido5217/yolo/internal/auth"
+	"github.com/kido5217/yolo/internal/bus"
+	"github.com/kido5217/yolo/internal/config"
+	"github.com/kido5217/yolo/internal/log"
+	"github.com/kido5217/yolo/internal/permission"
+	"github.com/kido5217/yolo/internal/provider"
+	"github.com/kido5217/yolo/internal/session"
+	"github.com/kido5217/yolo/internal/storage"
+)
+
+// Deps wires the server to the core (M5: value in, http.Handler out).
+type Deps struct {
+	DB     *storage.DB
+	Bus    *bus.Bus
+	Engine *session.Engine
+	Prov   *provider.Registry
+	Perm   *permission.Service
+	Config config.Loader
+	// Log receives handler-panic diagnostics; nil = no-op.
+	Log *log.Logger
+	// WorkDir is the directory scope when x-yolo-directory is absent
+	// (process CWD under `yolo serve`).
+	WorkDir string
+	// Dirs carries home/data/cache locations; zero value = real XDG.
+	Dirs config.Dirs
+}
+
+// Server holds Deps plus the optional in-process listener.
+type Server struct {
+	Deps
+	handler http.Handler
+	srv     *http.Server
+	addr    net.Addr
+	mu      sync.Mutex
+
+	// Auth store for the server's lifetime (M5): PUT/DELETE /auth mutate it
+	// and persist via auth.SaveTo; GET /provider recomputes status from it.
+	authMu    sync.Mutex
+	authPath  string
+	authStore auth.Store
+}
+
+// New returns the core API as a plain http.Handler.
+func New(d Deps) http.Handler { return build(d) }
+
+// NewServer builds the handler and exposes the listener lifecycle.
+func NewServer(d Deps) *Server { return &Server{Deps: d, handler: build(d)} }
+
+// Handler returns the core API handler.
+func (s *Server) Handler() http.Handler { return s.handler }
+
+// ServeHTTP implements http.Handler.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.handler.ServeHTTP(w, r)
+}
+
+func build(d Deps) http.Handler {
+	s := &Server{Deps: d}
+	s.initAuth()
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /global/health", s.handleHealth)
+	mux.HandleFunc("GET /path", s.handlePath)
+	mux.HandleFunc("GET /project/current", s.handleProjectCurrent)
+	mux.HandleFunc("GET /session", s.handleSessionList)
+	mux.HandleFunc("POST /session", s.handleSessionCreate)
+	// literal outranks the {id} wildcard (Go 1.22 specificity)
+	mux.HandleFunc("GET /session/status", s.handleSessionStatus)
+	mux.HandleFunc("GET /session/{id}", s.handleSessionGet)
+	mux.HandleFunc("PATCH /session/{id}", s.handleSessionPatch)
+	mux.HandleFunc("DELETE /session/{id}", s.handleSessionDelete)
+	mux.HandleFunc("GET /session/{id}/message", s.handleMessages)
+	mux.HandleFunc("POST /session/{id}/message", s.handleSend)
+	mux.HandleFunc("POST /session/{id}/abort", s.handleAbort)
+	mux.HandleFunc("POST /session/{id}/command", s.handleCommand)
+	mux.HandleFunc("GET /event", s.handleEvent)
+	mux.HandleFunc("GET /provider", s.handleProvider)
+	mux.HandleFunc("GET /provider/auth", s.handleProviderAuth)
+	mux.HandleFunc("GET /config", s.handleConfigGet)
+	mux.HandleFunc("PATCH /config", s.handleConfigPatch)
+	mux.HandleFunc("GET /global/config", s.handleGlobalConfigGet)
+	mux.HandleFunc("PATCH /global/config", s.handleGlobalConfigPatch)
+	mux.HandleFunc("PUT /auth/{providerID}", s.handleAuthPut)
+	mux.HandleFunc("DELETE /auth/{providerID}", s.handleAuthDelete)
+	mux.HandleFunc("GET /agent", s.handleAgent)
+	mux.HandleFunc("GET /command", s.handleCommandList)
+	mux.HandleFunc("GET /permission", s.handlePermissionList)
+	mux.HandleFunc("POST /permission/{requestID}/reply", s.handlePermissionReply)
+	// unknown route -> 404 envelope, per method
+	mux.HandleFunc("GET /{tail...}", s.handleNotFound)
+	mux.HandleFunc("POST /{tail...}", s.handleNotFound)
+	mux.HandleFunc("PATCH /{tail...}", s.handleNotFound)
+	mux.HandleFunc("DELETE /{tail...}", s.handleNotFound)
+	mux.HandleFunc("PUT /{tail...}", s.handleNotFound)
+	return recoverMiddleware(d.Log, mux)
+}
+
+// initAuth loads the boot-lifetime auth store from <Dirs.Data>/auth.json
+// (missing file = empty store).
+func (s *Server) initAuth() {
+	s.authPath = authPath(s.Dirs)
+	if st, err := auth.LoadFrom(s.authPath); err == nil {
+		s.authStore = st
+	} else {
+		s.authStore = auth.Store{}
+	}
+}
+
+func authPath(d config.Dirs) string {
+	if d.Data == "" {
+		return auth.Path()
+	}
+	return filepath.Join(d.Data, "auth.json")
+}
+
+// globalDir is <Dirs.Home>/yolo; zero Home falls back to the real XDG home.
+func (s *Server) globalDir() string {
+	if s.Dirs.Home == "" {
+		return config.GlobalYoloDir()
+	}
+	return filepath.Join(s.Dirs.Home, "yolo")
+}
+
+// Start listens on addr (":0" = ephemeral) and serves in a goroutine.
+func (s *Server) Start(addr string) (net.Addr, error) {
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+	s.srv = &http.Server{Handler: s.handler}
+	s.addr = ln.Addr()
+	go func() {
+		_ = s.srv.Serve(ln)
+	}()
+	return s.addr, nil
+}
+
+// Addr returns the bound listener address (nil before Start).
+func (s *Server) Addr() net.Addr {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.addr
+}
+
+// Shutdown gracefully stops the listener within ctx's budget (in-flight
+// handlers get to finish); a no-op if Start was never called.
+func (s *Server) Shutdown(ctx context.Context) {
+	if s.srv == nil {
+		return
+	}
+	_ = s.srv.Shutdown(ctx)
+}
+
+// Close shuts the listener down (2s grace).
+func (s *Server) Close() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	s.Shutdown(ctx)
+}
+
+// scope resolves the request's project directory: x-yolo-directory
+// (URL-encoded absolute path) or the server work dir. Bad escapes or
+// non-directories are errors (400).
+func (s *Server) scope(r *http.Request) (string, error) {
+	v := r.Header.Get("x-yolo-directory")
+	if v == "" {
+		return s.WorkDir, nil
+	}
+	d, err := url.PathUnescape(v)
+	if err != nil {
+		return "", err
+	}
+	st, err := os.Stat(d)
+	if err != nil || !st.IsDir() {
+		return "", errors.New("not a directory: " + d)
+	}
+	return d, nil
+}
+
+// decode JSON-decodes the request body into v; an empty body leaves v
+// untouched.
+func decode(r *http.Request, v any) error {
+	if r.Body == nil {
+		return nil
+	}
+	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+func writeJSON(w http.ResponseWriter, code int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(v)
+}

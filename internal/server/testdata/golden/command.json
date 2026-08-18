@@ -1,0 +1,27 @@
+[
+  {
+    "description": "show help",
+    "hints": [],
+    "name": "/help"
+  },
+  {
+    "description": "new session",
+    "hints": [],
+    "name": "/new"
+  },
+  {
+    "description": "pick model",
+    "hints": [],
+    "name": "/model"
+  },
+  {
+    "description": "pick agent",
+    "hints": [],
+    "name": "/agents"
+  },
+  {
+    "description": "quit",
+    "hints": [],
+    "name": "/exit"
+  }
+]

@@ -29,7 +29,16 @@ Yolo ports the **TUI + core server** of opencode v1.18.18 in Go. Confirmed decis
 | 13 | Extra built-in agent: **`yolo`** — permits everything unconditionally (no permission prompts for any tool/resource). Alongside opencode's built-ins `build` (default) and `plan` (read-only) |
 | 14 | Directory-scoping header renamed: **`x-yolo-directory`** (opencode uses `x-opencode-directory`; Yolo TUI is the only client, so the rename carries no interop cost). This is the single deliberate deviation from the upstream wire contract |
 
-**Feature scope for v1 = "core agent loop" (scope A):** session view with streaming, prompt input, tool execution, permission prompts, model + provider + agent selection, config, auth, session persistence. Explicitly **out** of v1 (deferred to v1.x): MCP, skills, subagents (`task`), LSP, snapshots/revert, workspaces, compaction/summarize, themes engine & keymap config, command palette, @file fuzzy mentions, image/PDF attachments, OAuth flows, `/api/*` v2 routes, telemetry.
+**Core principle — zero telemetry:** Yolo runs entirely on the end user's machine. It must contain **zero telemetry**: no usage or telemetry data is ever sent to any remote server, and there is no opt-in telemetry either. This is a permanent project principle, not a v1 scope decision. Upstream telemetry surfaces are **skipped, not deferred**:
+
+- OTEL/OTLP exporter (`packages/core/src/observability/otlp.ts`, env-gated `OTEL_EXPORTER_OTLP_ENDPOINT`)
+- OpenTelemetry spans on LLM calls (`experimental.openTelemetry` config / `experimental_telemetry` flag in `packages/opencode/src/session/llm.ts`)
+- Telemetry-identity username field in upstream config
+- The `experimental.openTelemetry` key is dropped from Yolo's ported config schema
+
+`OTEL_*` environment variables are inert in yolo.
+
+**Feature scope for v1 = "core agent loop" (scope A):** session view with streaming, prompt input, tool execution, permission prompts, model + provider + agent selection, config, auth, session persistence. Explicitly **out** of v1 (deferred to v1.x): MCP, skills, subagents (`task`), LSP, snapshots/revert, workspaces, compaction/summarize, themes engine & keymap config, command palette, @file fuzzy mentions, image/PDF attachments, OAuth flows, `/api/*` v2 routes.
 
 ---
 
@@ -392,4 +401,4 @@ CI gates: `go vet` + `golangci-lint` (errcheck, staticcheck, govet) + `go test .
 
 **v1 success criteria:** `yolo` boots to home, starts a session on `kido/Qwen3.8-27B` by default, streams, and runs all 7 tools with correct per-agent permission behavior (`yolo` agent = zero prompts); sessions persist across restarts and appear in the home list; zen paid models work through both wire protocols; CI green.
 
-**Non-goals (v1.x):** MCP, skills, subagents/`task`, LSP, snapshots/revert, workspaces, compaction, themes/keymaps engine, @file fuzzy mentions, image/PDF attachments, OAuth flows, `/api/*` v2 routes, web/desktop UIs, telemetry.
+**Non-goals (v1.x):** MCP, skills, subagents/`task`, LSP, snapshots/revert, workspaces, compaction, themes/keymaps engine, @file fuzzy mentions, image/PDF attachments, OAuth flows, `/api/*` v2 routes, web/desktop UIs. (Telemetry is not a non-goal — it is a permanent exclusion, see the zero-telemetry core principle in Section 1.)
