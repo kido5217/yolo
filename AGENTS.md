@@ -41,7 +41,7 @@ Read it before acting. For session state, read `docs/superpowers/PROGRESS.md` se
 
 - Work happens inline on branch `plan`, **one task at a time**.
 - Conventional commits (`feat:`/`fix:`/`docs:`/`test:`/…, imperative, ≤ 72-char subject). Task commits use **the commit message pinned in the plan**. Between tasks: `docs: checkpoint — Task N (...) done, next is Task N+1`.
-- Update `PROGRESS.md` at each checkpoint (active task, completed work, deviations, open items).
+- Update `PROGRESS.md` at each checkpoint. It is a **rolling checkpoint** — keep it small: active task (full detail), one-line last-completed, key verified facts, full append-only deviation log, open items. No per-task history, no plan-slice copies: `git log --oneline` and the plan file are the archive.
 - **Tag `v0.1.0` (Task 30) ONLY with explicit user go-ahead.** Versioning: 0.1.0 = current scope; out-of-scope features land in 0.2.0+.
 
 ## Superpowers workflow (required)
