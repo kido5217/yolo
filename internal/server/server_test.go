@@ -1,12 +1,8 @@
 package server_test
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
-	"io"
-	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -14,237 +10,26 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kido5217/yolo/internal/bus"
-	"github.com/kido5217/yolo/internal/config"
 	"github.com/kido5217/yolo/internal/llm"
-	fakellm "github.com/kido5217/yolo/internal/llm/fake"
-	"github.com/kido5217/yolo/internal/permission"
 	"github.com/kido5217/yolo/internal/protocol"
-	"github.com/kido5217/yolo/internal/provider"
 	"github.com/kido5217/yolo/internal/server"
-	"github.com/kido5217/yolo/internal/session"
-	"github.com/kido5217/yolo/internal/storage"
-	"github.com/kido5217/yolo/internal/tool"
+	"github.com/kido5217/yolo/internal/server/testutil"
 )
 
-type srv struct {
-	*httptest.Server
-	db      *storage.DB
-	eng     *session.Engine
-	fake    *fakellm.Driver
-	permSvc *permission.Service
-	bus     *bus.Bus
-	dir     string
-	home    string
-}
-
-// waitSubscribe blocks until the bus has at least n live subscribers (an SSE
-// reader registered), so subsequent publishes are not dropped by the
-// subscribe/handshake window. Returns false on a 2s deadline.
-func (s *srv) waitSubscribe(t *testing.T, n int) {
-	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if s.bus.SubscriberCount() >= n {
-			return
-		}
-		time.Sleep(2 * time.Millisecond)
-	}
-	t.Fatalf("timed out waiting for %d bus subscriber(s); have %d", n, s.bus.SubscriberCount())
-}
-
-// fakeDelay makes subsequent fake turns hold open for d (slow-turn tests).
-func (s *srv) fakeDelay(d time.Duration) { s.fake.SetDelay(d) }
-
-// newSrv boots the FULL stack on a fake provider set (no network): kido static model, no fetch
-func newSrv(t *testing.T) *srv {
-	t.Helper()
-	root := t.TempDir()
-	dataDir := filepath.Join(root, "data")
-	if err := os.MkdirAll(filepath.Join(dataDir, "storage"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	db, err := storage.Open(filepath.Join(dataDir, "storage", "yolo.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	b := bus.New()
-	fake := fakellm.New(fakellm.AutoText())
-	prov := provider.NewStaticForTest()
-	permSvc := permission.New(db, b)
-	eng := session.New(session.Deps{
-		DB: db, Bus: b,
-		Prov:  prov,
-		Perm:  permSvc,
-		Tools: tool.Registry(),
-		DataDir: dataDir,
-		Cfg:   func(string) (*protocol.Config, error) { return &protocol.Config{}, nil },
-		Drivers: map[string]llm.Driver{"kido": fake},
-		Clock:   func() int64 { return time.Now().UnixMilli() },
-	})
-	dir := t.TempDir()
-	home := filepath.Join(root, "home")
-	h := server.New(server.Deps{
-		DB: db, Bus: b, Engine: eng, Prov: prov, Perm: permSvc,
-		Config:  config.Loader{Env: map[string]string{}},
-		WorkDir: dir,
-		Dirs:    config.Dirs{Home: home, Data: dataDir, Cache: filepath.Join(root, "cache")},
-	})
-	ts := httptest.NewServer(h)
-	t.Cleanup(ts.Close)
-	return &srv{Server: ts, db: db, eng: eng, fake: fake, permSvc: permSvc, bus: b, dir: dir, home: home}
-}
-
-// parkAsk parks a pending permission ask in a goroutine and blocks until it
-// is visible on GET /permission (so pinned tests never race the park).
-func (s *srv) parkAsk(sessionID, action, resource string) {
-	req := permission.Request{
-		RequestID:  protocol.NewID("perm"),
-		SessionID:  sessionID,
-		Agent:      "build",
-		Permission: action,
-		Resources:  []string{resource},
-	}
-	go s.permSvc.Ask(context.Background(), req)
-	row, err := s.db.GetSession(sessionID)
-	if err != nil {
-		panic(err)
-	}
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		r, _ := http.NewRequest(http.MethodGet, s.URL+"/permission", nil)
-		r.Header.Set("x-yolo-directory", row.ProjectDir)
-		if resp, err := http.DefaultClient.Do(r); err == nil {
-			b, _ := io.ReadAll(resp.Body)
-			_ = resp.Body.Close()
-			var pend []protocol.PermissionAskedProps
-			if json.Unmarshal(b, &pend) == nil {
-				for _, p := range pend {
-					if p.ID == req.RequestID {
-						return
-					}
-				}
-			}
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-}
-
-// writeCfg writes a project yolo.jsonc.
-func writeCfg(t *testing.T, dir, jsonc string) {
-	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, "yolo.jsonc"), []byte(jsonc), 0o644); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func req(t *testing.T, s *srv, method, path, dir, body string) (*http.Response, []byte) {
-	t.Helper()
-	var rd io.Reader
-	if body != "" {
-		rd = strings.NewReader(body)
-	}
-	r, err := http.NewRequest(method, s.URL+path, rd)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if dir != "" {
-		r.Header.Set("x-yolo-directory", dir)
-	}
-	resp, err := http.DefaultClient.Do(r)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	b, _ := io.ReadAll(resp.Body)
-	return resp, b
-}
-
-// sseFrame is one decoded `data:` frame.
-type sseFrame struct {
-	ID         string         `json:"id"`
-	Type       string         `json:"type"`
-	Properties map[string]any `json:"properties"`
-}
-
-// String returns a property as a string; object properties resolve to their
-// "type" field (session.status: status {type:"idle"|...}).
-func (f sseFrame) String(key string) string {
-	v, ok := f.Properties[key]
-	if !ok {
-		return ""
-	}
-	switch t := v.(type) {
-	case string:
-		return t
-	case map[string]any:
-		if s, ok := t["type"].(string); ok {
-			return s
-		}
-	}
-	return ""
-}
-
-// sseReader keeps ONE scanner over the open SSE body (a fresh scanner per
-// read would drop buffered bytes).
-type sseReader struct{ sc *bufio.Scanner }
-
-// sseConnect opens the /event stream and asserts the 200 handshake.
-func sseConnect(t *testing.T, s *srv, dir string) *sseReader {
-	t.Helper()
-	r, err := http.NewRequest(http.MethodGet, s.URL+"/event", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if dir != "" {
-		r.Header.Set("x-yolo-directory", dir)
-	}
-	resp, err := http.DefaultClient.Do(r)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		t.Fatalf("sse connect: %d %s", resp.StatusCode, b)
-	}
-	t.Cleanup(func() { _ = resp.Body.Close() })
-	return &sseReader{sc: bufio.NewScanner(resp.Body)}
-}
-
-// Frame decodes the next `data:` frame.
-func (r *sseReader) Frame(t *testing.T) sseFrame {
-	t.Helper()
-	for r.sc.Scan() {
-		line := r.sc.Text()
-		if !strings.HasPrefix(line, "data: ") {
-			continue
-		}
-		var f sseFrame
-		if err := json.Unmarshal([]byte(line[len("data: "):]), &f); err != nil {
-			t.Fatalf("bad frame %q: %v", line, err)
-		}
-		return f
-	}
-	t.Fatalf("sse stream closed: %v", r.sc.Err())
-	return sseFrame{}
-}
-
 func TestHealthAndPathAndProject(t *testing.T) {
-	s := newSrv(t)
-	resp, b := req(t, s, "GET", "/global/health", "", "")
+	s := testutil.Boot(t)
+	resp, b := testutil.Req(t, s, "GET", "/global/health", "", "")
 	if resp.StatusCode != 200 || !strings.Contains(string(b), `"ok"`) {
 		t.Fatalf("%d %s", resp.StatusCode, b)
 	}
 	d := t.TempDir()
-	resp, b = req(t, s, "GET", "/path", d, "")
+	resp, b = testutil.Req(t, s, "GET", "/path", d, "")
 	var p map[string]string
 	_ = json.Unmarshal(b, &p)
 	if resp.StatusCode != 200 || p["directory"] != d {
 		t.Fatalf("path: %d %s", resp.StatusCode, b)
 	}
-	resp, b = req(t, s, "GET", "/project/current", d, "")
+	resp, b = testutil.Req(t, s, "GET", "/project/current", d, "")
 	var pr struct {
 		ID, Name, Directory string
 	}
@@ -253,48 +38,48 @@ func TestHealthAndPathAndProject(t *testing.T) {
 		t.Fatalf("project: %s %s", pr.ID, pr.Directory)
 	}
 	// bad dir → 400
-	resp, _ = req(t, s, "GET", "/path", "/no/such/dir/xyz", "")
+	resp, _ = testutil.Req(t, s, "GET", "/path", "/no/such/dir/xyz", "")
 	if resp.StatusCode != 400 {
 		t.Fatalf("want 400, got %d", resp.StatusCode)
 	}
 }
 
 func TestScopedHeaderURLDecoded(t *testing.T) {
-	s := newSrv(t)
+	s := testutil.Boot(t)
 	odd := filepath.Join(t.TempDir(), "odd dir")
 	if err := os.MkdirAll(odd, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	// header value is URL-encoded; the server must PathUnescape it
-	resp, b := req(t, s, "GET", "/path", url.PathEscape(odd), "")
+	resp, b := testutil.Req(t, s, "GET", "/path", url.PathEscape(odd), "")
 	var p map[string]string
 	_ = json.Unmarshal(b, &p)
 	if resp.StatusCode != 200 || p["directory"] != odd {
 		t.Fatalf("path: %d %s", resp.StatusCode, b)
 	}
 	// invalid escape → 400
-	resp, _ = req(t, s, "GET", "/path", "/bad/%zz", "")
+	resp, _ = testutil.Req(t, s, "GET", "/path", "/bad/%zz", "")
 	if resp.StatusCode != 400 {
 		t.Fatalf("want 400, got %d", resp.StatusCode)
 	}
 }
 
 func TestSessionLifecycleAndScoping(t *testing.T) {
-	s := newSrv(t)
+	s := testutil.Boot(t)
 	d := t.TempDir()
 	other := t.TempDir()
-	resp, b := req(t, s, "POST", "/session", d, `{"title":"T1"}`)
+	resp, b := testutil.Req(t, s, "POST", "/session", d, `{"title":"T1"}`)
 	if resp.StatusCode != 201 {
 		t.Fatalf("%d %s", resp.StatusCode, b)
 	}
 	var ses struct {
-		ID      string
-		Title   string
-		Agent   string
-		Model   struct{ ID, ProviderID string }
+		ID         string
+		Title      string
+		Agent      string
+		Model      struct{ ID, ProviderID string }
 		ProjectDir string
-		Cost  float64
-		Tokens struct{ Input, Output int }
+		Cost       float64
+		Tokens     struct{ Input, Output int }
 	}
 	json.Unmarshal(b, &ses)
 	if ses.Title != "T1" || ses.Agent != "build" || ses.Model.ID != "q" || ses.Model.ProviderID != "kido" {
@@ -303,25 +88,25 @@ func TestSessionLifecycleAndScoping(t *testing.T) {
 	id := ses.ID
 
 	// list scoped
-	resp, b = req(t, s, "GET", "/session", d, "")
+	resp, b = testutil.Req(t, s, "GET", "/session", d, "")
 	var list []map[string]any
 	json.Unmarshal(b, &list)
 	if len(list) != 1 {
 		t.Fatalf("list = %d", len(list))
 	}
 	// other dir sees nothing
-	resp, b = req(t, s, "GET", "/session", other, "")
+	resp, b = testutil.Req(t, s, "GET", "/session", other, "")
 	json.Unmarshal(b, &list)
 	if len(list) != 0 {
 		t.Fatalf("cross-dir leak: %d", len(list))
 	}
 	// get by id from other dir → 404
-	resp, _ = req(t, s, "GET", "/session/"+id, other, "")
+	resp, _ = testutil.Req(t, s, "GET", "/session/"+id, other, "")
 	if resp.StatusCode != 404 {
 		t.Fatalf("want 404, got %d", resp.StatusCode)
 	}
 	// patch model+agent+title
-	resp, b = req(t, s, "PATCH", "/session/"+id, d, `{"title":"T2","agent":"yolo","model":"opencode/gpt-5-nano"}`)
+	resp, b = testutil.Req(t, s, "PATCH", "/session/"+id, d, `{"title":"T2","agent":"yolo","model":"opencode/gpt-5-nano"}`)
 	if resp.StatusCode != 200 {
 		t.Fatalf("patch: %d %s", resp.StatusCode, b)
 	}
@@ -335,30 +120,30 @@ func TestSessionLifecycleAndScoping(t *testing.T) {
 		t.Fatalf("patched = %+v", got)
 	}
 	// delete → gone
-	resp, _ = req(t, s, "DELETE", "/session/"+id, d, "")
+	resp, _ = testutil.Req(t, s, "DELETE", "/session/"+id, d, "")
 	if resp.StatusCode != 204 {
 		t.Fatalf("delete: %d", resp.StatusCode)
 	}
-	resp, _ = req(t, s, "GET", "/session/"+id, d, "")
+	resp, _ = testutil.Req(t, s, "GET", "/session/"+id, d, "")
 	if resp.StatusCode != 404 {
 		t.Fatalf("after delete: %d", resp.StatusCode)
 	}
 }
 
 func TestMessagesEndpoint(t *testing.T) {
-	s := newSrv(t)
+	s := testutil.Boot(t)
 	d := t.TempDir()
-	_, b := req(t, s, "POST", "/session", d, `{}`)
+	_, b := testutil.Req(t, s, "POST", "/session", d, `{}`)
 	var ses struct{ ID string }
 	json.Unmarshal(b, &ses)
-	resp, _ := req(t, s, "POST", "/session/"+ses.ID+"/message", d, `{"text":"hello"}`)
+	resp, _ := testutil.Req(t, s, "POST", "/session/"+ses.ID+"/message", d, `{"text":"hello"}`)
 	if resp.StatusCode != 202 {
 		t.Fatalf("send: %d", resp.StatusCode)
 	}
 	// wait for the turn to settle
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		_, b = req(t, s, "GET", "/session/status", d, "")
+		_, b = testutil.Req(t, s, "GET", "/session/status", d, "")
 		var st struct {
 			Sessions map[string]string `json:"sessions"`
 		}
@@ -368,7 +153,7 @@ func TestMessagesEndpoint(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	resp, b = req(t, s, "GET", "/session/"+ses.ID+"/message", d, "")
+	resp, b = testutil.Req(t, s, "GET", "/session/"+ses.ID+"/message", d, "")
 	if resp.StatusCode != 200 {
 		t.Fatalf("messages: %d %s", resp.StatusCode, b)
 	}
@@ -409,16 +194,16 @@ func TestMessagesEndpoint(t *testing.T) {
 }
 
 func TestSendMessage409AndEvents(t *testing.T) {
-	s := newSrv(t)
+	s := testutil.Boot(t)
 	d := t.TempDir()
-	_, b := req(t, s, "POST", "/session", d, `{}`)
+	_, b := testutil.Req(t, s, "POST", "/session", d, `{}`)
 	var ses struct{ ID string }
 	json.Unmarshal(b, &ses)
 	id := ses.ID
 
 	// subscribe SSE BEFORE sending (no pre-read: nothing is published yet)
-	res := sseConnect(t, s, d)
-	resp, b := req(t, s, "POST", "/session/"+id+"/message", d, `{"text":"hello"}`)
+	res := testutil.SSEConnect(t, s, d)
+	resp, b := testutil.Req(t, s, "POST", "/session/"+id+"/message", d, `{"text":"hello"}`)
 	if resp.StatusCode != 202 {
 		t.Fatalf("send: %d %s", resp.StatusCode, b)
 	}
@@ -440,13 +225,13 @@ func TestSendMessage409AndEvents(t *testing.T) {
 	}
 	// busy during turn: send again → 409 (turn still settling? send returns 202 immediately;
 	// LOCKED: 409 observable when a turn IS active — use slow fake (delay_ms) variant:
-	s.fakeDelay(200 * time.Millisecond)
-	resp2, _ := req(t, s, "POST", "/session/"+id+"/message", d, `{"text":"again"}`)
+	s.FakeDelay(200 * time.Millisecond)
+	resp2, _ := testutil.Req(t, s, "POST", "/session/"+id+"/message", d, `{"text":"again"}`)
 	if resp2.StatusCode != 202 {
 		t.Fatalf("second send: %d", resp2.StatusCode)
 	}
 	time.Sleep(50 * time.Millisecond)
-	resp3, b3 := req(t, s, "POST", "/session/"+id+"/message", d, `{"text":"thrice"}`)
+	resp3, b3 := testutil.Req(t, s, "POST", "/session/"+id+"/message", d, `{"text":"thrice"}`)
 	if resp3.StatusCode != 409 {
 		t.Fatalf("want 409 during busy, got %d %s", resp3.StatusCode, b3)
 	}
@@ -461,15 +246,15 @@ func TestSendMessage409AndEvents(t *testing.T) {
 }
 
 func TestAbortEndpoint(t *testing.T) {
-	s := newSrv(t)
+	s := testutil.Boot(t)
 	d := t.TempDir()
-	_, b := req(t, s, "POST", "/session", d, `{}`)
+	_, b := testutil.Req(t, s, "POST", "/session", d, `{}`)
 	var ses struct{ ID string }
 	json.Unmarshal(b, &ses)
-	s.fakeDelay(300 * time.Millisecond)
-	_, _ = req(t, s, "POST", "/session/"+ses.ID+"/message", d, `{"text":"slow"}`)
+	s.FakeDelay(300 * time.Millisecond)
+	_, _ = testutil.Req(t, s, "POST", "/session/"+ses.ID+"/message", d, `{"text":"slow"}`)
 	time.Sleep(30 * time.Millisecond)
-	resp, b2 := req(t, s, "POST", "/session/"+ses.ID+"/abort", d, `{}`)
+	resp, b2 := testutil.Req(t, s, "POST", "/session/"+ses.ID+"/abort", d, `{}`)
 	var body struct {
 		Aborted bool
 	}
@@ -478,7 +263,7 @@ func TestAbortEndpoint(t *testing.T) {
 		t.Fatalf("abort: %d %s", resp.StatusCode, b2)
 	}
 	// status now idle
-	resp, b3 := req(t, s, "GET", "/session/status", d, "")
+	resp, b3 := testutil.Req(t, s, "GET", "/session/status", d, "")
 	var st struct {
 		Sessions map[string]string `json:"sessions"`
 	}
@@ -487,7 +272,7 @@ func TestAbortEndpoint(t *testing.T) {
 		t.Fatalf("status = %v", st.Sessions)
 	}
 	// abort idle → aborted:false
-	resp, b4 := req(t, s, "POST", "/session/"+ses.ID+"/abort", d, `{}`)
+	resp, b4 := testutil.Req(t, s, "POST", "/session/"+ses.ID+"/abort", d, `{}`)
 	var b5 struct{ Aborted bool }
 	json.Unmarshal(b4, &b5)
 	if b5.Aborted {
@@ -496,13 +281,13 @@ func TestAbortEndpoint(t *testing.T) {
 }
 
 func TestCommandEndpoint(t *testing.T) {
-	s := newSrv(t)
+	s := testutil.Boot(t)
 	d := t.TempDir()
-	resp, b := req(t, s, "POST", "/session", d, `{}`)
+	resp, b := testutil.Req(t, s, "POST", "/session", d, `{}`)
 	var ses struct{ ID string }
 	json.Unmarshal(b, &ses)
 	// /new → new session id
-	resp, b = req(t, s, "POST", "/session/"+ses.ID+"/command", d, `{"command":"/new"}`)
+	resp, b = testutil.Req(t, s, "POST", "/session/"+ses.ID+"/command", d, `{"command":"/new"}`)
 	if resp.StatusCode != 200 {
 		t.Fatalf("%d %s", resp.StatusCode, b)
 	}
@@ -511,13 +296,13 @@ func TestCommandEndpoint(t *testing.T) {
 	if out.SessionID == "" || out.SessionID == ses.ID {
 		t.Fatalf("/new = %s", out.SessionID)
 	}
-	resp, b = req(t, s, "POST", "/session/"+ses.ID+"/command", d, `{"command":"/model"}`)
+	resp, b = testutil.Req(t, s, "POST", "/session/"+ses.ID+"/command", d, `{"command":"/model"}`)
 	var client struct{ Handled string `json:"handled"` }
 	json.Unmarshal(b, &client)
 	if resp.StatusCode != 200 || client.Handled != "client" {
 		t.Fatalf("/model = %d %s", resp.StatusCode, b)
 	}
-	resp, _ = req(t, s, "POST", "/session/"+ses.ID+"/command", d, `{"command":"/bogus"}`)
+	resp, _ = testutil.Req(t, s, "POST", "/session/"+ses.ID+"/command", d, `{"command":"/bogus"}`)
 	if resp.StatusCode != 400 {
 		t.Fatalf("/bogus = %d", resp.StatusCode)
 	}

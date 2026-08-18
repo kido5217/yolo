@@ -8,11 +8,12 @@ import (
 	"testing"
 
 	"github.com/kido5217/yolo/internal/protocol"
+	"github.com/kido5217/yolo/internal/server/testutil"
 )
 
 func TestProviderListAndAuth(t *testing.T) {
-	s := newSrv(t)
-	resp, b := req(t, s, "GET", "/provider", "", "")
+	s := testutil.Boot(t)
+	resp, b := testutil.Req(t, s, "GET", "/provider", "", "")
 	if resp.StatusCode != 200 {
 		t.Fatalf("%d %s", resp.StatusCode, b)
 	}
@@ -33,8 +34,8 @@ func TestProviderListAndAuth(t *testing.T) {
 		t.Fatalf("zen auth = %+v", z.Auth)
 	}
 	// config-defined provider appears
-	writeCfg(t, s.dir, `{"provider": {"myprov": {"base_url": "http://x", "models": {"m1": {"name": "M1"}}}}}`)
-	resp, b = req(t, s, "GET", "/provider", s.dir, "")
+	testutil.WriteCfg(t, s.Dir, `{"provider": {"myprov": {"base_url": "http://x", "models": {"m1": {"name": "M1"}}}}}`)
+	resp, b = testutil.Req(t, s, "GET", "/provider", s.Dir, "")
 	json.Unmarshal(b, &ps)
 	var found bool
 	for _, p := range ps {
@@ -51,8 +52,8 @@ func TestProviderListAndAuth(t *testing.T) {
 // body shape LOCKED): key_required + env per provider, merged with the
 // loaded key source/status.
 func TestProviderAuthEndpoint(t *testing.T) {
-	s := newSrv(t)
-	resp, b := req(t, s, "GET", "/provider/auth", "", "")
+	s := testutil.Boot(t)
+	resp, b := testutil.Req(t, s, "GET", "/provider/auth", "", "")
 	if resp.StatusCode != 200 {
 		t.Fatalf("%d %s", resp.StatusCode, b)
 	}
@@ -74,13 +75,13 @@ func TestProviderAuthEndpoint(t *testing.T) {
 }
 
 func TestConfigGetPatchRoundtrip(t *testing.T) {
-	s := newSrv(t)
-	d := s.dir
-	resp, b := req(t, s, "GET", "/config", d, "")
+	s := testutil.Boot(t)
+	d := s.Dir
+	resp, b := testutil.Req(t, s, "GET", "/config", d, "")
 	if resp.StatusCode != 200 {
 		t.Fatalf("%d %s", resp.StatusCode, b)
 	}
-	resp, b = req(t, s, "PATCH", "/config", d, `{"model": "opencode/gpt-5-nano", "provider": {"kido": {"options": {"foo": true}}}}`)
+	resp, b = testutil.Req(t, s, "PATCH", "/config", d, `{"model": "opencode/gpt-5-nano", "provider": {"kido": {"options": {"foo": true}}}}`)
 	if resp.StatusCode != 200 {
 		t.Fatalf("%d %s", resp.StatusCode, b)
 	}
@@ -95,7 +96,7 @@ func TestConfigGetPatchRoundtrip(t *testing.T) {
 		t.Fatalf("file = %s", raw)
 	}
 	// patch again — deep merge keeps provider.kido.options.foo
-	resp, b = req(t, s, "PATCH", "/config", d, `{"provider": {"kido": {"options": {"bar": 1}}}}`)
+	resp, b = testutil.Req(t, s, "PATCH", "/config", d, `{"provider": {"kido": {"options": {"bar": 1}}}}`)
 	json.Unmarshal(b, &cfg)
 	k := cfg["provider"].(map[string]any)["kido"].(map[string]any)["options"].(map[string]any)
 	if k["foo"] != true || k["bar"] != float64(1) {
@@ -104,12 +105,12 @@ func TestConfigGetPatchRoundtrip(t *testing.T) {
 }
 
 func TestGlobalConfig(t *testing.T) {
-	s := newSrv(t)
-	resp, b := req(t, s, "PATCH", "/global/config", "", `{"model": "kido/m"}`)
+	s := testutil.Boot(t)
+	resp, b := testutil.Req(t, s, "PATCH", "/global/config", "", `{"model": "kido/m"}`)
 	if resp.StatusCode != 200 {
 		t.Fatalf("%d %s", resp.StatusCode, b)
 	}
-	f := filepath.Join(s.home, "yolo", "yolo.jsonc")
+	f := filepath.Join(s.Home, "yolo", "yolo.jsonc")
 	raw, err := os.ReadFile(f)
 	if err != nil {
 		t.Fatalf("global file: %v", err)
@@ -118,8 +119,8 @@ func TestGlobalConfig(t *testing.T) {
 		t.Fatalf("global = %s", raw)
 	}
 	// project overrides global in GET /config
-	resp, b = req(t, s, "PATCH", "/config", s.dir, `{"model": "kido/other"}`)
-	resp, b = req(t, s, "GET", "/config", s.dir, "")
+	resp, b = testutil.Req(t, s, "PATCH", "/config", s.Dir, `{"model": "kido/other"}`)
+	resp, b = testutil.Req(t, s, "GET", "/config", s.Dir, "")
 	var cfg map[string]any
 	json.Unmarshal(b, &cfg)
 	if cfg["model"] != "kido/other" {
@@ -128,12 +129,12 @@ func TestGlobalConfig(t *testing.T) {
 }
 
 func TestAuthPutDelete(t *testing.T) {
-	s := newSrv(t)
-	resp, _ := req(t, s, "PUT", "/auth/opencode", "", `{"key": "sk-test"}`)
+	s := testutil.Boot(t)
+	resp, _ := testutil.Req(t, s, "PUT", "/auth/opencode", "", `{"key": "sk-test"}`)
 	if resp.StatusCode != 204 {
 		t.Fatalf("put: %d", resp.StatusCode)
 	}
-	resp, b := req(t, s, "GET", "/provider", "", "")
+	resp, b := testutil.Req(t, s, "GET", "/provider", "", "")
 	var ps []protocol.Provider
 	json.Unmarshal(b, &ps)
 	for _, p := range ps {
@@ -143,11 +144,11 @@ func TestAuthPutDelete(t *testing.T) {
 			}
 		}
 	}
-	resp, _ = req(t, s, "DELETE", "/auth/opencode", "", "")
+	resp, _ = testutil.Req(t, s, "DELETE", "/auth/opencode", "", "")
 	if resp.StatusCode != 204 {
 		t.Fatalf("delete: %d", resp.StatusCode)
 	}
-	resp, b = req(t, s, "GET", "/provider", "", "")
+	resp, b = testutil.Req(t, s, "GET", "/provider", "", "")
 	json.Unmarshal(b, &ps)
 	for _, p := range ps {
 		if p.ID == "opencode" && p.Auth != nil && p.Auth.Status == "loaded" {
@@ -157,15 +158,15 @@ func TestAuthPutDelete(t *testing.T) {
 }
 
 func TestPermissionListAndReply(t *testing.T) {
-	s := newSrv(t)
+	s := testutil.Boot(t)
 	d := t.TempDir()
-	_, b := req(t, s, "POST", "/session", d, `{}`)
+	_, b := testutil.Req(t, s, "POST", "/session", d, `{}`)
 	var ses struct{ ID string }
 	json.Unmarshal(b, &ses)
 	// park a pending ask (action with no rules → ask) via the permission
 	// service directly (harness seam permSvc.Ask in a goroutine):
-	s.parkAsk(ses.ID, "custom", "res1")
-	resp, b := req(t, s, "GET", "/permission", d, "")
+	s.ParkAsk(ses.ID, "custom", "res1")
+	resp, b := testutil.Req(t, s, "GET", "/permission", d, "")
 	if resp.StatusCode != 200 {
 		t.Fatalf("%d %s", resp.StatusCode, b)
 	}
@@ -174,28 +175,28 @@ func TestPermissionListAndReply(t *testing.T) {
 	if len(pend) != 1 || pend[0].Permission != "custom" {
 		t.Fatalf("pending = %+v", pend)
 	}
-	resp, _ = req(t, s, "POST", "/permission/"+pend[0].ID+"/reply", d, `{"response":"once"}`)
+	resp, _ = testutil.Req(t, s, "POST", "/permission/"+pend[0].ID+"/reply", d, `{"response":"once"}`)
 	if resp.StatusCode != 204 {
 		t.Fatalf("reply: %d", resp.StatusCode)
 	}
-	resp, b = req(t, s, "GET", "/permission", d, "")
+	resp, b = testutil.Req(t, s, "GET", "/permission", d, "")
 	json.Unmarshal(b, &pend)
 	if len(pend) != 0 {
 		t.Fatalf("still pending: %+v", pend)
 	}
-	resp, _ = req(t, s, "POST", "/permission/per_missing/reply", d, `{"response":"once"}`)
+	resp, _ = testutil.Req(t, s, "POST", "/permission/per_missing/reply", d, `{"response":"once"}`)
 	if resp.StatusCode != 404 {
 		t.Fatalf("unknown reply: %d", resp.StatusCode)
 	}
-	resp, _ = req(t, s, "POST", "/permission/per_missing/reply", d, `{"response":"bogus"}`)
+	resp, _ = testutil.Req(t, s, "POST", "/permission/per_missing/reply", d, `{"response":"bogus"}`)
 	if resp.StatusCode == 404 { // 404 wins over 400? LOCKED: validate body first → 400
 		t.Fatalf("bad response should be 400")
 	}
 }
 
 func TestAgentAndCommand(t *testing.T) {
-	s := newSrv(t)
-	_, b := req(t, s, "GET", "/agent", "", "")
+	s := testutil.Boot(t)
+	_, b := testutil.Req(t, s, "GET", "/agent", "", "")
 	var agents []protocol.Agent
 	json.Unmarshal(b, &agents)
 	byName := map[string]string{}
@@ -211,7 +212,7 @@ func TestAgentAndCommand(t *testing.T) {
 	if _, ok := byName["yolo"]; !ok {
 		t.Fatalf("yolo missing: %s", b)
 	}
-	_, b = req(t, s, "GET", "/command", "", "")
+	_, b = testutil.Req(t, s, "GET", "/command", "", "")
 	var cmds []protocol.Command
 	json.Unmarshal(b, &cmds)
 	if len(cmds) != 5 {
@@ -220,9 +221,9 @@ func TestAgentAndCommand(t *testing.T) {
 }
 
 func TestUnknownRoutes404(t *testing.T) {
-	s := newSrv(t)
+	s := testutil.Boot(t)
 	for _, p := range []string{"/", "/api/v2/sessions", "/mcp/x", "/skill/s", "/nope"} {
-		resp, _ := req(t, s, "GET", p, "", "")
+		resp, _ := testutil.Req(t, s, "GET", p, "", "")
 		if resp.StatusCode != 404 {
 			t.Fatalf("%s → %d, want 404", p, resp.StatusCode)
 		}

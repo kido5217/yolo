@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"math"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -16,17 +15,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kido5217/yolo/internal/bus"
-	"github.com/kido5217/yolo/internal/config"
 	"github.com/kido5217/yolo/internal/llm"
 	fakellm "github.com/kido5217/yolo/internal/llm/fake"
-	"github.com/kido5217/yolo/internal/permission"
 	"github.com/kido5217/yolo/internal/protocol"
-	"github.com/kido5217/yolo/internal/provider"
 	"github.com/kido5217/yolo/internal/server"
-	"github.com/kido5217/yolo/internal/session"
-	"github.com/kido5217/yolo/internal/storage"
-	"github.com/kido5217/yolo/internal/tool"
+	"github.com/kido5217/yolo/internal/server/testutil"
 )
 
 // updateGolden regenerates testdata/golden/*.json
@@ -120,9 +113,9 @@ func (n *normalizer) walk(v any) any {
 
 // golden performs one canonical request, normalizes the JSON body, and compares
 // (or, with -update, regenerates) it against testdata/golden/<name>.json.
-func golden(t *testing.T, s *srv, name, method, path, dir, body string, want int) {
+func golden(t *testing.T, s *testutil.TestServer, name, method, path, dir, body string, want int) {
 	t.Helper()
-	resp, b := req(t, s, method, path, dir, body)
+	resp, b := testutil.Req(t, s, method, path, dir, body)
 	if resp.StatusCode != want {
 		t.Fatalf("%s %s: status %d, want %d: %s", method, path, resp.StatusCode, want, b)
 	}
@@ -132,7 +125,7 @@ func golden(t *testing.T, s *srv, name, method, path, dir, body string, want int
 	}
 	normDir := dir
 	if normDir == "" {
-		normDir = s.dir
+		normDir = s.Dir
 	}
 	norm := newNormalizer(normDir).walk(v)
 	data, err := json.MarshalIndent(norm, "", "  ")
@@ -160,9 +153,9 @@ func golden(t *testing.T, s *srv, name, method, path, dir, body string, want int
 }
 
 // mkSession creates a session in dir ("") and returns its id.
-func mkSession(t *testing.T, s *srv, dir, title string) string {
+func mkSession(t *testing.T, s *testutil.TestServer, dir, title string) string {
 	t.Helper()
-	resp, b := req(t, s, "POST", "/session", dir, `{"title":"`+title+`"}`)
+	resp, b := testutil.Req(t, s, "POST", "/session", dir, `{"title":"`+title+`"}`)
 	if resp.StatusCode != 201 {
 		t.Fatalf("create session: %d %s", resp.StatusCode, b)
 	}
@@ -175,11 +168,11 @@ func mkSession(t *testing.T, s *srv, dir, title string) string {
 }
 
 // waitIdle polls /session/status until the session reports idle.
-func waitIdle(t *testing.T, s *srv, dir, id string) {
+func waitIdle(t *testing.T, s *testutil.TestServer, dir, id string) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		_, b := req(t, s, "GET", "/session/status", dir, "")
+		_, b := testutil.Req(t, s, "GET", "/session/status", dir, "")
 		var st struct {
 			Sessions map[string]string `json:"sessions"`
 		}
@@ -194,48 +187,48 @@ func waitIdle(t *testing.T, s *srv, dir, id string) {
 
 func TestGoldenResponses(t *testing.T) {
 	t.Run("health", func(t *testing.T) {
-		s := newSrv(t)
+		s := testutil.Boot(t)
 		golden(t, s, "health", "GET", "/global/health", "", "", 200)
 	})
 	t.Run("path", func(t *testing.T) {
-		s := newSrv(t)
+		s := testutil.Boot(t)
 		d := t.TempDir()
 		golden(t, s, "path", "GET", "/path", d, "", 200)
 	})
 	t.Run("project", func(t *testing.T) {
-		s := newSrv(t)
+		s := testutil.Boot(t)
 		d := t.TempDir()
 		golden(t, s, "project", "GET", "/project/current", d, "", 200)
 	})
 	t.Run("session_list", func(t *testing.T) {
-		s := newSrv(t)
+		s := testutil.Boot(t)
 		d := t.TempDir()
 		mkSession(t, s, d, "Golden")
 		golden(t, s, "session_list", "GET", "/session", d, "", 200)
 	})
 	t.Run("session_create", func(t *testing.T) {
-		s := newSrv(t)
+		s := testutil.Boot(t)
 		d := t.TempDir()
 		golden(t, s, "session_create", "POST", "/session", d, `{"title":"Golden"}`, 201)
 	})
 	t.Run("session_get", func(t *testing.T) {
-		s := newSrv(t)
+		s := testutil.Boot(t)
 		d := t.TempDir()
 		id := mkSession(t, s, d, "Golden")
 		golden(t, s, "session_get", "GET", "/session/"+id, d, "", 200)
 	})
 	t.Run("session_patch", func(t *testing.T) {
-		s := newSrv(t)
+		s := testutil.Boot(t)
 		d := t.TempDir()
 		id := mkSession(t, s, d, "Golden")
 		golden(t, s, "session_patch", "PATCH", "/session/"+id, d,
 			`{"title":"Patched","agent":"yolo","model":"opencode/gpt-5-nano"}`, 200)
 	})
 	t.Run("message_list", func(t *testing.T) {
-		s := newSrv(t)
+		s := testutil.Boot(t)
 		d := t.TempDir()
 		id := mkSession(t, s, d, "Golden")
-		resp, b := req(t, s, "POST", "/session/"+id+"/message", d, `{"text":"hello"}`)
+		resp, b := testutil.Req(t, s, "POST", "/session/"+id+"/message", d, `{"text":"hello"}`)
 		if resp.StatusCode != 202 {
 			t.Fatalf("send: %d %s", resp.StatusCode, b)
 		}
@@ -243,31 +236,31 @@ func TestGoldenResponses(t *testing.T) {
 		golden(t, s, "message_list", "GET", "/session/"+id+"/message", d, "", 200)
 	})
 	t.Run("provider", func(t *testing.T) {
-		s := newSrv(t)
+		s := testutil.Boot(t)
 		d := t.TempDir()
 		golden(t, s, "provider", "GET", "/provider", d, "", 200)
 	})
 	t.Run("config", func(t *testing.T) {
-		s := newSrv(t)
+		s := testutil.Boot(t)
 		d := t.TempDir()
-		writeCfg(t, d, `{"model":"kido/q","permission":{"edit":"ask"}}`)
+		testutil.WriteCfg(t, d, `{"model":"kido/q","permission":{"edit":"ask"}}`)
 		golden(t, s, "config", "GET", "/config", d, "", 200)
 	})
 	t.Run("agent", func(t *testing.T) {
-		s := newSrv(t)
+		s := testutil.Boot(t)
 		golden(t, s, "agent", "GET", "/agent", "", "", 200)
 	})
 	t.Run("command", func(t *testing.T) {
-		s := newSrv(t)
+		s := testutil.Boot(t)
 		golden(t, s, "command", "GET", "/command", "", "", 200)
 	})
 	t.Run("permission_empty", func(t *testing.T) {
-		s := newSrv(t)
+		s := testutil.Boot(t)
 		d := t.TempDir()
 		golden(t, s, "permission_empty", "GET", "/permission", d, "", 200)
 	})
 	t.Run("status", func(t *testing.T) {
-		s := newSrv(t)
+		s := testutil.Boot(t)
 		d := t.TempDir()
 		mkSession(t, s, d, "Golden")
 		golden(t, s, "status", "GET", "/session/status", d, "", 200)
@@ -275,7 +268,7 @@ func TestGoldenResponses(t *testing.T) {
 }
 
 // sseMsgField pulls a string field out of a message.updated frame's info object.
-func sseMsgField(t *testing.T, f sseFrame, field string) string {
+func sseMsgField(t *testing.T, f testutil.SSEFrame, field string) string {
 	t.Helper()
 	info, ok := f.Properties["info"].(map[string]any)
 	if !ok {
@@ -286,13 +279,13 @@ func sseMsgField(t *testing.T, f sseFrame, field string) string {
 }
 
 // ssePart returns the part object of a message.part.updated frame.
-func ssePart(t *testing.T, f sseFrame) map[string]any {
+func ssePart(t *testing.T, f testutil.SSEFrame) map[string]any {
 	t.Helper()
 	p, _ := f.Properties["part"].(map[string]any)
 	return p
 }
 
-func sseTypes(frames []sseFrame) []string {
+func sseTypes(frames []testutil.SSEFrame) []string {
 	out := make([]string, 0, len(frames))
 	for _, f := range frames {
 		out = append(out, f.Type)
@@ -305,13 +298,13 @@ func sseTypes(frames []sseFrame) []string {
 // BEFORE the turn goroutine emits busy — matching upstream v1.18.18, and
 // deviating from the plan's pinned "busy first" order (see PROGRESS.md).
 func TestSSEOrdering(t *testing.T) {
-	s := newSrv(t)
+	s := testutil.Boot(t)
 	d := t.TempDir()
 	id := mkSession(t, s, d, "Sse") // explicit title: no title-generation side request
 
-	res := sseConnect(t, s, d)
-	s.waitSubscribe(t, 1) // subscription live before we publish the turn
-	resp, b := req(t, s, "POST", "/session/"+id+"/message", d, `{"text":"hello"}`)
+	res := testutil.SSEConnect(t, s, d)
+	s.WaitSubscribe(t, 1) // subscription live before we publish the turn
+	resp, b := testutil.Req(t, s, "POST", "/session/"+id+"/message", d, `{"text":"hello"}`)
 	if resp.StatusCode != 202 {
 		t.Fatalf("send: %d %s", resp.StatusCode, b)
 	}
@@ -321,7 +314,7 @@ func TestSSEOrdering(t *testing.T) {
 	_ = json.Unmarshal(b, &out)
 	userMsgID := out.MessageID
 
-	var frames []sseFrame
+	var frames []testutil.SSEFrame
 	for i := 0; i < 200; i++ {
 		f := res.Frame(t)
 		frames = append(frames, f)
@@ -422,7 +415,7 @@ func osEnvMap() map[string]string {
 // newSrvFakeEnv boots the full stack but wires the kido driver from the
 // YOLO_LLM/YOLO_FAKE_SCRIPT environment (the M5 env gate), so the e2e runs the
 // same path as `yolo serve` with YOLO_LLM=fake.
-func newSrvFakeEnv(t *testing.T, script string) (*srv, *fakellm.Driver) {
+func newSrvFakeEnv(t *testing.T, script string) (*testutil.TestServer, *fakellm.Driver) {
 	t.Helper()
 	_ = os.Setenv("YOLO_LLM", "fake")
 	_ = os.Setenv("YOLO_FAKE_SCRIPT", script)
@@ -437,46 +430,7 @@ func newSrvFakeEnv(t *testing.T, script string) (*srv, *fakellm.Driver) {
 	if drv == nil {
 		t.Fatal("FakeFromEnv returned nil driver with YOLO_LLM=fake set")
 	}
-
-	root := t.TempDir()
-	dataDir := filepath.Join(root, "data")
-	if err := os.MkdirAll(filepath.Join(dataDir, "storage"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	db, err := storage.Open(filepath.Join(dataDir, "storage", "yolo.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	b := bus.New()
-	prov := provider.NewStaticForTest()
-	permSvc := permission.New(db, b)
-	eng := session.New(session.Deps{
-		DB:      db,
-		Bus:     b,
-		Prov:    prov,
-		Perm:    permSvc,
-		Tools:   tool.Registry(),
-		DataDir: dataDir,
-		Cfg:     func(string) (*protocol.Config, error) { return &protocol.Config{}, nil },
-		Drivers: map[string]llm.Driver{"kido": drv},
-		Clock:   func() int64 { return time.Now().UnixMilli() },
-	})
-	dir := t.TempDir()
-	home := filepath.Join(root, "home")
-	h := server.New(server.Deps{
-		DB:      db,
-		Bus:     b,
-		Engine:  eng,
-		Prov:    prov,
-		Perm:    permSvc,
-		Config:  config.Loader{Env: map[string]string{}},
-		WorkDir: dir,
-		Dirs:    config.Dirs{Home: home, Data: dataDir, Cache: filepath.Join(root, "cache")},
-	})
-	ts := httptest.NewServer(h)
-	t.Cleanup(ts.Close)
-	return &srv{Server: ts, db: db, eng: eng, fake: drv, permSvc: permSvc, bus: b, dir: dir, home: home}, drv
+	return testutil.BootWithDriver(t, drv), drv
 }
 
 // TestFakeEnvE2E drives a two-send conversation through the HTTP API with the
@@ -495,25 +449,25 @@ func TestFakeEnvE2E(t *testing.T) {
 	s, drv := newSrvFakeEnv(t, sp)
 	// the session (and the read tool's relative path) resolves against the
 	// server work dir, so the note must live there
-	if err := os.WriteFile(filepath.Join(s.dir, "note.txt"), []byte("hello from note\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(s.Dir, "note.txt"), []byte("hello from note\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	id := mkSession(t, s, s.dir, "E2E")
+	id := mkSession(t, s, s.Dir, "E2E")
 
-	resp, b := req(t, s, "POST", "/session/"+id+"/message", s.dir, `{"text":"read note please"}`)
+	resp, b := testutil.Req(t, s, "POST", "/session/"+id+"/message", s.Dir, `{"text":"read note please"}`)
 	if resp.StatusCode != 202 {
 		t.Fatalf("send 1: %d %s", resp.StatusCode, b)
 	}
-	waitIdle(t, s, s.dir, id)
-	resp, b = req(t, s, "POST", "/session/"+id+"/message", s.dir, `{"text":"again"}`)
+	waitIdle(t, s, s.Dir, id)
+	resp, b = testutil.Req(t, s, "POST", "/session/"+id+"/message", s.Dir, `{"text":"again"}`)
 	if resp.StatusCode != 202 {
 		t.Fatalf("send 2: %d %s", resp.StatusCode, b)
 	}
-	waitIdle(t, s, s.dir, id)
+	waitIdle(t, s, s.Dir, id)
 
 	// messages + parts persisted: user x2, an assistant with a completed
 	// `read` tool part (output = the note) and the closing text part.
-	resp, b = req(t, s, "GET", "/session/"+id+"/message", s.dir, "")
+	resp, b = testutil.Req(t, s, "GET", "/session/"+id+"/message", s.Dir, "")
 	if resp.StatusCode != 200 {
 		t.Fatalf("messages: %d %s", resp.StatusCode, b)
 	}
@@ -591,18 +545,18 @@ func TestFakeEnvE2E(t *testing.T) {
 // server work dir, and every id-scoped route 404s for a session id belonging to
 // a different directory.
 func TestScopeMatrix(t *testing.T) {
-	s := newSrv(t)
-	wd := s.dir
+	s := testutil.Boot(t)
+	wd := s.Dir
 
 	t.Run("no_header_uses_workdir", func(t *testing.T) {
-		resp, b := req(t, s, "GET", "/path", "", "")
+		resp, b := testutil.Req(t, s, "GET", "/path", "", "")
 		var p map[string]string
 		_ = json.Unmarshal(b, &p)
 		if resp.StatusCode != 200 || p["directory"] != wd {
 			t.Fatalf("no-header /path = %d %s, want dir %s", resp.StatusCode, b, wd)
 		}
 		mkSession(t, s, "", "Cwd") // created without a header -> work dir
-		resp, b = req(t, s, "GET", "/session", "", "")
+		resp, b = testutil.Req(t, s, "GET", "/session", "", "")
 		var list []map[string]any
 		_ = json.Unmarshal(b, &list)
 		if len(list) != 1 {
@@ -627,13 +581,13 @@ func TestScopeMatrix(t *testing.T) {
 	dB := t.TempDir()
 	id := mkSession(t, s, dA, "A")
 	for _, r := range idScoped {
-		resp, b := req(t, s, r.method, fmt.Sprintf(r.path, id), dB, r.body)
+		resp, b := testutil.Req(t, s, r.method, fmt.Sprintf(r.path, id), dB, r.body)
 		if resp.StatusCode != 404 {
 			t.Fatalf("%s %s (other dir) = %d, want 404: %s", r.method, r.path, resp.StatusCode, b)
 		}
 	}
 	// sanity: the owning dir resolves the id
-	resp, b := req(t, s, "GET", "/session/"+id, dA, "")
+	resp, b := testutil.Req(t, s, "GET", "/session/"+id, dA, "")
 	if resp.StatusCode != 200 {
 		t.Fatalf("GET /session/%s (owning dir) = %d, want 200: %s", id, resp.StatusCode, b)
 	}
