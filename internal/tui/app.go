@@ -745,8 +745,31 @@ func (a *App) emit(cmds ...tea.Cmd) []tea.Cmd {
 // View renders the active route, the dialog overlay and the last error line
 // into a tea.View (bubbletea v2's Model interface returns tea.View, not
 // string). The plain-string composition lives in a.view() for unit testing.
+// AltScreen keeps the TUI in the alternate screen buffer (v2 expresses this
+// on the View, not as a program option).
 func (a *App) View() tea.View {
-	return tea.NewView(a.view())
+	v := tea.NewView(a.view())
+	v.AltScreen = true
+	return v
+}
+
+// overlayLines counts the lines the below-viewport overlays (slash menu is
+// reserved separately by viewSession) occupy: the permission ask, the
+// toasts, the open dialog and the last error line. The viewport uses this
+// to shrink so the composed frame always fits the terminal height —
+// mandatory under the alt screen, whose frame (unlike the normal-screen
+// frame, which grows with content) is the fixed terminal size.
+func (a *App) overlayLines() int {
+	n := 0
+	for _, v := range []string{a.permissionView(), a.toastsView(), a.dlgView()} {
+		if v != "" {
+			n += 1 + strings.Count(v, "\n")
+		}
+	}
+	if a.lastErr != "" {
+		n++
+	}
+	return n
 }
 
 // view composes the on-screen string: the active route, the slash menu, the
@@ -781,13 +804,14 @@ func (a *App) view() string {
 
 // viewSession renders the session route: title, the transcript viewport and
 // the locked help line. The viewport reserves a line for the prompt, one for
-// the footer, plus the open slash menu.
+// the footer, the open slash menu and every below-viewport overlay (see
+// overlayLines), so the frame fits the terminal height.
 func (a *App) viewSession() string {
 	w := a.size.Width
 	if w < 1 {
 		w = 80
 	}
-	h := a.size.Height - 3 - 1 - 1 - a.prompt.menuLines(a.store.Commands)
+	h := a.size.Height - 3 - 1 - 1 - a.prompt.menuLines(a.store.Commands) - a.overlayLines()
 	if h < 1 {
 		h = 1
 	}

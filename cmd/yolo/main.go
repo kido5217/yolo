@@ -1,16 +1,40 @@
+// Command yolo runs the core HTTP server (REST + SSE) in-process and, by
+// default, the bubbletea TUI which talks to it only through the wire
+// contract (internal/protocol via internal/tui/client). `yolo serve` runs
+// the server alone; `yolo auth` manages credentials.
 package main
 
 import (
 	"bufio"
+	"context"
+	"errors"
 	"flag"
 	"fmt"
-	"net"
+	"io"
 	"os"
+	"os/signal"
+	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/kido5217/yolo/internal/auth"
+	"github.com/kido5217/yolo/internal/bus"
+	"github.com/kido5217/yolo/internal/config"
+	"github.com/kido5217/yolo/internal/llm"
+	"github.com/kido5217/yolo/internal/permission"
+	"github.com/kido5217/yolo/internal/protocol"
+	"github.com/kido5217/yolo/internal/provider"
 	"github.com/kido5217/yolo/internal/server"
+	"github.com/kido5217/yolo/internal/session"
+	"github.com/kido5217/yolo/internal/storage"
+	"github.com/kido5217/yolo/internal/tool"
+	"github.com/kido5217/yolo/internal/tui"
+	"github.com/kido5217/yolo/internal/tui/client"
+	"github.com/kido5217/yolo/internal/tui/store"
 )
 
 func main() {
@@ -19,19 +43,11 @@ func main() {
 
 func run(args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "yolo: TUI not wired yet (milestone M6); use `yolo serve`")
-		return 0
+		return tuiMode(nil)
 	}
 	switch args[0] {
 	case "help", "-h", "--help":
-		fmt.Fprint(os.Stderr, `yolo — Go port of opencode (v1.18.18 wire contract)
-
-Usage:
-  yolo [<sessionID>]        start the TUI (or resume a session)
-  yolo serve [--port N]     run the core server only
-  yolo auth <subcommand>    manage credentials (list | add <provider> [key] | remove <provider>)
-  yolo help                 this help
-`)
+		usage(os.Stderr)
 		return 0
 	case "serve":
 		return serve(args[1:])
@@ -41,30 +57,226 @@ Usage:
 		fmt.Println("yolo 0.0.0-dev")
 		return 0
 	default:
-		fmt.Fprintf(os.Stderr, "yolo: resume not wired yet (Task 27); unknown argument %q\n", args[0])
+		return tuiMode(args)
+	}
+}
+
+func usage(w io.Writer) {
+	fmt.Fprint(w, `yolo — Go port of opencode (v1.18.18 wire contract)
+
+Usage:
+  yolo [<sessionID>] [--dir DIR]   start the TUI (optionally resume a session)
+  yolo serve [--addr ADDR]         run the core server only (default http://127.0.0.1:4096)
+  yolo auth <subcommand>           manage credentials (list | add <provider> [key] | remove <provider>)
+  yolo help                        this help
+`)
+}
+
+// workDir resolves --dir to an absolute directory that must exist.
+func workDir(flagDir string) (string, error) {
+	d := flagDir
+	if d == "" {
+		var err error
+		if d, err = os.Getwd(); err != nil {
+			return "", err
+		}
+	}
+	abs, err := filepath.Abs(d)
+	if err != nil {
+		return "", err
+	}
+	st, err := os.Stat(abs)
+	if err != nil {
+		return "", err
+	}
+	if !st.IsDir() {
+		return "", fmt.Errorf("not a directory: %s", abs)
+	}
+	return abs, nil
+}
+
+// buildDeps assembles the full core stack for workDir: config loader (real
+// XDG env), storage DB, bus, permission service, provider registry, tools
+// and the session engine. YOLO_LLM=fake (with YOLO_FAKE_SCRIPT) selects the
+// scripted fake driver + static catalog so the suite never hits the
+// network; any other env runs the live registry.
+func buildDeps(workDir string) (*server.Deps, func(), error) {
+	loader := config.Loader{} // nil Env view = real process environment
+	dataDir := config.DataYoloDir()
+
+	db, err := openDB(filepath.Join(dataDir, "storage", "yolo.db"))
+	if err != nil {
+		return nil, nil, err
+	}
+	closeDB := func() { _ = db.Close() }
+
+	b := bus.New()
+	deps := &server.Deps{
+		DB:      db,
+		Bus:     b,
+		Perm:    permission.New(db, b),
+		Config:  loader,
+		WorkDir: workDir, // zero Dirs = real XDG roots
+	}
+
+	globalDir := config.GlobalYoloDir()
+	cfg, err := loader.LoadAt(globalDir, workDir)
+	if err != nil {
+		closeDB()
+		return nil, nil, err
+	}
+
+	fake, err := server.FakeFromEnv(envMap())
+	if err != nil {
+		closeDB()
+		return nil, nil, err
+	}
+	if fake != nil {
+		deps.Prov = provider.NewStaticForTest()
+		deps.Engine = session.New(session.Deps{
+			DB: db, Bus: deps.Bus, Prov: deps.Prov, Perm: deps.Perm,
+			Tools: tool.Registry(), DataDir: dataDir,
+			Cfg: func(dir string) (*protocol.Config, error) {
+				return loader.LoadAt(globalDir, dir)
+			},
+			Drivers: map[string]llm.Driver{"kido": fake},
+		})
+	} else {
+		prov, err := provider.New(context.Background(), cfg, nil, provider.Dirs{})
+		if err != nil {
+			closeDB()
+			return nil, nil, err
+		}
+		deps.Prov = prov
+		deps.Engine = session.New(session.Deps{
+			DB: db, Bus: deps.Bus, Prov: deps.Prov, Perm: deps.Perm,
+			Tools: tool.Registry(), DataDir: dataDir,
+			Cfg: func(dir string) (*protocol.Config, error) {
+				return loader.LoadAt(globalDir, dir)
+			},
+		})
+	}
+	return deps, closeDB, nil
+}
+
+func openDB(path string) (*storage.DB, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, err
+	}
+	return storage.Open(path)
+}
+
+func envMap() map[string]string {
+	env := map[string]string{}
+	for _, kv := range os.Environ() {
+		if i := strings.IndexByte(kv, '='); i > 0 {
+			env[kv[:i]] = kv[i+1:]
+		}
+	}
+	return env
+}
+
+// tuiMode runs `yolo [<sessionID>] [--dir DIR]`: in-process server on an
+// ephemeral port + the TUI.
+func tuiMode(args []string) int {
+	fs := flag.NewFlagSet("yolo", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	dir := fs.String("dir", "", "project directory (default CWD)")
+	if err := fs.Parse(args); err != nil {
+		usage(os.Stderr)
 		return 2
 	}
+	var sessionID string
+	if fs.NArg() > 1 {
+		usage(os.Stderr)
+		return 2
+	}
+	if fs.NArg() == 1 {
+		sessionID = fs.Arg(0)
+	}
+	wd, err := workDir(*dir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "yolo: %v\n", err)
+		return 2
+	}
+	deps, closeDB, err := buildDeps(wd)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "yolo: %v\n", err)
+		return 1
+	}
+	defer closeDB()
+
+	srv := server.NewServer(*deps)
+	ln, err := srv.Start("127.0.0.1:0")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "yolo: %v\n", err)
+		return 1
+	}
+
+	cl := client.New("http://"+ln.String(), wd)
+	if sessionID != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_, err := cl.GetSession(ctx, sessionID)
+		cancel()
+		if err != nil {
+			if errors.Is(err, client.ErrNotFound) {
+				fmt.Fprintf(os.Stderr, "session not found: %s\n", sessionID)
+			} else {
+				fmt.Fprintf(os.Stderr, "yolo: %v\n", err)
+			}
+			drain(deps, srv)
+			return 2
+		}
+	}
+
+	app := tui.NewApp(cl, &store.Store{}, sessionID)
+	if _, err := tea.NewProgram(app).Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "yolo: %v\n", err)
+		app.Close()
+		drain(deps, srv)
+		return 1
+	}
+	app.Close()
+	drain(deps, srv)
+	return 0
+}
+
+// drain stops active turns (at most 5 s), then the listener.
+func drain(deps *server.Deps, srv *server.Server) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	deps.Engine.Shutdown(ctx)
+	srv.Close()
 }
 
 func serve(args []string) int {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
-	port := fs.Int("port", 4096, "port to listen on (0 = ephemeral)")
-	if err := fs.Parse(args); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 2
-	}
-	s := server.NewServer(server.Deps{WorkDir: mustGetwd()})
-	addr, err := s.Start(fmt.Sprintf("127.0.0.1:%d", *port))
+	addr := fs.String("addr", "127.0.0.1:4096", "listen address")
+	fs.Parse(args)
+	wd, err := workDir("")
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "listen:", err)
+		fmt.Fprintf(os.Stderr, "yolo serve: %v\n", err)
 		return 1
 	}
-	srv := addr.(*net.TCPAddr)
-	fmt.Printf("yolo serving on http://%s (dir %s)\n", srv.String(), s.WorkDir)
+	deps, closeDB, err := buildDeps(wd)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "yolo serve: %v\n", err)
+		return 1
+	}
+	defer closeDB()
+
+	srv := server.NewServer(*deps)
+	ln, err := srv.Start(*addr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "yolo serve: listen: %v\n", err)
+		return 1
+	}
+	fmt.Printf("yolo serving on http://%s (dir %s)\n", ln.String(), wd)
+
 	stop := make(chan os.Signal, 1)
-	// import os/signal here is not allowed pre-M8; block on channel closed by Close
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
-	s.Close()
+	drain(deps, srv)
 	return 0
 }
 
@@ -144,12 +356,4 @@ func authCmd(args []string) int {
 	default:
 		return authUsage()
 	}
-}
-
-func mustGetwd() string {
-	wd, err := os.Getwd()
-	if err != nil {
-		panic(err)
-	}
-	return wd
 }

@@ -15,8 +15,8 @@ import (
 	"github.com/kido5217/yolo/internal/llm"
 	fakellm "github.com/kido5217/yolo/internal/llm/fake"
 	"github.com/kido5217/yolo/internal/permission"
-	"github.com/kido5217/yolo/internal/provider"
 	"github.com/kido5217/yolo/internal/protocol"
+	"github.com/kido5217/yolo/internal/provider"
 	"github.com/kido5217/yolo/internal/session"
 	"github.com/kido5217/yolo/internal/storage"
 	"github.com/kido5217/yolo/internal/tool"
@@ -147,11 +147,11 @@ func (h *harness) build(t *testing.T) {
 		Tools:   tool.Registry(),
 		DataDir: t.TempDir(),
 		Cfg:     h.cfgLoader(),
-	// slowDriver reads h.slowTurn per Stream call (the test sets it
-	// after build) and slows the call by sleeping in the wrapper before
-	// forwarding — not via a fake field, because the title side-call and
-	// the turn call Stream concurrently and a shared field would race.
-	Drivers: map[string]llm.Driver{"kido": slowDriver{h: h, inner: drv}},
+		// slowDriver reads h.slowTurn per Stream call (the test sets it
+		// after build) and slows the call by sleeping in the wrapper before
+		// forwarding — not via a fake field, because the title side-call and
+		// the turn call Stream concurrently and a shared field would race.
+		Drivers: map[string]llm.Driver{"kido": slowDriver{h: h, inner: drv}},
 		Clock:   func() int64 { return time.Now().UnixMilli() },
 		Backoff: func(attempt int) time.Duration {
 			if h.fastBackoff {
@@ -578,5 +578,43 @@ func TestHistoryReplayIncludesToolResults(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("no completed read tool part: %+v", ump)
+	}
+}
+
+// TestShutdownAbortsActiveAndWaits: two sessions with active turns (the
+// slowTurn seam holds each stream open 500 ms); Shutdown aborts all of
+// them and returns once every turn has released — well under the 500 ms
+// hold, i.e. it aborts rather than waits.
+func TestShutdownAbortsActiveAndWaits(t *testing.T) {
+	h := newHarness(t)
+	h.build(t)
+	sesA := h.startSession(t, t.TempDir())
+	sesB := h.startSession(t, t.TempDir())
+	h.slowTurn = true
+	if _, err := h.eng.Send(context.Background(), sesA, "hi", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.eng.Send(context.Background(), sesB, "hi", nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.eng.Status(sesA); got != protocol.StatusBusy {
+		t.Fatalf("status(%s) = %s, want busy", sesA, got)
+	}
+	if got := h.eng.Status(sesB); got != protocol.StatusBusy {
+		t.Fatalf("status(%s) = %s, want busy", sesB, got)
+	}
+
+	start := time.Now()
+	h.eng.Shutdown(context.Background())
+	elapsed := time.Since(start)
+
+	if got := h.eng.Status(sesA); got != protocol.StatusIdle {
+		t.Fatalf("status(%s) = %s, want idle", sesA, got)
+	}
+	if got := h.eng.Status(sesB); got != protocol.StatusIdle {
+		t.Fatalf("status(%s) = %s, want idle", sesB, got)
+	}
+	if elapsed > 400*time.Millisecond {
+		t.Fatalf("Shutdown took %s; slowTurn holds each stream 500 ms, so it should abort, not wait", elapsed)
 	}
 }

@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/x/exp/teatest/v2"
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/kido5217/yolo/internal/llm"
 	fakellm "github.com/kido5217/yolo/internal/llm/fake"
@@ -91,7 +91,11 @@ func TestTUIFullTurn(t *testing.T) {
 		t.Fatalf("read final output: %v", err)
 	}
 	tsTail := stripANSI(string(tail))
-	for _, w := range []string{"\u25BE think", "let me think", "world", "quit?", "[y/n]"} {
+	// "think" is asserted via its \u25BE marker and the expanded content:
+	// the v2 renderer cell-diffs frames, and on the alt screen's fixed
+	// frame the unchanged tail of the marker line is never re-emitted, so
+	// the contiguous "▾ think" line cannot appear in the byte stream.
+	for _, w := range []string{"\u25BE", "let me think", "world", "quit?", "[y/n]"} {
 		if !strings.Contains(tsTail, w) {
 			t.Errorf("final output missing %q:\n%s", w, tsTail)
 		}

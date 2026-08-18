@@ -206,6 +206,46 @@ func (e *Engine) Close(sessionID string) {
 	}
 }
 
+// Shutdown drains the engine for process exit: it cancels every active
+// turn, waits for the turn goroutines to release (at most 5 s, or until
+// ctx is done), then releases all session shells.
+func (e *Engine) Shutdown(ctx context.Context) {
+	e.mu.Lock()
+	cancels := make([]context.CancelFunc, 0, len(e.busy))
+	for _, cancel := range e.busy {
+		cancels = append(cancels, cancel)
+	}
+	e.mu.Unlock()
+	for _, cancel := range cancels {
+		cancel()
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
+		deadline = d
+	}
+	tick := time.NewTicker(10 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		e.mu.Lock()
+		drained := len(e.busy) == 0
+		e.mu.Unlock()
+		if drained || time.Now().After(deadline) {
+			break
+		}
+		select {
+		case <-ctx.Done():
+		case <-tick.C:
+		}
+	}
+	e.mu.Lock()
+	shells := e.shells
+	e.shells = map[string]*tool.Shell{}
+	e.mu.Unlock()
+	for _, s := range shells {
+		_ = s.Close()
+	}
+}
+
 // idleAndRelease runs the turn-exit cleanup used when the turn goroutine
 // never started.
 func (e *Engine) idleAndRelease(sessionID string) {
