@@ -1,0 +1,68 @@
+[
+  {
+    "info": {
+      "agent": "build",
+      "id": "MSG1",
+      "role": "user",
+      "sessionID": "SES1",
+      "time": {
+        "created": "\u003cT\u003e"
+      },
+      "tokens": {
+        "cache": {
+          "read": 0,
+          "write": 0
+        },
+        "input": 0,
+        "output": 0,
+        "reasoning": 0
+      }
+    },
+    "parts": [
+      {
+        "id": "PRT1",
+        "messageID": "MSG1",
+        "sessionID": "SES1",
+        "text": "hello",
+        "time": {
+          "start": 0
+        },
+        "type": "text"
+      }
+    ]
+  },
+  {
+    "info": {
+      "agent": "build",
+      "id": "MSG2",
+      "role": "assistant",
+      "sessionID": "SES1",
+      "time": {
+        "completed": "\u003cT\u003e",
+        "created": "\u003cT\u003e"
+      },
+      "tokens": {
+        "cache": {
+          "read": 0,
+          "write": 0
+        },
+        "input": 1,
+        "output": 1,
+        "reasoning": 0
+      }
+    },
+    "parts": [
+      {
+        "id": "PRT2",
+        "messageID": "MSG2",
+        "sessionID": "SES1",
+        "text": "ok-1",
+        "time": {
+          "end": "\u003cT\u003e",
+          "start": 0
+        },
+        "type": "text"
+      }
+    ]
+  }
+]

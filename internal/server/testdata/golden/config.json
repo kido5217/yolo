@@ -1,0 +1,6 @@
+{
+  "model": "kido/q",
+  "permission": {
+    "edit": "ask"
+  }
+}

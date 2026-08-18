@@ -1,0 +1,94 @@
+[
+  {
+    "auth": {
+      "keyRequired": false,
+      "status": "not-required",
+      "type": "api"
+    },
+    "env": [
+      "KIDO_API_KEY"
+    ],
+    "id": "kido",
+    "models": {
+      "q": {
+        "adapter": "openai",
+        "attachment": false,
+        "cost": {
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "input": 0,
+          "output": 0
+        },
+        "family": "qwen",
+        "id": "q",
+        "limit": {
+          "context": 100000,
+          "output": 16384
+        },
+        "name": "Qwen",
+        "providerID": "kido",
+        "reasoning": true,
+        "toolcall": true
+      }
+    },
+    "name": "Kido",
+    "options": {},
+    "source": "builtin"
+  },
+  {
+    "auth": {
+      "keyRequired": true,
+      "status": "missing",
+      "type": "api"
+    },
+    "env": [
+      "OPENCODE_API_KEY"
+    ],
+    "id": "opencode",
+    "models": {
+      "claude-opus-4-7": {
+        "adapter": "anthropic",
+        "attachment": false,
+        "cost": {
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "input": 0,
+          "output": 0
+        },
+        "family": "anthropic",
+        "id": "claude-opus-4-7",
+        "limit": {
+          "context": 200000,
+          "output": 32768
+        },
+        "name": "Claude Opus 4.7",
+        "providerID": "opencode",
+        "reasoning": true,
+        "toolcall": true
+      },
+      "gpt-5-nano": {
+        "adapter": "openai",
+        "attachment": false,
+        "cost": {
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "input": 0,
+          "output": 0
+        },
+        "family": "openai",
+        "id": "gpt-5-nano",
+        "limit": {
+          "context": 400000,
+          "output": 16384
+        },
+        "name": "GPT-5 Nano",
+        "providerID": "opencode",
+        "reasoning": true,
+        "toolcall": true
+      }
+    },
+    "name": "OpenCode Zen",
+    "options": {},
+    "source": "builtin"
+  }
+]

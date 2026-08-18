@@ -24,6 +24,15 @@ type Bus struct {
 // New returns an empty bus.
 func New() *Bus { return &Bus{subs: map[*subscriber]struct{}{}} }
 
+// SubscriberCount returns the number of live subscribers. Test support: lets
+// a test wait until an SSE subscriber is registered before publishing, so
+// the first frames are not dropped by the subscribe/handshake window.
+func (b *Bus) SubscriberCount() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return len(b.subs)
+}
+
 // Subscribe registers a subscriber and returns its receive channel plus a
 // cancel func that unregisters and closes the channel.
 func (b *Bus) Subscribe() (<-chan protocol.Event, func()) {

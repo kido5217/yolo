@@ -33,8 +33,24 @@ type srv struct {
 	eng     *session.Engine
 	fake    *fakellm.Driver
 	permSvc *permission.Service
+	bus     *bus.Bus
 	dir     string
 	home    string
+}
+
+// waitSubscribe blocks until the bus has at least n live subscribers (an SSE
+// reader registered), so subsequent publishes are not dropped by the
+// subscribe/handshake window. Returns false on a 2s deadline.
+func (s *srv) waitSubscribe(t *testing.T, n int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if s.bus.SubscriberCount() >= n {
+			return
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %d bus subscriber(s); have %d", n, s.bus.SubscriberCount())
 }
 
 // fakeDelay makes subsequent fake turns hold open for d (slow-turn tests).
@@ -77,7 +93,7 @@ func newSrv(t *testing.T) *srv {
 	})
 	ts := httptest.NewServer(h)
 	t.Cleanup(ts.Close)
-	return &srv{Server: ts, db: db, eng: eng, fake: fake, permSvc: permSvc, dir: dir, home: home}
+	return &srv{Server: ts, db: db, eng: eng, fake: fake, permSvc: permSvc, bus: b, dir: dir, home: home}
 }
 
 // parkAsk parks a pending permission ask in a goroutine and blocks until it

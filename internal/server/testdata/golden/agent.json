@@ -1,0 +1,23 @@
+[
+  {
+    "description": "The default agent. Executes tools based on configured permissions.",
+    "mode": "primary",
+    "name": "build",
+    "options": {},
+    "permission": null
+  },
+  {
+    "description": "Plan mode. Disallows all edit tools.",
+    "mode": "primary",
+    "name": "plan",
+    "options": {},
+    "permission": null
+  },
+  {
+    "description": "Yolo agent. Permits everything without prompts.",
+    "mode": "primary",
+    "name": "yolo",
+    "options": {},
+    "permission": null
+  }
+]
