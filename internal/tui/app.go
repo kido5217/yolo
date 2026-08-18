@@ -77,6 +77,8 @@ type App struct {
 	sess      sessionModel
 	prompt    promptModel
 	dlg       dialogStack
+	modelDlg  *modelDlg
+	agentDlg  *agentDlg
 	toasts    []toast
 	lastErr   string
 	spinIdx   int // footer spinner frame
@@ -156,6 +158,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.hydrateCmd()
 	case hydratedMsg:
 		return a, a.applyHydrate(m)
+	case catalogMsg:
+		return a, a.applyCatalog(m)
+	case dlgPatchMsg:
+		return a, a.applyDlgPatch(m)
 	case sessionCreatedMsg:
 		return a, a.applySessionCreated(m)
 	case abortedMsg:
@@ -329,17 +335,23 @@ var (
 	dlgNo      = key.NewBinding(key.WithKeys("n", "esc"))
 )
 
-// handleKey is the app key dispatcher: permission > dialog > slash menu >
-// route > prompt. A pending permission ask owns every key (1/2/3/esc only);
-// while the slash menu is open it owns the keys; routes handle their
-// navigation keys; everything else falls through to the always-focused
-// prompt input.
+// handleKey is the app key dispatcher: permission > dialog > model/agent
+// openers > slash menu > route > prompt. A pending permission ask owns every
+// key (1/2/3/esc only); while the slash menu is open it owns the keys; routes
+// handle their navigation keys; everything else falls through to the
+// always-focused prompt input.
 func (a *App) handleKey(k tea.KeyPressMsg) []tea.Cmd {
 	if len(a.store.Pending) > 0 {
 		return a.handlePermKey(k)
 	}
 	if d, ok := a.dlg.top(); ok {
 		return a.handleDialogKey(d, k)
+	}
+	switch {
+	case key.Matches(k, dlgModelKey):
+		return a.openModelDialog()
+	case key.Matches(k, dlgAgentsKey):
+		return a.openAgentDialog()
 	}
 	if a.prompt.slashActive() {
 		return a.handleMenuKey(k)
@@ -467,9 +479,9 @@ func (a *App) runCommand(name string) []tea.Cmd {
 	case "/exit":
 		a.dlg.push(dialog{kind: dlgQuit})
 	case "/model":
-		a.dlg.push(dialog{kind: dlgModel})
+		return a.openModelDialog()
 	case "/agents":
-		a.dlg.push(dialog{kind: dlgAgents})
+		return a.openAgentDialog()
 	case "/new":
 		if a.cur == "" {
 			return a.emit(a.createSessionCmd())
@@ -514,8 +526,6 @@ type dialogKind int
 const (
 	dlgQuit dialogKind = iota
 	dlgHelp
-	// dlgModel and dlgAgents are T25 placeholders opened by the slash menu;
-	// the real pickers land in Task 27.
 	dlgModel
 	dlgAgents
 )
@@ -557,14 +567,22 @@ func (s dialogStack) view() string {
 			"\n" + dim.Render("  /help help \u00B7 ctrl+c quit \u00B7 esc back") +
 			"\n" + dim.Render("  / commands: /new /model /agents /help /exit") +
 			"\n" + dim.Render("  \\+enter newline in the prompt")
-	case dlgModel:
-		return title.Render("Model") +
-			"\n" + dim.Render("  select a model")
-	case dlgAgents:
-		return title.Render("Agents") +
-			"\n" + dim.Render("  select an agent")
 	}
 	return ""
+}
+
+// dlgView renders the top dialog: the model/agent pickers carry their state
+// on the app, the rest render from the stack alone.
+func (a *App) dlgView() string {
+	switch d, ok := a.dlg.top(); {
+	case !ok:
+		return ""
+	case d.kind == dlgModel && a.modelDlg != nil:
+		return a.modelDlg.view(&a.store)
+	case d.kind == dlgAgents && a.agentDlg != nil:
+		return a.agentDlg.view(&a.store)
+	}
+	return a.dlg.view()
 }
 
 func (a *App) handleDialogKey(d dialog, k tea.KeyPressMsg) []tea.Cmd {
@@ -577,7 +595,117 @@ func (a *App) handleDialogKey(d dialog, k tea.KeyPressMsg) []tea.Cmd {
 		}
 		return nil
 	}
+	switch d.kind {
+	case dlgModel:
+		if a.modelDlg == nil {
+			a.dlg.pop()
+			return nil
+		}
+		return a.modelDlg.handleKey(a, k)
+	case dlgAgents:
+		if a.agentDlg == nil {
+			a.dlg.pop()
+			return nil
+		}
+		return a.agentDlg.handleKey(a, k)
+	}
 	a.dlg.pop() // dlgHelp: any key closes
+	return nil
+}
+
+// catalogMsg reports the provider + agent catalog fetched when the model or
+// agent dialog opens.
+type catalogMsg struct {
+	provs  []protocol.Provider
+	agents []protocol.Agent
+	err    error
+}
+
+// fetchCatalogCmd lists providers and agents in one cmd.
+func (a *App) fetchCatalogCmd() tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		provs, perr := a.ListProviders(ctx)
+		agents, aerr := a.ListAgents(ctx)
+		var err error
+		if perr != nil {
+			err = perr
+		} else if aerr != nil {
+			err = aerr
+		}
+		return catalogMsg{provs: provs, agents: agents, err: err}
+	}
+}
+
+func (a *App) applyCatalog(m catalogMsg) tea.Cmd {
+	if m.err != nil {
+		a.toast(m.err.Error())
+		return nil
+	}
+	if m.provs != nil {
+		a.store.Providers = m.provs
+	}
+	if m.agents != nil {
+		a.store.Agents = m.agents
+	}
+	a.syncModelSel()
+	a.syncAgentSel()
+	return nil
+}
+
+// dlgPatchMsg reports the result of a model/agent dialog apply; sess is set
+// for the "this session" scope, cfg for "set default".
+type dlgPatchMsg struct {
+	field string // "model" | "agent"
+	value string
+	sess  *protocol.Session
+	cfg   map[string]any
+	err   error
+}
+
+// patchDlgCmd patches the session or config with the chosen value.
+func (a *App) patchDlgCmd(field, value string, thisSession bool) tea.Cmd {
+	if thisSession {
+		id := a.cur
+		return func() tea.Msg {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			ses, err := a.PatchSession(ctx, id, map[string]any{field: value})
+			return dlgPatchMsg{field: field, value: value, sess: &ses, err: err}
+		}
+	}
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		cfg, err := a.PatchConfig(ctx, map[string]any{field: value})
+		return dlgPatchMsg{field: field, value: value, cfg: cfg, err: err}
+	}
+}
+
+// applyDlgPatch lands a successful apply (store + toast + close); an error
+// toasts and keeps the dialog open.
+func (a *App) applyDlgPatch(m dlgPatchMsg) tea.Cmd {
+	if m.err != nil {
+		a.toast(m.err.Error())
+		return nil
+	}
+	if m.sess != nil {
+		cp := *m.sess
+		a.store.Current = &cp
+		a.putSessionFirst(cp)
+	}
+	if m.cfg != nil {
+		a.store.Config = m.cfg
+	}
+	switch m.field {
+	case "agent":
+		a.toast("agent set: " + m.value)
+		a.closeAgentDialog()
+	default:
+		a.toast("model set: " + m.value)
+		a.closeModelDialog()
+	}
 	return nil
 }
 
@@ -641,7 +769,7 @@ func (a *App) view() string {
 	if v := a.toastsView(); v != "" {
 		b.WriteString("\n" + v)
 	}
-	if v := a.dlg.view(); v != "" {
+	if v := a.dlgView(); v != "" {
 		b.WriteString("\n" + v)
 	}
 	if a.lastErr != "" {
