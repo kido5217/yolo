@@ -1,0 +1,317 @@
+package tui
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/kido5217/yolo/internal/protocol"
+	"github.com/kido5217/yolo/internal/tui/store"
+)
+
+// sessionModel holds session-route state: the transcript viewport, the
+// expanded part set (tool I/O blocks and reasoning text) and the auto-follow
+// flag.
+type sessionModel struct {
+	vm       viewport.Model
+	expanded map[string]bool
+	follow   bool
+	content  string
+}
+
+var sessKeyMap = struct {
+	PageUp   key.Binding
+	PageDown key.Binding
+	Expand   key.Binding
+	Think    key.Binding
+}{
+	PageUp:   key.NewBinding(key.WithKeys("pgup")),
+	PageDown: key.NewBinding(key.WithKeys("pgdown")),
+	Expand:   key.NewBinding(key.WithKeys("e")),
+	Think:    key.NewBinding(key.WithKeys("t")),
+}
+
+func newSessionModel(w, h int) sessionModel {
+	return sessionModel{
+		vm:       viewport.New(viewport.WithWidth(w), viewport.WithHeight(h)),
+		expanded: map[string]bool{},
+		follow:   true,
+	}
+}
+
+func sessionBusy(st *store.Store) bool {
+	switch st.Status.Type {
+	case protocol.StatusBusy, protocol.StatusRetry:
+		return true
+	}
+	return false
+}
+
+// const sessionHelp locks the session-route footer help line.
+const sessionHelp = "pgup/pgdn scroll \u00B7 e expand \u00B7 t think \u00B7 esc abort/back"
+
+// sync updates viewport size/content and applies auto-follow: while the
+// session is busy and follow is on, the viewport stays pinned to the bottom;
+// a user scroll-up (pgup) pauses follow until pgdn reaches the bottom again.
+func (sm *sessionModel) sync(st *store.Store, w, h int) {
+	if sm.vm.Width() != w || sm.vm.Height() != h {
+		sm.vm.SetWidth(w)
+		sm.vm.SetHeight(h)
+	}
+	content := renderMessages(st, sm.expanded, w)
+	if content != sm.content {
+		sm.content = content
+		sm.vm.SetContent(content)
+	}
+	if sm.follow && sessionBusy(st) {
+		sm.vm.GotoBottom()
+	}
+}
+
+// renderMessages renders the current session's transcript as viewport
+// content: user messages verbatim, assistant parts in arrival order (reasoning
+// collapsed as "▸ think", tool rows "✓/▶/✗ <tool> <title>"), a divider before
+// every message after the first, and message errors as a red "! message" line.
+// expanded maps partID to the parts whose I/O block or reasoning text is
+// shown.
+func renderMessages(st *store.Store, expanded map[string]bool, w int) string {
+	var blocks []string
+	for _, m := range st.Messages {
+		if m.Info.Role == "user" {
+			blocks = append(blocks, renderUser(m))
+		} else {
+			blocks = append(blocks, renderAssistant(m, expanded))
+		}
+	}
+	if len(blocks) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(blocks[0])
+	for _, blk := range blocks[1:] {
+		b.WriteByte('\n')
+		b.WriteString(divider.Render(dividerLine()))
+		b.WriteByte('\n')
+		b.WriteString(blk)
+	}
+	return b.String()
+}
+
+func renderUser(m protocol.MessageWithParts) string {
+	var texts []string
+	for _, p := range m.Parts {
+		if p.Type == "text" && p.Text != "" {
+			texts = append(texts, p.Text)
+		}
+	}
+	if len(texts) == 0 {
+		return "User:"
+	}
+	if len(texts) > 1 {
+		return "User: " + strings.Join(texts, "\n")
+	}
+	return "User: " + texts[0]
+}
+
+func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool) string {
+	var b strings.Builder
+	first := true
+	writeLine := func(s string) {
+		if !first {
+			b.WriteByte('\n')
+		}
+		b.WriteString(s)
+		first = false
+	}
+	for _, p := range m.Parts {
+		switch p.Type {
+		case "text":
+			if p.Text == "" {
+				continue
+			}
+			lines := strings.Split(p.Text, "\n")
+			writeLine(lines[0])
+			for _, l := range lines[1:] {
+				writeLine(l)
+			}
+		case "reasoning":
+			if expanded[p.ID] && p.Text != "" {
+				writeLine(dim.Render("\u25BE think"))
+				for _, l := range strings.Split(p.Text, "\n") {
+					writeLine(dim.Render("  " + l))
+				}
+			} else {
+				writeLine(dim.Render("\u25B8 think"))
+			}
+		case "tool":
+			row, ok := toolRowLine(p)
+			if !ok {
+				continue
+			}
+			writeLine(row)
+			if expanded[p.ID] && p.State != nil {
+				block := tailLines(p.State.Output, 40)
+				if p.State.Status == "error" {
+					block = p.State.Error
+				}
+				if block == "" {
+					break
+				}
+				for _, l := range strings.Split(block, "\n") {
+					writeLine("  " + l)
+				}
+			}
+		}
+	}
+	if m.Info.Error != nil {
+		writeLine(errRed.Render("! " + m.Info.Error.Message))
+	}
+	return b.String()
+}
+
+// toolRowLine renders the locked tool row: "✓ <tool> <title>" completed,
+// "▶ <tool> <title>" running, "✗ <tool> <error>" error (first error line).
+func toolRowLine(p protocol.Part) (string, bool) {
+	st := p.State
+	status := "running"
+	title := ""
+	if st != nil {
+		status = st.Status
+		title = st.Title
+	}
+	if title == "" {
+		title = toolTitleFallback(p)
+	}
+	switch status {
+	case "completed":
+		return okGreen.Render("\u2713 " + p.Tool + " " + title), true
+	case "error":
+		errText := ""
+		if st != nil {
+			errText = st.Error
+		}
+		if i := strings.IndexByte(errText, '\n'); i >= 0 {
+			errText = errText[:i]
+		}
+		if errText == "" {
+			errText = title
+		}
+		return errRed.Render("\u2717 " + p.Tool + " " + errText), true
+	default:
+		return toolRow.Render("\u25B6 " + p.Tool + " " + title), true
+	}
+}
+
+// toolTitleFallback applies the locked rule for an empty state.Title: the
+// first input argument stringified, else the callID prefix 8.
+func toolTitleFallback(p protocol.Part) string {
+	if st := p.State; st != nil && st.Input != nil {
+		for _, k := range []string{"path", "command", "pattern", "input"} {
+			if v, ok := st.Input[k].(string); ok {
+				return v
+			}
+		}
+		keys := make([]string, 0, len(st.Input))
+		for k := range st.Input {
+			if k == "input" {
+				continue
+			}
+			keys = append(keys, k)
+		}
+		if len(keys) > 0 {
+			sort.Strings(keys)
+			return fmt.Sprintf("%v", st.Input[keys[0]])
+		}
+	}
+	if len(p.CallID) >= 8 {
+		return p.CallID[:8]
+	}
+	return p.CallID
+}
+
+func tailLines(s string, n int) string {
+	if s == "" || n <= 0 {
+		return ""
+	}
+	lines := strings.Split(s, "\n")
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return strings.Join(lines, "\n")
+}
+
+// lastToolPartID returns the ID of the most recent tool part in the
+// transcript (the part "e" toggles).
+func lastToolPartID(st *store.Store) string {
+	id := ""
+	for _, m := range st.Messages {
+		for _, p := range m.Parts {
+			if p.Type == "tool" {
+				id = p.ID
+			}
+		}
+	}
+	return id
+}
+
+// handleSessionKey dispatches session-route keys: pgup/pgdn scroll, e
+// expands the most recent tool part, t toggles reasoning, esc aborts while
+// busy and returns to home when idle.
+func (a *App) handleSessionKey(k tea.KeyPressMsg) []tea.Cmd {
+	switch {
+	case key.Matches(k, sessKeyMap.PageUp):
+		a.sess.vm.PageUp()
+		a.sess.follow = false
+		return nil
+	case key.Matches(k, sessKeyMap.PageDown):
+		a.sess.vm.PageDown()
+		a.sess.follow = a.sess.vm.AtBottom()
+		return nil
+	case key.Matches(k, sessKeyMap.Expand):
+		id := lastToolPartID(&a.store)
+		if id == "" {
+			return nil
+		}
+		if a.sess.expanded[id] {
+			delete(a.sess.expanded, id)
+		} else {
+			a.sess.expanded[id] = true
+		}
+		return nil
+	case key.Matches(k, sessKeyMap.Think):
+		expand := false
+		ids := []string{}
+		for _, m := range a.store.Messages {
+			for _, p := range m.Parts {
+				if p.Type != "reasoning" {
+					continue
+				}
+				ids = append(ids, p.ID)
+				if !a.sess.expanded[p.ID] {
+					expand = true
+				}
+			}
+		}
+		for _, id := range ids {
+			if expand {
+				a.sess.expanded[id] = true
+			} else {
+				delete(a.sess.expanded, id)
+			}
+		}
+		return nil
+	case key.Matches(k, escBinding):
+		if sessionBusy(&a.store) {
+			return a.emit(a.abortCmd())
+		}
+		a.route = routeHome
+		a.cur = ""
+		a.home.buf = ""
+		return a.emit(a.hydrateCmd())
+	}
+	return nil
+}

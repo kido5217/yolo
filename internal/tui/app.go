@@ -35,10 +35,7 @@ const (
 	routeSession
 )
 
-// sessionModel, promptModel and toast are placeholders for T24 (viewport),
-// T25 (prompt) and T29 (toasts).
-type sessionModel struct{}
-
+// promptModel and toast are placeholders for T25 (prompt) and T29 (toasts).
 type promptModel struct{}
 
 type toast struct{ msg string }
@@ -72,6 +69,7 @@ func NewApp(c *client.Client, s *store.Store, startSessionID string) *App {
 		Client:  c,
 		route:   routeHome,
 		home:    homeModel{now: nowMillis},
+		sess:    newSessionModel(80, 21),
 		size:    tea.WindowSizeMsg{Width: 80, Height: 24},
 		eventCh: c.Events(ctx),
 		stop:    cancel,
@@ -114,6 +112,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.applyHydrate(m)
 	case sessionCreatedMsg:
 		return a, a.applySessionCreated(m)
+	case abortedMsg:
+		if m.err != nil {
+			a.lastErr = "abort: " + m.err.Error()
+		}
+		return a, nil
 	case tea.KeyPressMsg:
 		cmds := a.handleKey(m)
 		if len(cmds) == 0 {
@@ -263,16 +266,6 @@ func (a *App) handleKey(k tea.KeyPressMsg) []tea.Cmd {
 	return a.handleHomeKey(k)
 }
 
-func (a *App) handleSessionKey(k tea.KeyPressMsg) []tea.Cmd {
-	if key.Matches(k, escBinding) {
-		a.route = routeHome
-		a.cur = ""
-		a.home.buf = ""
-		return a.emit(a.hydrateCmd())
-	}
-	return nil
-}
-
 type dialogKind int
 
 const (
@@ -339,6 +332,20 @@ func quitCmd() tea.Cmd {
 	return func() tea.Msg { return tea.Quit() }
 }
 
+// abortedMsg reports the result of the esc-while-busy abort.
+type abortedMsg struct{ err error }
+
+// abortCmd posts the server abort for the current session.
+func (a *App) abortCmd() tea.Cmd {
+	id := a.cur
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_, err := a.Abort(ctx, id)
+		return abortedMsg{err: err}
+	}
+}
+
 // emit returns cmds unchanged; when record is set (tests) it also captures
 // them in a.Cmds.
 func (a *App) emit(cmds ...tea.Cmd) []tea.Cmd {
@@ -377,14 +384,24 @@ func (a *App) view() string {
 	return b.String()
 }
 
-// viewSession is the T23 session-route placeholder; T24 replaces it with the
-// viewport + streaming render.
+// viewSession renders the session route: title, the transcript viewport and
+// the locked help line.
 func (a *App) viewSession() string {
+	w := a.size.Width
+	if w < 1 {
+		w = 80
+	}
+	h := a.size.Height - 3
+	if h < 1 {
+		h = 1
+	}
+	a.sess.sync(&a.store, w, h)
 	t := "session"
 	if a.store.Current != nil {
 		t = a.store.Current.Title
 	}
 	return title.Render(t) +
-		"\n" + dim.Render("session view: T24") +
-		"\n" + dim.Render("esc back")
+		"\n" + a.sess.vm.View() +
+		"\n" + divider.Render(dividerLine()) +
+		"\n" + dim.Render(sessionHelp)
 }
