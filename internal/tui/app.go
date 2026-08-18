@@ -37,10 +37,11 @@ const (
 )
 
 // toast is a transient one-shot line (T25 lands the busy-send and command
-// error toasts; T29 replaces this with the proper stack and dismiss).
+// error toasts; T28 replaces this with the proper stack and 4s auto-clear).
 type toast struct{ msg string }
 
-// maxToasts caps the visible toast stack (T29 refines the behavior).
+// maxToasts caps the visible toast stack (matches the T28 locked queue ≤3;
+// T28 refines timing and dismiss).
 const maxToasts = 3
 
 // toast records a transient message; the newest stays within the cap.
@@ -481,8 +482,8 @@ type dialogKind int
 const (
 	dlgQuit dialogKind = iota
 	dlgHelp
-	// dlgModel and dlgAgents are T25/T28/T29 placeholders opened by the slash
-	// menu; the real pickers land in Tasks 28/29.
+	// dlgModel and dlgAgents are T25 placeholders opened by the slash menu;
+	// the real pickers land in Task 27.
 	dlgModel
 	dlgAgents
 )
