@@ -39,7 +39,7 @@ func ToRegex(pattern, name string) (*regexp.Regexp, error) {
 		return nil, fmt.Errorf("glob: empty pattern")
 	}
 	if pattern == "*" {
-		return regexp.Compile(`^.*$`)
+		return regexp.MustCompile(`^.*$`), nil
 	}
 	if !strings.Contains(pattern, "/") {
 		return segmentRe(pattern)
@@ -117,12 +117,12 @@ func segmentRe(seg string) (*regexp.Regexp, error) {
 	b.WriteString("^")
 	for i := 0; i < len(seg); i++ {
 		c := seg[i]
-		switch {
-		case c == '*':
+		switch c {
+		case '*':
 			b.WriteString(".*")
-		case c == '?':
+		case '?':
 			b.WriteString(".")
-		case c == '[':
+		case '[':
 			j := i + 1
 			neg := false
 			if j < len(seg) && (seg[j] == '!' || seg[j] == '^') {

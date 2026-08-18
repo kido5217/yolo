@@ -709,10 +709,9 @@ func (a *App) applyDlgPatch(m dlgPatchMsg) tea.Cmd {
 	return nil
 }
 
-// quitCmd is a Cmd that tells the program to exit (bubbletea v2's Quit() is a
-// Msg, so it is wrapped for use as a Cmd).
+// quitCmd is a Cmd that tells the program to exit.
 func quitCmd() tea.Cmd {
-	return func() tea.Msg { return tea.Quit() }
+	return tea.Quit
 }
 
 // abortedMsg reports the result of the esc-while-busy abort.

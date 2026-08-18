@@ -11,7 +11,9 @@ import (
 func TestEditExactReplace(t *testing.T) {
 	d := t.TempDir()
 	f := filepath.Join(d, "f.txt")
-	os.WriteFile(f, []byte("one\ntwo\nthree\n"), 0o644)
+	if err := os.WriteFile(f, []byte("one\ntwo\nthree\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	env := &Env{Dir: d, Limits: Limits{2000, 50 * 1024}}
 	out, err := runTool(t, "edit", env, map[string]any{
 		"filePath": f, "oldString": "two", "newString": "TWO",
@@ -29,11 +31,13 @@ func TestEditExactReplace(t *testing.T) {
 func TestEditErrorsPinned(t *testing.T) {
 	d := t.TempDir()
 	f := filepath.Join(d, "f.txt")
-	os.WriteFile(f, []byte("a\nb\na\n"), 0o644)
+	if err := os.WriteFile(f, []byte("a\nb\na\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	env := &Env{Dir: d, Limits: Limits{2000, 50 * 1024}}
 
 	_, err := runTool(t, "edit", env, map[string]any{"filePath": f, "oldString": "a", "newString": "a"})
-	if err == nil || err.Error() != "No changes to apply: oldString and newString are identical." {
+	if err == nil || err.Error() != "no changes to apply: oldString and newString are identical" {
 		t.Fatalf("err = %v", err)
 	}
 	_, err = runTool(t, "edit", env, map[string]any{"filePath": f, "oldString": "", "newString": "a"})
@@ -41,19 +45,19 @@ func TestEditErrorsPinned(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 	_, err = runTool(t, "edit", env, map[string]any{"filePath": filepath.Join(d, "nope.txt"), "oldString": "x", "newString": "y"})
-	if err == nil || err.Error() != "File "+filepath.Join(d, "nope.txt")+" not found" {
+	if err == nil || err.Error() != "file "+filepath.Join(d, "nope.txt")+" not found" {
 		t.Fatalf("err = %v", err)
 	}
 	_, err = runTool(t, "edit", env, map[string]any{"filePath": d, "oldString": "x", "newString": "y"})
-	if err == nil || !strings.Contains(err.Error(), "Path is a directory, not a file") {
+	if err == nil || !strings.Contains(err.Error(), "path is a directory, not a file") {
 		t.Fatalf("err = %v", err)
 	}
 	_, err = runTool(t, "edit", env, map[string]any{"filePath": f, "oldString": "zzz", "newString": "y"})
-	if err == nil || err.Error() != "Could not find oldString in the file. It must match exactly, including whitespace, indentation, and line endings." {
+	if err == nil || err.Error() != "could not find oldString in the file. It must match exactly, including whitespace, indentation, and line endings" {
 		t.Fatalf("err = %v", err)
 	}
 	_, err = runTool(t, "edit", env, map[string]any{"filePath": f, "oldString": "a", "newString": "b"})
-	if err == nil || err.Error() != "Found multiple matches for oldString. Provide more surrounding context to make the match unique." {
+	if err == nil || err.Error() != "found multiple matches for oldString. Provide more surrounding context to make the match unique" {
 		t.Fatalf("err = %v", err)
 	}
 	_, err = runTool(t, "edit", env, map[string]any{"filePath": f, "oldString": "a", "newString": "b", "replaceAll": true})

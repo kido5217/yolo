@@ -64,7 +64,7 @@ func findLast(rules []protocol.Rule, action, res string) *protocol.Rule {
 func findLastWithWildcard(rules []protocol.Rule, action, res string, wildcardOK bool) *protocol.Rule {
 	for i := len(rules) - 1; i >= 0; i-- {
 		r := &rules[i]
-		if r.Permission != action && !(r.Permission == "*" && wildcardOK) {
+		if r.Permission != action && (r.Permission != "*" || !wildcardOK) {
 			continue
 		}
 		if !glob.Match(r.Pattern, res) {

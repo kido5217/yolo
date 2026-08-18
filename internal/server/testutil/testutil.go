@@ -153,7 +153,9 @@ func (ts *TestServer) ParkAsk(sessionID, action, resource string) {
 		Permission: action,
 		Resources:  []string{resource},
 	}
-	go ts.PermSvc.Ask(context.Background(), req)
+	go func() {
+		_, _ = ts.PermSvc.Ask(context.Background(), req)
+	}()
 	row, err := ts.DB.GetSession(sessionID)
 	if err != nil {
 		panic(err)

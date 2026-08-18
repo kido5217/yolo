@@ -130,7 +130,9 @@ func TestEnvBlock(t *testing.T) {
 
 func TestBuildSystemPromptInstructions(t *testing.T) {
 	d := t.TempDir()
-	os.WriteFile(filepath.Join(d, "AGENTS.md"), []byte("PROJECT RULES"), 0o644)
+	if err := os.WriteFile(filepath.Join(d, "AGENTS.md"), []byte("PROJECT RULES"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	sys, err := buildSystemPromptForTest(d, provider.Model{ID: "Qwen3.8-27B", Name: "q"}, "kido", []string{})
 	if err != nil {
 		t.Fatal(err)
@@ -143,8 +145,12 @@ func TestBuildSystemPromptInstructions(t *testing.T) {
 	}
 	// nearest AGENTS.md wins on walk-up (v1 pin)
 	sub := filepath.Join(d, "deep")
-	os.MkdirAll(sub, 0o755)
-	os.WriteFile(filepath.Join(sub, "AGENTS.md"), []byte("NEARER RULES"), 0o644)
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "AGENTS.md"), []byte("NEARER RULES"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	sys2, err := buildSystemPromptForTest(sub, provider.Model{ID: "m", Name: "m"}, "prov", []string{filepath.Join(d, "missing-instructions.md")})
 	if err != nil {
 		t.Fatal(err)

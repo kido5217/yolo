@@ -1,0 +1,17 @@
+version: "2"
+linters:
+  # Default set (errcheck, govet, ineffassign, staticcheck, unused) plus:
+  enable:
+    - gocritic
+    - misspell
+  exclusions:
+    rules:
+      # Display prints (usage text, SSE frames): a failed write to a
+      # gone connection/terminal is not recoverable at that point.
+      - linters: [errcheck]
+        text: 'Error return value of `fmt\..*` is not checked'
+      # Deferred resource cleanup: post-mortem Close/Rollback failures are
+      # not actionable (mirrors errcheck's historical default exclusion
+      # list, which v1 configs relied on).
+      - linters: [errcheck]
+        text: 'Error return value of `.*\.(Close|Rollback)` is not checked'

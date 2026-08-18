@@ -13,9 +13,15 @@ import (
 // test; cwd and env persistence are asserted across calls on it.
 func TestBashCwdPersistsAcrossCalls(t *testing.T) {
 	d := t.TempDir()
-	os.MkdirAll(filepath.Join(d, "sub"), 0o755)
+	if err := os.MkdirAll(filepath.Join(d, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	env := &Env{Dir: d, Limits: Limits{2000, 50 * 1024}, Shell: NewShell(d, Limits{2000, 50 * 1024})}
-	t.Cleanup(func() { env.Shell.Close() })
+	t.Cleanup(func() {
+		if err := env.Shell.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	raw, _ := json.Marshal(map[string]any{"command": "cd sub"})
 	_, err := Registry()["bash"].Run(context.Background(), raw, env)
 	if err != nil {
@@ -73,7 +79,7 @@ func TestBashTimeoutKillsAndReports(t *testing.T) {
 	if err == nil {
 		t.Fatal("want timeout error")
 	}
-	want := "shell tool terminated command after exceeding timeout 300 ms. If this command is expected to take longer and is not waiting for interactive input, retry with a larger timeout value in milliseconds."
+	want := "shell tool terminated command after exceeding timeout 300 ms. If this command is expected to take longer and is not waiting for interactive input, retry with a larger timeout value in milliseconds"
 	if err.Error() != want {
 		t.Fatalf("err = %q", err)
 	}

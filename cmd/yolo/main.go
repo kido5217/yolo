@@ -25,6 +25,7 @@ import (
 	"github.com/kido5217/yolo/internal/bus"
 	"github.com/kido5217/yolo/internal/config"
 	"github.com/kido5217/yolo/internal/llm"
+	"github.com/kido5217/yolo/internal/log"
 	"github.com/kido5217/yolo/internal/permission"
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/provider"
@@ -103,12 +104,22 @@ func workDir(flagDir string) (string, error) {
 func buildDeps(workDir string) (*server.Deps, func(), error) {
 	loader := config.Loader{} // nil Env view = real process environment
 	dataDir := config.DataYoloDir()
+	lob := log.New(dataDir)
+
+	fail := func(err error) (*server.Deps, func(), error) {
+		lob.Errorf("startup failed: %v", err)
+		lob.Close()
+		return nil, nil, err
+	}
 
 	db, err := openDB(filepath.Join(dataDir, "storage", "yolo.db"))
 	if err != nil {
-		return nil, nil, err
+		return fail(err)
 	}
-	closeDB := func() { _ = db.Close() }
+	closeDB := func() {
+		_ = db.Close()
+		lob.Close()
+	}
 
 	b := bus.New()
 	deps := &server.Deps{
@@ -116,6 +127,7 @@ func buildDeps(workDir string) (*server.Deps, func(), error) {
 		Bus:     b,
 		Perm:    permission.New(db, b),
 		Config:  loader,
+		Log:     lob,
 		WorkDir: workDir, // zero Dirs = real XDG roots
 	}
 
@@ -123,19 +135,19 @@ func buildDeps(workDir string) (*server.Deps, func(), error) {
 	cfg, err := loader.LoadAt(globalDir, workDir)
 	if err != nil {
 		closeDB()
-		return nil, nil, err
+		return fail(err)
 	}
 
 	fake, err := server.FakeFromEnv(envMap())
 	if err != nil {
 		closeDB()
-		return nil, nil, err
+		return fail(err)
 	}
 	if fake != nil {
 		deps.Prov = provider.NewStaticForTest()
 		deps.Engine = session.New(session.Deps{
 			DB: db, Bus: deps.Bus, Prov: deps.Prov, Perm: deps.Perm,
-			Tools: tool.Registry(), DataDir: dataDir,
+			Tools: tool.Registry(), DataDir: dataDir, Log: lob,
 			Cfg: func(dir string) (*protocol.Config, error) {
 				return loader.LoadAt(globalDir, dir)
 			},
@@ -145,12 +157,12 @@ func buildDeps(workDir string) (*server.Deps, func(), error) {
 		prov, err := provider.New(context.Background(), cfg, nil, provider.Dirs{})
 		if err != nil {
 			closeDB()
-			return nil, nil, err
+			return fail(err)
 		}
 		deps.Prov = prov
 		deps.Engine = session.New(session.Deps{
 			DB: db, Bus: deps.Bus, Prov: deps.Prov, Perm: deps.Perm,
-			Tools: tool.Registry(), DataDir: dataDir,
+			Tools: tool.Registry(), DataDir: dataDir, Log: lob,
 			Cfg: func(dir string) (*protocol.Config, error) {
 				return loader.LoadAt(globalDir, dir)
 			},
@@ -209,9 +221,18 @@ func tuiMode(args []string) int {
 	srv := server.NewServer(*deps)
 	ln, err := srv.Start("127.0.0.1:0")
 	if err != nil {
+		deps.Log.Errorf("listen: %v", err)
 		fmt.Fprintf(os.Stderr, "yolo: %v\n", err)
+		drain(deps, srv)
 		return 1
 	}
+
+	// Swallow signals outside the TUI run so the drain below can finish;
+	// during Run bubbletea's own handler ends the program (the clean-exit
+	// mapping is tuiExit).
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(stop)
 
 	cl := client.New("http://"+ln.String(), wd)
 	if sessionID != "" {
@@ -230,29 +251,38 @@ func tuiMode(args []string) int {
 	}
 
 	app := tui.NewApp(cl, &store.Store{}, sessionID)
-	if _, err := tea.NewProgram(app).Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "yolo: %v\n", err)
-		app.Close()
-		drain(deps, srv)
-		return 1
-	}
+	_, runErr := tea.NewProgram(app).Run()
 	app.Close()
 	drain(deps, srv)
-	return 0
+	return tuiExit(runErr)
 }
 
-// drain stops active turns (at most 5 s), then the listener.
+// tuiExit maps a tea.Run result to the process exit code: a program killed
+// by a signal (bubbletea's built-in SIGINT/SIGTERM handler) is a clean
+// exit, any other error is a failure.
+func tuiExit(err error) int {
+	if err == nil || errors.Is(err, tea.ErrProgramKilled) {
+		return 0
+	}
+	return 1
+}
+
+// drain stops active turns and the listener within one 5 s budget, then
+// closes the logger (process-exit path for serve and TUI mode).
 func drain(deps *server.Deps, srv *server.Server) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	deps.Engine.Shutdown(ctx)
-	srv.Close()
+	srv.Shutdown(ctx)
+	deps.Log.Close()
 }
 
 func serve(args []string) int {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	addr := fs.String("addr", "127.0.0.1:4096", "listen address")
-	fs.Parse(args)
+	// ExitOnError: Parse prints and os.Exit's on bad flags, never returns
+	// a non-nil error.
+	_ = fs.Parse(args)
 	wd, err := workDir("")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "yolo serve: %v\n", err)
@@ -268,14 +298,18 @@ func serve(args []string) int {
 	srv := server.NewServer(*deps)
 	ln, err := srv.Start(*addr)
 	if err != nil {
+		deps.Log.Errorf("listen: %v", err)
 		fmt.Fprintf(os.Stderr, "yolo serve: listen: %v\n", err)
+		drain(deps, srv)
 		return 1
 	}
 	fmt.Printf("yolo serving on http://%s (dir %s)\n", ln.String(), wd)
+	deps.Log.Infof("serving on http://%s (dir %s)", ln.String(), wd)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-	<-stop
+	sig := <-stop
+	deps.Log.Infof("received %s, shutting down", sig)
 	drain(deps, srv)
 	return 0
 }
@@ -291,7 +325,7 @@ func authCmd(args []string) int {
 	}
 	sub, rest := args[0], args[1:]
 
-	loadStore := func() (auth.Store, error) { return auth.Load() }
+	loadStore := auth.Load
 
 	switch sub {
 	case "list":

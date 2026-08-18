@@ -151,15 +151,15 @@ func (readTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 		return readDirListing(env.Dir, fp, offset, limit)
 	}
 	if binaryFile(fp) {
-		return Output{}, fmt.Errorf("Cannot read binary file: %s", fp)
+		return Output{}, fmt.Errorf("cannot read binary file: %s", fp)
 	}
 
 	rawLines, count, cut, more, err := readLines(fp, offset, limit, lim.MaxBytes)
 	if err != nil {
 		return Output{}, err
 	}
-	if count < offset && !(count == 0 && offset == 1) {
-		return Output{}, fmt.Errorf("Offset %d is out of range for this file (%d lines)", offset, count)
+	if count < offset && (count != 0 || offset != 1) {
+		return Output{}, fmt.Errorf("offset %d is out of range for this file (%d lines)", offset, count)
 	}
 
 	last := offset + len(rawLines) - 1
@@ -351,9 +351,9 @@ func miss(fp string) error {
 		}
 	}
 	if len(hits) > 0 {
-		return fmt.Errorf("File not found: %s\n\nDid you mean one of these?\n%s", fp, strings.Join(hits, "\n"))
+		return fmt.Errorf("file not found: %s\n\nDid you mean one of these?\n%s", fp, strings.Join(hits, "\n"))
 	}
-	return fmt.Errorf("File not found: %s", fp)
+	return fmt.Errorf("file not found: %s", fp)
 }
 
 // binaryFile sniffs NUL bytes in the first binarySniffBytes.

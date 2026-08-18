@@ -127,7 +127,7 @@ func (editTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 		return Output{}, err
 	}
 	if oldText == newText {
-		return Output{}, errors.New("No changes to apply: oldString and newString are identical.")
+		return Output{}, errors.New("no changes to apply: oldString and newString are identical")
 	}
 	if env == nil {
 		env = &Env{}
@@ -160,7 +160,7 @@ func (editTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 func editApply(fp, oldText, newText string, replaceAll bool) (contentOld, contentNew string, err error) {
 	if oldText == "" {
 		if _, serr := os.Stat(fp); serr == nil {
-			return "", "", errors.New("oldString cannot be empty when editing an existing file. Provide the exact text to replace, or use write for an intentional full-file replacement.")
+			return "", "", errors.New("oldString cannot be empty when editing an existing file. Provide the exact text to replace, or use write for an intentional full-file replacement")
 		}
 		if merr := os.MkdirAll(filepath.Dir(fp), 0o755); merr != nil {
 			return "", "", merr
@@ -172,10 +172,10 @@ func editApply(fp, oldText, newText string, replaceAll bool) (contentOld, conten
 	}
 	fi, serr := os.Stat(fp)
 	if serr != nil {
-		return "", "", fmt.Errorf("File %s not found", fp)
+		return "", "", fmt.Errorf("file %s not found", fp)
 	}
 	if fi.IsDir() {
-		return "", "", fmt.Errorf("Path is a directory, not a file: %s", fp)
+		return "", "", fmt.Errorf("path is a directory, not a file: %s", fp)
 	}
 	b, rerr := os.ReadFile(fp)
 	if rerr != nil {
@@ -184,9 +184,9 @@ func editApply(fp, oldText, newText string, replaceAll bool) (contentOld, conten
 	content := string(b)
 	switch n := strings.Count(content, oldText); {
 	case n == 0:
-		return "", "", errors.New("Could not find oldString in the file. It must match exactly, including whitespace, indentation, and line endings.")
+		return "", "", errors.New("could not find oldString in the file. It must match exactly, including whitespace, indentation, and line endings")
 	case n > 1 && !replaceAll:
-		return "", "", errors.New("Found multiple matches for oldString. Provide more surrounding context to make the match unique.")
+		return "", "", errors.New("found multiple matches for oldString. Provide more surrounding context to make the match unique")
 	}
 	if replaceAll {
 		content = strings.ReplaceAll(content, oldText, newText)

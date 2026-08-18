@@ -186,7 +186,7 @@ func TestTUIPermissionFlow(t *testing.T) {
 		driveToPermDialog(t, tm, ts)
 		tm.Send(press('1'))
 		teatest.WaitFor(t, tm.Output(), hasLines("\u2713 bash", "all done"), teatest.WithDuration(5*time.Second))
-		tm.Quit()
+		_ = tm.Quit()
 		tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 	})
 	t.Run("always", func(t *testing.T) {
@@ -194,7 +194,7 @@ func TestTUIPermissionFlow(t *testing.T) {
 		driveToPermDialog(t, tm, ts)
 		tm.Send(press('2'))
 		teatest.WaitFor(t, tm.Output(), hasLines("\u2713 bash", "all done"), teatest.WithDuration(5*time.Second))
-		tm.Quit()
+		_ = tm.Quit()
 		tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 	})
 	t.Run("reject", func(t *testing.T) {
@@ -207,7 +207,7 @@ func TestTUIPermissionFlow(t *testing.T) {
 				strings.Contains(s, "permission rejected") &&
 				strings.Contains(s, "all done")
 		}, teatest.WithDuration(5*time.Second))
-		tm.Quit()
+		_ = tm.Quit()
 		tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 	})
 }

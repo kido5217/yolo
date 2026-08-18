@@ -63,8 +63,7 @@ func TestImportsDirection(t *testing.T) {
 }
 
 func importAllowed(path, imp string) bool {
-	switch imp {
-	case "github.com/kido5217/yolo/internal/protocol":
+	if imp == "github.com/kido5217/yolo/internal/protocol" {
 		return true
 	}
 	if strings.HasPrefix(imp, "github.com/kido5217/yolo/internal/tui") {

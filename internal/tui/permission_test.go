@@ -284,7 +284,7 @@ func TestPermissionDialogKeyReply(t *testing.T) {
 		t.Fatal("bash part not completed server-side")
 	}
 
-	tm.Quit()
+	_ = tm.Quit()
 	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 }
 
@@ -313,6 +313,6 @@ func TestPermissionDialogHTTPReply(t *testing.T) {
 		t.Fatalf("pending = %+v, want empty after the replied event", got)
 	}
 
-	tm.Quit()
+	_ = tm.Quit()
 	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 }

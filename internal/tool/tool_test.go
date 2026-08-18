@@ -67,16 +67,22 @@ func TestReadFileOffsetLimit(t *testing.T) {
 func TestReadFileOffsetOutOfRange(t *testing.T) {
 	p := tmpFile(t, "a.txt", "a\nb\n")
 	_, err := runRead(t, p, 99, 0)
-	if err == nil || !strings.Contains(err.Error(), "Offset 99 is out of range for this file") {
+	if err == nil || !strings.Contains(err.Error(), "offset 99 is out of range for this file") {
 		t.Fatalf("err = %v", err)
 	}
 }
 
 func TestReadDirListing(t *testing.T) {
 	d := t.TempDir()
-	os.MkdirAll(filepath.Join(d, "sub"), 0o755)
-	os.WriteFile(filepath.Join(d, "b.txt"), []byte("z"), 0o644)
-	os.WriteFile(filepath.Join(d, "A.txt"), []byte("z"), 0o644)
+	if err := os.MkdirAll(filepath.Join(d, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(d, "b.txt"), []byte("z"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(d, "A.txt"), []byte("z"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	out, err := runRead(t, d, 0, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -106,7 +112,7 @@ func TestReadMissingFileSuggests(t *testing.T) {
 func TestReadBinaryRefused(t *testing.T) {
 	p := tmpFile(t, "bin.dat", "\x00\x01\x02"+strings.Repeat("a", 100))
 	_, err := runRead(t, p, 0, 0)
-	if err == nil || !strings.HasPrefix(err.Error(), "Cannot read binary file:") {
+	if err == nil || !strings.HasPrefix(err.Error(), "cannot read binary file:") {
 		t.Fatalf("err = %v", err)
 	}
 }

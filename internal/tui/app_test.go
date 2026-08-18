@@ -58,7 +58,7 @@ func TestHomeRendersListAndNewSession(t *testing.T) {
 
 	// The output stream is consumed by the WaitFor calls above (v2 teatest);
 	// the two WaitFors are the locked assertions for this test.
-	tm.Quit()
+	_ = tm.Quit()
 	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 }
 
@@ -119,7 +119,7 @@ func TestSessionStreamingViewport(t *testing.T) {
 		return bytes.Contains(s, []byte("\u2713 read")) && bytes.Contains(s, []byte("done"))
 	}, teatest.WithDuration(5*time.Second))
 
-	tm.Quit()
+	_ = tm.Quit()
 	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 }
 
@@ -191,7 +191,7 @@ func TestPromptSendAndSlashMenu(t *testing.T) {
 		return strings.Contains(s, "Model")
 	}, teatest.WithDuration(5*time.Second))
 
-	tm.Quit()
+	_ = tm.Quit()
 	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 }
 
@@ -231,7 +231,7 @@ func TestPromptSendWhileBusyToasts(t *testing.T) {
 		return bytes.Contains(b, []byte("abort or wait (esc aborts)"))
 	}, teatest.WithDuration(5*time.Second))
 
-	tm.Quit()
+	_ = tm.Quit()
 	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 }
 
@@ -268,6 +268,6 @@ func TestPromptSlashNewWithoutSession(t *testing.T) {
 		t.Fatalf("sessions = %d, want 1 (locked CreateSession-direct path)", len(list))
 	}
 
-	tm.Quit()
+	_ = tm.Quit()
 	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 }

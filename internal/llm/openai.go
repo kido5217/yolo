@@ -139,7 +139,7 @@ func oaRequest(req Request) oaReq {
 	for _, td := range req.Tools {
 		out.Tools = append(out.Tools, oaTool{
 			Type:     "function",
-			Function: oaToolFn{Name: td.Name, Description: td.Description, Parameters: td.Parameters},
+			Function: oaToolFn(td),
 		})
 	}
 	return out

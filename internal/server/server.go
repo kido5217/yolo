@@ -18,6 +18,7 @@ import (
 	"github.com/kido5217/yolo/internal/auth"
 	"github.com/kido5217/yolo/internal/bus"
 	"github.com/kido5217/yolo/internal/config"
+	"github.com/kido5217/yolo/internal/log"
 	"github.com/kido5217/yolo/internal/permission"
 	"github.com/kido5217/yolo/internal/provider"
 	"github.com/kido5217/yolo/internal/session"
@@ -32,6 +33,8 @@ type Deps struct {
 	Prov   *provider.Registry
 	Perm   *permission.Service
 	Config config.Loader
+	// Log receives handler-panic diagnostics; nil = no-op.
+	Log *log.Logger
 	// WorkDir is the directory scope when x-yolo-directory is absent
 	// (process CWD under `yolo serve`).
 	WorkDir string
@@ -105,7 +108,7 @@ func build(d Deps) http.Handler {
 	mux.HandleFunc("PATCH /{tail...}", s.handleNotFound)
 	mux.HandleFunc("DELETE /{tail...}", s.handleNotFound)
 	mux.HandleFunc("PUT /{tail...}", s.handleNotFound)
-	return recoverMiddleware(mux)
+	return recoverMiddleware(d.Log, mux)
 }
 
 // initAuth loads the boot-lifetime auth store from <Dirs.Data>/auth.json
@@ -155,14 +158,20 @@ func (s *Server) Addr() net.Addr {
 	return s.addr
 }
 
-// Close shuts the listener down (2s grace).
-func (s *Server) Close() {
+// Shutdown gracefully stops the listener within ctx's budget (in-flight
+// handlers get to finish); a no-op if Start was never called.
+func (s *Server) Shutdown(ctx context.Context) {
 	if s.srv == nil {
 		return
 	}
+	_ = s.srv.Shutdown(ctx)
+}
+
+// Close shuts the listener down (2s grace).
+func (s *Server) Close() {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	_ = s.srv.Shutdown(ctx)
+	s.Shutdown(ctx)
 }
 
 // scope resolves the request's project directory: x-yolo-directory

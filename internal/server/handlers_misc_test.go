@@ -18,7 +18,9 @@ func TestProviderListAndAuth(t *testing.T) {
 		t.Fatalf("%d %s", resp.StatusCode, b)
 	}
 	var ps []protocol.Provider
-	json.Unmarshal(b, &ps)
+	if err := json.Unmarshal(b, &ps); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
 	byID := map[string]protocol.Provider{}
 	for _, p := range ps {
 		byID[p.ID] = p
@@ -35,8 +37,10 @@ func TestProviderListAndAuth(t *testing.T) {
 	}
 	// config-defined provider appears
 	testutil.WriteCfg(t, s.Dir, `{"provider": {"myprov": {"base_url": "http://x", "models": {"m1": {"name": "M1"}}}}}`)
-	resp, b = testutil.Req(t, s, "GET", "/provider", s.Dir, "")
-	json.Unmarshal(b, &ps)
+	_, b = testutil.Req(t, s, "GET", "/provider", s.Dir, "")
+	if err := json.Unmarshal(b, &ps); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
 	var found bool
 	for _, p := range ps {
 		if p.ID == "myprov" && len(p.Models) == 1 {
@@ -86,7 +90,9 @@ func TestConfigGetPatchRoundtrip(t *testing.T) {
 		t.Fatalf("%d %s", resp.StatusCode, b)
 	}
 	var cfg map[string]any
-	json.Unmarshal(b, &cfg)
+	if err := json.Unmarshal(b, &cfg); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
 	if cfg["model"] != "opencode/gpt-5-nano" {
 		t.Fatalf("merged = %v", cfg["model"])
 	}
@@ -96,8 +102,10 @@ func TestConfigGetPatchRoundtrip(t *testing.T) {
 		t.Fatalf("file = %s", raw)
 	}
 	// patch again — deep merge keeps provider.kido.options.foo
-	resp, b = testutil.Req(t, s, "PATCH", "/config", d, `{"provider": {"kido": {"options": {"bar": 1}}}}`)
-	json.Unmarshal(b, &cfg)
+	_, b = testutil.Req(t, s, "PATCH", "/config", d, `{"provider": {"kido": {"options": {"bar": 1}}}}`)
+	if err := json.Unmarshal(b, &cfg); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
 	k := cfg["provider"].(map[string]any)["kido"].(map[string]any)["options"].(map[string]any)
 	if k["foo"] != true || k["bar"] != float64(1) {
 		t.Fatalf("deep merge lost keys: %v", k)
@@ -119,10 +127,14 @@ func TestGlobalConfig(t *testing.T) {
 		t.Fatalf("global = %s", raw)
 	}
 	// project overrides global in GET /config
-	resp, b = testutil.Req(t, s, "PATCH", "/config", s.Dir, `{"model": "kido/other"}`)
-	resp, b = testutil.Req(t, s, "GET", "/config", s.Dir, "")
+	if pr, _ := testutil.Req(t, s, "PATCH", "/config", s.Dir, `{"model": "kido/other"}`); pr.StatusCode != 200 {
+		t.Fatalf("patch status = %d", pr.StatusCode)
+	}
+	_, b = testutil.Req(t, s, "GET", "/config", s.Dir, "")
 	var cfg map[string]any
-	json.Unmarshal(b, &cfg)
+	if err := json.Unmarshal(b, &cfg); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
 	if cfg["model"] != "kido/other" {
 		t.Fatalf("precedence broken: %v", cfg["model"])
 	}
@@ -134,9 +146,11 @@ func TestAuthPutDelete(t *testing.T) {
 	if resp.StatusCode != 204 {
 		t.Fatalf("put: %d", resp.StatusCode)
 	}
-	resp, b := testutil.Req(t, s, "GET", "/provider", "", "")
+	_, b := testutil.Req(t, s, "GET", "/provider", "", "")
 	var ps []protocol.Provider
-	json.Unmarshal(b, &ps)
+	if err := json.Unmarshal(b, &ps); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
 	for _, p := range ps {
 		if p.ID == "opencode" {
 			if p.Auth == nil || p.Auth.Status != "loaded" {
@@ -148,8 +162,10 @@ func TestAuthPutDelete(t *testing.T) {
 	if resp.StatusCode != 204 {
 		t.Fatalf("delete: %d", resp.StatusCode)
 	}
-	resp, b = testutil.Req(t, s, "GET", "/provider", "", "")
-	json.Unmarshal(b, &ps)
+	_, b = testutil.Req(t, s, "GET", "/provider", "", "")
+	if err := json.Unmarshal(b, &ps); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
 	for _, p := range ps {
 		if p.ID == "opencode" && p.Auth != nil && p.Auth.Status == "loaded" {
 			t.Fatalf("key still loaded after delete")
@@ -162,7 +178,9 @@ func TestPermissionListAndReply(t *testing.T) {
 	d := t.TempDir()
 	_, b := testutil.Req(t, s, "POST", "/session", d, `{}`)
 	var ses struct{ ID string }
-	json.Unmarshal(b, &ses)
+	if err := json.Unmarshal(b, &ses); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
 	// park a pending ask (action with no rules → ask) via the permission
 	// service directly (harness seam permSvc.Ask in a goroutine):
 	s.ParkAsk(ses.ID, "custom", "res1")
@@ -171,7 +189,9 @@ func TestPermissionListAndReply(t *testing.T) {
 		t.Fatalf("%d %s", resp.StatusCode, b)
 	}
 	var pend []protocol.PermissionAskedProps
-	json.Unmarshal(b, &pend)
+	if err := json.Unmarshal(b, &pend); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
 	if len(pend) != 1 || pend[0].Permission != "custom" {
 		t.Fatalf("pending = %+v", pend)
 	}
@@ -179,8 +199,10 @@ func TestPermissionListAndReply(t *testing.T) {
 	if resp.StatusCode != 204 {
 		t.Fatalf("reply: %d", resp.StatusCode)
 	}
-	resp, b = testutil.Req(t, s, "GET", "/permission", d, "")
-	json.Unmarshal(b, &pend)
+	_, b = testutil.Req(t, s, "GET", "/permission", d, "")
+	if err := json.Unmarshal(b, &pend); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
 	if len(pend) != 0 {
 		t.Fatalf("still pending: %+v", pend)
 	}
@@ -198,7 +220,9 @@ func TestAgentAndCommand(t *testing.T) {
 	s := testutil.Boot(t)
 	_, b := testutil.Req(t, s, "GET", "/agent", "", "")
 	var agents []protocol.Agent
-	json.Unmarshal(b, &agents)
+	if err := json.Unmarshal(b, &agents); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
 	byName := map[string]string{}
 	for _, a := range agents {
 		byName[a.Name] = a.Description
@@ -214,7 +238,9 @@ func TestAgentAndCommand(t *testing.T) {
 	}
 	_, b = testutil.Req(t, s, "GET", "/command", "", "")
 	var cmds []protocol.Command
-	json.Unmarshal(b, &cmds)
+	if err := json.Unmarshal(b, &cmds); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
 	if len(cmds) != 5 {
 		t.Fatalf("commands = %s", b)
 	}

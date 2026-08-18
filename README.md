@@ -1,7 +1,115 @@
-# Yolo
+# yolo
 
-A port of [opencode](https://github.com/anomalyco/opencode) to Go.
+A faithful Go port of [opencode](https://github.com/anomalyco/opencode) **v1.18.18** — TUI + core server only (web/desktop/slack/console dropped). Single binary: it starts the core HTTP server (REST + SSE) in-process, then runs a bubbletea TUI which talks to it **only** through the wire contract (`internal/protocol`), so the REST/SSE surface stays verifiable against opencode's OpenAPI contract. One deliberate wire deviation: the scoping header is `x-yolo-directory` (upstream: `x-opencode-directory`).
 
-This project is a port of [opencode](https://github.com/anomalyco/opencode), an interactive CLI tool that helps users with software engineering tasks, rewritten in Go.
+yolo contains **zero telemetry**: it runs on your machine, sends nothing anywhere, and the ported config schema has no telemetry surface.
 
-It is being done to test the capabilities of Qwen 3.8 27B running on a single RTX 5090.
+## Prerequisites
+
+- Go ≥ 1.25 (pure-Go build, no cgo; `modernc.org/sqlite` is embedded)
+
+## Build
+
+```sh
+go build -o yolo ./cmd/yolo
+```
+
+## Run
+
+```sh
+yolo                 # TUI (in-process server on an ephemeral localhost port)
+yolo <sessionID>     # TUI, resume an existing session
+yolo --dir DIR       # start in a specific project directory
+yolo serve           # core server only (default http://127.0.0.1:4096)
+yolo serve --addr 127.0.0.1:0
+yolo auth list       # list stored credentials
+yolo auth add <provider> [key]   # add (key omitted = prompt on stdin)
+yolo auth remove <provider>
+yolo help
+```
+
+SIGINT/SIGTERM (TUI or `serve`) triggers a graceful drain — in-flight turns are cancelled, the listener shuts down within 5 s — and the process exits 0.
+
+## Configuration
+
+JSONC, merged deterministically (innermost wins; `instructions` concatenates). `{env:NAME}` and whole-string env names are substituted.
+
+- **Global**: `~/.config/yolo/yolo.jsonc` (file precedence in `~/.config/yolo/`: `config.json` → `yolo.json` → `yolo.jsonc`)
+- **Project**: `yolo.jsonc` (or `yolo.json`) in the working directory and each ancestor up to `/`, innermost last, plus `<workDir>/.yolo/yolo.jsonc` as the innermost override
+
+### Fields (minimal)
+
+| Key | Type | Meaning |
+|---|---|---|
+| `model` | string | `"providerID/modelID"`, e.g. `"kido/Qwen3.8-27B"` (default) |
+| `agent` | string | default agent for new sessions (`build`) |
+| `provider` | map | per provider: `baseURL`, `apiKey` (or `"{env:NAME}"`), `options`, `models` |
+| `permission` | map | per permission (`bash`, `edit`, `read`, `glob`, `grep`, `todowrite`): `"allow" \| "ask" \| "deny"` or a pattern→action map |
+| `instructions` | string[] | extra system instructions (concatenated across layers) |
+| `theme` | map | reserved (no theme engine in v1) |
+| `tool_output` | object | `max_lines` / `max_bytes` truncation of tool output |
+| `agents` | map | custom agents: `description` + `permission` merge (v1) |
+
+Example project `yolo.jsonc`:
+
+```jsonc
+{
+  "model": "kido/Qwen3.8-27B",
+  "permission": { "bash": "ask", "read": "allow" },
+  "provider": { "kido": { "baseURL": "https://ai.kido.ws/v1", "apiKey": "{env:KIDO_API_KEY}" } }
+}
+```
+
+## Auth
+
+v1 credential sources, in precedence order used at request time:
+
+1. `provider.<id>.apiKey` in config (literal or `{env:NAME}`)
+2. environment variable — the `opencode` provider reads `OPENCODE_API_KEY`
+3. `yolo auth add <provider> [key]` (stored in `~/.local/share/yolo/auth.json`)
+
+The in-process server also exposes the opencode `/auth` API (`GET /provider/auth`, `PUT|DELETE /auth/{providerID}`) for parity; yolo has no other credential UI.
+
+The builtin `kido` provider (default) points at `https://ai.kido.ws/v1` with model `Qwen3.8-27B`; override with `provider.kido.baseURL`.
+
+## TUI keymap
+
+| Key | Action |
+|---|---|
+| enter | send prompt |
+| esc | abort turn (busy) / close dialog |
+| ctrl+c | quit (confirm) |
+| ctrl+p | model dialog |
+| ctrl+a | agent dialog |
+| / | command menu |
+| ↑/↓ / pgup/pgdn | viewport scroll |
+| 1/2/3 | permission reply (allow once / always / deny) |
+| e / t | expand tool part / toggle reasoning |
+
+`pgup/pgdn` scroll · `\`+enter newline.
+
+## Data directory
+
+```
+~/.local/share/yolo/
+  auth.json          # yolo auth credentials
+  storage/yolo.db    # sessions, messages, parts, permissions, todos (SQLite)
+  plans/             # plan-agent files (writable by the engine without asking)
+  log/yolo.log       # logger (info/error), rotated at 5 MiB to yolo.log.1
+```
+
+Global config lives in `~/.config/yolo/yolo.jsonc` (XDG: honor `XDG_DATA_HOME` / `XDG_CONFIG_HOME`).
+
+## Tests
+
+```sh
+go vet ./... && go test ./...     # the CI gate — never hits the network
+```
+
+Dev mode: `YOLO_LLM=fake` (+ optional `YOLO_FAKE_SCRIPT=path.json`) swaps the LLM drivers for a scripted fake (one scripted turn per model request; `"delay_ms"` per turn for slow-turn tests). The e2e suite exercises the full TUI against this.
+
+**Live e2e (manual, never in CI)**: `scripts/e2e-live.sh` boots `yolo serve` against the real `kido` provider, sends "list files in /tmp" to a `yolo`-agent session, asserts one `read`/`glob` tool call plus a text reply, and aborts. Needs a working `kido` endpoint (key via `provider.kido.apiKey`/`{env:...}` in a project `yolo.jsonc`, or `KIDO_BASE_URL` to override the endpoint).
+
+## v1 non-goals
+
+Out of scope for 0.1.0 (landing in 0.2.0+): web/desktop/slack/console frontends, custom themes, MCP integration, snapshot/revert, multi-provider routing beyond kido + opencode (Zen), share links, and any telemetry.

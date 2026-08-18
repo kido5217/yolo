@@ -375,7 +375,7 @@ func TestSSEOrdering(t *testing.T) {
 			t.Fatalf("missing frame %s in %v", name, types)
 		}
 	}
-	if !(ai > 2 && pi > ai && di > pi && lastPart > di && mi > lastPart) {
+	if ai <= 2 || pi <= ai || di <= pi || lastPart <= di || mi <= lastPart {
 		t.Fatalf("ordering violation: busy(2) < assistantMsg(%d) < assistantPart(%d) < lastDelta(%d) < finalPart(%d) < assistantFinal(%d); got %v",
 			ai, pi, di, lastPart, mi, types)
 	}
@@ -556,7 +556,7 @@ func TestScopeMatrix(t *testing.T) {
 			t.Fatalf("no-header /path = %d %s, want dir %s", resp.StatusCode, b, wd)
 		}
 		mkSession(t, s, "", "Cwd") // created without a header -> work dir
-		resp, b = testutil.Req(t, s, "GET", "/session", "", "")
+		_, b = testutil.Req(t, s, "GET", "/session", "", "")
 		var list []map[string]any
 		_ = json.Unmarshal(b, &list)
 		if len(list) != 1 {

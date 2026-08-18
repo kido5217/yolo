@@ -29,11 +29,13 @@ func TestHealthAndPathAndProject(t *testing.T) {
 	if resp.StatusCode != 200 || p["directory"] != d {
 		t.Fatalf("path: %d %s", resp.StatusCode, b)
 	}
-	resp, b = testutil.Req(t, s, "GET", "/project/current", d, "")
+	_, b = testutil.Req(t, s, "GET", "/project/current", d, "")
 	var pr struct {
 		ID, Name, Directory string
 	}
-	json.Unmarshal(b, &pr)
+	if err := json.Unmarshal(b, &pr); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
 	if pr.Directory != d || strings.Count(pr.ID, "prj_") != 1 || !strings.HasPrefix(pr.ID, "prj_") {
 		t.Fatalf("project: %s %s", pr.ID, pr.Directory)
 	}
@@ -81,22 +83,28 @@ func TestSessionLifecycleAndScoping(t *testing.T) {
 		Cost       float64
 		Tokens     struct{ Input, Output int }
 	}
-	json.Unmarshal(b, &ses)
+	if err := json.Unmarshal(b, &ses); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
 	if ses.Title != "T1" || ses.Agent != "build" || ses.Model.ID != "q" || ses.Model.ProviderID != "kido" {
 		t.Fatalf("session = %+v", ses)
 	}
 	id := ses.ID
 
 	// list scoped
-	resp, b = testutil.Req(t, s, "GET", "/session", d, "")
+	_, b = testutil.Req(t, s, "GET", "/session", d, "")
 	var list []map[string]any
-	json.Unmarshal(b, &list)
+	if err := json.Unmarshal(b, &list); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
 	if len(list) != 1 {
 		t.Fatalf("list = %d", len(list))
 	}
 	// other dir sees nothing
-	resp, b = testutil.Req(t, s, "GET", "/session", other, "")
-	json.Unmarshal(b, &list)
+	_, b = testutil.Req(t, s, "GET", "/session", other, "")
+	if err := json.Unmarshal(b, &list); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
 	if len(list) != 0 {
 		t.Fatalf("cross-dir leak: %d", len(list))
 	}
@@ -115,7 +123,9 @@ func TestSessionLifecycleAndScoping(t *testing.T) {
 		Agent string
 		Model struct{ ID, ProviderID string }
 	}
-	json.Unmarshal(b, &got)
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
 	if got.Title != "T2" || got.Agent != "yolo" || got.Model.ProviderID != "opencode" {
 		t.Fatalf("patched = %+v", got)
 	}
@@ -135,7 +145,9 @@ func TestMessagesEndpoint(t *testing.T) {
 	d := t.TempDir()
 	_, b := testutil.Req(t, s, "POST", "/session", d, `{}`)
 	var ses struct{ ID string }
-	json.Unmarshal(b, &ses)
+	if err := json.Unmarshal(b, &ses); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
 	resp, _ := testutil.Req(t, s, "POST", "/session/"+ses.ID+"/message", d, `{"text":"hello"}`)
 	if resp.StatusCode != 202 {
 		t.Fatalf("send: %d", resp.StatusCode)
@@ -147,7 +159,9 @@ func TestMessagesEndpoint(t *testing.T) {
 		var st struct {
 			Sessions map[string]string `json:"sessions"`
 		}
-		json.Unmarshal(b, &st)
+		if err := json.Unmarshal(b, &st); err != nil {
+			t.Fatalf("unmarshal: %v (%s)", err, b)
+		}
 		if st.Sessions[ses.ID] == "idle" {
 			break
 		}
@@ -198,7 +212,9 @@ func TestSendMessage409AndEvents(t *testing.T) {
 	d := t.TempDir()
 	_, b := testutil.Req(t, s, "POST", "/session", d, `{}`)
 	var ses struct{ ID string }
-	json.Unmarshal(b, &ses)
+	if err := json.Unmarshal(b, &ses); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
 	id := ses.ID
 
 	// subscribe SSE BEFORE sending (no pre-read: nothing is published yet)
@@ -239,7 +255,9 @@ func TestSendMessage409AndEvents(t *testing.T) {
 	var env struct {
 		Error struct{ Message string } `json:"error"`
 	}
-	json.Unmarshal(b3, &env)
+	if err := json.Unmarshal(b3, &env); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b3)
+	}
 	if env.Error.Message == "" {
 		t.Fatalf("envelope = %s", b3)
 	}
@@ -250,7 +268,9 @@ func TestAbortEndpoint(t *testing.T) {
 	d := t.TempDir()
 	_, b := testutil.Req(t, s, "POST", "/session", d, `{}`)
 	var ses struct{ ID string }
-	json.Unmarshal(b, &ses)
+	if err := json.Unmarshal(b, &ses); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
 	s.FakeDelay(300 * time.Millisecond)
 	_, _ = testutil.Req(t, s, "POST", "/session/"+ses.ID+"/message", d, `{"text":"slow"}`)
 	time.Sleep(30 * time.Millisecond)
@@ -258,23 +278,29 @@ func TestAbortEndpoint(t *testing.T) {
 	var body struct {
 		Aborted bool
 	}
-	json.Unmarshal(b2, &body)
+	if err := json.Unmarshal(b2, &body); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b2)
+	}
 	if resp.StatusCode != 200 || !body.Aborted {
 		t.Fatalf("abort: %d %s", resp.StatusCode, b2)
 	}
 	// status now idle
-	resp, b3 := testutil.Req(t, s, "GET", "/session/status", d, "")
+	_, b3 := testutil.Req(t, s, "GET", "/session/status", d, "")
 	var st struct {
 		Sessions map[string]string `json:"sessions"`
 	}
-	json.Unmarshal(b3, &st)
+	if err := json.Unmarshal(b3, &st); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b3)
+	}
 	if st.Sessions[ses.ID] != "idle" {
 		t.Fatalf("status = %v", st.Sessions)
 	}
 	// abort idle → aborted:false
-	resp, b4 := testutil.Req(t, s, "POST", "/session/"+ses.ID+"/abort", d, `{}`)
+	_, b4 := testutil.Req(t, s, "POST", "/session/"+ses.ID+"/abort", d, `{}`)
 	var b5 struct{ Aborted bool }
-	json.Unmarshal(b4, &b5)
+	if err := json.Unmarshal(b4, &b5); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b4)
+	}
 	if b5.Aborted {
 		t.Fatal("abort on idle must be false")
 	}
@@ -283,22 +309,28 @@ func TestAbortEndpoint(t *testing.T) {
 func TestCommandEndpoint(t *testing.T) {
 	s := testutil.Boot(t)
 	d := t.TempDir()
-	resp, b := testutil.Req(t, s, "POST", "/session", d, `{}`)
+	_, b := testutil.Req(t, s, "POST", "/session", d, `{}`)
 	var ses struct{ ID string }
-	json.Unmarshal(b, &ses)
+	if err := json.Unmarshal(b, &ses); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
 	// /new → new session id
-	resp, b = testutil.Req(t, s, "POST", "/session/"+ses.ID+"/command", d, `{"command":"/new"}`)
+	resp, b := testutil.Req(t, s, "POST", "/session/"+ses.ID+"/command", d, `{"command":"/new"}`)
 	if resp.StatusCode != 200 {
 		t.Fatalf("%d %s", resp.StatusCode, b)
 	}
 	var out struct{ SessionID string `json:"session_id"` }
-	json.Unmarshal(b, &out)
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
 	if out.SessionID == "" || out.SessionID == ses.ID {
 		t.Fatalf("/new = %s", out.SessionID)
 	}
 	resp, b = testutil.Req(t, s, "POST", "/session/"+ses.ID+"/command", d, `{"command":"/model"}`)
 	var client struct{ Handled string `json:"handled"` }
-	json.Unmarshal(b, &client)
+	if err := json.Unmarshal(b, &client); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
 	if resp.StatusCode != 200 || client.Handled != "client" {
 		t.Fatalf("/model = %d %s", resp.StatusCode, b)
 	}

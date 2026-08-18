@@ -8,12 +8,6 @@ import (
 	"testing"
 )
 
-func tmpEnv(t *testing.T, file, content string) (string, *Env) {
-	t.Helper()
-	p := tmpFile(t, file, content)
-	return p, &Env{Dir: t.TempDir(), Limits: Limits{2000, 50 * 1024}}
-}
-
 func runTool(t *testing.T, id string, env *Env, args map[string]any) (Output, error) {
 	t.Helper()
 	raw, _ := json.Marshal(args)

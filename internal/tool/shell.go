@@ -255,10 +255,8 @@ func (s *Shell) readLoop(st *shellProc) {
 		if data != "" {
 			raw := data
 			if strings.HasSuffix(raw, "\n") {
-				raw = raw[:len(raw)-1]
-				if strings.HasSuffix(raw, "\r") {
-					raw = raw[:len(raw)-1]
-				}
+				raw = strings.TrimSuffix(raw, "\n")
+				raw = strings.TrimSuffix(raw, "\r")
 				raw += "\n"
 			}
 			ev := shellEvt{raw: raw, line: strings.TrimRight(raw, "\n")}
@@ -288,10 +286,10 @@ func killGroup(st *shellProc) {
 	}
 	pgid, err := syscall.Getpgid(p.Pid)
 	if err != nil {
-		syscall.Kill(p.Pid, syscall.SIGKILL)
+		_ = syscall.Kill(p.Pid, syscall.SIGKILL)
 		return
 	}
-	syscall.Kill(-pgid, syscall.SIGKILL)
+	_ = syscall.Kill(-pgid, syscall.SIGKILL)
 }
 
 // reapProc detaches a proc: optionally SIGKILLs its group, releases the

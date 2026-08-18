@@ -117,8 +117,5 @@ func IsTransient(err error) bool {
 		return te.Status == 429 || te.Status >= 500
 	}
 	var ne net.Error
-	if errors.As(err, &ne) {
-		return true
-	}
-	return false
+	return errors.As(err, &ne)
 }

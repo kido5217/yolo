@@ -97,7 +97,8 @@ func (h *harness) replyWatcher(ch <-chan protocol.Event) {
 		}
 		var p protocol.PermissionAskedProps
 		if err := json.Unmarshal(e.Properties, &p); err != nil {
-			h.t.Fatalf("decode permission.asked: %v", err)
+			h.t.Errorf("decode permission.asked: %v", err)
+			continue
 		}
 		select {
 		case resp := <-h.replies:
@@ -107,7 +108,7 @@ func (h *harness) replyWatcher(ch <-chan protocol.Event) {
 		case <-h.done:
 			return
 		case <-time.After(3 * time.Second):
-			h.t.Fatalf("permission.asked %s (permission %q) has no queued reply", p.ID, p.Permission)
+			h.t.Errorf("permission.asked %s (permission %q) has no queued reply", p.ID, p.Permission)
 		}
 	}
 }
@@ -116,15 +117,6 @@ func (h *harness) replyWatcher(ch <-chan protocol.Event) {
 func (h *harness) queueReplies(responses ...string) {
 	for _, r := range responses {
 		h.replies <- r
-	}
-}
-
-// setAgent re-points the session's agent row (the engine has no per-session
-// cache to clear; it re-reads the row per turn and per tool call).
-func (h *harness) setAgent(t *testing.T, ses, agent string) {
-	t.Helper()
-	if err := h.db.UpdateSession(ses, storage.SessionRow{Agent: agent, TimeUpdated: time.Now().UnixMilli()}); err != nil {
-		t.Fatal(err)
 	}
 }
 

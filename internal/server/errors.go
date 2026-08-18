@@ -2,18 +2,19 @@ package server
 
 import (
 	"encoding/json"
-	"log/slog"
 	"net/http"
 
+	"github.com/kido5217/yolo/internal/log"
 	"github.com/kido5217/yolo/internal/protocol"
 )
 
-// recoverMiddleware turns handler panics into a 500 envelope (M5).
-func recoverMiddleware(next http.Handler) http.Handler {
+// recoverMiddleware turns handler panics into a 500 envelope (M5). Panics
+// are diagnosed to lob (nil = dropped).
+func recoverMiddleware(lob *log.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rec := recover(); rec != nil {
-				slog.Error("handler panic", "err", rec, "path", r.URL.Path)
+				lob.Errorf("handler panic (path=%s): %v", r.URL.Path, rec)
 				envelope(w, http.StatusInternalServerError, "internal error", nil)
 			}
 		}()

@@ -129,11 +129,12 @@ func lcsLen(a, b []string) int {
 	cur := make([]int, len(b)+1)
 	for i := len(a) - 1; i >= 0; i-- {
 		for j := len(b) - 1; j >= 0; j-- {
-			if a[i] == b[j] {
+			switch {
+			case a[i] == b[j]:
 				cur[j] = prev[j+1] + 1
-			} else if prev[j] > cur[j+1] {
+			case prev[j] > cur[j+1]:
 				cur[j] = prev[j]
-			} else {
+			default:
 				cur[j] = cur[j+1]
 			}
 		}

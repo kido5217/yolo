@@ -291,7 +291,7 @@ func TestTUIAgentDialog(t *testing.T) {
 		t.Fatalf("session agent = %q, want yolo", got.Agent)
 	}
 
-	tm.Quit()
+	_ = tm.Quit()
 	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 }
 

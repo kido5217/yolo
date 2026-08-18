@@ -22,7 +22,8 @@ func TestNewIDFormats(t *testing.T) {
 	if !evtRe.MatchString(p.NewEventID()) {
 		t.Fatalf("bad event id: %q", p.NewEventID())
 	}
-	if p.NewID("msg") == p.NewID("msg") {
+	a := p.NewID("msg")
+	if a == p.NewID("msg") {
 		t.Fatal("ids are not random")
 	}
 }

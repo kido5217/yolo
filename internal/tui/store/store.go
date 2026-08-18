@@ -206,11 +206,12 @@ func (s *Store) applyDelta(p protocol.MessagePartDeltaProps) {
 // "reasoning" -> Text, "input" -> ToolState.Input["input"]).
 func appendDelta(pr *protocol.Part, field, delta string) {
 	if pr.Type == "" {
-		if field == "reasoning" {
+		switch field {
+		case "reasoning":
 			pr.Type = "reasoning"
-		} else if field == "input" {
+		case "input":
 			pr.Type = "tool"
-		} else {
+		default:
 			pr.Type = "text"
 		}
 	}

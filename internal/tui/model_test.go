@@ -417,7 +417,7 @@ func TestTUIModelDialog(t *testing.T) {
 		t.Fatalf("session model = %+v, want opencode/gpt-5-nano", got.Model)
 	}
 
-	tm.Quit()
+	_ = tm.Quit()
 	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 }
 

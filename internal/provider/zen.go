@@ -51,8 +51,7 @@ func ParseZenCatalog(raw []byte) ([]Model, error) {
 		if m.Cost.Input <= 0 {
 			continue
 		}
-		switch {
-		case strings.HasPrefix(m.Provider.Npm, "@ai-sdk/google"):
+		if strings.HasPrefix(m.Provider.Npm, "@ai-sdk/google") {
 			continue
 		}
 		adapter := "openai"

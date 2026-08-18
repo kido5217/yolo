@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -20,6 +19,7 @@ import (
 	"github.com/kido5217/yolo/internal/auth"
 	"github.com/kido5217/yolo/internal/bus"
 	"github.com/kido5217/yolo/internal/llm"
+	"github.com/kido5217/yolo/internal/log"
 	"github.com/kido5217/yolo/internal/permission"
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/provider"
@@ -51,6 +51,8 @@ type Deps struct {
 	Tools   map[string]tool.Tool
 	DataDir string // ~/.yolo-equivalent (AGENTS.md walk-up, plan agent rules)
 	Cfg     func(projectDir string) (*protocol.Config, error)
+	// Log receives turn-level diagnostics; nil = no-op.
+	Log *log.Logger
 
 	// Drivers, when set for a provider id, overrides the registry driver
 	// (tests wire the scripted fake).
@@ -68,6 +70,7 @@ type Engine struct {
 	prov    *provider.Registry
 	perm    *permission.Service
 	tools   map[string]tool.Tool
+	lg      *log.Logger
 	dataDir string
 	cfg     func(projectDir string) (*protocol.Config, error)
 	drivers map[string]llm.Driver
@@ -94,6 +97,7 @@ func New(d Deps) *Engine {
 		prov:    d.Prov,
 		perm:    d.Perm,
 		tools:   d.Tools,
+		lg:      d.Log,
 		dataDir: d.DataDir,
 		cfg:     d.Cfg,
 		drivers: d.Drivers,
@@ -356,7 +360,7 @@ func (e *Engine) runTurn(ctx context.Context, sessionID string, row storage.Sess
 			if errors.Is(err, context.Canceled) {
 				// Abort: non-fatal (log only); the TUI already got the
 				// part-level finalization.
-				slog.Info("session: turn aborted", "sessionID", sessionID)
+				e.lg.Infof("session: turn aborted (session=%s)", sessionID)
 			}
 			turnErr = err
 			return
@@ -596,7 +600,7 @@ func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row stor
 			return false, sErr
 		}
 		if attempt >= maxRetryAttempts {
-			slog.Warn("session: transient retries exhausted", "sessionID", sessionID, "err", sErr)
+			e.lg.Errorf("session: transient retries exhausted (session=%s): %v", sessionID, sErr)
 			e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, nil, "")
 			return false, sErr
 		}
@@ -737,7 +741,7 @@ func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row stor
 				// Step budget exhausted: the remaining calls of this stream
 				// are dropped (not persisted, not executed); the turn ends
 				// idle and onDone(nil).
-				slog.Warn("session: max tool steps reached", "sessionID", sessionID, "steps", maxToolSteps)
+				e.lg.Infof("session: max tool steps reached (session=%s, steps=%d)", sessionID, maxToolSteps)
 				e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, usage, finish)
 				return false, nil
 			}
@@ -898,7 +902,7 @@ func (e *Engine) executeTool(ctx context.Context, sessionID, agent string, row s
 		fail(e.clock(), err.Error())
 		return
 	}
-	if hidden, _ := permission.Hidden(rules, []string{name})[name]; hidden {
+	if hidden := permission.Hidden(rules, []string{name})[name]; hidden {
 		start := e.clock()
 		fail(start, "tool not available")
 		return

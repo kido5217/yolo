@@ -2,7 +2,6 @@ package llm
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -78,9 +77,3 @@ func collect(t *testing.T, s PartStream) []Part {
 	return out
 }
 
-func mustJSONUnmarshal(t *testing.T, b []byte, v any) {
-	t.Helper()
-	if err := json.Unmarshal(b, v); err != nil {
-		t.Fatalf("unmarshal %s: %v", b, err)
-	}
-}
