@@ -1,6 +1,6 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-18 (**Tasks 1–30 done — ALL 30 TASKS / M0–M8 COMPLETE**; awaiting `v0.1.0` tag go-ahead)
+**Updated:** 2026-08-18 (**Tasks 1–30 done — ALL 30 TASKS / M0–M8 COMPLETE**; `v0.1.0` tagged + released)
 
 Rolling checkpoint: active task (full detail) + one-line last-completed + verified facts + the full
 append-only deviation log. No per-task history and no plan-slice copies — `git log --oneline` and the
@@ -16,7 +16,8 @@ goldens, TUI client/SSE/Store/testutil, root app + home, viewport + streaming, p
 menu, permission dialog + footer, model + agent dialogs, toasts + /help + quit + full teatest
 suites [the M6-M7 "done when" gate], CLI wiring [in-process `yolo` + `yolo serve` + resume +
 import-direction guard], README + log rotation + signal drain + golangci-lint sweep + live e2e).
-**Remaining: tag `v0.1.0` ONLY after explicit user go-ahead** (separate tag commit; never auto-tag).
+**DONE:** merged to `main` (PR #2, `6214416`), tagged `v0.1.0` on the merged tip, GitHub release
+created — https://github.com/kido5217/yolo/releases/tag/v0.1.0. Out-of-scope features → 0.2.0+.
 
 ## Resume instructions
 
@@ -25,8 +26,8 @@ import-direction guard], README + log rotation + signal drain + golangci-lint sw
 
 ## Active
 
-None — plan complete. Next action: **tag `v0.1.0` ONLY after explicit user go-ahead** (separate tag
-commit; 0.1.0 = full plan scope; out-of-scope features land in 0.2.0+).
+None — plan complete and **released**: `v0.1.0` tagged on the `main` merge tip (`6214416`) and the
+GitHub release created (2026-08-18). 0.1.0 = full plan scope; out-of-scope features land in 0.2.0+.
 
 ## Last completed
 
@@ -127,7 +128,7 @@ commit; 0.1.0 = full plan scope; out-of-scope features land in 0.2.0+).
 
 - [x] Task 30 executed (`5ae4e81`): README + log rotation + signal drain + golangci-lint sweep (0 issues) + live e2e script.
 - [x] gofmt policy: resolved — the M8 lint sweep only rewrote files with actual lint findings; no legacy-only gofmt reformatting needed.
-- [ ] **NEXT (needs user): tag `v0.1.0` ONLY with explicit user go-ahead** (versioning: 0.1.0 = current scope; out-of-scope features → 0.2.0, …).
+- [x] Tag + release done with explicit user go-ahead: `v0.1.0` on `6214416` (merged main), GitHub release created 2026-08-18.
 - [x] On-demand live e2e vs `ai.kido.ws` — agent-verified PASS on the real endpoint 2026-08-18 (Key verified facts); stays user-run, never CI.
 - [ ] Flag at handoff: plan's Task 21 SSE pin (busy first) contradicts engine + upstream v1.18.18 (user message/part events precede busy; deviation 41) — verified against `/tmp/opencode-upstream` `prompt.ts`
 - [ ] Flags for user at handoff: plan-matrix third `edit` rule moved to engine (T10 note); CallID not persisted (T5); host toolchain scalar `//go:embed` typecheck gap → `import _ "embed"` workaround (T11 note 12)
