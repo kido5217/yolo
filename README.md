@@ -113,3 +113,7 @@ Dev mode: `YOLO_LLM=fake` (+ optional `YOLO_FAKE_SCRIPT=path.json`) swaps the LL
 ## v1 non-goals
 
 Out of scope for 0.1.0 (landing in 0.2.0+): web/desktop/slack/console frontends, custom themes, MCP integration, snapshot/revert, multi-provider routing beyond kido + opencode (Zen), share links, and any telemetry.
+
+## License
+
+[DO WHAT THE FUCK YOU WANT TO PUBLIC LICENSE (WTFPL), Version 2](LICENSE).
