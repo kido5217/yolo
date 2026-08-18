@@ -36,36 +36,6 @@ const (
 	routeSession
 )
 
-// toast is a transient one-shot line (T25 lands the busy-send and command
-// error toasts; T28 replaces this with the proper stack and 4s auto-clear).
-type toast struct{ msg string }
-
-// maxToasts caps the visible toast stack (matches the T28 locked queue ≤3;
-// T28 refines timing and dismiss).
-const maxToasts = 3
-
-// toast records a transient message; the newest stays within the cap.
-func (a *App) toast(msg string) {
-	a.toasts = append(a.toasts, toast{msg: msg})
-	if len(a.toasts) > maxToasts {
-		a.toasts = a.toasts[len(a.toasts)-maxToasts:]
-	}
-}
-
-func (a *App) toastsView() string {
-	if len(a.toasts) == 0 {
-		return ""
-	}
-	var b strings.Builder
-	for i, t := range a.toasts {
-		if i > 0 {
-			b.WriteByte('\n')
-		}
-		b.WriteString(errRed.Render("\u2022 " + t.msg))
-	}
-	return b.String()
-}
-
 // App is the root bubbletea model: routes, store, dialog stack and the SSE
 // event pump.
 type App struct {
@@ -80,6 +50,8 @@ type App struct {
 	modelDlg  *modelDlg
 	agentDlg  *agentDlg
 	toasts    []toast
+	toastSeq  int
+	toastCmds []tea.Cmd
 	lastErr   string
 	spinIdx   int // footer spinner frame
 	// tea plumbing
@@ -131,56 +103,74 @@ func (a *App) Init() tea.Cmd {
 
 // Update dispatches one message; every state change re-renders on return
 // (bubbletea default).
+// Update dispatches a message, then drains the toast ticks armed during the
+// update and merges them into the returned cmd (each toast owns its 4s
+// auto-clear tick).
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	cmd := a.updateMsg(msg)
+	if c := a.drainToastCmds(); c != nil {
+		if cmd == nil {
+			cmd = c
+		} else {
+			cmd = tea.Batch(cmd, c)
+		}
+	}
+	return a, cmd
+}
+
+func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 	switch m := msg.(type) {
 	case tea.WindowSizeMsg:
 		a.size = m
 		if m.Width > 2 {
 			a.prompt.input.SetWidth(m.Width - 2)
 		}
-		return a, nil
+		return nil
 	case EventMsg:
 		a.store.Conn = true
 		a.store.Apply(m.Ev)
-		return a, a.afterApply(a.eventPump())
+		return a.afterApply(a.eventPump())
 	case connLostMsg:
 		a.store.Conn = false
-		return a, nil
+		return nil
 	case spinMsg:
 		a.spinIdx++
 		if a.statusSeg() != "" {
-			return a, a.spinTick()
+			return a.spinTick()
 		}
-		return a, nil
+		return nil
 	case permReplyMsg:
-		return a, a.applyPermReply(m)
+		return a.applyPermReply(m)
 	case HydrateMsg:
-		return a, a.hydrateCmd()
+		return a.hydrateCmd()
 	case hydratedMsg:
-		return a, a.applyHydrate(m)
+		return a.applyHydrate(m)
 	case catalogMsg:
-		return a, a.applyCatalog(m)
+		return a.applyCatalog(m)
 	case dlgPatchMsg:
-		return a, a.applyDlgPatch(m)
+		return a.applyDlgPatch(m)
 	case sessionCreatedMsg:
-		return a, a.applySessionCreated(m)
+		return a.applySessionCreated(m)
+	case toastExpireMsg:
+		a.removeToast(m.id)
+		return nil
 	case abortedMsg:
 		if m.err != nil {
 			a.lastErr = "abort: " + m.err.Error()
 		}
-		return a, nil
+		return nil
 	case sendMsg:
-		return a, a.applySend(m)
+		return a.applySend(m)
 	case commandExecMsg:
-		return a, a.applyCommandExec(m)
+		return a.applyCommandExec(m)
 	case tea.KeyPressMsg:
 		cmds := a.handleKey(m)
 		if len(cmds) == 0 {
-			return a, nil
+			return nil
 		}
-		return a, tea.Batch(cmds...)
+		return tea.Batch(cmds...)
 	}
-	return a, nil
+	return nil
 }
 
 // connLostMsg signals the SSE channel closed (ctx done); the client already
@@ -352,6 +342,9 @@ func (a *App) handleKey(k tea.KeyPressMsg) []tea.Cmd {
 		return a.openModelDialog()
 	case key.Matches(k, dlgAgentsKey):
 		return a.openAgentDialog()
+	case key.Matches(k, homeKeyMap.Quit):
+		a.dlg.push(dialog{kind: dlgQuit})
+		return nil
 	}
 	if a.prompt.slashActive() {
 		return a.handleMenuKey(k)
@@ -559,14 +552,21 @@ func (s dialogStack) view() string {
 	}
 	switch d.kind {
 	case dlgQuit:
-		return title.Render("Quit yolo?") +
-			"\n" + dim.Render("  y yes \u00B7 n/esc no")
+		return title.Render("quit? [y/n]")
 	case dlgHelp:
 		return title.Render("Help") +
-			"\n" + dim.Render("  \u2191/\u2193 move \u00B7 enter open \u00B7 n new") +
-			"\n" + dim.Render("  /help help \u00B7 ctrl+c quit \u00B7 esc back") +
-			"\n" + dim.Render("  / commands: /new /model /agents /help /exit") +
-			"\n" + dim.Render("  \\+enter newline in the prompt")
+			"\n" + dim.Render("  | Key | Action |") +
+			"\n" + dim.Render("  |---|---|") +
+			"\n" + dim.Render("  | enter | send prompt |") +
+			"\n" + dim.Render("  | esc | abort turn (busy) / close dialog |") +
+			"\n" + dim.Render("  | ctrl+c | quit (confirm) |") +
+			"\n" + dim.Render("  | ctrl+p | model dialog |") +
+			"\n" + dim.Render("  | ctrl+a | agent dialog |") +
+			"\n" + dim.Render("  | / | command menu |") +
+			"\n" + dim.Render("  | \u2191/\u2193 / pgup/pgdn | viewport scroll |") +
+			"\n" + dim.Render("  | 1/2/3 | permission reply |") +
+			"\n" + dim.Render("  | e / t | expand tool part / toggle reasoning |") +
+			"\n" + dim.Render("  pgup/pgdn scroll \u00B7 \\+enter newline")
 	}
 	return ""
 }

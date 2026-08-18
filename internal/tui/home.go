@@ -125,8 +125,8 @@ func (h *homeModel) renderRow(line int, content string) string {
 }
 
 // handleHomeKey dispatches home-route keys: up/down wrap, enter opens or
-// creates, n creates, ctrl+c asks to quit, esc clears the prompt; unhandled
-// keys fall through to the prompt input.
+// creates, n creates, esc clears the prompt; unhandled keys fall through to
+// the prompt input. (ctrl+c is handled app-wide in handleKey.)
 func (a *App) handleHomeKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 	switch {
 	case key.Matches(k, homeKeyMap.Up):
@@ -139,9 +139,6 @@ func (a *App) handleHomeKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 		return a.homeEnter(), true
 	case key.Matches(k, homeKeyMap.NewSess):
 		return a.emit(a.createSessionCmd()), true
-	case key.Matches(k, homeKeyMap.Quit):
-		a.dlg.push(dialog{kind: dlgQuit})
-		return nil, true
 	case key.Matches(k, escBinding):
 		a.prompt.input.SetValue("")
 		return nil, true
