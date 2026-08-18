@@ -11,9 +11,11 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
+	"github.com/kido5217/yolo/internal/auth"
 	"github.com/kido5217/yolo/internal/bus"
 	"github.com/kido5217/yolo/internal/config"
 	"github.com/kido5217/yolo/internal/permission"
@@ -44,6 +46,12 @@ type Server struct {
 	srv     *http.Server
 	addr    net.Addr
 	mu      sync.Mutex
+
+	// Auth store for the server's lifetime (M5): PUT/DELETE /auth mutate it
+	// and persist via auth.SaveTo; GET /provider recomputes status from it.
+	authMu    sync.Mutex
+	authPath  string
+	authStore auth.Store
 }
 
 // New returns the core API as a plain http.Handler.
@@ -62,6 +70,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func build(d Deps) http.Handler {
 	s := &Server{Deps: d}
+	s.initAuth()
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /global/health", s.handleHealth)
 	mux.HandleFunc("GET /path", s.handlePath)
@@ -78,12 +87,51 @@ func build(d Deps) http.Handler {
 	mux.HandleFunc("POST /session/{id}/abort", s.handleAbort)
 	mux.HandleFunc("POST /session/{id}/command", s.handleCommand)
 	mux.HandleFunc("GET /event", s.handleEvent)
+	mux.HandleFunc("GET /provider", s.handleProvider)
+	mux.HandleFunc("GET /provider/auth", s.handleProviderAuth)
+	mux.HandleFunc("GET /config", s.handleConfigGet)
+	mux.HandleFunc("PATCH /config", s.handleConfigPatch)
+	mux.HandleFunc("GET /global/config", s.handleGlobalConfigGet)
+	mux.HandleFunc("PATCH /global/config", s.handleGlobalConfigPatch)
+	mux.HandleFunc("PUT /auth/{providerID}", s.handleAuthPut)
+	mux.HandleFunc("DELETE /auth/{providerID}", s.handleAuthDelete)
+	mux.HandleFunc("GET /agent", s.handleAgent)
+	mux.HandleFunc("GET /command", s.handleCommandList)
+	mux.HandleFunc("GET /permission", s.handlePermissionList)
+	mux.HandleFunc("POST /permission/{requestID}/reply", s.handlePermissionReply)
 	// unknown route -> 404 envelope, per method
 	mux.HandleFunc("GET /{tail...}", s.handleNotFound)
 	mux.HandleFunc("POST /{tail...}", s.handleNotFound)
 	mux.HandleFunc("PATCH /{tail...}", s.handleNotFound)
 	mux.HandleFunc("DELETE /{tail...}", s.handleNotFound)
+	mux.HandleFunc("PUT /{tail...}", s.handleNotFound)
 	return recoverMiddleware(mux)
+}
+
+// initAuth loads the boot-lifetime auth store from <Dirs.Data>/auth.json
+// (missing file = empty store).
+func (s *Server) initAuth() {
+	s.authPath = authPath(s.Dirs)
+	if st, err := auth.LoadFrom(s.authPath); err == nil {
+		s.authStore = st
+	} else {
+		s.authStore = auth.Store{}
+	}
+}
+
+func authPath(d config.Dirs) string {
+	if d.Data == "" {
+		return auth.Path()
+	}
+	return filepath.Join(d.Data, "auth.json")
+}
+
+// globalDir is <Dirs.Home>/yolo; zero Home falls back to the real XDG home.
+func (s *Server) globalDir() string {
+	if s.Dirs.Home == "" {
+		return config.GlobalYoloDir()
+	}
+	return filepath.Join(s.Dirs.Home, "yolo")
 }
 
 // Start listens on addr (":0" = ephemeral) and serves in a goroutine.

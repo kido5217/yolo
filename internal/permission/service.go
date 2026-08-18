@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -14,6 +15,10 @@ import (
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/storage"
 )
+
+// ErrNoPending is returned by Reply when the request is not (or no longer)
+// parked.
+var ErrNoPending = errors.New("permission: no pending request")
 
 // Request is one permission ask. DecisionPre carries the engine's
 // pre-evaluation (Allow|Deny | AskAction); zero means "decide now".
@@ -185,7 +190,7 @@ func (s *Service) Reply(requestID, response string) error {
 	e, ok := s.pending[requestID]
 	s.mu.Unlock()
 	if !ok {
-		return errors.New("permission: no pending request " + requestID)
+		return fmt.Errorf("%w: %s", ErrNoPending, requestID)
 	}
 	req := e.req
 	switch response {

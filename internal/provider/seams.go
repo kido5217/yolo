@@ -14,9 +14,26 @@ func NewWithSeams(ctx context.Context, dataDir string, seam func(providerID stri
 }
 
 // NewStaticForTest builds a fully offline registry: kido/q (default; no key)
-// plus opencode/gpt-5-nano (key-required placeholder). Server tests use it so
-// no test ever touches the network.
-func NewStaticForTest() *Registry {
+// plus opencode (key-required) seeded with a minimal zen catalog
+// (claude-opus-4-7 anthropic + gpt-5-nano openai); seed replaces the
+// opencode models when given. Server tests use it so no test ever touches
+// the network.
+func NewStaticForTest(seed ...Model) *Registry {
+	opencode := []Model{
+		{
+			ID: "claude-opus-4-7", Name: "Claude Opus 4.7", Family: "anthropic",
+			Adapter: "anthropic", ToolCall: true, Reasoning: true,
+			Context: 200000, Output: 32768,
+		},
+		{
+			ID: "gpt-5-nano", Name: "GPT-5 Nano", Family: "openai", Adapter: "openai",
+			ToolCall: true, Reasoning: true,
+			Context: 400000, Output: 16384,
+		},
+	}
+	if len(seed) > 0 {
+		opencode = seed
+	}
 	return &Registry{
 		client:      http.DefaultClient,
 		defProvider: "kido",
@@ -36,11 +53,7 @@ func NewStaticForTest() *Registry {
 				ID: "opencode", Name: "OpenCode Zen", Source: "builtin",
 				BaseURL: "https://opencode.ai/zen/v1",
 				KeyRequired: true, Env: []string{"OPENCODE_API_KEY"},
-				Models: []Model{{
-					ID: "gpt-5-nano", Name: "GPT-5 Nano", Family: "openai", Adapter: "openai",
-					ToolCall: true, Reasoning: true,
-					Context: 400000, Output: 16384,
-				}},
+				Models: opencode,
 			},
 		},
 	}

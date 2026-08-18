@@ -200,6 +200,12 @@ func mfloat(m map[string]any, k string) float64 {
 	return v
 }
 
+// FromConfig maps one config-defined provider to its wire shape (shared by
+// the server's live /provider merge).
+func FromConfig(id string, oc protocol.ProviderConfig) protocol.Provider {
+	return (&Registry{info: []Info{configProviderInfo(id, oc)}}).List()[0]
+}
+
 // List maps the catalog to wire providers.
 func (r *Registry) List() []protocol.Provider {
 	out := make([]protocol.Provider, 0, len(r.info))

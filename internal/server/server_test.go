@@ -29,11 +29,12 @@ import (
 
 type srv struct {
 	*httptest.Server
-	db   *storage.DB
-	eng  *session.Engine
-	fake *fakellm.Driver
-	dir  string
-	home string
+	db      *storage.DB
+	eng     *session.Engine
+	fake    *fakellm.Driver
+	permSvc *permission.Service
+	dir     string
+	home    string
 }
 
 // fakeDelay makes subsequent fake turns hold open for d (slow-turn tests).
@@ -76,7 +77,50 @@ func newSrv(t *testing.T) *srv {
 	})
 	ts := httptest.NewServer(h)
 	t.Cleanup(ts.Close)
-	return &srv{Server: ts, db: db, eng: eng, fake: fake, dir: dir, home: home}
+	return &srv{Server: ts, db: db, eng: eng, fake: fake, permSvc: permSvc, dir: dir, home: home}
+}
+
+// parkAsk parks a pending permission ask in a goroutine and blocks until it
+// is visible on GET /permission (so pinned tests never race the park).
+func (s *srv) parkAsk(sessionID, action, resource string) {
+	req := permission.Request{
+		RequestID:  protocol.NewID("perm"),
+		SessionID:  sessionID,
+		Agent:      "build",
+		Permission: action,
+		Resources:  []string{resource},
+	}
+	go s.permSvc.Ask(context.Background(), req)
+	row, err := s.db.GetSession(sessionID)
+	if err != nil {
+		panic(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		r, _ := http.NewRequest(http.MethodGet, s.URL+"/permission", nil)
+		r.Header.Set("x-yolo-directory", row.ProjectDir)
+		if resp, err := http.DefaultClient.Do(r); err == nil {
+			b, _ := io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			var pend []protocol.PermissionAskedProps
+			if json.Unmarshal(b, &pend) == nil {
+				for _, p := range pend {
+					if p.ID == req.RequestID {
+						return
+					}
+				}
+			}
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// writeCfg writes a project yolo.jsonc.
+func writeCfg(t *testing.T, dir, jsonc string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, "yolo.jsonc"), []byte(jsonc), 0o644); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func req(t *testing.T, s *srv, method, path, dir, body string) (*http.Response, []byte) {
