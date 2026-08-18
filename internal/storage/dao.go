@@ -165,8 +165,8 @@ func (d *DB) CreateMessage(r MessageRow) error {
 		return err
 	}
 	_, err = d.Exec(
-	`INSERT INTO message (id, session_id, role, agent, cost, tokens, time_created, time_completed) VALUES (?,?,?,?,?,?,?,?)`,
-	r.ID, r.SessionID, r.Role, agentOrDefault(r.Agent), r.Cost, string(tok), r.TimeCreated, nullStrPtr(r.TimeCompleted))
+		`INSERT INTO message (id, session_id, role, agent, cost, tokens, time_created, time_completed) VALUES (?,?,?,?,?,?,?,?)`,
+		r.ID, r.SessionID, r.Role, agentOrDefault(r.Agent), r.Cost, string(tok), r.TimeCreated, nullStrPtr(r.TimeCompleted))
 	return err
 }
 

@@ -29,11 +29,11 @@ func TestFooterRender(t *testing.T) {
 		Current: &protocol.Session{ID: "ses_1", Agent: "build", Model: refModel("kido", "q"), Cost: 0.0002, Tokens: protocol.Tokens{Input: 123, Output: 45}},
 	}
 	tests := []struct {
-		name      string
-		route     route
-		cfg       map[string]any
-		mutate    func(*store.Store)
-		want      string
+		name   string
+		route  route
+		cfg    map[string]any
+		mutate func(*store.Store)
+		want   string
 	}{
 		{
 			name:  "session idle live",
@@ -53,10 +53,12 @@ func TestFooterRender(t *testing.T) {
 			want:   "kido/q · build · ↑123 ↓45 · $0.0002 · ● live · ⠋ busy",
 		},
 		{
-			name:   "session retry shows attempt and message",
-			route:  routeSession,
-			mutate: func(s *store.Store) { s.Status = protocol.SessionStatus{Type: protocol.StatusRetry, Attempt: 2, Message: "rate limited"} },
-			want:   "kido/q · build · ↑123 ↓45 · $0.0002 · ● live · ⠋ retry 2: rate limited",
+			name:  "session retry shows attempt and message",
+			route: routeSession,
+			mutate: func(s *store.Store) {
+				s.Status = protocol.SessionStatus{Type: protocol.StatusRetry, Attempt: 2, Message: "rate limited"}
+			},
+			want: "kido/q · build · ↑123 ↓45 · $0.0002 · ● live · ⠋ retry 2: rate limited",
 		},
 		{
 			name:   "session without model",

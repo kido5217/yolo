@@ -96,7 +96,7 @@ func (m *agentDlg) handleKey(a *App, k tea.KeyPressMsg) []tea.Cmd {
 	switch {
 	case key.Matches(k, homeKeyMap.Up):
 		if n > 0 {
-			m.sel = ((m.sel - 1) % n + n) % n
+			m.sel = ((m.sel-1)%n + n) % n
 		}
 	case key.Matches(k, homeKeyMap.Down):
 		if n > 0 {

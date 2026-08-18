@@ -11,8 +11,8 @@ import (
 	"github.com/kido5217/yolo/internal/auth"
 	"github.com/kido5217/yolo/internal/config"
 	"github.com/kido5217/yolo/internal/permission"
-	"github.com/kido5217/yolo/internal/provider"
 	"github.com/kido5217/yolo/internal/protocol"
+	"github.com/kido5217/yolo/internal/provider"
 )
 
 // baseAgents are the built-in agents (upstream agent.ts, locked text).

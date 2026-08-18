@@ -196,14 +196,14 @@ func (m *modelDlg) move(st *store.Store, d int) {
 		if n == 0 {
 			return
 		}
-		m.selProv = ((m.selProv + d) % n + n) % n
+		m.selProv = ((m.selProv+d)%n + n) % n
 		return
 	}
 	n := m.modelCount(st)
 	if n == 0 {
 		return
 	}
-	m.selModel = ((m.selModel + d) % n + n) % n
+	m.selModel = ((m.selModel+d)%n + n) % n
 }
 
 // modelCount is the length of the selected provider's model list.

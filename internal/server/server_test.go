@@ -319,7 +319,9 @@ func TestCommandEndpoint(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Fatalf("%d %s", resp.StatusCode, b)
 	}
-	var out struct{ SessionID string `json:"session_id"` }
+	var out struct {
+		SessionID string `json:"session_id"`
+	}
 	if err := json.Unmarshal(b, &out); err != nil {
 		t.Fatalf("unmarshal: %v (%s)", err, b)
 	}
@@ -327,7 +329,9 @@ func TestCommandEndpoint(t *testing.T) {
 		t.Fatalf("/new = %s", out.SessionID)
 	}
 	resp, b = testutil.Req(t, s, "POST", "/session/"+ses.ID+"/command", d, `{"command":"/model"}`)
-	var client struct{ Handled string `json:"handled"` }
+	var client struct {
+		Handled string `json:"handled"`
+	}
 	if err := json.Unmarshal(b, &client); err != nil {
 		t.Fatalf("unmarshal: %v (%s)", err, b)
 	}

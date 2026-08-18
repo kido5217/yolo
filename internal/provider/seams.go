@@ -41,7 +41,7 @@ func NewStaticForTest(seed ...Model) *Registry {
 		info: []Info{
 			{
 				ID: "kido", Name: "Kido", Source: "builtin",
-				BaseURL: "https://ai.kido.ws/v1",
+				BaseURL:     "https://ai.kido.ws/v1",
 				KeyRequired: false, KeyLoaded: true,
 				Models: []Model{{
 					ID: "q", Name: "Qwen", Family: "qwen", Adapter: "openai",
@@ -51,7 +51,7 @@ func NewStaticForTest(seed ...Model) *Registry {
 			},
 			{
 				ID: "opencode", Name: "OpenCode Zen", Source: "builtin",
-				BaseURL: "https://opencode.ai/zen/v1",
+				BaseURL:     "https://opencode.ai/zen/v1",
 				KeyRequired: true, Env: []string{"OPENCODE_API_KEY"},
 				Models: opencode,
 			},

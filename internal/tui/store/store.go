@@ -29,7 +29,7 @@ type Store struct {
 func (s *Store) Apply(ev protocol.Event) {
 	switch ev.Type {
 	case protocol.EventTypeMessageUpdated:
- 		var p protocol.MessageUpdatedProps
+		var p protocol.MessageUpdatedProps
 		if json.Unmarshal(ev.Properties, &p) != nil || !s.isCurrent(p.SessionID) {
 			return
 		}

@@ -47,10 +47,10 @@ type Service struct {
 	db  *storage.DB
 	bus *bus.Bus
 
-	mu        sync.Mutex
-	pending   map[string]*pendingEntry
-	cfgRules  []protocol.Rule
-	dataDir   string
+	mu       sync.Mutex
+	pending  map[string]*pendingEntry
+	cfgRules []protocol.Rule
+	dataDir  string
 }
 
 func New(db *storage.DB, b *bus.Bus) *Service {
@@ -304,12 +304,12 @@ func (s *Service) persist(req Request, response string) error {
 		}
 	}
 	return s.db.SavePermission(storage.PermissionRow{
-		RequestID:  req.RequestID,
-		SessionID:  req.SessionID,
-		Action:     req.Permission,
-		Resource:   strings.Join(req.Resources, ","),
-		Response:   response,
-		AlwaysJSON: alwaysJSON,
+		RequestID:   req.RequestID,
+		SessionID:   req.SessionID,
+		Action:      req.Permission,
+		Resource:    strings.Join(req.Resources, ","),
+		Response:    response,
+		AlwaysJSON:  alwaysJSON,
 		TimeCreated: req.CreatedAt,
 	})
 }

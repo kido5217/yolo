@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/x/exp/teatest/v2"
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/server/testutil"
@@ -22,8 +22,8 @@ func pressTab() tea.KeyPressMsg { return tea.KeyPressMsg{Code: '\t'} }
 
 // pressCtrlP / pressCtrlA build the locked dialog openers (ctrl modifiers, no
 // Text).
-func pressCtrlP() tea.KeyPressMsg  { return tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl} }
-func pressCtrlA() tea.KeyPressMsg  { return tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl} }
+func pressCtrlP() tea.KeyPressMsg { return tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl} }
+func pressCtrlA() tea.KeyPressMsg { return tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl} }
 
 // tuiProviderFixture mirrors the offline server fixture (provider.
 // NewStaticForTest): kido (key-less, Qwen 100k) and opencode (key-required,

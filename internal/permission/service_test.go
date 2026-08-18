@@ -41,7 +41,12 @@ func TestAskPreAllowNoBlock(t *testing.T) {
 	req := e.req("per_1")
 	req.DecisionPre = Allow
 	done := make(chan Decision, 1)
-	go func() { d, err := e.svc.Ask(context.Background(), req); if err == nil { done <- d } }()
+	go func() {
+		d, err := e.svc.Ask(context.Background(), req)
+		if err == nil {
+			done <- d
+		}
+	}()
 	select {
 	case d := <-done:
 		if d != Allow {
@@ -62,7 +67,12 @@ func TestAskAskBlocksThenOnce(t *testing.T) {
 	req := e.req("per_2")
 	req.Permission = "custom"
 	done := make(chan Decision, 1)
-	go func() { d, err := e.svc.Ask(context.Background(), req); if err == nil { done <- d } }()
+	go func() {
+		d, err := e.svc.Ask(context.Background(), req)
+		if err == nil {
+			done <- d
+		}
+	}()
 	time.Sleep(100 * time.Millisecond) // let it park
 	if pend, _ := e.svc.Pending("ses_1"); len(pend) != 1 {
 		t.Fatalf("pending = %d", len(pend))
@@ -84,8 +94,13 @@ func TestAlwaysPersistsRuleAndCoveredAutoAnswer(t *testing.T) {
 	e := newEnv(t)
 	_ = e.db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Agent: "build", Model: "k"})
 	// two parked asks, same permission, second fully covered by first's always pattern
-	r1 := e.req("per_3"); r1.Permission = "custom"; r1.Resources = []string{"a/b"}; r1.Always = []string{"a/*"}
-	r2 := e.req("per_4"); r2.Permission = "custom"; r2.Resources = []string{"a/c"}
+	r1 := e.req("per_3")
+	r1.Permission = "custom"
+	r1.Resources = []string{"a/b"}
+	r1.Always = []string{"a/*"}
+	r2 := e.req("per_4")
+	r2.Permission = "custom"
+	r2.Resources = []string{"a/c"}
 	go func() { _, _ = e.svc.Ask(context.Background(), r1) }()
 	go func() { _, _ = e.svc.Ask(context.Background(), r2) }()
 	time.Sleep(100 * time.Millisecond)
@@ -105,8 +120,10 @@ func TestAlwaysPersistsRuleAndCoveredAutoAnswer(t *testing.T) {
 func TestRejectCascade(t *testing.T) {
 	e := newEnv(t)
 	_ = e.db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Agent: "build", Model: "k"})
-	r1 := e.req("per_5"); r1.Permission = "custom"
-	r2 := e.req("per_6"); r2.Permission = "custom"
+	r1 := e.req("per_5")
+	r1.Permission = "custom"
+	r2 := e.req("per_6")
+	r2.Permission = "custom"
 	res1 := make(chan Decision, 1)
 	res2 := make(chan Decision, 1)
 	go func() { d, _ := e.svc.Ask(context.Background(), r1); res1 <- d }()

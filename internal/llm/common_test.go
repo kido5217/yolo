@@ -76,4 +76,3 @@ func collect(t *testing.T, s PartStream) []Part {
 	}
 	return out
 }
-
