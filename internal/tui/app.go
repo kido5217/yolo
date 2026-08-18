@@ -79,6 +79,7 @@ type App struct {
 	dlg       dialogStack
 	toasts    []toast
 	lastErr   string
+	spinIdx   int // footer spinner frame
 	// tea plumbing
 	size    tea.WindowSizeMsg
 	eventCh chan protocol.Event
@@ -139,10 +140,18 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case EventMsg:
 		a.store.Conn = true
 		a.store.Apply(m.Ev)
-		return a, a.eventPump()
+		return a, a.afterApply(a.eventPump())
 	case connLostMsg:
 		a.store.Conn = false
 		return a, nil
+	case spinMsg:
+		a.spinIdx++
+		if a.statusSeg() != "" {
+			return a, a.spinTick()
+		}
+		return a, nil
+	case permReplyMsg:
+		return a, a.applyPermReply(m)
 	case HydrateMsg:
 		return a, a.hydrateCmd()
 	case hydratedMsg:
@@ -172,6 +181,18 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // handles reconnects with its internal backoff loop.
 type connLostMsg struct{}
 
+// afterApply arms the footer spinner when a just-applied event left the
+// session non-idle.
+func (a *App) afterApply(cmd tea.Cmd) tea.Cmd {
+	if a.statusSeg() == "" {
+		return cmd
+	}
+	if cmd == nil {
+		return a.spinTick()
+	}
+	return tea.Batch(cmd, a.spinTick())
+}
+
 // eventPump blocks on the SSE channel and delivers the next event. It re-arms
 // itself on every event; on channel close it delivers connLostMsg and stops.
 func (a *App) eventPump() tea.Cmd {
@@ -194,6 +215,7 @@ type hydratedMsg struct {
 	sess     *protocol.Session
 	msgs     []protocol.MessageWithParts
 	cmds     []protocol.Command
+	cfg      map[string]any
 	err      error
 	notFound bool
 }
@@ -219,15 +241,20 @@ func (a *App) hydrateCmd() tea.Cmd {
 		}
 	}
 	return func() tea.Msg {
-		list, err := a.ListSessions(context.Background())
-		cmds, _ := a.ListCommands(context.Background())
-		return hydratedMsg{list: list, cmds: cmds, err: err}
+		ctx := context.Background()
+		list, err := a.ListSessions(ctx)
+		cmds, _ := a.ListCommands(ctx)
+		cfg, _ := a.GetConfig(ctx)
+		return hydratedMsg{list: list, cmds: cmds, cfg: cfg, err: err}
 	}
 }
 
 func (a *App) applyHydrate(m hydratedMsg) tea.Cmd {
 	if m.cmds != nil {
 		a.store.Commands = m.cmds
+	}
+	if m.cfg != nil {
+		a.store.Config = m.cfg
 	}
 	switch {
 	case m.notFound:
@@ -302,10 +329,15 @@ var (
 	dlgNo      = key.NewBinding(key.WithKeys("n", "esc"))
 )
 
-// handleKey is the app key dispatcher: dialog > slash menu > route > prompt.
-// While the menu is open it owns the keys; routes handle their navigation
-// keys; everything else falls through to the always-focused prompt input.
+// handleKey is the app key dispatcher: permission > dialog > slash menu >
+// route > prompt. A pending permission ask owns every key (1/2/3/esc only);
+// while the slash menu is open it owns the keys; routes handle their
+// navigation keys; everything else falls through to the always-focused
+// prompt input.
 func (a *App) handleKey(k tea.KeyPressMsg) []tea.Cmd {
+	if len(a.store.Pending) > 0 {
+		return a.handlePermKey(k)
+	}
 	if d, ok := a.dlg.top(); ok {
 		return a.handleDialogKey(d, k)
 	}
@@ -589,8 +621,9 @@ func (a *App) View() tea.View {
 	return tea.NewView(a.view())
 }
 
-// view composes the on-screen string: the active route, the slash menu and
-// prompt lines, toasts, the dialog overlay and the last error line.
+// view composes the on-screen string: the active route, the slash menu, the
+// permission overlay above the prompt, the prompt line, toasts, the dialog
+// overlay, the last error line and the status footer (both routes).
 func (a *App) view() string {
 	var b strings.Builder
 	if a.route == routeSession {
@@ -599,6 +632,9 @@ func (a *App) view() string {
 		b.WriteString(a.home.render(&a.store))
 	}
 	if v := a.prompt.menuView(a.store.Commands); v != "" {
+		b.WriteString("\n" + v)
+	}
+	if v := a.permissionView(); v != "" {
 		b.WriteString("\n" + v)
 	}
 	b.WriteString("\n" + a.prompt.view())
@@ -611,18 +647,19 @@ func (a *App) view() string {
 	if a.lastErr != "" {
 		b.WriteString("\n" + errRed.Render("! "+a.lastErr))
 	}
+	b.WriteString("\n" + a.footerView())
 	return b.String()
 }
 
 // viewSession renders the session route: title, the transcript viewport and
-// the locked help line. The viewport reserves a line for the prompt plus the
-// open slash menu.
+// the locked help line. The viewport reserves a line for the prompt, one for
+// the footer, plus the open slash menu.
 func (a *App) viewSession() string {
 	w := a.size.Width
 	if w < 1 {
 		w = 80
 	}
-	h := a.size.Height - 3 - 1 - a.prompt.menuLines(a.store.Commands)
+	h := a.size.Height - 3 - 1 - 1 - a.prompt.menuLines(a.store.Commands)
 	if h < 1 {
 		h = 1
 	}

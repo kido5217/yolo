@@ -21,13 +21,16 @@ import (
 var ErrNoPending = errors.New("permission: no pending request")
 
 // Request is one permission ask. DecisionPre carries the engine's
-// pre-evaluation (Allow|Deny | AskAction); zero means "decide now".
+// pre-evaluation (Allow|Deny | AskAction); zero means "decide now". CallID and
+// MessageID identify the originating tool call (wire tool ref); they may be
+// empty for non-tool asks.
 type Request struct {
 	RequestID, SessionID, Agent string
 	Permission                  string // action, e.g. "read"
 	Tool                        string // tool name for the TUI
 	Resources                   []string
 	Always                      []string // suggested always patterns
+	CallID, MessageID           string
 	Meta                        map[string]any
 	DecisionPre                 Decision
 	CreatedAt                   int64
@@ -331,7 +334,11 @@ func (s *Service) publishAsked(req Request) {
 		Metadata:   meta,
 	}
 	if req.Tool != "" {
-		props.Tool = &protocol.PermissionToolRef{CallID: req.RequestID}
+		if req.CallID != "" {
+			props.Tool = &protocol.PermissionToolRef{MessageID: req.MessageID, CallID: req.CallID}
+		} else {
+			props.Tool = &protocol.PermissionToolRef{CallID: req.RequestID}
+		}
 	}
 	if ev, err := protocol.MakeEvent(protocol.EventTypePermissionAsked, props); err == nil {
 		s.bus.Publish(ev)

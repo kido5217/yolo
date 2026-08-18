@@ -882,7 +882,8 @@ func (e *Engine) executeTool(ctx context.Context, sessionID, agent string, row s
 		doomReq := permission.Request{
 			RequestID: protocol.NewID("perm"), SessionID: sessionID, Agent: agent,
 			Permission: "doom_loop", Tool: t.ID(),
-			Resources:   []string{name},
+			Resources: []string{name},
+			CallID:    callID, MessageID: asstID,
 			DecisionPre: d, CreatedAt: e.clock(),
 		}
 		decision, err := e.perm.Ask(ctx, doomReq)
@@ -921,7 +922,8 @@ func (e *Engine) executeTool(ctx context.Context, sessionID, agent string, row s
 		extReq := permission.Request{
 			RequestID: protocol.NewID("perm"), SessionID: sessionID, Agent: agent,
 			Permission: "external_directory", Tool: t.ID(),
-			Resources:   []string{pattern},
+			Resources: []string{pattern},
+			CallID:    callID, MessageID: asstID,
 			DecisionPre: d, CreatedAt: e.clock(),
 		}
 		decision, aerr := e.perm.Ask(ctx, extReq)
@@ -937,6 +939,7 @@ func (e *Engine) executeTool(ctx context.Context, sessionID, agent string, row s
 		RequestID: protocol.NewID("perm"), SessionID: sessionID, Agent: agent,
 		Permission: t.Permission(), Tool: t.ID(),
 		Resources: resources, Always: always,
+		CallID: callID, MessageID: asstID,
 		DecisionPre: d, CreatedAt: e.clock(),
 	}
 	decision, err := e.perm.Ask(ctx, preq)

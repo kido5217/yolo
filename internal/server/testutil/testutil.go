@@ -46,18 +46,27 @@ type TestServer struct {
 // cleanup on t.
 func Boot(t *testing.T) *TestServer {
 	t.Helper()
-	return boot(t, fakellm.New(fakellm.AutoText()))
+	return boot(t, fakellm.New(fakellm.AutoText()), &protocol.Config{})
 }
 
 // BootWithDriver boots the full stack with a caller-provided fake driver
 // (the env-gate variant, YOLO_LLM=fake).
 func BootWithDriver(t *testing.T, drv *fakellm.Driver) *TestServer {
 	t.Helper()
-	return boot(t, drv)
+	return boot(t, drv, &protocol.Config{})
+}
+
+// BootWithDriverConfig boots the full stack with a caller-provided fake driver
+// and pins the engine's config dependency to cfg (empty per directory by
+// default). Tests use it to exercise config-driven behavior such as
+// permission rules without a yolo.jsonc file.
+func BootWithDriverConfig(t *testing.T, drv *fakellm.Driver, cfg *protocol.Config) *TestServer {
+	t.Helper()
+	return boot(t, drv, cfg)
 }
 
 // boot boots the FULL stack on the given kido driver (no network).
-func boot(t *testing.T, drv *fakellm.Driver) *TestServer {
+func boot(t *testing.T, drv *fakellm.Driver, cfg *protocol.Config) *TestServer {
 	t.Helper()
 	root := t.TempDir()
 	dataDir := filepath.Join(root, "data")
@@ -79,7 +88,7 @@ func boot(t *testing.T, drv *fakellm.Driver) *TestServer {
 		Perm:    permSvc,
 		Tools:   tool.Registry(),
 		DataDir: dataDir,
-		Cfg:     func(string) (*protocol.Config, error) { return &protocol.Config{}, nil },
+		Cfg:     func(string) (*protocol.Config, error) { return cfg, nil },
 		Drivers: map[string]llm.Driver{"kido": drv},
 		Clock:   func() int64 { return time.Now().UnixMilli() },
 	})
