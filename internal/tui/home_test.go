@@ -175,13 +175,18 @@ func TestAppHandleKeyHome(t *testing.T) {
 		}
 	})
 
-	t.Run("typing /help opens help dialog", func(t *testing.T) {
+	// T25 (deviation 52): the T23 auto-open command buffer is replaced by the
+	// slash menu — typing "/help" opens the menu, enter executes it.
+	t.Run("typing /help + enter opens help dialog", func(t *testing.T) {
 		a := testApp()
+		a.store.Commands = testCommands()
 		for _, r := range "/help" {
 			a.handleKey(press(r))
 		}
-		if !a.dlg.has() {
-			t.Fatal("help dialog not opened")
+		a.handleKey(press(tea.KeyEnter))
+		d, ok := a.dlg.top()
+		if !ok || d.kind != dlgHelp {
+			t.Fatalf("dialog = %v (ok=%v), want dlgHelp", d.kind, ok)
 		}
 	})
 }

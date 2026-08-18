@@ -12,11 +12,11 @@ import (
 	"github.com/kido5217/yolo/internal/tui/store"
 )
 
-// homeModel holds home-route state: cursor line, the "/<cmd>" input buffer,
-// and the relative-time clock.
+// homeModel holds home-route state: the cursor line and the relative-time
+// clock. (The "/<cmd>" buffer was the T23 prototype; T25 replaces it with the
+// always-focused prompt input.)
 type homeModel struct {
 	cursor int
-	buf    string
 	now    func() int64
 }
 
@@ -125,32 +125,32 @@ func (h *homeModel) renderRow(line int, content string) string {
 }
 
 // handleHomeKey dispatches home-route keys: up/down wrap, enter opens or
-// creates, n creates, ctrl+c asks to quit, printable input feeds the command
-// buffer.
-func (a *App) handleHomeKey(k tea.KeyPressMsg) []tea.Cmd {
+// creates, n creates, ctrl+c asks to quit, esc clears the prompt; unhandled
+// keys fall through to the prompt input.
+func (a *App) handleHomeKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 	switch {
 	case key.Matches(k, homeKeyMap.Up):
 		a.home.moveCursor(&a.store, -1)
-		return nil
+		return nil, true
 	case key.Matches(k, homeKeyMap.Down):
 		a.home.moveCursor(&a.store, 1)
-		return nil
+		return nil, true
 	case key.Matches(k, homeKeyMap.Enter):
-		return a.homeEnter()
+		return a.homeEnter(), true
 	case key.Matches(k, homeKeyMap.NewSess):
-		a.home.buf = ""
-		return a.emit(a.createSessionCmd())
+		return a.emit(a.createSessionCmd()), true
 	case key.Matches(k, homeKeyMap.Quit):
 		a.dlg.push(dialog{kind: dlgQuit})
-		return nil
-	default:
-		return a.homeCommand(k)
+		return nil, true
+	case key.Matches(k, escBinding):
+		a.prompt.input.SetValue("")
+		return nil, true
 	}
+	return nil, false
 }
 
 func (a *App) homeEnter() []tea.Cmd {
 	if a.home.cursor == 0 {
-		a.home.buf = ""
 		return a.emit(a.createSessionCmd())
 	}
 	rows := a.home.visible(&a.store)
@@ -160,23 +160,4 @@ func (a *App) homeEnter() []tea.Cmd {
 	}
 	a.openSession(rows[idx].ID)
 	return a.emit(a.hydrateCmd())
-}
-
-// homeCommand accumulates the "/<cmd>" buffer; "/help" opens the help dialog,
-// any other input clears the buffer. Only /help exists at T23.
-func (a *App) homeCommand(k tea.KeyPressMsg) []tea.Cmd {
-	t := k.Text
-	if t == "" {
-		return nil
-	}
-	a.home.buf += t
-	if a.home.buf == "/help" {
-		a.home.buf = ""
-		a.dlg.push(dialog{kind: dlgHelp})
-		return nil
-	}
-	if !strings.HasPrefix("/help", a.home.buf) {
-		a.home.buf = ""
-	}
-	return nil
 }

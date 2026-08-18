@@ -31,8 +31,11 @@ var sessKeyMap = struct {
 }{
 	PageUp:   key.NewBinding(key.WithKeys("pgup")),
 	PageDown: key.NewBinding(key.WithKeys("pgdown")),
-	Expand:   key.NewBinding(key.WithKeys("e")),
-	Think:    key.NewBinding(key.WithKeys("t")),
+	// T25 (deviation 51): the always-focused prompt needs plain e/t for
+	// typing, so the toggles moved to alt+e / alt+t (both unbound by
+	// textinput's DefaultKeyMap).
+	Expand: key.NewBinding(key.WithKeys("alt+e")),
+	Think:  key.NewBinding(key.WithKeys("alt+t")),
 }
 
 func newSessionModel(w, h int) sessionModel {
@@ -52,7 +55,7 @@ func sessionBusy(st *store.Store) bool {
 }
 
 // const sessionHelp locks the session-route footer help line.
-const sessionHelp = "pgup/pgdn scroll \u00B7 e expand \u00B7 t think \u00B7 esc abort/back"
+const sessionHelp = "pgup/pgdn scroll \u00B7 alt+e expand \u00B7 alt+t think \u00B7 esc abort/back"
 
 // sync updates viewport size/content and applies auto-follow: while the
 // session is busy and follow is on, the viewport stays pinned to the bottom;
@@ -258,30 +261,31 @@ func lastToolPartID(st *store.Store) string {
 	return id
 }
 
-// handleSessionKey dispatches session-route keys: pgup/pgdn scroll, e
-// expands the most recent tool part, t toggles reasoning, esc aborts while
-// busy and returns to home when idle.
-func (a *App) handleSessionKey(k tea.KeyPressMsg) []tea.Cmd {
+// handleSessionKey dispatches session-route keys: pgup/pgdn scroll, alt+e
+// expands the most recent tool part, alt+t toggles reasoning, esc aborts
+// while busy and returns to home when idle. It reports whether the key was
+// consumed; unhandled keys fall through to the prompt input.
+func (a *App) handleSessionKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 	switch {
 	case key.Matches(k, sessKeyMap.PageUp):
 		a.sess.vm.PageUp()
 		a.sess.follow = false
-		return nil
+		return nil, true
 	case key.Matches(k, sessKeyMap.PageDown):
 		a.sess.vm.PageDown()
 		a.sess.follow = a.sess.vm.AtBottom()
-		return nil
+		return nil, true
 	case key.Matches(k, sessKeyMap.Expand):
 		id := lastToolPartID(&a.store)
 		if id == "" {
-			return nil
+			return nil, true
 		}
 		if a.sess.expanded[id] {
 			delete(a.sess.expanded, id)
 		} else {
 			a.sess.expanded[id] = true
 		}
-		return nil
+		return nil, true
 	case key.Matches(k, sessKeyMap.Think):
 		expand := false
 		ids := []string{}
@@ -303,15 +307,14 @@ func (a *App) handleSessionKey(k tea.KeyPressMsg) []tea.Cmd {
 				delete(a.sess.expanded, id)
 			}
 		}
-		return nil
+		return nil, true
 	case key.Matches(k, escBinding):
 		if sessionBusy(&a.store) {
-			return a.emit(a.abortCmd())
+			return a.emit(a.abortCmd()), true
 		}
 		a.route = routeHome
 		a.cur = ""
-		a.home.buf = ""
-		return a.emit(a.hydrateCmd())
+		return a.emit(a.hydrateCmd()), true
 	}
-	return nil
+	return nil, false
 }

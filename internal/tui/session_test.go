@@ -178,19 +178,21 @@ func testSessionApp(s store.Store) *App {
 }
 
 func TestSessionKeys(t *testing.T) {
-	t.Run("e toggles the most recent tool part", func(t *testing.T) {
+	// T25 (deviation 51): with the always-focused prompt, plain e/t must type
+	// into the input, so the session toggles moved to alt+e / alt+t.
+	t.Run("alt+e toggles the most recent tool part", func(t *testing.T) {
 		a := testSessionApp(sessionFixture())
-		a.handleKey(press('e'))
+		a.handleKey(pressAlt('e'))
 		if len(a.sess.expanded) != 1 || !a.sess.expanded["t3"] {
 			t.Fatalf("expanded = %v, want {t3:true}", a.sess.expanded)
 		}
-		a.handleKey(press('e'))
+		a.handleKey(pressAlt('e'))
 		if len(a.sess.expanded) != 0 {
 			t.Fatalf("expanded = %v, want {}", a.sess.expanded)
 		}
 	})
 
-	t.Run("e is a no-op without tool parts", func(t *testing.T) {
+	t.Run("alt+e is a no-op without tool parts", func(t *testing.T) {
 		s := store.Store{
 			Current: &protocol.Session{ID: "ses_0"},
 			Messages: []protocol.MessageWithParts{{
@@ -199,19 +201,19 @@ func TestSessionKeys(t *testing.T) {
 			}},
 		}
 		a := testSessionApp(s)
-		a.handleKey(press('e'))
+		a.handleKey(pressAlt('e'))
 		if len(a.sess.expanded) != 0 {
 			t.Fatalf("expanded = %v, want {}", a.sess.expanded)
 		}
 	})
 
-	t.Run("t toggles all reasoning parts", func(t *testing.T) {
+	t.Run("alt+t toggles all reasoning parts", func(t *testing.T) {
 		a := testSessionApp(sessionFixture())
-		a.handleKey(press('t'))
+		a.handleKey(pressAlt('t'))
 		if len(a.sess.expanded) != 1 || !a.sess.expanded["r1"] {
 			t.Fatalf("expanded = %v, want {r1:true}", a.sess.expanded)
 		}
-		a.handleKey(press('t'))
+		a.handleKey(pressAlt('t'))
 		if len(a.sess.expanded) != 0 {
 			t.Fatalf("expanded = %v, want {}", a.sess.expanded)
 		}

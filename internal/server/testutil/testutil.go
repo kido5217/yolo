@@ -118,6 +118,22 @@ func (ts *TestServer) WaitSubscribe(t *testing.T, n int) {
 // FakeDelay makes subsequent fake turns hold open for d (slow-turn tests).
 func (ts *TestServer) FakeDelay(d time.Duration) { ts.Fake.SetDelay(d) }
 
+// LastMessages fetches the persisted messages of a session (GET
+// /session/{id}/message) and decodes them. Test-side read path against the
+// in-process test server.
+func (ts *TestServer) LastMessages(t *testing.T, sessionID string) []protocol.MessageWithParts {
+	t.Helper()
+	resp, body := Req(t, ts, "GET", "/session/"+sessionID+"/message", ts.Dir, "")
+	if resp.StatusCode != 200 {
+		t.Fatalf("GET /session/%s/message = %d %s", sessionID, resp.StatusCode, string(body))
+	}
+	var out []protocol.MessageWithParts
+	if err := json.Unmarshal(body, &out); err != nil {
+		t.Fatalf("decode LastMessages: %v", err)
+	}
+	return out
+}
+
 // ParkAsk parks a pending permission ask in a goroutine and blocks until it
 // is visible on GET /permission (so pinned tests never race the park).
 func (ts *TestServer) ParkAsk(sessionID, action, resource string) {
