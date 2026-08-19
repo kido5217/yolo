@@ -8,20 +8,14 @@ plan file are the archive.
 
 ## Where we are
 
-Plan approved by user ("LGTM"). Executed inline on branch `plan`, one task at a time, strict
-5-step TDD, commit per plan-pinned message. **M0–M8 COMPLETE** (Tasks 1–30:
-protocol/config/auth/storage/bus, LLM drivers + provider registry, permission + 7 tools, prompt
-builder, session engine [permission gates + lifecycle + Shutdown], REST + SSE server, contract
-goldens, TUI client/SSE/Store/testutil, root app + home, viewport + streaming, prompt + slash
-menu, permission dialog + footer, model + agent dialogs, toasts + /help + quit + full teatest
-suites [the M6-M7 "done when" gate], CLI wiring [in-process `yolo` + `yolo serve` + resume +
-import-direction guard], README + log rotation + signal drain + golangci-lint sweep + live e2e).
-**DONE:** merged to `main` (PR #2, `6214416`), tagged `v0.1.0` on the merged tip, GitHub release
-created — https://github.com/kido5217/yolo/releases/tag/v0.1.0. Out-of-scope features → 0.2.0+.
+**v0.1.0** (Tasks 1–30, M0–M8) and **v0.1.1** (post-release follow-ups) are complete — merged to
+`main`, tagged, GitHub releases cut. Per-task history: `git log --oneline` + the tag/release
+pages. Out-of-scope features → 0.2.0+. Current focus: the **v0.1.2 skill-driven review** (details
+in "Active").
 
 ## Resume instructions
 
-1. Repo: `/home/kido/network/projects/yolo` (on `main`; post-release work on `v0.1.1_fix_plan_derivations`). Plan: `docs/superpowers/plans/2026-08-17-yolo-go-port.md` (read the active task's slice in full before executing). Spec: `docs/superpowers/specs/2026-08-17-yolo-go-port-design.md`.
+1. Repo: `/home/kido/network/projects/yolo`, on branch `v0.1.2_skills_review` (off the v0.1.1 main merge `1784ac0`). Active plan: `docs/superpowers/plans/2026-08-19-v0.1.2-skill-review.md` (read its Resume Protocol, then Task 0, in full before executing). Active spec: `docs/superpowers/specs/2026-08-19-v0.1.2-skill-review-design.md`. (The original port plan/spec `2026-08-17-yolo-go-port.md` / `-design.md` are closed.)
 2. Per task: Step 1 failing test → Step 2 confirm FAIL → Step 3 minimal impl → Step 4 `go vet ./... && go test ./...` PASS → Step 5 commit with the plan's pinned message; then roll this file (active task → one-line "Last completed", next task → "Active").
 
 ## Active
@@ -30,7 +24,7 @@ created — https://github.com/kido5217/yolo/releases/tag/v0.1.0. Out-of-scope f
 
 ## Last completed
 
-**v0.1.1 (2026-08-19): post-release follow-ups released** — spec + AGENTS.md reconciled to as-built v0.1.0 (11 fixes), `/help` keymap rows fixed (T28 pin), `/exit` → `/quit` canonical rename with `/exit` alias on every surface (deviation 66), gofmt 1.26 gate pinned in AGENTS.md — merged to `main` (PR #3), tagged + GitHub release. (v0.1.0: all 30 tasks done, PR #2 `6214416`, released 2026-08-18. Earlier detail archived: `git log --oneline` + the deviation log below.)
+**v0.1.2 skill review — spec + plan committed** (2026-08-19/20, `v0.1.2_skills_review`): approved design spec `2026-08-19-v0.1.2-skill-review-design.md` (`d391257`) + executable 16-wave plan `2026-08-19-v0.1.2-skill-review.md` (`c96bb92`). (v0.1.1: post-release follow-ups released 2026-08-19, PR #3 `1784ac0`, tagged + released; v0.1.0: all 30 tasks, PR #2 `6214416`, 2026-08-18. Earlier detail: `git log --oneline` + the deviation log below.)
 
 ## Key verified facts (so they don't get re-litigated)
 
@@ -114,12 +108,3 @@ created — https://github.com/kido5217/yolo/releases/tag/v0.1.0. Out-of-scope f
 - **64. `scripts/e2e-live.sh` asserts a completed tool call from read/glob/grep/bash, not the plan's "one `read`/`glob` tool call".** The real-endpoint run answered "list files in /tmp" with a completed `bash ls /tmp` call — a legitimate tool-set choice, not a contract break (the contract golden suite separately pins wire shapes). Widened so dogfood passes without weakening the real checks (completed tool call + non-empty assistant text + abort semantics).
 - **65. e2e script boots `yolo serve` from a scratch project dir (with `provider.kido.baseURL` pinned in `$PROJ/yolo.jsonc`), not from an empty CWD with only a scope header.** Verified facts: the provider registry is built ONCE at server startup from the startup-dir config (`cmd/yolo/main.go` `LoadAt` → `provider.New` `:106-109`); the engine's per-turn config does NOT change `BaseURL`; `KIDO_BASE_URL` is read by no code path (grep-verified) — the script's `KIDO_BASE_URL` env is honored by the SCRIPT (it writes the config), not by yolo. Also: `GET /global/health` → `{"status":"ok"}` (not `{"ok":true}`), and the scratch-boot is how non-default endpoints stay reachable.
 - **66. Post-release (2026-08-19), user-approved 0.1.1 follow-up: canonical slash command renamed from the plan's LOCKED `/exit` to `/quit`.** `/exit` remains an accepted alias on every surface: `GET /command` lists only `/quit` (description "exit"); `POST /session/{id}/command` accepts both; the TUI slash menu prefix-matches aliases but surfaces only the canonical name (`commandAliases` in `prompt.go`); `runCommand` resolves both. Golden fixture `testdata/golden/command.json` regenerated via the contract suite's `-update` flag (only that file changed).
-
-## Open items
-
-- [x] Task 30 executed (`5ae4e81`): README + log rotation + signal drain + golangci-lint sweep (0 issues) + live e2e script.
-- [x] gofmt policy: resolved — the M8 lint sweep only rewrote files with actual lint findings; no legacy-only gofmt reformatting needed.
-- [x] Tag + release done with explicit user go-ahead: `v0.1.0` on `6214416` (merged main), GitHub release created 2026-08-18.
-- [x] On-demand live e2e vs `ai.kido.ws` — agent-verified PASS on the real endpoint 2026-08-18 (Key verified facts); stays user-run, never CI.
-- [x] Flagged at handoff — on record: plan's Task 21 SSE pin (busy first) contradicts engine + upstream v1.18.18 (deviation 41; upstream `prompt.ts` verified)
-- [x] Flagged at handoff — on record: plan-matrix third `edit` rule moved to engine (T10 note); CallID not persisted (T5); host toolchain scalar `//go:embed` typecheck gap → `import _ "embed"` workaround (T11 note 12)

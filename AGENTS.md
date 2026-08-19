@@ -29,6 +29,7 @@ Read it before acting. For session state, read `docs/superpowers/PROGRESS.md` se
 3. **Verbatim pins are tests, not decoration.** 14 session prompt files and all tool `desc/*.txt` files are ported **byte-verbatim** from upstream and guarded by sha256 pins in tests. Do not "improve", rewrap, or reword pinned text.
 4. **TUI is a pure client.** Non-test files under `internal/tui/` import only `internal/protocol` + `internal/tui/*` (+ stdlib/charm deps). `_test.go` may use `internal/server/testutil` (escape hatch). Enforced by Task 29.
 5. **Tests define the contract.** When the plan contradicts itself (or its own test code is buggy), resolve per the last-stated call, fix the test, and **log the deviation in `PROGRESS.md` → "Plan deviations logged"** with severity.
+6. **`PROGRESS.md` is never stale.** After any edit, plan, spec, design decision, deviation, or checkpoint — anything that changes what the next session must know — roll `docs/superpowers/PROGRESS.md` before moving on. It is the single thing a future session reads to resume; a stale one is a broken resume. What it holds and how to keep it small: "Commit & branch discipline."
 
 ## Commands & verification
 
