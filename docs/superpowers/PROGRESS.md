@@ -1,6 +1,6 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-20 (**v0.1.2 planned, not started**: skill-review spec + 16-wave plan committed on `v0.1.2_skills_review`; awaiting user plan review + GO to run wave 0)
+**Updated:** 2026-08-20 (**v0.1.2 in progress**: wave 0/16 done, next wave 1 — concurrency)
 
 Rolling checkpoint: active task (full detail) + one-line last-completed + verified facts + the full
 append-only deviation log. No per-task history and no plan-slice copies — `git log --oneline` and the
@@ -20,11 +20,15 @@ in "Active").
 
 ## Active
 
-**v0.1.2 skill-driven review — awaiting user GO.** Plan: `docs/superpowers/plans/2026-08-19-v0.1.2-skill-review.md` (16 waves: inventory + 15 golang-skill review waves + roll-up; read its Resume Protocol, then Task 0). Spec: `docs/superpowers/specs/2026-08-19-v0.1.2-skill-review-design.md`. Branch: `v0.1.2_skills_review` (off `1784ac0`). On GO: start at Task 0 Step 1 (write CONTEXT.md verbatim). Execution is stoppable after any wave; tag `v0.1.2` only on explicit go-ahead.
+v0.1.2 skill-driven review — wave 1 (golang-concurrency). Plan:
+docs/superpowers/plans/2026-08-19-v0.1.2-skill-review.md (read ONLY the active task slice;
+resume protocol in the plan header). Dispatch review subagents per plan (task tool,
+general, ≤3 parallel), findings under docs/superpowers/reviews/v0.1.2/. Commit gate:
+go vet ./... && go test ./... + gofmt -l . + golangci-lint run ./...
 
 ## Last completed
 
-**v0.1.2 skill review — spec + plan committed** (2026-08-19/20, `v0.1.2_skills_review`): approved design spec `2026-08-19-v0.1.2-skill-review-design.md` (`d391257`) + executable 16-wave plan `2026-08-19-v0.1.2-skill-review.md` (`c96bb92`). (v0.1.1: post-release follow-ups released 2026-08-19, PR #3 `1784ac0`, tagged + released; v0.1.0: all 30 tasks, PR #2 `6214416`, 2026-08-18. Earlier detail: `git log --oneline` + the deviation log below.)
+Wave 0 (inventory): CONTEXT.md + 00-inventory.md committed.
 
 ## Key verified facts (so they don't get re-litigated)
 
