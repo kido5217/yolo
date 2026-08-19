@@ -17,7 +17,7 @@ func testCommands() []protocol.Command {
 		{Name: "/new", Description: "new session"},
 		{Name: "/model", Description: "pick model"},
 		{Name: "/agents", Description: "pick agent"},
-		{Name: "/exit", Description: "quit"},
+		{Name: "/quit", Description: "exit"},
 	}
 }
 
@@ -46,11 +46,13 @@ func TestPromptMenuFilter(t *testing.T) {
 	}{
 		{"", nil},
 		{"hello", nil},
-		{"/", []string{"/help", "/new", "/model", "/agents", "/exit"}},
+		{"/", []string{"/help", "/new", "/model", "/agents", "/quit"}},
 		{"/m", []string{"/model"}},
 		{"/n", []string{"/new"}},
 		{"/h", []string{"/help"}},
-		{"/exit", []string{"/exit"}},
+		{"/quit", []string{"/quit"}},
+		{"/exit", []string{"/quit"}}, // alias: canonical /quit is surfaced
+		{"/ex", []string{"/quit"}},
 		{"/zz", []string{}},
 	}
 	for _, tt := range tests {
@@ -146,7 +148,8 @@ func TestPromptMenuKeys(t *testing.T) {
 			want dialogKind
 		}{
 			{"/help", dlgHelp},
-			{"/exit", dlgQuit},
+			{"/quit", dlgQuit},
+			{"/exit", dlgQuit}, // alias of /quit
 			{"/model", dlgModel},
 			{"/agents", dlgAgents},
 		}
@@ -166,6 +169,19 @@ func TestPromptMenuKeys(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestPromptQuitAlias(t *testing.T) {
+	for _, in := range []string{"/quit", "/exit"} {
+		t.Run(in, func(t *testing.T) {
+			a := testApp()
+			a.runCommand(in)
+			d, ok := a.dlg.top()
+			if !ok || d.kind != dlgQuit {
+				t.Fatalf("dialog = %v (ok=%v), want dlgQuit", d.kind, ok)
+			}
+		})
+	}
 }
 
 func TestPromptNewCommand(t *testing.T) {

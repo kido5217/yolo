@@ -338,6 +338,19 @@ func TestCommandEndpoint(t *testing.T) {
 	if resp.StatusCode != 200 || client.Handled != "client" {
 		t.Fatalf("/model = %d %s", resp.StatusCode, b)
 	}
+	// /quit is canonical; /exit is accepted as its alias (both client-handled)
+	for _, c := range []string{"/quit", "/exit"} {
+		resp, b = testutil.Req(t, s, "POST", "/session/"+ses.ID+"/command", d, `{"command":"`+c+`"}`)
+		client = struct {
+			Handled string `json:"handled"`
+		}{}
+		if err := json.Unmarshal(b, &client); err != nil {
+			t.Fatalf("unmarshal %s: %v (%s)", c, err, b)
+		}
+		if resp.StatusCode != 200 || client.Handled != "client" {
+			t.Fatalf("%s = %d %s", c, resp.StatusCode, b)
+		}
+	}
 	resp, _ = testutil.Req(t, s, "POST", "/session/"+ses.ID+"/command", d, `{"command":"/bogus"}`)
 	if resp.StatusCode != 400 {
 		t.Fatalf("/bogus = %d", resp.StatusCode)

@@ -1,6 +1,6 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-19 (v0.1.0 released; **post-release: spec + AGENTS.md reconciled to as-built, /help keymap fixed** — branch `v0.1.1_fix_plan_derivations`)
+**Updated:** 2026-08-19 (v0.1.0 released; **post-release: spec + AGENTS.md reconciled to as-built, /help keymap fixed, `/quit` canonical with `/exit` alias** — branch `v0.1.1_fix_plan_derivations`)
 
 Rolling checkpoint: active task (full detail) + one-line last-completed + verified facts + the full
 append-only deviation log. No per-task history and no plan-slice copies — `git log --oneline` and the
@@ -26,16 +26,12 @@ created — https://github.com/kido5217/yolo/releases/tag/v0.1.0. Out-of-scope f
 
 ## Active
 
-Post-release reconciliation on `v0.1.1_fix_plan_derivations` (2026-08-19): spec re-checked against
-as-built v0.1.0 — in-place fixes (Go ≥ 1.25, `yolo serve --addr`, package layout gains
-`internal/log` + `internal/glob` + `tui/store`, bubbles usage, teatest module path, plan white-list,
-model-dialog picker, keymap pgup/pgdn + alt+e/alt+t, log rotation, e2e criteria, SSE note) +
-`fix:` commit for the `/help` keymap rows (T28 pin updated, gate green) + AGENTS.md teatest path.
-Next: user review → merge to `main`.
+None — awaiting user review of `v0.1.1_fix_plan_derivations` (post-release reconciliation + the
+`/quit`-canonical rename) → merge to `main`.
 
 ## Last completed
 
-**Task 30 (M8 final — `5ae4e81`): README + log rotation + signal drain + golangci-lint sweep (0 issues) + live e2e — all 30 tasks done; merged to `main` (PR #2, `6214416`), `v0.1.0` tagged + GitHub release (2026-08-18).** (Earlier task detail is archived: `git log --oneline` + the deviation log below.)
+**0.1.1 follow-ups on `v0.1.1_fix_plan_derivations` (2026-08-19):** spec + AGENTS.md reconciled to as-built v0.1.0 (11 in-place fixes), `/help` keymap rows fixed (T28 pin updated), and the canonical slash command renamed `/exit` → `/quit` with `/exit` kept as an accepted alias on every surface (server list + wire validation, TUI menu filter + exec — deviation 66); gate green. (Task 30 line: all 30 tasks done; merged to `main` (PR #2, `6214416`), `v0.1.0` tagged + released 2026-08-18. Earlier task detail archived: `git log --oneline` + the deviation log below.)
 
 ## Key verified facts (so they don't get re-litigated)
 
@@ -118,6 +114,7 @@ Next: user review → merge to `main`.
 - **63. staticcheck ST1005 forced several `internal/tool` error strings to change casing / trailing punctuation** (e.g. `file not found: %s` → `File not found: %s`; `no file %q in %q` → `No file %q in %q`; shell/timeout strings reworked into sentence case). These runtime strings are NOT byte-pinned — the verbatim pins cover only `desc/*.txt` tool descriptions, the 14 session prompt files, and golden fixtures (none touched) — so the tests asserting the old strings moved in the same commit.
 - **64. `scripts/e2e-live.sh` asserts a completed tool call from read/glob/grep/bash, not the plan's "one `read`/`glob` tool call".** The real-endpoint run answered "list files in /tmp" with a completed `bash ls /tmp` call — a legitimate tool-set choice, not a contract break (the contract golden suite separately pins wire shapes). Widened so dogfood passes without weakening the real checks (completed tool call + non-empty assistant text + abort semantics).
 - **65. e2e script boots `yolo serve` from a scratch project dir (with `provider.kido.baseURL` pinned in `$PROJ/yolo.jsonc`), not from an empty CWD with only a scope header.** Verified facts: the provider registry is built ONCE at server startup from the startup-dir config (`cmd/yolo/main.go` `LoadAt` → `provider.New` `:106-109`); the engine's per-turn config does NOT change `BaseURL`; `KIDO_BASE_URL` is read by no code path (grep-verified) — the script's `KIDO_BASE_URL` env is honored by the SCRIPT (it writes the config), not by yolo. Also: `GET /global/health` → `{"status":"ok"}` (not `{"ok":true}`), and the scratch-boot is how non-default endpoints stay reachable.
+- **66. Post-release (2026-08-19), user-approved 0.1.1 follow-up: canonical slash command renamed from the plan's LOCKED `/exit` to `/quit`.** `/exit` remains an accepted alias on every surface: `GET /command` lists only `/quit` (description "exit"); `POST /session/{id}/command` accepts both; the TUI slash menu prefix-matches aliases but surfaces only the canonical name (`commandAliases` in `prompt.go`); `runCommand` resolves both. Golden fixture `testdata/golden/command.json` regenerated via the contract suite's `-update` flag (only that file changed).
 
 ## Open items
 

@@ -107,7 +107,7 @@ REST = opencode's **legacy endpoint paths and JSON shapes** (the set the v1.18.1
 | `GET /path` | working-directory info |
 | `GET /project/current` | project identity (id, name, directory) |
 | `GET /agent` | agents `build`, `plan`, `yolo` (+ config-defined) |
-| `GET /command` | slash-command definitions (minimal: `/help`, `/new`, `/model`, `/agents`, `/exit`) |
+| `GET /command` | slash-command definitions (minimal: `/help`, `/new`, `/model`, `/agents`, `/quit`; `/exit` accepted as its alias) |
 | `GET /event` | SSE stream (below) |
 | `GET /session/status` | active session busy/idle snapshot for the footer |
 | `GET,POST /session` | list (scoped by directory header) / create session |
@@ -240,7 +240,7 @@ Pure HTTP/SSE client (imports only `internal/protocol` + its own client). Stack:
 **Session route:**
 
 - **Message viewport** (`bubbles/viewport`): user messages; assistant text streaming (appended on `message.part.delta`); reasoning parts as dimmed indented collapsible blocks (toggle); tool parts inline rows (`✓ read src/main.go (123 lines)`, `▶ bash: ls -la …`) with expandable full I/O; error tool parts in red.
-- **Prompt input** (`bubbles/textinput`): multiline; `/` opens slash-command menu (`/new`, `/model`, `/agents`, `/help`, `/exit`). @-mentions are plain text (no fuzzy picker in v1).
+- **Prompt input** (`bubbles/textinput`): multiline; `/` opens slash-command menu (`/new`, `/model`, `/agents`, `/help`, `/quit`; the alias `exit` also opens it as `/quit`). @-mentions are plain text (no fuzzy picker in v1).
 - **Permission dialog:** inline overlay above the prompt on `permission.asked`; keys 1/2/3 → allow once / always / reject.
 - **Model dialog** (two-pane picker, hand-rolled — key bindings + lipgloss; no `bubbles/list` in v1): providers (with auth state) → models (default marker, context + cost); "use for this session" vs "set default" (PATCH `/config`).
 - **Agent dialog / `/agents`:** pick `build` / `plan` / `yolo` (PATCH session + config).
