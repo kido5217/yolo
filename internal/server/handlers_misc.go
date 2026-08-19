@@ -28,7 +28,7 @@ var commands = []protocol.Command{
 	{Name: "/new", Description: "new session", Hints: []string{}},
 	{Name: "/model", Description: "pick model", Hints: []string{}},
 	{Name: "/agents", Description: "pick agent", Hints: []string{}},
-	{Name: "/exit", Description: "quit", Hints: []string{}},
+	{Name: "/quit", Description: "exit", Hints: []string{}},
 }
 
 // providerEntries resolves the provider list for dir: registry providers plus

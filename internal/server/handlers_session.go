@@ -15,7 +15,7 @@ import (
 
 // knownCommands are the TUI-handled commands the server answers with
 // {"handled":"client"} (M5); /new creates a session server-side.
-var knownCommands = map[string]bool{"/exit": true, "/help": true, "/model": true, "/agents": true}
+var knownCommands = map[string]bool{"/quit": true, "/exit": true, "/help": true, "/model": true, "/agents": true}
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})

@@ -10,7 +10,7 @@ Read it before acting. For session state, read `docs/superpowers/PROGRESS.md` se
 - Module `github.com/kido5217/yolo`, binary `yolo`, Go ≥ 1.25 (installed 1.26.5).
 - Single binary: starts the core HTTP server (REST + SSE) **in-process**, then runs the bubbletea v2 TUI which talks to it **only** via the wire contract.
 - Core layering: `protocol` (wire DTOs, single source of truth) → `server` → `session` (agent loop) → `llm` / `provider` / `tool` / `permission` / `config` / `auth` / `storage` / `bus`.
-- Pinned deps, exact versions, **nothing else**: `charm.land/bubbletea/v2` v2.0.8, `charm.land/lipgloss/v2` v2.0.6, `charm.land/bubbles/v2` v2.1.1, `modernc.org/sqlite` v1.56.0 (pure Go, no cgo), `tidwall/jsonc` v0.3.3; dev-only `charm.land/x/exp/teatest/v2` v2.0.0-20260816001655-68d539dca504.
+- Pinned deps, exact versions, **nothing else**: `charm.land/bubbletea/v2` v2.0.8, `charm.land/lipgloss/v2` v2.0.6, `charm.land/bubbles/v2` v2.1.1, `modernc.org/sqlite` v1.56.0 (pure Go, no cgo), `tidwall/jsonc` v0.3.3; dev-only `github.com/charmbracelet/x/exp/teatest/v2` v2.0.0-20260816001655-68d539dca504.
 
 ## Key files (read order)
 
@@ -33,6 +33,7 @@ Read it before acting. For session state, read `docs/superpowers/PROGRESS.md` se
 ## Commands & verification
 
 - **The CI gate (run at module root):** `go vet ./... && go test ./...` — **every task ends with both green and a commit.**
+- **Formatting (run at module root after every completed step, before the commit):** gofmt from the **Go 1.26** toolchain on all code — `gofmt -l .` must print nothing; if it prints files, run `gofmt -w` on them and re-run the gate.
 - Unit/integration tests **never hit the network.** Live paths are env-gated: `YOLO_LLM=fake` (+ `YOLO_FAKE_SCRIPT`) selects the scripted fake driver; the e2e smoke vs `ai.kido.ws` (`scripts/e2e-live.sh`, created in Task 30) is on-demand, user-run, never CI.
 - Host toolchain quirk (both installed toolchains): plain `import "embed"` + scalar `//go:embed` fails typecheck with `embed imported and not used` — the workaround in use is `import _ "embed"` (see `internal/tool/read.go`). Keep the pattern.
 - Zen catalog CDN (`models.opencode.ai`) blocks python-urllib (403) — fetch with **curl + browser UA**.

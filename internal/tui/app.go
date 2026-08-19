@@ -469,7 +469,7 @@ func (a *App) runCommand(name string) []tea.Cmd {
 	switch name {
 	case "/help":
 		a.dlg.push(dialog{kind: dlgHelp})
-	case "/exit":
+	case "/quit", "/exit": // /exit is the alias of /quit
 		a.dlg.push(dialog{kind: dlgQuit})
 	case "/model":
 		return a.openModelDialog()
@@ -563,9 +563,9 @@ func (s dialogStack) view() string {
 			"\n" + dim.Render("  | ctrl+p | model dialog |") +
 			"\n" + dim.Render("  | ctrl+a | agent dialog |") +
 			"\n" + dim.Render("  | / | command menu |") +
-			"\n" + dim.Render("  | \u2191/\u2193 / pgup/pgdn | viewport scroll |") +
+			"\n" + dim.Render("  | pgup/pgdn | viewport scroll |") +
 			"\n" + dim.Render("  | 1/2/3 | permission reply |") +
-			"\n" + dim.Render("  | e / t | expand tool part / toggle reasoning |") +
+			"\n" + dim.Render("  | alt+e / alt+t | expand tool part / toggle reasoning |") +
 			"\n" + dim.Render("  pgup/pgdn scroll \u00B7 \\+enter newline")
 	}
 	return ""

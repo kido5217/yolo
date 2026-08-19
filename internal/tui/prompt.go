@@ -31,9 +31,13 @@ func (pm *promptModel) slashActive() bool {
 	return v != "" && strings.HasPrefix(v, "/")
 }
 
-// menuItems filters the known commands by the typed "/prefix". It returns nil
-// when the menu is closed, else the filtered (possibly empty) list in server
-// order.
+// commandAliases maps canonical command names to accepted aliases. Aliases
+// are input forms only: the menu surfaces the canonical name.
+var commandAliases = map[string][]string{"/quit": {"/exit"}}
+
+// menuItems filters the known commands by the typed "/prefix", matching both
+// canonical names and their aliases. It returns nil when the menu is closed,
+// else the filtered (possibly empty) list in server order.
 func (pm *promptModel) menuItems(cmds []protocol.Command) []protocol.Command {
 	if !pm.slashActive() {
 		return nil
@@ -41,7 +45,16 @@ func (pm *promptModel) menuItems(cmds []protocol.Command) []protocol.Command {
 	prefix := pm.input.Value()[1:]
 	out := []protocol.Command{}
 	for _, c := range cmds {
-		if strings.HasPrefix(c.Name[1:], prefix) {
+		match := strings.HasPrefix(c.Name[1:], prefix)
+		if !match {
+			for _, alias := range commandAliases[c.Name] {
+				if strings.HasPrefix(alias[1:], prefix) {
+					match = true
+					break
+				}
+			}
+		}
+		if match {
 			out = append(out, c)
 		}
 	}

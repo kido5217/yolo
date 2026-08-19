@@ -244,6 +244,16 @@ func TestAgentAndCommand(t *testing.T) {
 	if len(cmds) != 5 {
 		t.Fatalf("commands = %s", b)
 	}
+	names := map[string]bool{}
+	for _, c := range cmds {
+		names[c.Name] = true
+	}
+	if !names["/quit"] {
+		t.Fatalf("commands missing /quit: %s", b)
+	}
+	if names["/exit"] {
+		t.Fatalf("/exit must not be its own entry (alias of /quit): %s", b)
+	}
 }
 
 func TestUnknownRoutes404(t *testing.T) {

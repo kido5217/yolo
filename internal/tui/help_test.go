@@ -9,9 +9,10 @@ import (
 )
 
 // T28 locks the help dialog text: the spec's keymap table verbatim plus the
-// v1 scroll note (pgup/pgdn are the real scroll keys; \+enter inserts a
-// newline in the prompt). The table keeps the spec's e/t row; the actual
-// alt+e/alt+t bindings stay visible on the session help line (deviation 51).
+// scroll/newline note. The table mirrors the actual bindings: pgup/pgdn are
+// the only scroll keys (v0.1.1 reconciliation, the spec's arrow row never
+// existed) and alt+e/alt+t are the real expand/think toggles. \+enter
+// inserts a newline in the prompt.
 const wantHelp = "Help\n" +
 	"  | Key | Action |\n" +
 	"  |---|---|\n" +
@@ -21,9 +22,9 @@ const wantHelp = "Help\n" +
 	"  | ctrl+p | model dialog |\n" +
 	"  | ctrl+a | agent dialog |\n" +
 	"  | / | command menu |\n" +
-	"  | \u2191/\u2193 / pgup/pgdn | viewport scroll |\n" +
+	"  | pgup/pgdn | viewport scroll |\n" +
 	"  | 1/2/3 | permission reply |\n" +
-	"  | e / t | expand tool part / toggle reasoning |\n" +
+	"  | alt+e / alt+t | expand tool part / toggle reasoning |\n" +
 	"  pgup/pgdn scroll \u00B7 \\+enter newline"
 
 func openHelp(t *testing.T) *App {

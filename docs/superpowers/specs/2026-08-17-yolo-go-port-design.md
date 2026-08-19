@@ -1,7 +1,7 @@
 # Yolo — Go Port of opencode (TUI + Core)
 
 - **Date:** 2026-08-17
-- **Status:** Approved design (all sections confirmed by user)
+- **Status:** Approved design (all sections confirmed by user); reconciled in place against as-built **v0.1.0** on 2026-08-19 (deviations in `PROGRESS.md` log)
 - **Upstream reference:** [anomalyco/opencode](https://github.com/anomalyco/opencode) tag **`v1.18.18`** (local clone at `/tmp/opencode-upstream`)
 - **Upstream contract reference:** `packages/sdk/openapi.json` (162 paths), event schemas in `packages/schema/src/*.ts`, TUI at `packages/tui/src/`
 - **Purpose (per README):** a Go rewrite of opencode to test the capabilities of **Qwen3.8-27B** running on a single RTX 5090 behind `https://ai.kido.ws/v1`.
@@ -44,10 +44,10 @@ Yolo ports the **TUI + core server** of opencode v1.18.18 in Go. Confirmed decis
 
 ## 2. Architecture & process model
 
-Single Go binary `yolo` (Go 1.26; module `github.com/kido5217/yolo`):
+Single Go binary `yolo` (Go ≥ 1.25; module `github.com/kido5217/yolo`):
 
 - `yolo` (default) — starts the core server **in-process** on a local port, then launches the bubbletea TUI, which connects to it over HTTP + SSE. The TUI is a *pure client*: it never imports core packages.
-- `yolo serve [--port N]` — headless server only (debugging / remote TUI).
+- `yolo serve [--addr ADDR]` — headless server only (default `127.0.0.1:4096`; debugging / remote TUI).
 - `yolo auth [list|add <provider> [key]|remove <provider>]` — credential management (stdlib `flag` + manual subcommand dispatch; no Cobra).
 - `yolo <sessionID>` — resume a session (TUI opens session route directly).
 
@@ -58,7 +58,7 @@ Single Go binary `yolo` (Go 1.26; module `github.com/kido5217/yolo`):
 | Agent | Mode | Permissions (resolved ruleset) |
 |---|---|---|
 | `build` (default) | primary | opencode v1.18.18 semantics: blanket allow; `read` on `*.env`/`*.env.*` → **ask** (`*.env.example` allow); `question` allow; `plan_enter` allow; `plan_exit` deny; `doom_loop` ask; external directory → ask (whitelist exceptions) — full table in §4.5 |
-| `plan` | primary | build base, but `edit`/`write` → **deny** except plan-note files (`plans/*.md` under the data dir and `.yolo/plans/*.md`); `plan_exit` allow |
+| `plan` | primary | build base, but `edit`/`write` → **deny** except plan-note files (`plans/*.md` under the data dir, plus a worktree-relative allow rule for it at session start); `plan_exit` allow |
 | `yolo` (new) | primary | `{action: "*", resource: "*", effect: "allow"}` — everything permitted, unconditionally: no prompt for bash, edits, `.env` reads, external dirs, anything |
 
 Agent selection: config `agent` field (default) + TUI agent dialog / `/agents` command. Custom agents from config: v1 merges their `permission` rules into the built-in matrix; full custom system-prompt support is v1.x.
@@ -74,11 +74,13 @@ internal/session/    # agent loop: turn execution, system prompt, title gen, ret
 internal/llm/        # Driver interface + openai-chat + anthropic drivers (hand-rolled SSE)
 internal/provider/   # kido + opencode(zen) + config-defined providers, model catalog, auth state
 internal/tool/       # registry + read, write, edit, glob, grep, bash, todowrite
+internal/glob/       # pattern matcher (opencode glob semantics, used by permission)
 internal/permission/ # rulesets, evaluation, built-in agent rules
 internal/config/     # discovery, merge, JSONC, env substitution
 internal/auth/       # auth.json, env vars, key resolution
 internal/storage/    # SQLite open/migrations/DAOs
-internal/tui/        # bubbletea v2 app + client/ home/ session/ components
+internal/log/        # rotating file logger (<data>/log/yolo.log)
+internal/tui/        # bubbletea v2 app + client/ + store/ + home/, session/, prompt/, dialog components
 ```
 
 **Runtime dependencies (pinned):**
@@ -87,11 +89,11 @@ internal/tui/        # bubbletea v2 app + client/ home/ session/ components
 |---|---|---|
 | `charm.land/bubbletea/v2` | v2.0.8 | TUI framework (stable v2 line; requires Go ≥ 1.25) |
 | `charm.land/lipgloss/v2` | v2.0.6 | styling/layout |
-| `charm.land/bubbles/v2` | v2.1.1 | textinput, viewport, list, spinner components |
+| `charm.land/bubbles/v2` | v2.1.1 | key, textinput, viewport (spinner + pickers hand-rolled) |
 | `modernc.org/sqlite` | v1.56.0 | pure-Go SQLite (no cgo) |
 | `tidwall/jsonc` | v0.3.3 | JSONC comment stripping → stdlib `encoding/json` |
 
-Everything else is **stdlib**: `net/http` (Go 1.22+ `ServeMux` method+pattern routing — no router framework), SSE via `http.Flusher`, hand-rolled LLM HTTP/SSE clients (no LLM SDK), `flag` for the CLI. Dev-only: `charm.land/x/exp/teatest` for TUI e2e tests.
+Everything else is **stdlib**: `net/http` (Go 1.22+ `ServeMux` method+pattern routing — no router framework), SSE via `http.Flusher`, hand-rolled LLM HTTP/SSE clients (no LLM SDK), `flag` for the CLI. Dev-only: `github.com/charmbracelet/x/exp/teatest/v2` for TUI e2e tests (same pinned pseudo-version; served from github.com, not charm.land — see deviation 46).
 
 ---
 
@@ -105,7 +107,7 @@ REST = opencode's **legacy endpoint paths and JSON shapes** (the set the v1.18.1
 | `GET /path` | working-directory info |
 | `GET /project/current` | project identity (id, name, directory) |
 | `GET /agent` | agents `build`, `plan`, `yolo` (+ config-defined) |
-| `GET /command` | slash-command definitions (minimal: `/help`, `/new`, `/model`, `/agents`, `/exit`) |
+| `GET /command` | slash-command definitions (minimal: `/help`, `/new`, `/model`, `/agents`, `/quit`; `/exit` accepted as its alias) |
 | `GET /event` | SSE stream (below) |
 | `GET /session/status` | active session busy/idle snapshot for the footer |
 | `GET,POST /session` | list (scoped by directory header) / create session |
@@ -129,6 +131,8 @@ Skipped endpoint families (server returns 404; the TUI never calls them in v1): 
   (part kinds: `text`, `reasoning`, `tool` with state `running` | `completed` | `error`)
 - `session.updated`, `session.deleted`, `session.status`
 - `permission.asked`, `permission.replied`
+
+  (as-built v0.1.0: `message.removed` / `message.part.removed` are defined and consumed by the TUI store but never emitted; user message/part events are published **before** the busy `session.status` — deviation 41)
 
 **Directory scoping:** header **`x-yolo-directory`** carrying the URL-encoded absolute project directory (opencode uses `x-opencode-directory` — the one deliberate deviation; TUI sends it at connect time, server defaults to the process CWD when absent).
 
@@ -236,9 +240,9 @@ Pure HTTP/SSE client (imports only `internal/protocol` + its own client). Stack:
 **Session route:**
 
 - **Message viewport** (`bubbles/viewport`): user messages; assistant text streaming (appended on `message.part.delta`); reasoning parts as dimmed indented collapsible blocks (toggle); tool parts inline rows (`✓ read src/main.go (123 lines)`, `▶ bash: ls -la …`) with expandable full I/O; error tool parts in red.
-- **Prompt input** (`bubbles/textinput`): multiline; `/` opens slash-command menu (`/new`, `/model`, `/agents`, `/help`, `/exit`). @-mentions are plain text (no fuzzy picker in v1).
+- **Prompt input** (`bubbles/textinput`): multiline; `/` opens slash-command menu (`/new`, `/model`, `/agents`, `/help`, `/quit`; the alias `exit` also opens it as `/quit`). @-mentions are plain text (no fuzzy picker in v1).
 - **Permission dialog:** inline overlay above the prompt on `permission.asked`; keys 1/2/3 → allow once / always / reject.
-- **Model dialog** (two-pane `bubbles/list`): providers (with auth state) → models (default marker, context + cost); "use for this session" vs "set default" (PATCH `/config`).
+- **Model dialog** (two-pane picker, hand-rolled — key bindings + lipgloss; no `bubbles/list` in v1): providers (with auth state) → models (default marker, context + cost); "use for this session" vs "set default" (PATCH `/config`).
 - **Agent dialog / `/agents`:** pick `build` / `plan` / `yolo` (PATCH session + config).
 - **Footer:** model `provider/id`, active agent, tokens in/out, cost, connection indicator, busy spinner (driven by `session.status`).
 - **Toasts:** error flash area (minimal; opencode's MCL/LSP/status-banner lines dropped).
@@ -253,9 +257,11 @@ Pure HTTP/SSE client (imports only `internal/protocol` + its own client). Stack:
 | ctrl+p | model dialog |
 | ctrl+a | agent dialog |
 | `/` | command menu |
-| ↑/↓ / pgup/pgdn | viewport scroll |
+| pgup/pgdn | viewport scroll |
 | 1/2/3 | permission reply |
-| `e` / `t` | expand tool part / toggle reasoning |
+| `alt+e` / `alt+t` | expand tool part / toggle reasoning |
+
+`\` + enter inserts a newline in the prompt (rendered in `/help` as the footer note "pgup/pgdn scroll · \+enter newline", not as a table row).
 
 **Non-goals (TUI v1.x):** themes/keymap engine, command palette, mouse selection/scrolling, stashes, timelines, workspaces UI, plugin slots.
 
@@ -364,7 +370,7 @@ Migrations: versioned SQL list tracked in `meta.schema_version`, applied at boot
 2. **LLM** — transient (429/5xx/network) → bounded exponential backoff + jitter; non-transient (401/400/model-not-found) → fail fast. After a 200 stream has started, failures ride as an error part + `session.status` idle; TUI shows toast + red part. 401 on `opencode` provider → actionable message (`yolo auth add opencode` / `OPENCODE_API_KEY`).
 3. **Tools** — failure → part `state=error` with message; agent loop continues (model adapts). Bash: non-zero exit keeps stdout+stderr in output; timeout/abort → error. `plan` agent edits → permission-denied error.
 4. **SSE** — server: one goroutine per client, 1024-slot buffer; overflow closes the client; TUI reconnects (1 s→30 s backoff) and re-hydrates via REST — no state loss.
-5. **Process** — SIGINT/SIGTERM → abort active turns → drain SSE → close DB → exit 0. Logging to `~/.local/share/yolo/log/yolo.log` (rotating, 3×5 MB), `YOLO_LOG=debug` to raise level.
+5. **Process** — SIGINT/SIGTERM → abort active turns → drain SSE → close DB → exit 0. Logging to `~/.local/share/yolo/log/yolo.log` (5 MiB size rotation → `yolo.log.1`, single generation, overwrite).
 
 **Testing (stdlib `testing` + `httptest`; goldens checked in):**
 
@@ -379,7 +385,7 @@ Migrations: versioned SQL list tracked in `meta.schema_version`, applied at boot
 | integration: engine | fake LLM driver: multi-tool turn, permission ask→reply, abort mid-tool, 429 retry, max-turn guard, overflow → assert event sequence **and** persisted rows |
 | contract: server | every Section-3 endpoint vs opencode-OpenAPI-derived JSON goldens; SSE frame ordering; `x-yolo-directory` scoping |
 | TUI: teatest | scripted: home → new session → streamed text + tool + permission keypresses → assert; model dialog; abort |
-| e2e smoke (on-demand, not CI-gated) | real binary vs live `ai.kido.ws`: one prompt, one tool call |
+| e2e smoke (on-demand, not CI-gated) | real binary vs live `ai.kido.ws`: one prompt, a completed tool call (read/glob/grep/bash) + non-empty assistant text (`scripts/e2e-live.sh`) |
 
 CI gates: `go vet` + `golangci-lint` (errcheck, staticcheck, govet) + `go test ./...`.
 
