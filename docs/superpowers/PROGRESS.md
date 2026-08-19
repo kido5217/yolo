@@ -1,6 +1,6 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-19 (**v0.1.1 released**: spec + AGENTS.md reconciled to as-built, `/help` keymap fixed, `/quit` canonical with `/exit` alias, gofmt 1.26 gate pinned — merged to `main`, tagged + released)
+**Updated:** 2026-08-20 (**v0.1.2 planned, not started**: skill-review spec + 16-wave plan committed on `v0.1.2_skills_review`; awaiting user plan review + GO to run wave 0)
 
 Rolling checkpoint: active task (full detail) + one-line last-completed + verified facts + the full
 append-only deviation log. No per-task history and no plan-slice copies — `git log --oneline` and the
@@ -26,7 +26,7 @@ created — https://github.com/kido5217/yolo/releases/tag/v0.1.0. Out-of-scope f
 
 ## Active
 
-None — `v0.1.1` tagged + released 2026-08-19; awaiting user direction (0.2.0+ candidates per spec non-goals: MCP, skills, subagents, LSP, …).
+**v0.1.2 skill-driven review — awaiting user GO.** Plan: `docs/superpowers/plans/2026-08-19-v0.1.2-skill-review.md` (16 waves: inventory + 15 golang-skill review waves + roll-up; read its Resume Protocol, then Task 0). Spec: `docs/superpowers/specs/2026-08-19-v0.1.2-skill-review-design.md`. Branch: `v0.1.2_skills_review` (off `1784ac0`). On GO: start at Task 0 Step 1 (write CONTEXT.md verbatim). Execution is stoppable after any wave; tag `v0.1.2` only on explicit go-ahead.
 
 ## Last completed
 
