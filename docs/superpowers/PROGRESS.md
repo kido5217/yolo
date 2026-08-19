@@ -1,6 +1,6 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-20 (**v0.1.2 in progress**: wave 0/16 done, next wave 1 — concurrency)
+**Updated:** 2026-08-20 (v0.1.2 in progress: wave 1/16 done, next wave 2 — safety)
 
 Rolling checkpoint: active task (full detail) + one-line last-completed + verified facts + the full
 append-only deviation log. No per-task history and no plan-slice copies — `git log --oneline` and the
@@ -20,7 +20,7 @@ in "Active").
 
 ## Active
 
-v0.1.2 skill-driven review — wave 1 (golang-concurrency). Plan:
+v0.1.2 skill-driven review — wave 2 (golang-safety). Plan:
 docs/superpowers/plans/2026-08-19-v0.1.2-skill-review.md (read ONLY the active task slice;
 resume protocol in the plan header). Dispatch review subagents per plan (task tool,
 general, ≤3 parallel), findings under docs/superpowers/reviews/v0.1.2/. Commit gate:
@@ -28,7 +28,16 @@ go vet ./... && go test ./... + gofmt -l . + golangci-lint run ./...
 
 ## Last completed
 
-Wave 0 (inventory): CONTEXT.md + 00-inventory.md committed.
+Wave 1 (concurrency): 5 findings (P0:0 P1:0 P2:2 P3:3, all in tui-cmd chunk) — 0 fixed, 5 auto-deferred (4 behavior + 1 render); no fix subagent dispatched (zero `contract-risk: none`).
+
+## Open items
+
+- Wave 1 left two of three chunks **unreviewed**: `session+permission+bus` (incl. engine.go,
+  the most concurrency-heavy file) and `server+llm+provider`. Both review subagents returned
+  empty twice (no findings file); chunks marked `COVERAGE: skipped`
+  (01-concurrency-session.md / 01-concurrency-server-llm.md). Backfill option: split
+  re-dispatch in smaller chunks (wave-2 safety re-covers these packages with a different
+  lens anyway). Decision pending.
 
 ## Key verified facts (so they don't get re-litigated)
 
