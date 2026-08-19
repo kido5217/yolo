@@ -1,6 +1,6 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-19 (v0.1.0 released; **post-release: spec + AGENTS.md reconciled to as-built, /help keymap fixed, `/quit` canonical with `/exit` alias** — branch `v0.1.1_fix_plan_derivations`)
+**Updated:** 2026-08-19 (**v0.1.1 released**: spec + AGENTS.md reconciled to as-built, `/help` keymap fixed, `/quit` canonical with `/exit` alias, gofmt 1.26 gate pinned — merged to `main`, tagged + released)
 
 Rolling checkpoint: active task (full detail) + one-line last-completed + verified facts + the full
 append-only deviation log. No per-task history and no plan-slice copies — `git log --oneline` and the
@@ -26,12 +26,11 @@ created — https://github.com/kido5217/yolo/releases/tag/v0.1.0. Out-of-scope f
 
 ## Active
 
-None — awaiting user review of `v0.1.1_fix_plan_derivations` (post-release reconciliation + the
-`/quit`-canonical rename) → merge to `main`.
+None — `v0.1.1` tagged + released 2026-08-19; awaiting user direction (0.2.0+ candidates per spec non-goals: MCP, skills, subagents, LSP, …).
 
 ## Last completed
 
-**0.1.1 follow-ups on `v0.1.1_fix_plan_derivations` (2026-08-19):** spec + AGENTS.md reconciled to as-built v0.1.0 (11 in-place fixes), `/help` keymap rows fixed (T28 pin updated), and the canonical slash command renamed `/exit` → `/quit` with `/exit` kept as an accepted alias on every surface (server list + wire validation, TUI menu filter + exec — deviation 66); gate green. (Task 30 line: all 30 tasks done; merged to `main` (PR #2, `6214416`), `v0.1.0` tagged + released 2026-08-18. Earlier task detail archived: `git log --oneline` + the deviation log below.)
+**v0.1.1 (2026-08-19): post-release follow-ups released** — spec + AGENTS.md reconciled to as-built v0.1.0 (11 fixes), `/help` keymap rows fixed (T28 pin), `/exit` → `/quit` canonical rename with `/exit` alias on every surface (deviation 66), gofmt 1.26 gate pinned in AGENTS.md — merged to `main` (PR #3), tagged + GitHub release. (v0.1.0: all 30 tasks done, PR #2 `6214416`, released 2026-08-18. Earlier detail archived: `git log --oneline` + the deviation log below.)
 
 ## Key verified facts (so they don't get re-litigated)
 
