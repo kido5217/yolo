@@ -10,7 +10,7 @@ Read it before acting. For session state, read `docs/superpowers/PROGRESS.md` se
 - Module `github.com/kido5217/yolo`, binary `yolo`, Go ≥ 1.25 (installed 1.26.5).
 - Single binary: starts the core HTTP server (REST + SSE) **in-process**, then runs the bubbletea v2 TUI which talks to it **only** via the wire contract.
 - Core layering: `protocol` (wire DTOs, single source of truth) → `server` → `session` (agent loop) → `llm` / `provider` / `tool` / `permission` / `config` / `auth` / `storage` / `bus`.
-- Pinned deps, exact versions, **nothing else**: `charm.land/bubbletea/v2` v2.0.8, `charm.land/lipgloss/v2` v2.0.6, `charm.land/bubbles/v2` v2.1.1, `modernc.org/sqlite` v1.56.0 (pure Go, no cgo), `tidwall/jsonc` v0.3.3; dev-only `charm.land/x/exp/teatest/v2` v2.0.0-20260816001655-68d539dca504.
+- Pinned deps, exact versions, **nothing else**: `charm.land/bubbletea/v2` v2.0.8, `charm.land/lipgloss/v2` v2.0.6, `charm.land/bubbles/v2` v2.1.1, `modernc.org/sqlite` v1.56.0 (pure Go, no cgo), `tidwall/jsonc` v0.3.3; dev-only `github.com/charmbracelet/x/exp/teatest/v2` v2.0.0-20260816001655-68d539dca504.
 
 ## Key files (read order)
 
