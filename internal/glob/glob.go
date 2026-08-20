@@ -64,13 +64,12 @@ func segmentsMatch(ps, ns []string) bool {
 
 // segmentMatch reports whether a single segment glob matches a segment.
 func segmentMatch(pat, seg string) bool {
-	re := mustCompile(segmentRe(pat))
-	return re.MatchString(seg)
+	return segmentRe(pat).MatchString(seg)
 }
 
-// segmentRe converts one segment glob into an anchored regexp string.
+// segmentRe converts one segment glob into an anchored regexp.
 // Within a segment there is no "/" to cross, so "*" -> ".*" and "?" -> ".".
-func segmentRe(seg string) (*regexp.Regexp, error) {
+func segmentRe(seg string) *regexp.Regexp {
 	var b strings.Builder
 	b.WriteString("^")
 	for i := 0; i < len(seg); i++ {
@@ -112,12 +111,7 @@ func segmentRe(seg string) (*regexp.Regexp, error) {
 		// Uncompilable class (e.g. the empty class "[]"): degrade to the
 		// literal segment, consistent with the unclosed-"[" literalization.
 		// A quoted literal always compiles.
-		return regexp.Compile("^" + regexp.QuoteMeta(seg) + "$")
+		return regexp.MustCompile("^" + regexp.QuoteMeta(seg) + "$")
 	}
-	return re, nil
-}
-
-func mustCompile(re *regexp.Regexp, err error) *regexp.Regexp {
-	_ = err
 	return re
 }
