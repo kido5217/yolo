@@ -183,7 +183,7 @@ func TestPermissionListAndReply(t *testing.T) {
 	}
 	// park a pending ask (action with no rules → ask) via the permission
 	// service directly (harness seam permSvc.Ask in a goroutine):
-	s.ParkAsk(ses.ID, "custom", "res1")
+	s.ParkAsk(t, ses.ID, "custom", "res1")
 	resp, b := testutil.Req(t, s, "GET", "/permission", d, "")
 	if resp.StatusCode != 200 {
 		t.Fatalf("%d %s", resp.StatusCode, b)

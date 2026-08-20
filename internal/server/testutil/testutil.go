@@ -144,8 +144,13 @@ func (ts *TestServer) LastMessages(t *testing.T, sessionID string) []protocol.Me
 }
 
 // ParkAsk parks a pending permission ask in a goroutine and blocks until it
-// is visible on GET /permission (so pinned tests never race the park).
-func (ts *TestServer) ParkAsk(sessionID, action, resource string) {
+// is visible on GET /permission (so pinned tests never race the park). The
+// ask's context is cancelled at test end, so an un-replied park cannot leak
+// its goroutine past the test.
+func (ts *TestServer) ParkAsk(t *testing.T, sessionID, action, resource string) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
 	req := permission.Request{
 		RequestID:  protocol.NewID("perm"),
 		SessionID:  sessionID,
@@ -154,7 +159,7 @@ func (ts *TestServer) ParkAsk(sessionID, action, resource string) {
 		Resources:  []string{resource},
 	}
 	go func() {
-		_, _ = ts.PermSvc.Ask(context.Background(), req)
+		_, _ = ts.PermSvc.Ask(ctx, req)
 	}()
 	row, err := ts.DB.GetSession(sessionID)
 	if err != nil {
@@ -178,6 +183,7 @@ func (ts *TestServer) ParkAsk(sessionID, action, resource string) {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
+	t.Fatalf("parked ask %s did not become visible on GET /permission within 2s", req.RequestID)
 }
 
 // WriteCfg writes a project yolo.jsonc.
