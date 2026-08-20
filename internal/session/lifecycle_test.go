@@ -53,7 +53,7 @@ func TestTransientRetrySucceeds(t *testing.T) {
 	}
 }
 
-func TestTransientExgivesUpAfter4(t *testing.T) {
+func TestTransientGivesUpAfter4(t *testing.T) {
 	h := newHarness(t)
 	h.build(t)
 	d := t.TempDir()
