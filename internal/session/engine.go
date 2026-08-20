@@ -580,6 +580,12 @@ func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row stor
 	// failures fail the round immediately (overflow 400s take the
 	// graceful path below).
 	var stream llm.PartStream
+	// One reusable timer for the pre-stream retry backoffs (no fresh
+	// allocation per attempt); the zero timer has already fired, so
+	// drain that tick before the first Reset re-arms it.
+	retry := time.NewTimer(0)
+	<-retry.C
+	defer retry.Stop()
 	for attempt := 1; ; attempt++ {
 		var sErr error
 		stream, sErr = drv.Stream(ctx, req)
@@ -612,8 +618,9 @@ func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row stor
 				Message: sErr.Error(), Next: delay.Milliseconds(),
 			},
 		})
+		retry.Reset(delay)
 		select {
-		case <-time.After(delay):
+		case <-retry.C:
 		case <-ctx.Done():
 			e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, nil, "")
 			return false, ctx.Err()
