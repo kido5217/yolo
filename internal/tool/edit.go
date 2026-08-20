@@ -115,7 +115,13 @@ var editLocks sync.Map
 // fileLock locks (and returns) the mutex for fp. Caller defers Unlock.
 func fileLock(fp string) *sync.Mutex {
 	v, _ := editLocks.LoadOrStore(fp, &sync.Mutex{})
-	m := v.(*sync.Mutex)
+	m, ok := v.(*sync.Mutex)
+	if !ok {
+		// Invariant: the map only ever stores *sync.Mutex; keep one anyway
+		// so a future second writer cannot turn this into a nil panic.
+		m = &sync.Mutex{}
+		editLocks.Store(fp, m)
+	}
 	m.Lock()
 	return m
 }

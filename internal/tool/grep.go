@@ -154,7 +154,10 @@ func (grepTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 		searchDir = filepath.Dir(requested)
 	}
 
-	matches, truncated := grepWalk(searchDir, re, include)
+	matches, truncated, werr := grepWalk(searchDir, re, include)
+	if werr != nil {
+		return Output{}, werr
+	}
 	if len(matches) == 0 {
 		return empty, nil
 	}
@@ -185,8 +188,8 @@ func (grepTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 // grepWalk walks searchDir depth-first, collecting up to grepLimit
 // matches. Skips hidden entries (ripgrep --hidden default false), files
 // over 10MB, and NUL-binary files (first 8000 bytes).
-func grepWalk(searchDir string, re *regexp.Regexp, include string) (matches []grepMatch, truncated bool) {
-	_ = filepath.WalkDir(searchDir, func(dpath string, d fs.DirEntry, err error) error {
+func grepWalk(searchDir string, re *regexp.Regexp, include string) (matches []grepMatch, truncated bool, werr error) {
+	werr = filepath.WalkDir(searchDir, func(dpath string, d fs.DirEntry, err error) error {
 		if len(matches) == grepLimit {
 			truncated = true
 			return fs.SkipAll
@@ -232,5 +235,10 @@ func grepWalk(searchDir string, re *regexp.Regexp, include string) (matches []gr
 		}
 		return nil
 	})
+	// Per-entry errors are swallowed above (skip unreadable entries); the
+	// root-level error is load-bearing: surface it when nothing matched.
+	if werr != nil && len(matches) == 0 {
+		return nil, false, werr
+	}
 	return
 }
