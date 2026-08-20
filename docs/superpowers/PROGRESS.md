@@ -44,6 +44,10 @@ goroutine+conn+body; 474faac rune-boundary 10 MB cap + typed dead-process EPIPE 
 `overflowRe` misclassifies 401/403/413 provider errors as context overflow (turn ends
 nil-error with a synthetic overflow note) and `Deps.Log` documented `nil = no-op` but
 every call site dereferences it (nil logger → process-level panic on first DB/marshal error).
+DOX tree initialized (2026-08-20): child AGENTS.md at `internal/`,
+`internal/protocol`, `internal/tui`, `docs/superpowers/` (standard section
+shape); root Child DOX Index real, stale refs (branch `plan`, closed v1
+plan/spec rows, removed banner/thumbnail) generalized or dropped.
 
 ## Open items
 
