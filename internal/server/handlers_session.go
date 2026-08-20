@@ -270,7 +270,20 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 		envelope(w, http.StatusBadRequest, "empty message", nil)
 		return
 	}
-	res, err := s.Engine.Send(context.Background(), id, in.Text, func(error) {})
+	// The send boundary is the single log site for a turn's terminal
+	// state: an aborted turn is user-initiated (info), a failed model
+	// turn must not vanish (the 202 is already on its way and the TUI
+	// stays idle-looking — upstream promptAsync logs it too).
+	res, err := s.Engine.Send(context.Background(), id, in.Text, func(err error) {
+		if err == nil {
+			return
+		}
+		if errors.Is(err, context.Canceled) {
+			s.Log.Infof("session: turn aborted (session=%s)", id)
+			return
+		}
+		s.Log.Errorf("session: turn failed (session=%s): %v", id, err)
+	})
 	switch {
 	case err == nil:
 		writeJSON(w, http.StatusAccepted, map[string]string{"message_id": res.MessageID})

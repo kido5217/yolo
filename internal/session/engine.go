@@ -265,6 +265,9 @@ func (e *Engine) idleAndRelease(sessionID string) {
 func (e *Engine) publish(t string, props any) {
 	ev, err := protocol.MakeEvent(t, props)
 	if err != nil {
+		// A marshal failure here would kill the whole event stream, so it
+		// must be diagnosable, not silently dropped.
+		e.lg.Errorf("session: marshal %s: %v", t, err)
 		return
 	}
 	e.bus.Publish(ev)
@@ -364,11 +367,9 @@ func (e *Engine) runTurn(ctx context.Context, sessionID string, row storage.Sess
 		}
 		more, err := e.runRound(ctx, sessionID, agent, row, cfg, cfgRules, info, model, req, &doomHist, &toolCalls)
 		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				// Abort: non-fatal (log only); the TUI already got the
-				// part-level finalization.
-				e.lg.Infof("session: turn aborted (session=%s)", sessionID)
-			}
+			// Abort (context.Canceled) is user-initiated, not a failure.
+			// The TUI already got the part-level finalization; the send
+			// boundary (onDone consumer) is the single log site.
 			turnErr = err
 			return
 		}
@@ -613,9 +614,10 @@ func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row stor
 			return false, sErr
 		}
 		if attempt >= maxRetryAttempts {
-			e.lg.Errorf("session: transient retries exhausted (session=%s): %v", sessionID, sErr)
 			e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, nil, "")
-			return false, sErr
+			// Retry-exhaustion framing belongs in the boundary error: the
+			// send boundary logs the turn error exactly once.
+			return false, fmt.Errorf("transient retries exhausted after %d attempts (session=%s): %w", maxRetryAttempts, sessionID, sErr)
 		}
 		delay := e.backoff(attempt)
 		e.publish(protocol.EventTypeSessionStatus, protocol.SessionStatusProps{
