@@ -70,7 +70,10 @@ func SaveTo(s Store, path string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o600)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return err
+	}
+	return os.Chmod(path, 0o600)
 }
 
 // Save writes the store dir 0700, file 0600.
