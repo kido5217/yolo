@@ -417,12 +417,8 @@ func osEnvMap() map[string]string {
 // same path as `yolo serve` with YOLO_LLM=fake.
 func newSrvFakeEnv(t *testing.T, script string) (*testutil.TestServer, *fakellm.Driver) {
 	t.Helper()
-	_ = os.Setenv("YOLO_LLM", "fake")
-	_ = os.Setenv("YOLO_FAKE_SCRIPT", script)
-	t.Cleanup(func() {
-		_ = os.Unsetenv("YOLO_LLM")
-		_ = os.Unsetenv("YOLO_FAKE_SCRIPT")
-	})
+	t.Setenv("YOLO_LLM", "fake")
+	t.Setenv("YOLO_FAKE_SCRIPT", script)
 	drv, err := server.FakeFromEnv(osEnvMap())
 	if err != nil {
 		t.Fatalf("FakeFromEnv: %v", err)
