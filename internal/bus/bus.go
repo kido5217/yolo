@@ -10,8 +10,7 @@ import (
 const subscriberBuffer = 1024
 
 type subscriber struct {
-	ch     chan protocol.Event
-	closed bool
+	ch chan protocol.Event
 }
 
 // Bus fans events out to subscribers; a subscriber whose buffer overflows is
@@ -45,7 +44,6 @@ func (b *Bus) Subscribe() (<-chan protocol.Event, func()) {
 		if _, ok := b.subs[s]; ok {
 			delete(b.subs, s)
 			close(s.ch)
-			s.closed = true
 		}
 		b.mu.Unlock()
 	}
@@ -61,10 +59,7 @@ func (b *Bus) Publish(e protocol.Event) {
 		case s.ch <- e:
 		default:
 			delete(b.subs, s)
-			if !s.closed {
-				close(s.ch)
-				s.closed = true
-			}
+			close(s.ch)
 		}
 	}
 }
