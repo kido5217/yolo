@@ -118,7 +118,7 @@ func (s *Server) handleProvider(w http.ResponseWriter, r *http.Request) {
 	}
 	entries, err := s.providerEntries(dir)
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "list providers", nil)
+		s.fail(w, http.StatusInternalServerError, "list providers", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, entries)
@@ -130,17 +130,17 @@ func (s *Server) handleProviderAuth(w http.ResponseWriter, _ *http.Request) {
 	dir := s.WorkDir
 	entries, err := s.providerEntries(dir)
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "list providers", nil)
+		s.fail(w, http.StatusInternalServerError, "list providers", err)
 		return
 	}
 	gdir, gerr := s.globalDir()
 	if gerr != nil {
-		envelope(w, http.StatusInternalServerError, "load config", nil)
+		s.fail(w, http.StatusInternalServerError, "load config", gerr)
 		return
 	}
 	cfg, err := s.Config.LoadAt(gdir, dir)
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "load config", nil)
+		s.fail(w, http.StatusInternalServerError, "load config", err)
 		return
 	}
 	store := s.authSnapshot()
@@ -164,12 +164,12 @@ func (s *Server) handleConfigGet(w http.ResponseWriter, r *http.Request) {
 	}
 	gdir, gerr := s.globalDir()
 	if gerr != nil {
-		envelope(w, http.StatusInternalServerError, "load config", nil)
+		s.fail(w, http.StatusInternalServerError, "load config", gerr)
 		return
 	}
 	cfg, err := s.Config.LoadAt(gdir, dir)
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "load config", nil)
+		s.fail(w, http.StatusInternalServerError, "load config", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, cfg)
@@ -189,17 +189,17 @@ func (s *Server) handleConfigPatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := writeProjectLayer(dir, partial); err != nil {
-		envelope(w, http.StatusInternalServerError, "write project config", nil)
+		s.fail(w, http.StatusInternalServerError, "write project config", err)
 		return
 	}
 	gdir, gerr := s.globalDir()
 	if gerr != nil {
-		envelope(w, http.StatusInternalServerError, "load config", nil)
+		s.fail(w, http.StatusInternalServerError, "load config", gerr)
 		return
 	}
 	cfg, err := s.Config.LoadAt(gdir, dir)
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "load config", nil)
+		s.fail(w, http.StatusInternalServerError, "load config", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, cfg)
@@ -229,12 +229,12 @@ func writeProjectLayer(dir string, partial map[string]any) error {
 func (s *Server) handleGlobalConfigGet(w http.ResponseWriter, _ *http.Request) {
 	gdir, err := s.globalDir()
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "load global config", nil)
+		s.fail(w, http.StatusInternalServerError, "load global config", err)
 		return
 	}
 	cfg, err := config.LoadGlobal(gdir)
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "load global config", nil)
+		s.fail(w, http.StatusInternalServerError, "load global config", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, cfg)
@@ -251,7 +251,7 @@ func (s *Server) handleGlobalConfigPatch(w http.ResponseWriter, r *http.Request)
 	}
 	dir, err := s.globalDir()
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "load global config", nil)
+		s.fail(w, http.StatusInternalServerError, "load global config", err)
 		return
 	}
 	path := filepath.Join(dir, "yolo.jsonc")
@@ -259,26 +259,26 @@ func (s *Server) handleGlobalConfigPatch(w http.ResponseWriter, r *http.Request)
 	if raw, err := os.ReadFile(path); err == nil {
 		m, uerr := config.UnmarshalJSONC(raw)
 		if uerr != nil {
-			envelope(w, http.StatusInternalServerError, "parse global config", nil)
+			s.fail(w, http.StatusInternalServerError, "parse global config", uerr)
 			return
 		}
 		existing = m
 	} else if !os.IsNotExist(err) {
-		envelope(w, http.StatusInternalServerError, "read global config", nil)
+		s.fail(w, http.StatusInternalServerError, "read global config", err)
 		return
 	}
 	merged := config.Merge(existing, partial)
 	b, err := json.MarshalIndent(merged, "", "  ")
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "encode global config", nil)
+		s.fail(w, http.StatusInternalServerError, "encode global config", err)
 		return
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		envelope(w, http.StatusInternalServerError, "write global config", nil)
+		s.fail(w, http.StatusInternalServerError, "write global config", err)
 		return
 	}
 	if err := os.WriteFile(path, b, 0o644); err != nil {
-		envelope(w, http.StatusInternalServerError, "write global config", nil)
+		s.fail(w, http.StatusInternalServerError, "write global config", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, merged)
@@ -294,7 +294,7 @@ func (s *Server) handleAuthPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.authErr != nil {
-		envelope(w, http.StatusInternalServerError, "auth store unavailable", nil)
+		s.fail(w, http.StatusInternalServerError, "auth store unavailable", s.authErr)
 		return
 	}
 	s.authMu.Lock()
@@ -302,7 +302,7 @@ func (s *Server) handleAuthPut(w http.ResponseWriter, r *http.Request) {
 	snap := s.snapshotStoreLocked()
 	s.authMu.Unlock()
 	if err := auth.SaveTo(snap, s.authPath); err != nil {
-		envelope(w, http.StatusInternalServerError, "save auth", nil)
+		s.fail(w, http.StatusInternalServerError, "save auth", err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -310,7 +310,7 @@ func (s *Server) handleAuthPut(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAuthDelete(w http.ResponseWriter, r *http.Request) {
 	if s.authErr != nil {
-		envelope(w, http.StatusInternalServerError, "auth store unavailable", nil)
+		s.fail(w, http.StatusInternalServerError, "auth store unavailable", s.authErr)
 		return
 	}
 	s.authMu.Lock()
@@ -318,7 +318,7 @@ func (s *Server) handleAuthDelete(w http.ResponseWriter, r *http.Request) {
 	snap := s.snapshotStoreLocked()
 	s.authMu.Unlock()
 	if err := auth.SaveTo(snap, s.authPath); err != nil {
-		envelope(w, http.StatusInternalServerError, "save auth", nil)
+		s.fail(w, http.StatusInternalServerError, "save auth", err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -362,7 +362,7 @@ func (s *Server) handlePermissionList(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := s.DB.ListSessions(dir, 0)
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "list sessions", nil)
+		s.fail(w, http.StatusInternalServerError, "list sessions", err)
 		return
 	}
 	seen := map[string]bool{}
@@ -373,7 +373,7 @@ func (s *Server) handlePermissionList(w http.ResponseWriter, r *http.Request) {
 	for _, row := range rows {
 		reqs, err := s.Perm.Pending(row.ID)
 		if err != nil {
-			envelope(w, http.StatusInternalServerError, "list permissions", nil)
+			s.fail(w, http.StatusInternalServerError, "list permissions", err)
 			return
 		}
 		for _, q := range reqs {
@@ -426,7 +426,7 @@ func (s *Server) handlePermissionReply(w http.ResponseWriter, r *http.Request) {
 			envelope(w, http.StatusNotFound, "no pending permission request", nil)
 			return
 		}
-		envelope(w, http.StatusInternalServerError, "reply permission", nil)
+		s.fail(w, http.StatusInternalServerError, "reply permission", err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

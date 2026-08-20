@@ -64,7 +64,7 @@ func (s *Server) scopedSession(w http.ResponseWriter, r *http.Request) (string, 
 		return "", false
 	}
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "lookup session", nil)
+		s.fail(w, http.StatusInternalServerError, "lookup session", err)
 		return "", false
 	}
 	if row.ProjectDir != dir {
@@ -81,7 +81,7 @@ func (s *Server) handleSessionList(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := s.DB.ListSessions(dir, 0)
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "list sessions", nil)
+		s.fail(w, http.StatusInternalServerError, "list sessions", err)
 		return
 	}
 	out := make([]protocol.Session, 0, len(rows))
@@ -132,7 +132,7 @@ func (s *Server) handleSessionCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	ses, err := s.newSession(dir, in.Title, in.Agent, in.Model)
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "create session", nil)
+		s.fail(w, http.StatusInternalServerError, "create session", err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, ses)
@@ -145,7 +145,7 @@ func (s *Server) handleSessionGet(w http.ResponseWriter, r *http.Request) {
 	}
 	ses, err := s.DB.Session(id)
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "lookup session", nil)
+		s.fail(w, http.StatusInternalServerError, "lookup session", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, ses)
@@ -180,7 +180,7 @@ func (s *Server) handleSessionPatch(w http.ResponseWriter, r *http.Request) {
 		patch.TimeUpdated = *in.Time
 	}
 	if err := s.DB.UpdateSession(id, patch); err != nil && !errors.Is(err, storage.ErrNotFound) {
-		envelope(w, http.StatusInternalServerError, "update session", nil)
+		s.fail(w, http.StatusInternalServerError, "update session", err)
 		return
 	}
 	ses, err := s.DB.Session(id)
@@ -198,11 +198,11 @@ func (s *Server) handleSessionDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	ses, err := s.DB.Session(id)
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "lookup session", nil)
+		s.fail(w, http.StatusInternalServerError, "lookup session", err)
 		return
 	}
 	if err := s.DB.DeleteSession(id); err != nil {
-		envelope(w, http.StatusInternalServerError, "delete session", nil)
+		s.fail(w, http.StatusInternalServerError, "delete session", err)
 		return
 	}
 	s.Engine.Close(id)
@@ -230,21 +230,21 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := s.DB.ListMessages(id)
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "list messages", nil)
+		s.fail(w, http.StatusInternalServerError, "list messages", err)
 		return
 	}
 	out := make([]protocol.MessageWithParts, 0, len(rows))
 	for _, m := range rows {
 		partRows, err := s.DB.ListParts(m.ID)
 		if err != nil {
-			envelope(w, http.StatusInternalServerError, "list parts", nil)
+			s.fail(w, http.StatusInternalServerError, "list parts", err)
 			return
 		}
 		mp := protocol.MessageWithParts{Info: messageWire(m), Parts: make([]protocol.Part, 0, len(partRows))}
 		for _, p := range partRows {
 			wire, err := storage.PartToProtocol(p)
 			if err != nil {
-				envelope(w, http.StatusInternalServerError, "decode part", nil)
+				s.fail(w, http.StatusInternalServerError, "decode part", err)
 				return
 			}
 			mp.Parts = append(mp.Parts, wire)
@@ -292,7 +292,7 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, storage.ErrNotFound):
 		envelope(w, http.StatusNotFound, "session not found", nil)
 	default:
-		envelope(w, http.StatusInternalServerError, "start turn", nil)
+		s.fail(w, http.StatusInternalServerError, "start turn", err)
 	}
 }
 
@@ -317,7 +317,7 @@ func (s *Server) handleSessionStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := s.DB.ListSessions(dir, 0)
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "list sessions", nil)
+		s.fail(w, http.StatusInternalServerError, "list sessions", err)
 		return
 	}
 	out := make(map[string]string, len(rows))
@@ -355,7 +355,7 @@ func (s *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
 		}
 		ses, err := s.newSession(dir, "", "", "")
 		if err != nil {
-			envelope(w, http.StatusInternalServerError, "create session", nil)
+			s.fail(w, http.StatusInternalServerError, "create session", err)
 			return
 		}
 		s.emit(protocol.EventTypeSessionUpdated, protocol.SessionUpdatedProps{SessionID: ses.ID, Info: ses})
