@@ -31,6 +31,7 @@ Read it before acting. For session state, read `docs/superpowers/PROGRESS.md` se
 5. **Tests define the contract.** When the plan contradicts itself (or its own test code is buggy), resolve per the last-stated call, fix the test, and **log the deviation in `PROGRESS.md` → "Plan deviations logged"** with severity.
 6. **`PROGRESS.md` is never stale.** After any edit, plan, spec, design decision, deviation, or checkpoint — anything that changes what the next session must know — roll `docs/superpowers/PROGRESS.md` before moving on. It is the single thing a future session reads to resume; a stale one is a broken resume. What it holds and how to keep it small: "Commit & branch discipline."
 7. **Subagents one at a time.** Never dispatch more than one subagent concurrently (via the `task` tool): dispatch one, wait for it to fully return, then dispatch the next. This supersedes any plan/spec wording permitting parallel subagents (the v0.1.2 plan/spec "≤3 parallel" text was revised 2026-08-20; see PROGRESS.md deviation log).
+8. **YOLO spawns only YOLO.** If the root agent is `YOLO`, any subagent it spawns MUST also be `YOLO` — never dispatch a subagent of a different agent type.
 
 ## Commands & verification
 
