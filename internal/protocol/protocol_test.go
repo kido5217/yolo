@@ -120,11 +120,14 @@ func TestMakeEvent(t *testing.T) {
 }
 
 func TestParsePerms(t *testing.T) {
-	rules := p.ParsePerms(map[string]any{
+	rules, err := p.ParsePerms(map[string]any{
 		"bash": "ask",
 		"edit": "allow",
 		"read": map[string]any{"*.env": "ask"},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	// broad first, narrow later (later wins under last-match-wins)
 	var sawBash, sawEdit, sawReadEnv bool
 	for _, r := range rules {
@@ -141,6 +144,18 @@ func TestParsePerms(t *testing.T) {
 	}
 	if !sawBash || !sawEdit || !sawReadEnv {
 		t.Fatalf("parsed rules wrong: %+v", rules)
+	}
+}
+
+func TestParsePermsRejectsNonStringValues(t *testing.T) {
+	for _, m := range []map[string]any{
+		{"bash": map[string]any{"echo": 123}},         // pattern value not a string
+		{"bash": 5},                                   // top-level value not a string/object
+		{"*": map[string]any{"rm": map[string]any{}}}, // nested map instead of action
+	} {
+		if rules, err := p.ParsePerms(m); err == nil {
+			t.Fatalf("ParsePerms(%v) = %+v, want error", m, rules)
+		}
 	}
 }
 

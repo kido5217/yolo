@@ -1,6 +1,9 @@
 package protocol
 
-import "sort"
+import (
+	"fmt"
+	"sort"
+)
 
 // config wire = config file schema (spec 6.1)
 
@@ -35,10 +38,12 @@ type Config struct {
 // ParsePerms converts the config `permission` object into an ordered rule list:
 // string value → {"*"} rule; map value → one rule per pattern (shortest first,
 // then lexical). "*" rules precede specific patterns (last-match-wins semantics
-// apply downstream).
-func ParsePerms(m map[string]any) []Rule {
+// apply downstream). Non-string values (top-level or per-pattern) are a config
+// error, not a rule: a silently empty action would evaluate to an accidental
+// allow downstream.
+func ParsePerms(m map[string]any) ([]Rule, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	keys := make([]string, 0, len(m))
 	for k := range m {
@@ -62,10 +67,15 @@ func ParsePerms(m map[string]any) []Rule {
 				return pats[i] < pats[j]
 			})
 			for _, p := range pats {
-				a, _ := v[p].(string)
+				a, ok := v[p].(string)
+				if !ok {
+					return nil, fmt.Errorf("permission %s: pattern %q value must be a string", k, p)
+				}
 				specific = append(specific, Rule{Permission: k, Pattern: p, Action: a})
 			}
+		default:
+			return nil, fmt.Errorf("permission %s: value must be a string or object", k)
 		}
 	}
-	return append(wild, specific...)
+	return append(wild, specific...), nil
 }

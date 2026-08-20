@@ -335,7 +335,11 @@ func (e *Engine) runTurn(ctx context.Context, sessionID string, row storage.Sess
 	e.perm.SetDataDir(e.dataDir)
 	cfgRules := []protocol.Rule{}
 	if cfgErr == nil && cfg != nil {
-		cfgRules = protocol.ParsePerms(cfg.Permission)
+		// Invalid permission entries degrade to no config rules (config
+		// load is non-fatal per turn).
+		if rules, perr := protocol.ParsePerms(cfg.Permission); perr == nil {
+			cfgRules = rules
+		}
 		e.perm.SetConfigRules(cfgRules)
 	}
 	agent := row.Agent

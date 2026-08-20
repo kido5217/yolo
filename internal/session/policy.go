@@ -44,7 +44,11 @@ func (e *Engine) rulesetForRow(row storage.SessionRow) ([]protocol.Rule, error) 
 	ruleset := make([]protocol.Rule, 0, len(builtins)+4)
 	ruleset = append(ruleset, builtins...)
 	if cfg, err := e.loadCfg(row.ProjectDir); err == nil && cfg != nil {
-		ruleset = append(ruleset, protocol.ParsePerms(cfg.Permission)...)
+		// Invalid permission entries degrade to no config rules (config
+		// load is non-fatal per turn).
+		if perms, perr := protocol.ParsePerms(cfg.Permission); perr == nil {
+			ruleset = append(ruleset, perms...)
+		}
 	}
 	always, err := e.db.AlwaysRules(row.ID)
 	if err != nil {
