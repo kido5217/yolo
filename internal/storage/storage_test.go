@@ -56,9 +56,15 @@ func TestSessionCRUDAndListOrder(t *testing.T) {
 
 func TestCascadeDelete(t *testing.T) {
 	db := openDB(t)
-	_ = db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1})
-	_ = db.CreateMessage(storage.MessageRow{ID: "msg_1", SessionID: "ses_1", Role: "user", TimeCreated: 2})
-	_ = db.UpsertPart(storage.PartRow{ID: "prt_1", MessageID: "msg_1", SessionID: "ses_1", Type: "text", StateJSON: `{"text":"hi"}`, TimeCreated: 3})
+	if err := db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CreateMessage(storage.MessageRow{ID: "msg_1", SessionID: "ses_1", Role: "user", TimeCreated: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpsertPart(storage.PartRow{ID: "prt_1", MessageID: "msg_1", SessionID: "ses_1", Type: "text", StateJSON: `{"text":"hi"}`, TimeCreated: 3}); err != nil {
+		t.Fatal(err)
+	}
 	if err := db.DeleteSession("ses_1"); err != nil {
 		t.Fatal(err)
 	}
@@ -73,9 +79,15 @@ func TestCascadeDelete(t *testing.T) {
 
 func TestMessageAgentRoundTrip(t *testing.T) {
 	db := openDB(t)
-	_ = db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1})
-	_ = db.CreateMessage(storage.MessageRow{ID: "msg_1", SessionID: "ses_1", Role: "user", Agent: "plan", TimeCreated: 2})
-	_ = db.CreateMessage(storage.MessageRow{ID: "msg_2", SessionID: "ses_1", Role: "assistant", TimeCreated: 3})
+	if err := db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CreateMessage(storage.MessageRow{ID: "msg_1", SessionID: "ses_1", Role: "user", Agent: "plan", TimeCreated: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CreateMessage(storage.MessageRow{ID: "msg_2", SessionID: "ses_1", Role: "assistant", TimeCreated: 3}); err != nil {
+		t.Fatal(err)
+	}
 	msgs, err := db.ListMessages("ses_1")
 	if err != nil {
 		t.Fatal(err)
@@ -93,8 +105,12 @@ func TestMessageAgentRoundTrip(t *testing.T) {
 
 func TestTextAndToolPartRoundTrip(t *testing.T) {
 	db := openDB(t)
-	_ = db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1})
-	_ = db.CreateMessage(storage.MessageRow{ID: "msg_1", SessionID: "ses_1", Role: "assistant", TimeCreated: 2})
+	if err := db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CreateMessage(storage.MessageRow{ID: "msg_1", SessionID: "ses_1", Role: "assistant", TimeCreated: 2}); err != nil {
+		t.Fatal(err)
+	}
 	text := protocol.Part{ID: "prt_txt", MessageID: "msg_1", SessionID: "ses_1", Type: "text", Text: "hello", Time: protocol.PartTime{Start: 5, End: 9}}
 	if err := db.UpsertPart(storage.ProtocolToPart(text)); err != nil {
 		t.Fatal(err)
@@ -114,8 +130,14 @@ func TestTextAndToolPartRoundTrip(t *testing.T) {
 	if err := db.UpsertPart(storage.ProtocolToPart(tool)); err != nil {
 		t.Fatal(err)
 	}
-	prow, _ := db.GetPart("prt_tool")
-	pback, _ := storage.PartToProtocol(prow)
+	prow, err := db.GetPart("prt_tool")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pback, err := storage.PartToProtocol(prow)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if pback.State == nil || pback.State.Output != "ok" {
 		t.Fatalf("tool state lost: %+v", pback)
 	}
@@ -125,10 +147,16 @@ func TestTextAndToolPartRoundTrip(t *testing.T) {
 
 func TestSessionAggregateCostTokens(t *testing.T) {
 	db := openDB(t)
-	_ = db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Title: "x", Model: "kido/m", Agent: "build", TimeCreated: 1, TimeUpdated: 1})
-	_ = db.CreateMessage(storage.MessageRow{ID: "msg_u", SessionID: "ses_1", Role: "user", TimeCreated: 2})
-	_ = db.CreateMessage(storage.MessageRow{ID: "msg_a", SessionID: "ses_1", Role: "assistant", Cost: 0.25,
-		Tokens: protocol.Tokens{Input: 100, Output: 50, Reasoning: 5, Cache: protocol.CacheTokens{Read: 7, Write: 1}}, TimeCreated: 3})
+	if err := db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Title: "x", Model: "kido/m", Agent: "build", TimeCreated: 1, TimeUpdated: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CreateMessage(storage.MessageRow{ID: "msg_u", SessionID: "ses_1", Role: "user", TimeCreated: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CreateMessage(storage.MessageRow{ID: "msg_a", SessionID: "ses_1", Role: "assistant", Cost: 0.25,
+		Tokens: protocol.Tokens{Input: 100, Output: 50, Reasoning: 5, Cache: protocol.CacheTokens{Read: 7, Write: 1}}, TimeCreated: 3}); err != nil {
+		t.Fatal(err)
+	}
 	sess, err := db.Session("ses_1")
 	if err != nil {
 		t.Fatal(err)
@@ -143,9 +171,15 @@ func TestSessionAggregateCostTokens(t *testing.T) {
 
 func TestAlwaysRules(t *testing.T) {
 	db := openDB(t)
-	_ = db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1})
-	_ = db.SavePermission(storage.PermissionRow{RequestID: "per_1", SessionID: "ses_1", Action: "bash", Resource: "*", Response: "always", AlwaysJSON: `["ls","whoami"]`, TimeCreated: 1})
-	_ = db.SavePermission(storage.PermissionRow{RequestID: "per_2", SessionID: "ses_1", Action: "bash", Resource: "*", Response: "once", TimeCreated: 2})
+	if err := db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SavePermission(storage.PermissionRow{RequestID: "per_1", SessionID: "ses_1", Action: "bash", Resource: "*", Response: "always", AlwaysJSON: `["ls","whoami"]`, TimeCreated: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SavePermission(storage.PermissionRow{RequestID: "per_2", SessionID: "ses_1", Action: "bash", Resource: "*", Response: "once", TimeCreated: 2}); err != nil {
+		t.Fatal(err)
+	}
 	rules, err := db.AlwaysRules("ses_1")
 	if err != nil {
 		t.Fatal(err)

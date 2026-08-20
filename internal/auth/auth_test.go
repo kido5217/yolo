@@ -100,7 +100,10 @@ func TestRoundTrip(t *testing.T) {
 	if err := auth.Save(s); err != nil {
 		t.Fatal(err)
 	}
-	got, _ = auth.Load()
+	got, err = auth.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, exists := got["opencode"]; exists {
 		t.Fatal("delete did not persist")
 	}

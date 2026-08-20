@@ -58,7 +58,10 @@ func TestMessageRoles(t *testing.T) {
 	u := p.Message{ID: "msg_1", SessionID: "ses_1", Role: "user",
 		Time: p.MessageTime{Created: 1}, Agent: "build",
 		Model: &p.MessageModel{ProviderID: "kido", ModelID: "Qwen3.8-27B"}}
-	b, _ := json.Marshal(u)
+	b, err := json.Marshal(u)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// user message must not carry any top-level assistant-only fields
 	var top map[string]json.RawMessage
 	if err := json.Unmarshal(b, &top); err != nil {
@@ -74,7 +77,10 @@ func TestMessageRoles(t *testing.T) {
 		ModelID: "Qwen3.8-27B", ProviderID: "kido", Mode: "primary", Agent: "build",
 		Path: &p.MessagePath{Cwd: "/w", Root: "/w"}, Cost: 0.1,
 		Tokens: &p.Tokens{Input: 3, Output: 4}}
-	ba, _ := json.Marshal(a)
+	ba, err := json.Marshal(a)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, want := range []string{`"parentID":"msg_1"`, `"modelID":"Qwen3.8-27B"`, `"providerID":"kido"`, `"path":{"cwd":"/w","root":"/w"}`, `"cost":0.1`, `"tokens":{"input":3,"output":4,"reasoning":0,"cache":{"read":0,"write":0}}`} {
 		if !strings.Contains(string(ba), want) {
 			t.Fatalf("assistant msg missing %s:\n%s", want, ba)
@@ -84,13 +90,19 @@ func TestMessageRoles(t *testing.T) {
 
 func TestPartAndToolStateShapes(t *testing.T) {
 	text := p.Part{ID: "prt_1", SessionID: "ses_1", MessageID: "msg_2", Type: "text", Text: "hi", Time: p.PartTime{Start: 1}}
-	b, _ := json.Marshal(text)
+	b, err := json.Marshal(text)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if want := `{"id":"prt_1","sessionID":"ses_1","messageID":"msg_2","type":"text","text":"hi","time":{"start":1}}`; string(b) != want {
 		t.Fatalf("text part:\n%s\nwant\n%s", b, want)
 	}
 	done := p.Part{ID: "prt_2", SessionID: "ses_1", MessageID: "msg_2", Type: "tool", CallID: "call_1", Tool: "bash",
 		State: &p.ToolState{Status: "completed", Input: map[string]any{"command": "ls"}, Output: "ok", Title: "ls", Time: p.PartTime{Start: 1, End: 2}}}
-	bd, _ := json.Marshal(done)
+	bd, err := json.Marshal(done)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, want := range []string{`"type":"tool"`, `"callID":"call_1"`, `"tool":"bash"`, `"status":"completed"`, `"output":"ok"`, `"end":2`} {
 		if !strings.Contains(string(bd), want) {
 			t.Fatalf("tool part missing %s:\n%s", want, bd)
@@ -111,7 +123,10 @@ func TestMakeEvent(t *testing.T) {
 	if !evtRe.MatchString(e.ID) || e.Type != p.EventTypePermissionAsked {
 		t.Fatalf("envelope bad: %+v", e)
 	}
-	b, _ := json.Marshal(e)
+	b, err := json.Marshal(e)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, want := range []string{`"type":"permission.asked"`, `"permission":"bash"`, `"patterns":["ls"]`, `"always":["ls"]`, `"tool":{"messageID":"msg_2","callID":"call_1"}`} {
 		if !strings.Contains(string(b), want) {
 			t.Fatalf("event missing %s:\n%s", want, b)
@@ -160,11 +175,17 @@ func TestParsePermsRejectsNonStringValues(t *testing.T) {
 }
 
 func TestSessionStatusWire(t *testing.T) {
-	b, _ := json.Marshal(p.SessionStatus{Type: p.StatusRetry, Attempt: 2, Message: "429", Next: 2000})
+	b, err := json.Marshal(p.SessionStatus{Type: p.StatusRetry, Attempt: 2, Message: "429", Next: 2000})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if want := `{"type":"retry","attempt":2,"message":"429","next":2000}`; string(b) != want {
 		t.Fatalf("status shape: %s", b)
 	}
-	bi, _ := json.Marshal(p.SessionStatus{Type: p.StatusIdle})
+	bi, err := json.Marshal(p.SessionStatus{Type: p.StatusIdle})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if string(bi) != `{"type":"idle"}` {
 		t.Fatalf("idle shape: %s", bi)
 	}

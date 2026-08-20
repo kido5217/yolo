@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -218,7 +219,7 @@ func (d *DB) ListMessages(sessionID string) ([]MessageRow, error) {
 			tok = "{}"
 		}
 		if err := json.Unmarshal([]byte(tok), &r.Tokens); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("message %s tokens: %w", r.ID, err)
 		}
 		out = append(out, r)
 	}
@@ -334,7 +335,7 @@ func PartToProtocol(r PartRow) (protocol.Part, error) {
 	case "tool":
 		st := &protocol.ToolState{}
 		if err := json.Unmarshal([]byte(r.StateJSON), st); err != nil {
-			return p, err
+			return p, fmt.Errorf("part %s state: %w", r.ID, err)
 		}
 		p.State = st
 	default:
@@ -344,7 +345,7 @@ func PartToProtocol(r PartRow) (protocol.Part, error) {
 			Synthetic *bool  `json:"synthetic"`
 		}
 		if err := json.Unmarshal([]byte(r.StateJSON), &st); err != nil {
-			return p, err
+			return p, fmt.Errorf("part %s state: %w", r.ID, err)
 		}
 		p.Text = st.Text
 		p.Time = protocol.PartTime{End: st.End}
@@ -491,7 +492,7 @@ func (d *DB) AlwaysRules(sessionID string) ([]protocol.Rule, error) {
 		var patterns []string
 		if always.Valid && always.String != "" {
 			if err := json.Unmarshal([]byte(always.String), &patterns); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("always rules (session=%s, action=%s): %w", sessionID, action, err)
 			}
 		}
 		for _, pat := range patterns {
