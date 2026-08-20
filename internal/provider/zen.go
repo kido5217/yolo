@@ -167,9 +167,23 @@ func (p *CatalogPolicy) writeAtomic(data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(p.cachePath), 0o755); err != nil {
 		return err
 	}
-	tmp := p.cachePath + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	f, err := os.CreateTemp(filepath.Dir(p.cachePath), "models.json.*")
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, p.cachePath)
+	tmp := f.Name()
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, p.cachePath); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
