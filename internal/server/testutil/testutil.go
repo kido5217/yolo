@@ -163,7 +163,7 @@ func (ts *TestServer) ParkAsk(t *testing.T, sessionID, action, resource string) 
 	}()
 	row, err := ts.DB.GetSession(sessionID)
 	if err != nil {
-		panic(err)
+		t.Fatalf("park ask: get session %s: %v", sessionID, err)
 	}
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
@@ -272,20 +272,41 @@ func SSEConnect(t *testing.T, ts *TestServer, dir string) *SSEReader {
 	return &SSEReader{sc: bufio.NewScanner(resp.Body)}
 }
 
-// Frame decodes the next `data:` frame.
+// Frame decodes the next `data:` frame. The single scan runs in a helper
+// goroutine so the wait is bounded: a frame that never arrives fails the
+// test on the deadline instead of hanging to the go test timeout.
 func (r *SSEReader) Frame(t *testing.T) SSEFrame {
 	t.Helper()
-	for r.sc.Scan() {
-		line := r.sc.Text()
-		if !strings.HasPrefix(line, "data: ") {
-			continue
-		}
-		var f SSEFrame
-		if err := json.Unmarshal([]byte(line[len("data: "):]), &f); err != nil {
-			t.Fatalf("bad frame %q: %v", line, err)
-		}
-		return f
+	type lineResult struct {
+		line string
+		ok   bool
+		err  error
 	}
-	t.Fatalf("sse stream closed: %v", r.sc.Err())
-	return SSEFrame{}
+	ch := make(chan lineResult, 1)
+	deadline := time.After(5 * time.Second)
+	for {
+		go func() {
+			if !r.sc.Scan() {
+				ch <- lineResult{ok: false, err: r.sc.Err()}
+				return
+			}
+			ch <- lineResult{line: r.sc.Text(), ok: true}
+		}()
+		select {
+		case res := <-ch:
+			if !res.ok {
+				t.Fatalf("sse stream closed: %v", res.err)
+			}
+			if !strings.HasPrefix(res.line, "data: ") {
+				continue
+			}
+			var f SSEFrame
+			if err := json.Unmarshal([]byte(res.line[len("data: "):]), &f); err != nil {
+				t.Fatalf("bad frame %q: %v", res.line, err)
+			}
+			return f
+		case <-deadline:
+			t.Fatalf("timed out after 5s waiting for an SSE data frame")
+		}
+	}
 }
