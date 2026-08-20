@@ -57,7 +57,11 @@ plan/spec rows, removed banner/thumbnail) generalized or dropped.
 
 ## Open items
 
-- none (wave-1 skipped chunks backfilled to `COVERAGE: full` — deviation 67)
+- Version wiring (0.2.0, user decision 2026-08-21): `yolo version` prints hardcoded
+  `0.0.0-dev` (cmd/yolo/main.go:58, plan-derived placeholder; no ldflags/build-info
+  mechanism). Wire build-time version (e.g. ldflags `-X` from `git describe --tags`) in
+  0.2.0+ — not in v0.1.x.
+- none from v0.1.2 waves (wave-1 skipped chunks backfilled to `COVERAGE: full` — deviation 67)
 
 ## Key verified facts (so they don't get re-litigated)
 
