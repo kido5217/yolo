@@ -34,10 +34,7 @@ func TestKidoParsesLlamacpp(t *testing.T) {
 		_, _ = w.Write(raw)
 	}))
 	defer srv.Close()
-	m, err := provider.FetchKido(context.Background(), srv.URL+"/v1", 5, false, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	m := provider.FetchKido(context.Background(), srv.URL+"/v1", 5, false, nil)
 	if len(m) != 1 {
 		t.Fatalf("models = %d", len(m))
 	}
@@ -48,10 +45,9 @@ func TestKidoParsesLlamacpp(t *testing.T) {
 }
 
 func TestKidoFallsBackStaticOnNetworkError(t *testing.T) {
-	m, err := provider.FetchKido(context.Background(), "http://127.0.0.1:1", 200, false, nil)
-	if err != nil {
-		t.Fatalf("fallback must not error: %v", err)
-	}
+	// Network failure falls back to the static list without an error
+	// (FetchKido never reports probe problems).
+	m := provider.FetchKido(context.Background(), "http://127.0.0.1:1", 200, false, nil)
 	if len(m) != 1 || m[0].ID != "Qwen3.8-27B" || m[0].Context != 262144 {
 		t.Fatalf("fallback model = %+v", m)
 	}
@@ -66,10 +62,7 @@ func TestKidoSkipsInvalidEntries(t *testing.T) {
 		]}`))
 	}))
 	defer srv.Close()
-	m, err := provider.FetchKido(context.Background(), srv.URL, 5000, false, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	m := provider.FetchKido(context.Background(), srv.URL, 5000, false, nil)
 	if len(m) != 1 || m[0].ID != "good" || m[0].Context != 8192 || m[0].Output != 1024 {
 		t.Fatalf("models = %+v", m)
 	}
@@ -77,9 +70,9 @@ func TestKidoSkipsInvalidEntries(t *testing.T) {
 		_, _ = w.Write([]byte(`{"data":[{"id":"","meta":{"n_ctx":0}}]}`))
 	}))
 	defer srv2.Close()
-	m2, err := provider.FetchKido(context.Background(), srv2.URL, 5000, false, nil)
-	if err != nil || len(m2) != 1 || m2[0].ID != "Qwen3.8-27B" {
-		t.Fatalf("all-invalid fallback = %+v err %v", m2, err)
+	m2 := provider.FetchKido(context.Background(), srv2.URL, 5000, false, nil)
+	if len(m2) != 1 || m2[0].ID != "Qwen3.8-27B" {
+		t.Fatalf("all-invalid fallback = %+v", m2)
 	}
 }
 

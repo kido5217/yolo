@@ -98,8 +98,15 @@ func OverridableDirs(d Dirs, fill bool) (Dirs, error) {
 	return d, nil
 }
 
-// New builds the registry: kido (live/fallback), zen (cached catalog), and
+// New builds the registry: kido (live probe with static fallback — see
+// FetchKido: probe problems never fail startup), the zen catalog, and
 // config-defined providers.
+//
+// The zen catalog is best-effort by contract: a failed cache/live load, a
+// parse failure, or missing "opencode" metadata simply omits the opencode
+// provider from the catalog (yolo keeps working on kido); an empty
+// "opencode.api" falls back to the production Zen base. Startup never fails
+// because of it.
 func New(ctx context.Context, cfg *protocol.Config, httpc *http.Client, homeDirs Dirs) (*Registry, error) {
 	if httpc == nil {
 		httpc = http.DefaultClient
@@ -113,10 +120,7 @@ func New(ctx context.Context, cfg *protocol.Config, httpc *http.Client, homeDirs
 	}
 	r := &Registry{client: httpc, defProvider: "kido", defModel: "Qwen3.8-27B"}
 
-	kidoModels, err := FetchKido(ctx, dirs.KidoBase, 5000, false, httpc)
-	if err != nil {
-		return nil, err
-	}
+	kidoModels := FetchKido(ctx, dirs.KidoBase, 5000, false, httpc)
 	kido := Info{ID: "kido", Name: "Kido", Source: "builtin", BaseURL: dirs.KidoBase,
 		KeyRequired: false, KeyLoaded: true, Models: kidoModels}
 	if oc, ok := cfg.Provider["kido"]; ok && oc.BaseURL != "" {
@@ -124,12 +128,20 @@ func New(ctx context.Context, cfg *protocol.Config, httpc *http.Client, homeDirs
 	}
 	r.info = append(r.info, kido)
 
+	// Best-effort zen catalog (see doc): load/parse/meta problems simply
+	// omit the provider.
 	if raw, lerr := NewCatalogPolicy(dirs.ZenCache, 5, dirs.ZenCatalog, httpc).Load(ctx); lerr == nil {
 		models, perr := ParseZenCatalog(raw)
 		if perr == nil {
 			meta := zenMeta(raw)
+			// Guard a malformed-but-parseable catalog missing
+			// "opencode.api" against an empty BaseURL.
+			api := meta.API
+			if api == "" {
+				api = dirs.ZenBase
+			}
 			zen := Info{ID: "opencode", Name: meta.Name, Source: "builtin",
-				BaseURL: meta.API, KeyRequired: true, Env: meta.Env, Models: models}
+				BaseURL: api, KeyRequired: true, Env: meta.Env, Models: models}
 			if oc, ok := cfg.Provider["opencode"]; ok && oc.BaseURL != "" {
 				zen.BaseURL = oc.BaseURL
 			}
