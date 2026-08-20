@@ -40,6 +40,9 @@ type harness struct {
 	// slowTurn holds each scripted stream open for 500ms (fake driver
 	// Delay), so a concurrent Send hits the busy flag.
 	slowTurn bool
+	// overrideDriver, when set before build, replaces the driver wired for
+	// the test provider (bespoke stream behavior, e.g. stream-leak probes).
+	overrideDriver llm.Driver
 
 	sessions []string // created via startSession; shells closed on cleanup
 
@@ -143,7 +146,7 @@ func (h *harness) build(t *testing.T) {
 		// after build) and slows the call by sleeping in the wrapper before
 		// forwarding — not via a fake field, because the title side-call and
 		// the turn call Stream concurrently and a shared field would race.
-		Drivers: map[string]llm.Driver{"kido": slowDriver{h: h, inner: drv}},
+		Drivers: map[string]llm.Driver{"kido": h.wiredDriver(drv)},
 		Clock:   func() int64 { return time.Now().UnixMilli() },
 		Backoff: func(attempt int) time.Duration {
 			if h.fastBackoff {
@@ -152,6 +155,17 @@ func (h *harness) build(t *testing.T) {
 			return time.Second << uint(attempt-1)
 		},
 	})
+}
+
+// wiredDriver picks the driver for the test provider: the slowDriver
+// wrapper, or h.overrideDriver when a test set it before build (bespoke
+// stream behavior). The title side-call shares the same driver, so
+// overrides must be concurrency-safe.
+func (h *harness) wiredDriver(drv *fakellm.Driver) llm.Driver {
+	if h.overrideDriver != nil {
+		return h.overrideDriver
+	}
+	return slowDriver{h: h, inner: drv}
 }
 
 // slowDriver slows each Stream call (ctx-aware sleep) while h.slowTurn is

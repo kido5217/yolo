@@ -566,6 +566,12 @@ func appendReminders(content string, reminders []string) string {
 // stops the turn with a synthetic note; the per-turn tool step budget ends
 // the turn idle before the next call beyond it is executed.
 func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row storage.SessionRow, cfg *protocol.Config, cfgRules []protocol.Rule, info provider.Info, model provider.Model, req llm.Request, doomHist *[]permission.CallKey, toolCalls *int) (bool, error) {
+	// Per-round context: the real drivers' stream goroutines block their
+	// send on this ctx, so cancelling it on every round exit unblocks any
+	// abandoned stream (e.g. the tool-step budget drop) instead of leaking
+	// its goroutine and connection until process shutdown.
+	roundCtx, roundCancel := context.WithCancel(ctx)
+	defer roundCancel()
 	drv := e.driverFor(info.ID, model)
 	// The assistant row exists before the first stream attempt so a failed
 	// round still finalizes a (possibly empty) assistant message.
@@ -596,7 +602,7 @@ func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row stor
 	defer retry.Stop()
 	for attempt := 1; ; attempt++ {
 		var sErr error
-		stream, sErr = drv.Stream(ctx, req)
+		stream, sErr = drv.Stream(roundCtx, req)
 		if sErr == nil {
 			break
 		}
@@ -697,7 +703,7 @@ func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row stor
 		sawToolPart bool
 	)
 	for {
-		p, err := stream.Next(ctx)
+		p, err := stream.Next(roundCtx)
 		if errors.Is(err, io.EOF) {
 			break
 		}
@@ -766,7 +772,7 @@ func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row stor
 				return false, nil
 			}
 			*toolCalls++
-			e.executeTool(ctx, sessionID, agent, row, cfg, cfgRules, asstID, doomHist, p)
+			e.executeTool(roundCtx, sessionID, agent, row, cfg, cfgRules, asstID, doomHist, p)
 		}
 	}
 	finalizePart(&textSt, "text")
