@@ -1,6 +1,6 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-20 (v0.1.2 in progress: wave 1/16 done, next wave 2 — safety)
+**Updated:** 2026-08-20 (v0.1.2 in progress: wave 2/16 done, next wave 3 — error-handling)
 
 Rolling checkpoint: active task (full detail) + one-line last-completed + verified facts + the full
 append-only deviation log. No per-task history and no plan-slice copies — `git log --oneline` and the
@@ -20,7 +20,7 @@ in "Active").
 
 ## Active
 
-v0.1.2 skill-driven review — wave 2 (golang-safety). Plan:
+v0.1.2 skill-driven review — wave 3 (golang-error-handling). Plan:
 docs/superpowers/plans/2026-08-19-v0.1.2-skill-review.md (read ONLY the active task slice;
 resume protocol in the plan header). Dispatch review subagents per plan (task tool,
 general, strictly one at a time), findings under docs/superpowers/reviews/v0.1.2/.
@@ -29,10 +29,11 @@ go vet ./... && go test ./... + gofmt -l . + golangci-lint run ./...
 
 ## Last completed
 
-Wave 1 (concurrency): 23 findings (P0:2 P1:3 P2:7 P3:9) — 8 fixed (7a1782b 600a5b6 b858c4d
-a9211fa d12d313 7fa2e0d a532fe1), 15 deferred (10 behavior/wire, 5 tui-cmd behavior/render).
-Initial 2/3 chunks failed both dispatches; user-approved 4-way split backfill (deviation 67)
-now gives full coverage of all wave-1 scope.
+Wave 2 (safety): 22 findings (P0:2 P1:4 P2:6 P3:10) — 14 fixed (0975325 67ee663 080a935
+4ba4c2f 9cec00f 3b813f5 6a0bb98), 8 deferred (non-`contract-risk: none` auto-defers).
+R2d tool chunk first dispatch returned header-only (all 16 skipped) → plan's one split
+re-dispatch gave COVERAGE: full. Findings: 2 verified P0 panics (blank bash command,
+read offset/limit int overflow), tui SSE reconnect backoff 64-bit shift → tight loop.
 
 ## Key verified facts (so they don't get re-litigated)
 
