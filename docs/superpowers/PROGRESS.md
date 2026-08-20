@@ -1,6 +1,6 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-20 (v0.1.2 in progress: wave 2/16 done, next wave 3 — error-handling)
+**Updated:** 2026-08-20 (v0.1.2 in progress: wave 3/16 done, next wave 4 — troubleshooting)
 
 Rolling checkpoint: active task (full detail) + one-line last-completed + verified facts + the full
 append-only deviation log. No per-task history and no plan-slice copies — `git log --oneline` and the
@@ -20,7 +20,7 @@ in "Active").
 
 ## Active
 
-v0.1.2 skill-driven review — wave 3 (golang-error-handling). Plan:
+v0.1.2 skill-driven review — wave 4 (golang-troubleshooting). Plan:
 docs/superpowers/plans/2026-08-19-v0.1.2-skill-review.md (read ONLY the active task slice;
 resume protocol in the plan header). Dispatch review subagents per plan (task tool,
 general, strictly one at a time), findings under docs/superpowers/reviews/v0.1.2/.
@@ -29,11 +29,12 @@ go vet ./... && go test ./... + gofmt -l . + golangci-lint run ./...
 
 ## Last completed
 
-Wave 2 (safety): 22 findings (P0:2 P1:4 P2:6 P3:10) — 14 fixed (0975325 67ee663 080a935
-4ba4c2f 9cec00f 3b813f5 6a0bb98), 8 deferred (non-`contract-risk: none` auto-defers).
-R2d tool chunk first dispatch returned header-only (all 16 skipped) → plan's one split
-re-dispatch gave COVERAGE: full. Findings: 2 verified P0 panics (blank bash command,
-read offset/limit int overflow), tui SSE reconnect backoff 64-bit shift → tight loop.
+Wave 3 (error-handling): 24 findings (P0:0 P1:2 P2:8 P3:14) — 18 fixed (cbe91b8
+49299c8 a7e98bd ceb959a 4d5dd73 2e2f8f6 ac3201c 730effa; status commit 1fcf2a2),
+6 deferred (auto-defer `contract-risk: behavior`). The two P1s (both fixed):
+permission `resolve` early-returned on non-NotFound DB error (parked Ask hung the
+turn indefinitely) and handleSend's no-op `onDone` dropped the turn's final error
+(model-level failures logged/emitted nowhere).
 
 ## Key verified facts (so they don't get re-litigated)
 
