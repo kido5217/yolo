@@ -30,6 +30,7 @@ Read it before acting. For session state, read `docs/superpowers/PROGRESS.md` se
 4. **TUI is a pure client.** Non-test files under `internal/tui/` import only `internal/protocol` + `internal/tui/*` (+ stdlib/charm deps). `_test.go` may use `internal/server/testutil` (escape hatch). Enforced by Task 29.
 5. **Tests define the contract.** When the plan contradicts itself (or its own test code is buggy), resolve per the last-stated call, fix the test, and **log the deviation in `PROGRESS.md` → "Plan deviations logged"** with severity.
 6. **`PROGRESS.md` is never stale.** After any edit, plan, spec, design decision, deviation, or checkpoint — anything that changes what the next session must know — roll `docs/superpowers/PROGRESS.md` before moving on. It is the single thing a future session reads to resume; a stale one is a broken resume. What it holds and how to keep it small: "Commit & branch discipline."
+7. **Subagents one at a time.** Never dispatch more than one subagent concurrently (via the `task` tool): dispatch one, wait for it to fully return, then dispatch the next. This supersedes any plan/spec wording permitting parallel subagents (the v0.1.2 plan/spec "≤3 parallel" text was revised 2026-08-20; see PROGRESS.md deviation log).
 
 ## Commands & verification
 
@@ -61,7 +62,7 @@ Entries live under `superpowers:` skills; invoke a skill **before** acting when 
 | Committing changes | `git-commit` — conventional message from the actual diff |
 | Milestone finished / before merge | `requesting-code-review` — and `receiving-code-review` when feedback arrives |
 | A new spec needs an implementation plan | `writing-plans` — specs → `docs/superpowers/specs/`, plans → `docs/superpowers/plans/`, progress → `docs/superpowers/PROGRESS.md` |
-| 2+ independent tasks with no shared state | `dispatching-parallel-agents` |
+| 2+ independent tasks with no shared state | `dispatching-parallel-agents` — apply sequentially: one subagent at a time (core principle 7) |
 | Feature work needing workspace isolation | `using-git-worktrees` |
 | Implementation complete, deciding integration | `finishing-a-development-branch` |
 
