@@ -73,7 +73,18 @@ func (s *Server) providerEntries(dir string) ([]protocol.Provider, error) {
 func (s *Server) authSnapshot() auth.Store {
 	s.authMu.Lock()
 	defer s.authMu.Unlock()
-	return s.authStore
+	return s.snapshotStoreLocked()
+}
+
+// snapshotStoreLocked deep-copies the auth store so callers can read it
+// without authMu while handleAuthPut/Delete mutate the live map. The caller
+// must hold authMu.
+func (s *Server) snapshotStoreLocked() auth.Store {
+	out := make(auth.Store, len(s.authStore))
+	for k, v := range s.authStore {
+		out[k] = v
+	}
+	return out
 }
 
 // authState recomputes a provider's auth state in spec order (env ->
@@ -256,9 +267,9 @@ func (s *Server) handleAuthPut(w http.ResponseWriter, r *http.Request) {
 	}
 	s.authMu.Lock()
 	s.authStore.Set(r.PathValue("providerID"), body.Key)
-	err := auth.SaveTo(s.authStore, s.authPath)
+	snap := s.snapshotStoreLocked()
 	s.authMu.Unlock()
-	if err != nil {
+	if err := auth.SaveTo(snap, s.authPath); err != nil {
 		envelope(w, http.StatusInternalServerError, "save auth", nil)
 		return
 	}
@@ -268,9 +279,9 @@ func (s *Server) handleAuthPut(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAuthDelete(w http.ResponseWriter, r *http.Request) {
 	s.authMu.Lock()
 	s.authStore.Delete(r.PathValue("providerID"))
-	err := auth.SaveTo(s.authStore, s.authPath)
+	snap := s.snapshotStoreLocked()
 	s.authMu.Unlock()
-	if err != nil {
+	if err := auth.SaveTo(snap, s.authPath); err != nil {
 		envelope(w, http.StatusInternalServerError, "save auth", nil)
 		return
 	}
