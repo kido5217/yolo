@@ -143,12 +143,16 @@ func (s *Server) Start(addr string) (net.Addr, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.srv = &http.Server{Handler: s.handler}
+	srv := &http.Server{Handler: s.handler}
+	s.mu.Lock()
+	s.srv = srv
 	s.addr = ln.Addr()
+	bound := s.addr
+	s.mu.Unlock()
 	go func() {
-		_ = s.srv.Serve(ln)
+		_ = srv.Serve(ln)
 	}()
-	return s.addr, nil
+	return bound, nil
 }
 
 // Addr returns the bound listener address (nil before Start).
@@ -161,10 +165,13 @@ func (s *Server) Addr() net.Addr {
 // Shutdown gracefully stops the listener within ctx's budget (in-flight
 // handlers get to finish); a no-op if Start was never called.
 func (s *Server) Shutdown(ctx context.Context) {
-	if s.srv == nil {
+	s.mu.Lock()
+	srv := s.srv
+	s.mu.Unlock()
+	if srv == nil {
 		return
 	}
-	_ = s.srv.Shutdown(ctx)
+	_ = srv.Shutdown(ctx)
 }
 
 // Close shuts the listener down (2s grace).
