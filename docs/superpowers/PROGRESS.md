@@ -1,6 +1,6 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-21 (v0.1.2 in progress: wave 5 — security, step 1 done, next steps 2–6)
+**Updated:** 2026-08-21 (v0.1.2 in progress: wave 5/16 done, next wave 6 — database)
 
 Rolling checkpoint: active task + last-completed + verified facts + v0.1.2-era deviation log +
 open items. Keep it small — `git log --oneline` and the plan files are the archive (no
@@ -27,33 +27,29 @@ roll this file (active → one-line "Last completed", next task → "Active").
 
 ## Active
 
-v0.1.2 skill-driven review — wave 5 (golang-security), Step 1 done. Plan:
+v0.1.2 skill-driven review — wave 6 (golang-database), not started. Plan:
 docs/superpowers/plans/2026-08-19-v0.1.2-skill-review.md (read ONLY the active task slice;
-resume protocol in the plan header). Step 1 DONE: R5a (server+auth+config) and
-R5b (tool+log) both returned `COVERAGE: full` first try; 9 findings (P0:0 P1:1 P2:5 P3:2),
-of which 3 are `contract-risk: none`; findings committed with the plan-step-1 note (the
-docs(review) wave-5 commit). The P1: unbounded glob tree walk (glob.go:115 — collects all
-matches before the cap; `glob {path:"/"}` = OOM-killable). Next: Step 2–6 — fix subagent
-(Template F, `<SKILL>`=`golang-security`, `<FILES>`=both 05-security-*.md paths; security
-fixes get priority within the batch), full gate, PROGRESS roll + checkpoint (`wave 5/16
-done, next wave 6 — database`). Findings under docs/superpowers/reviews/v0.1.2/.
+resume protocol in the plan header). Task 6 = single chunk R6a (Template R: lens =
+golang-database, IDs `[database-<n>]`, scope block in Task 6 Step 1 — storage/dao.go,
+db.go, migrate.go, storage_test.go in full + deps.go/main.go call-site reads; findings →
+06-database-storage.md), then Steps 2–6 same shape as Task 1 (coverage verify, findings
+commit `docs(review): v0.1.2 — wave 6 (database): <N> findings (…)`, fix subagent
+(Template F, `<SKILL>`=`golang-database`) iff any `contract-risk: none`, gate, PROGRESS
+roll + checkpoint `wave 6/16 done, next wave 7 — design-patterns`). Findings under
+docs/superpowers/reviews/v0.1.2/.
 Commit gate:
 go vet ./... && go test ./... + gofmt -l . + golangci-lint run ./...
 
 ## Last completed
 
-Wave 4 (troubleshooting): 10 findings (P0:0 P1:2 P2:4 P3:4) — 4 fixed (5135b8e
-per-round ctx cancel so an abandoned PartStream unblocks instead of leaking
-goroutine+conn+body; 474faac rune-boundary 10 MB cap + typed dead-process EPIPE error;
-717b3d3 test-name typo; status commit 5a62f37), 6 deferred (auto-defer:
-5 `contract-risk: behavior` + 1 wire). The two P1s (both deferred, behavior): broad
-`overflowRe` misclassifies 401/403/413 provider errors as context overflow (turn ends
-nil-error with a synthetic overflow note) and `Deps.Log` documented `nil = no-op` but
-every call site dereferences it (nil logger → process-level panic on first DB/marshal error).
-DOX tree initialized (2026-08-20): child AGENTS.md at `internal/`,
-`internal/protocol`, `internal/tui`, `docs/superpowers/` (standard section
-shape); root Child DOX Index real, stale refs (branch `plan`, closed v1
-plan/spec rows, removed banner/thumbnail) generalized or dropped.
+Wave 5 (security): 9 findings (P0:0 P1:1 P2:5 P3:2) — 3 fixed (ff2fb09 auth.json
+re-chmod 0600 after every save; 6f16faf zen cache CreateTemp vs predictable `.tmp`
+symlink target; ad9fc09 log dir 0700 / file 0600), 5 deferred (all contract-tagged:
+http.Server read timeouts, the P1 unbounded glob tree walk (glob.go:115 — stopping
+early or dropping the full-tree sort changes which paths fill the capped 100-result
+output), bash `timeout: 0`/overflow, full-DP LCS in write/edit counts, log-injection
+sanitize), 0 FALSE / 0 WONTFIX (findings commit 0adc84e; status commits 9d463d4
+ea67e84). Fix subagent ran as YOLO per core principle 8 (deviation 69).
 
 ## Open items
 
@@ -124,3 +120,10 @@ Architecture line, per-wave dispatch lines; spec §1 decision 4, §3 step 1, §8
 core principle 7 + PROGRESS.md Active updated the same day. Wave 1 already ran under the
 old rule
 (deviation 67) — its historical records are unrewritten.
+69. Subagent dispatch type (process, minor, 2026-08-21): plan text says the fix
+subagent is dispatched as one `task` call, `general` (Task 1 Step 4, carried into all
+later waves via "same shape as Task 1"). Core principle 8 (AGENTS.md, added same day)
+supersedes plan text: root agent is YOLO → subagents must be YOLO. Wave-5 fix subagent
+dispatched as YOLO (first run 3 fixes + status commit 9d463d4; resumed once for
+deferred-status backfill ea67e84). Plan text left unedited — principle 8 governs all
+remaining dispatches; historical (waves 1–4) dispatch records unrewritten.
