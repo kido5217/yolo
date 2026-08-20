@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 // Implements the plan's IMPLEMENTATION FIX (locked): one shell for the whole
@@ -88,6 +89,31 @@ func TestBashTimeoutKillsAndReports(t *testing.T) {
 	out, err2 := Registry()["bash"].Run(context.Background(), raw2, env)
 	if err2 != nil || strings.TrimSpace(out.Text) != "alive" {
 		t.Fatalf("respawn failed: %v %q", err2, out.Text)
+	}
+}
+
+func TestShellOutputCapCutsAtRuneBoundary(t *testing.T) {
+	d := t.TempDir()
+	s := NewShell(d, Limits{2000, 50 * 1024})
+	t.Cleanup(func() {
+		if err := s.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	// One line of 10MiB-1 'a' bytes followed by a two-byte rune: the
+	// 10MiB output cap lands between the rune's bytes, so the cut must
+	// back off to the rune boundary instead of leaving a dangling
+	// continuation byte (invalid UTF-8) in the model-visible output.
+	cmd := `head -c 10485759 /dev/zero | tr '\0' 'a'; printf '\303\251\n'`
+	_, out, err := s.Exec(context.Background(), cmd, 20000, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !utf8.ValidString(out) {
+		t.Fatal("output cap left invalid UTF-8 at the cut")
+	}
+	if len(out) != 10485759 {
+		t.Fatalf("len(out) = %d, want %d", len(out), 10485759)
 	}
 }
 

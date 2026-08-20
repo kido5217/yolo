@@ -107,7 +107,7 @@ func (s *Shell) Exec(ctx context.Context, command string, timeoutMS int, onLine 
 	if _, err := io.WriteString(st.stdin, command+"\n"+marker+"\n"); err != nil {
 		s.st = nil
 		reapProc(st, true)
-		return 0, "", err
+		return 0, "", fmt.Errorf("shell: command process died: %w", err)
 	}
 
 	lines := st.lines
@@ -150,7 +150,7 @@ func (s *Shell) Exec(ctx context.Context, command string, timeoutMS int, onLine 
 			}
 			if room := shellOutputCap - buf.Len(); room > 0 {
 				if len(ev.raw) > room {
-					buf.WriteString(ev.raw[:room])
+					buf.WriteString(ev.raw[:cutAtRuneBoundary(ev.raw, room)])
 				} else {
 					buf.WriteString(ev.raw)
 				}
@@ -168,6 +168,17 @@ func (s *Shell) Exec(ctx context.Context, command string, timeoutMS int, onLine 
 			return 0, buf.String(), errShellAborted
 		}
 	}
+}
+
+// cutAtRuneBoundary returns the largest cut ≤ n such that s[:cut] ends at a
+// UTF-8 rune boundary: when the cap lands mid-rune (s[n] is a continuation
+// byte) it backs off to that rune's start, so output truncated at
+// shellOutputCap never carries a dangling continuation byte.
+func cutAtRuneBoundary(s string, n int) int {
+	for n > 0 && s[n]&0xC0 == 0x80 {
+		n--
+	}
+	return n
 }
 
 // shellProc is one live shell process plus its output pump.
