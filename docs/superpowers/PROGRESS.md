@@ -1,6 +1,6 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-20 (v0.1.2 in progress: wave 4/16 done, next wave 5 — security)
+**Updated:** 2026-08-21 (v0.1.2 in progress: wave 5 — security, step 1 done, next steps 2–6)
 
 Rolling checkpoint: active task + last-completed + verified facts + v0.1.2-era deviation log +
 open items. Keep it small — `git log --oneline` and the plan files are the archive (no
@@ -27,10 +27,16 @@ roll this file (active → one-line "Last completed", next task → "Active").
 
 ## Active
 
-v0.1.2 skill-driven review — wave 5 (golang-security). Plan:
+v0.1.2 skill-driven review — wave 5 (golang-security), Step 1 done. Plan:
 docs/superpowers/plans/2026-08-19-v0.1.2-skill-review.md (read ONLY the active task slice;
-resume protocol in the plan header). Dispatch review subagents per plan (task tool,
-general, strictly one at a time), findings under docs/superpowers/reviews/v0.1.2/.
+resume protocol in the plan header). Step 1 DONE: R5a (server+auth+config) and
+R5b (tool+log) both returned `COVERAGE: full` first try; 9 findings (P0:0 P1:1 P2:5 P3:2),
+of which 3 are `contract-risk: none`; findings committed with the plan-step-1 note (the
+docs(review) wave-5 commit). The P1: unbounded glob tree walk (glob.go:115 — collects all
+matches before the cap; `glob {path:"/"}` = OOM-killable). Next: Step 2–6 — fix subagent
+(Template F, `<SKILL>`=`golang-security`, `<FILES>`=both 05-security-*.md paths; security
+fixes get priority within the batch), full gate, PROGRESS roll + checkpoint (`wave 5/16
+done, next wave 6 — database`). Findings under docs/superpowers/reviews/v0.1.2/.
 Commit gate:
 go vet ./... && go test ./... + gofmt -l . + golangci-lint run ./...
 
