@@ -224,7 +224,13 @@ func readLines(fp string, offset, limit, maxBytes int) ([]string, int, bool, boo
 	}
 	defer f.Close()
 	start := offset - 1
-	raw := make([]string, 0, limit)
+	// Preallocation hint only: limit is model-controlled and may be huge
+	// (clamping limit itself would change line-count semantics).
+	capHint := limit
+	if capHint > 8192 {
+		capHint = 8192
+	}
+	raw := make([]string, 0, capHint)
 	count := 0
 	bytes := 0
 	var cut, more bool
@@ -294,7 +300,9 @@ func readDirListing(base, fp string, offset, limit int) (Output, error) {
 	sliced := []string{}
 	if start < len(names) {
 		end := start + limit
-		if end > len(names) {
+		// start < len(names) but start+limit may overflow int and go
+		// negative; clamp to the tail instead of a bad slice bound.
+		if end < 0 || end > len(names) {
 			end = len(names)
 		}
 		sliced = names[start:end]

@@ -74,7 +74,7 @@ func bashArgs(raw json.RawMessage) (command string, timeoutMS int, err error) {
 		return
 	}
 	v, _ := m["command"].(string)
-	if v == "" {
+	if strings.TrimSpace(v) == "" {
 		err = errors.New("command is required")
 		return
 	}

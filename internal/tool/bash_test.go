@@ -91,6 +91,13 @@ func TestBashTimeoutKillsAndReports(t *testing.T) {
 	}
 }
 
+func TestBashWhitespaceOnlyCommandRejected(t *testing.T) {
+	raw, _ := json.Marshal(map[string]any{"command": "   "})
+	if _, _, err := Registry()["bash"].Patterns(raw); err == nil {
+		t.Fatal("want error for whitespace-only command")
+	}
+}
+
 func TestBashPermissionPatterns(t *testing.T) {
 	raw, _ := json.Marshal(map[string]any{"command": "git commit -m x"})
 	res, always, err := Registry()["bash"].Patterns(raw)
