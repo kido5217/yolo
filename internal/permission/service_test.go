@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kido5217/yolo/internal/bus"
+	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/storage"
 )
 
@@ -128,6 +129,74 @@ func TestAlwaysPersistsRuleAndCoveredAutoAnswer(t *testing.T) {
 	// r2 auto-answered: no longer pending
 	if pend, _ := e.svc.Pending("ses_1"); len(pend) != 0 {
 		t.Fatalf("pending after always = %d", len(pend))
+	}
+}
+
+func TestReplyUnblocksAndPublishesWhenPersistFails(t *testing.T) {
+	e := newEnv(t)
+	if err := e.db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Agent: "build", Model: "k"}); err != nil {
+		t.Fatal(err)
+	}
+	sub, cancel := e.bus.Subscribe()
+	defer cancel()
+	req := e.req("per_9")
+	req.Permission = "custom" // no rule matches -> parks
+	done := make(chan Decision, 1)
+	go func() {
+		d, err := e.svc.Ask(context.Background(), req)
+		if err == nil {
+			done <- d
+		}
+	}()
+	e.awaitPending(t, 1)
+	// Simulate a transient DB failure at reply-persist time: close the
+	// handle, so ReplyPermission returns a non-ErrNotFound error.
+	if err := e.db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.Reply("per_9", "once"); err != nil {
+		t.Fatal(err)
+	}
+	// The decision must still reach the blocked asker (a DB write failure
+	// must not hang the turn).
+	select {
+	case d := <-done:
+		if d != Allow {
+			t.Fatalf("d = %v, want Allow", d)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("blocked ask not unblocked after persist failure (turn would hang)")
+	}
+	// ... and the permission.replied event must still be published.
+	for {
+		select {
+		case ev := <-sub:
+			if ev.Type == protocol.EventTypePermissionReplied {
+				return
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("permission.replied not published after persist failure")
+		}
+	}
+}
+
+func TestCustomAgentFallsBackToBuildMatrix(t *testing.T) {
+	e := newEnv(t)
+	if err := e.db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Agent: "build", Model: "k"}); err != nil {
+		t.Fatal(err)
+	}
+	// A config-defined custom agent evaluates against the build matrix
+	// (same as the engine's ruleset path), not an empty rule set: "read"
+	// of a plain source file is build-allow.
+	req := e.req("per_10")
+	req.Permission = "read"
+	req.Resources = []string{"src/x.go"}
+	req.Agent = "custom"
+	if d := e.svc.DecisionFor(req); d != Allow {
+		t.Fatalf("custom-agent DecisionFor = %v, want Allow (build matrix)", d)
+	}
+	if d := e.svc.EvaluateRules("custom", "/data", nil, "read", []string{"src/x.go"}); d != Allow {
+		t.Fatalf("custom-agent EvaluateRules = %v, want Allow (build matrix)", d)
 	}
 }
 

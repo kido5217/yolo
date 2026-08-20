@@ -30,12 +30,21 @@ var base = []protocol.Rule{
 // LoadBuiltins returns the ruleset for a built-in agent. "yolo" allows
 // everything with a single catch-all rule.
 func LoadBuiltins(agent, dataDir string) ([]protocol.Rule, error) {
+	if rules, ok := builtinMatrix(agent, dataDir); ok {
+		return rules, nil
+	}
+	return nil, fmt.Errorf("permission: unknown agent %q", agent)
+}
+
+// builtinMatrix maps a known built-in agent to its rule matrix; ok is false
+// for unknown (custom) agents.
+func builtinMatrix(agent, dataDir string) ([]protocol.Rule, bool) {
 	switch agent {
 	case "build":
 		return cloneBase(base,
 			protocol.Rule{Permission: "question", Pattern: "*", Action: RuleAllow},
 			protocol.Rule{Permission: "plan_enter", Pattern: "*", Action: RuleAllow},
-		), nil
+		), true
 	case "plan":
 		return cloneBase(base,
 			protocol.Rule{Permission: "question", Pattern: "*", Action: RuleAllow},
@@ -43,12 +52,23 @@ func LoadBuiltins(agent, dataDir string) ([]protocol.Rule, error) {
 			protocol.Rule{Permission: "external_directory", Pattern: dataDir + "/plans/*", Action: RuleAllow},
 			protocol.Rule{Permission: "edit", Pattern: "*", Action: RuleDeny},
 			protocol.Rule{Permission: "edit", Pattern: dataDir + "/plans/*.md", Action: RuleAllow},
-		), nil
+		), true
 	case "yolo":
-		return []protocol.Rule{{Permission: "*", Pattern: "*", Action: RuleAllow}}, nil
-	default:
-		return nil, fmt.Errorf("permission: unknown agent %q", agent)
+		return []protocol.Rule{{Permission: "*", Pattern: "*", Action: RuleAllow}}, true
 	}
+	return nil, false
+}
+
+// BuiltinsFor returns the agent's builtin rules with the v1 custom-agent
+// fallback: unknown (config-defined) agents evaluate against the build
+// matrix. Shared by the service's decision path and the engine's ruleset
+// path (session's rulesetForRow), so both see the same verdicts.
+func BuiltinsFor(agent, dataDir string) []protocol.Rule {
+	if rules, ok := builtinMatrix(agent, dataDir); ok {
+		return rules
+	}
+	rules, _ := builtinMatrix("build", dataDir)
+	return rules
 }
 
 func cloneBase(src []protocol.Rule, extra ...protocol.Rule) []protocol.Rule {

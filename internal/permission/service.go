@@ -12,6 +12,7 @@ import (
 
 	"github.com/kido5217/yolo/internal/bus"
 	"github.com/kido5217/yolo/internal/glob"
+	"github.com/kido5217/yolo/internal/log"
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/storage"
 )
@@ -46,6 +47,7 @@ type pendingEntry struct {
 type Service struct {
 	db  *storage.DB
 	bus *bus.Bus
+	lg  *log.Logger // nil = no-op
 
 	mu       sync.Mutex
 	pending  map[string]*pendingEntry
@@ -55,6 +57,15 @@ type Service struct {
 
 func New(db *storage.DB, b *bus.Bus) *Service {
 	return &Service{db: db, bus: b, pending: map[string]*pendingEntry{}}
+}
+
+// SetLogger sets the diagnostic logger (nil is a no-op). Production wiring
+// calls this before the service is used; like SetDataDir it is a
+// set-once-before-use seam, not a concurrent config surface.
+func (s *Service) SetLogger(lg *log.Logger) {
+	s.mu.Lock()
+	s.lg = lg
+	s.mu.Unlock()
 }
 
 // SetConfigRules stores the config permission rules used by DecisionFor
@@ -75,11 +86,9 @@ func (s *Service) SetDataDir(dir string) {
 
 // EvaluateRules evaluates builtins + config rules for an action.
 // Session always rules are not included (they need a session; see DecisionFor).
+// Unknown (custom) agents fall back to the build matrix via BuiltinsFor.
 func (s *Service) EvaluateRules(agent, dataDir string, cfgRules []protocol.Rule, action string, resources []string) Decision {
-	rules, err := LoadBuiltins(agent, dataDir)
-	if err != nil {
-		rules = []protocol.Rule{}
-	}
+	rules := BuiltinsFor(agent, dataDir)
 	all := make([]protocol.Rule, 0, len(rules)+len(cfgRules))
 	all = append(all, rules...)
 	all = append(all, cfgRules...)
@@ -97,14 +106,18 @@ func (s *Service) decisionFor(req Request) Decision {
 	if v, ok := req.Meta["data_dir"].(string); ok {
 		dataDir = v
 	}
-	rules, err := LoadBuiltins(req.Agent, dataDir)
-	if err != nil {
-		rules = []protocol.Rule{}
-	}
+	// Unknown (custom) agents fall back to the build matrix via
+	// BuiltinsFor (mirrors the engine's ruleset path).
+	rules := BuiltinsFor(req.Agent, dataDir)
 	s.mu.Lock()
 	cfg := s.cfgRules
 	s.mu.Unlock()
-	always, _ := s.db.AlwaysRules(req.SessionID)
+	always, err := s.db.AlwaysRules(req.SessionID)
+	if err != nil {
+		// Fail-safe: degrade to no always rules (re-asks at worst).
+		s.lg.Errorf("permission: always rules (session=%s): %v", req.SessionID, err)
+		always = []protocol.Rule{}
+	}
 	all := make([]protocol.Rule, 0, len(rules)+len(cfg)+len(always))
 	all = append(all, rules...)
 	all = append(all, cfg...)
@@ -262,7 +275,9 @@ func (s *Service) sessionPending(sessionID, skipID string) []*pendingEntry {
 }
 
 // resolve records the response, emits permission.replied, and delivers the
-// decision to the waiting asker.
+// decision to the waiting asker. Reply persistence is best-effort here: the
+// decision is already in memory, so deliver and publish happen regardless of
+// the DB result — a failed write must not strand the blocked Ask.
 func (s *Service) resolve(requestID string, d Decision, stored, wire string, auto bool) {
 	s.mu.Lock()
 	e, ok := s.pending[requestID]
@@ -273,14 +288,18 @@ func (s *Service) resolve(requestID string, d Decision, stored, wire string, aut
 	}
 	s.mu.Unlock()
 
-	if err := s.db.ReplyPermission(requestID, stored); err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return
+	if err := s.db.ReplyPermission(requestID, stored); err != nil {
+		if !errors.Is(err, storage.ErrNotFound) {
+			s.lg.Errorf("permission: persist reply %s: %v", requestID, err)
+		}
 	}
 	props := protocol.PermissionRepliedProps{RequestID: requestID, Reply: wire, Auto: auto}
 	if sessionID != "" {
 		props.SessionID = sessionID
 	}
-	if ev, err := protocol.MakeEvent(protocol.EventTypePermissionReplied, props); err == nil {
+	if ev, err := protocol.MakeEvent(protocol.EventTypePermissionReplied, props); err != nil {
+		s.lg.Errorf("permission: marshal %s: %v", protocol.EventTypePermissionReplied, err)
+	} else {
 		s.bus.Publish(ev)
 	}
 	if ok {
@@ -340,7 +359,9 @@ func (s *Service) publishAsked(req Request) {
 			props.Tool = &protocol.PermissionToolRef{CallID: req.RequestID}
 		}
 	}
-	if ev, err := protocol.MakeEvent(protocol.EventTypePermissionAsked, props); err == nil {
+	if ev, err := protocol.MakeEvent(protocol.EventTypePermissionAsked, props); err != nil {
+		s.lg.Errorf("permission: marshal %s: %v", protocol.EventTypePermissionAsked, err)
+	} else {
 		s.bus.Publish(ev)
 	}
 }

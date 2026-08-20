@@ -32,15 +32,10 @@ func (e *Engine) rulesetForRow(row storage.SessionRow) ([]protocol.Rule, error) 
 	if agent == "" {
 		agent = "build"
 	}
-	builtins, err := permission.LoadBuiltins(agent, e.dataDir)
-	if err != nil {
-		// unknown (custom) agent: fall back to the build matrix (v1
-		// custom-agent behavior)
-		builtins, err = permission.LoadBuiltins("build", e.dataDir)
-		if err != nil {
-			return nil, err
-		}
-	}
+	// unknown (custom) agent: fall back to the build matrix (v1
+	// custom-agent behavior) — the same fallback the service's decision
+	// path uses (permission.BuiltinsFor).
+	builtins := permission.BuiltinsFor(agent, e.dataDir)
 	ruleset := make([]protocol.Rule, 0, len(builtins)+4)
 	ruleset = append(ruleset, builtins...)
 	if cfg, err := e.loadCfg(row.ProjectDir); err == nil && cfg != nil {

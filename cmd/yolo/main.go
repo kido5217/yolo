@@ -145,6 +145,7 @@ func buildDeps(workDir string) (*server.Deps, func(), error) {
 		Dirs:    config.Dirs{Home: homeDir, Data: dataDir, Cache: cacheDir},
 		WorkDir: workDir,
 	}
+	deps.Perm.SetLogger(lob)
 
 	globalDir, err := config.GlobalYoloDir()
 	if err != nil {
