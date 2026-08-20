@@ -27,3 +27,27 @@ func TestMatch(t *testing.T) {
 		}
 	}
 }
+
+// Regression: uncompilable character classes (e.g. the empty class "[]")
+// must not panic; segmentRe falls back to the literal segment.
+func TestMatchUncompilableClassesNoPanic(t *testing.T) {
+	for _, tc := range []struct {
+		pattern, name string
+		want          bool
+	}{
+		{"[]", "[]", true},
+		{"[]", "a", false},
+		{"[]]", "[]]", true},
+		{"[]]", "a", false},
+		{"a[]b", "a[]b", true},
+		{"a[]b", "a[]c", false},
+		{"[]x", "[]x", true},
+		{"[]x", "xy", false},
+		{"**/[]", "a/[]", true},
+		{"**/[]", "a", false},
+	} {
+		if got := Match(tc.pattern, tc.name); got != tc.want {
+			t.Errorf("Match(%q, %q) = %v, want %v", tc.pattern, tc.name, got, tc.want)
+		}
+	}
+}
