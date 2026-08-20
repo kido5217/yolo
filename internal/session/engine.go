@@ -340,8 +340,11 @@ func (e *Engine) runTurn(ctx context.Context, sessionID string, row storage.Sess
 		if rules, perr := protocol.ParsePerms(cfg.Permission); perr == nil {
 			cfgRules = rules
 		}
-		e.perm.SetConfigRules(cfgRules)
 	}
+	// Always publish this turn's rules (empty when the load failed): a
+	// broken config degrades to no config rules instead of silently
+	// inheriting the previous turn's ruleset.
+	e.perm.SetConfigRules(cfgRules)
 	agent := row.Agent
 	if agent == "" {
 		agent = "build"
@@ -645,8 +648,9 @@ func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row stor
 			Type: kind, Text: st.buf.String(),
 			Time: protocol.PartTime{Start: st.start},
 		}
+		// Best-effort persistence: the delta still goes to the TUI.
 		if err := e.db.UpsertPart(storage.ProtocolToPart(p)); err != nil {
-			return
+			e.lg.Errorf("session: persist part %s (session=%s): %v", p.ID, sessionID, err)
 		}
 		e.publish(protocol.EventTypeMessagePartDelta, protocol.MessagePartDeltaProps{
 			SessionID: sessionID, MessageID: asstID, PartID: st.id, Field: kind, Delta: delta,
@@ -661,8 +665,9 @@ func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row stor
 			Type: kind, Text: st.buf.String(),
 			Time: protocol.PartTime{Start: st.start},
 		}
+		// Best-effort persistence: the part-created event still goes out.
 		if err := e.db.UpsertPart(storage.ProtocolToPart(p)); err != nil {
-			return
+			e.lg.Errorf("session: persist part %s (session=%s): %v", p.ID, sessionID, err)
 		}
 		e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{SessionID: sessionID, Part: p, Time: e.clock()})
 		e.publish(protocol.EventTypeMessagePartDelta, protocol.MessagePartDeltaProps{
@@ -678,7 +683,9 @@ func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row stor
 			Type: kind, Text: st.buf.String(),
 			Time: protocol.PartTime{Start: st.start, End: e.clock()},
 		}
-		_ = e.db.UpsertPart(storage.ProtocolToPart(p))
+		if err := e.db.UpsertPart(storage.ProtocolToPart(p)); err != nil {
+			e.lg.Errorf("session: persist part %s (session=%s): %v", p.ID, sessionID, err)
+		}
 		e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{SessionID: sessionID, Part: p, Time: e.clock()})
 	}
 
@@ -801,7 +808,10 @@ func (e *Engine) finishRound(asstID, sessionID, agent string, now int64, model p
 		ID: asstID, SessionID: sessionID, Role: "assistant", Agent: agent,
 		Cost: cost, Tokens: tok, TimeCreated: now, TimeCompleted: &end,
 	}); err != nil {
-		return
+		// Best-effort: a failed write must not strand the TUI in a
+		// cost-less/incomplete final state, so the final message.updated
+		// still goes out.
+		e.lg.Errorf("session: update message %s (session=%s): %v", asstID, sessionID, err)
 	}
 	asstMsg.Cost = cost
 	asstMsg.Tokens = &tok
@@ -823,7 +833,9 @@ func (e *Engine) saveSynthetic(sessionID, asstID, text string) {
 		Type: "text", Text: text, Synthetic: &syn,
 		Time: protocol.PartTime{Start: start, End: e.clock()},
 	}
-	_ = e.db.UpsertPart(storage.ProtocolToPart(p))
+	if err := e.db.UpsertPart(storage.ProtocolToPart(p)); err != nil {
+		e.lg.Errorf("session: persist part %s (session=%s): %v", p.ID, sessionID, err)
+	}
 	e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{SessionID: sessionID, Part: p, Time: e.clock()})
 }
 
@@ -1042,7 +1054,9 @@ func (e *Engine) saveToolPart(sessionID, asstID, callID, name string, input map[
 		ID: callID, SessionID: sessionID, MessageID: asstID,
 		Type: "tool", Tool: name, CallID: callID, State: st,
 	}
-	_ = e.db.UpsertPart(storage.ProtocolToPart(p))
+	if err := e.db.UpsertPart(storage.ProtocolToPart(p)); err != nil {
+		e.lg.Errorf("session: persist part %s (session=%s): %v", p.ID, sessionID, err)
+	}
 	e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{SessionID: sessionID, Part: p, Time: e.clock()})
 }
 
