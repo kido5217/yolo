@@ -1,9 +1,16 @@
-# golang-concurrency — session+permission+bus
-Date: 2026-08-20 · chunk: session+permission+bus · source files: 15
+# golang-concurrency — session
+Date: 2026-08-20 · chunk: session (backfill) · source files: 8
 ## Findings
-- none
+- [concurrency-1] P2 internal/session/engine.go:315-328 — runTurn has no panic recovery: a panic in any tool (t.Run, engine.go:1006), driver (stream.Next, engine.go:680) or DB call escapes the turn goroutine; the defer still fires `onDone(nil)` because turnErr is never set on the panic path (misleading "success" to the caller) and the un-recovered panic then crashes the whole process — fix: add a `recover()` in the exit defer that captures the panic value into turnErr (map it to a turn error rather than re-panicking) so the process survives and onDone reports a real error — contract-risk: behavior
+- [concurrency-2] P2 internal/session/engine.go:201-211 — `Close` removes and closes a session's `*tool.Shell` without checking/waiting on the busy map (Shutdown:244-250 has the same shape on its 5s-overflow path); an in-flight bash tool in an active turn already holds the shell via shellFor (engine.go:1000) and can operate on the just-closed shell (use-after-close → tool error, or a panic depending on tool.Shell internals) — fix: make `Close` no-op (or wait) while Status is busy, or document+enforce that only idle sessions may be Closed — contract-risk: behavior
+- [concurrency-3] P3 internal/session/engine.go:615-617 — `case <-time.After(delay)` allocates a fresh timer on every retry attempt (up to 4 per round × 50 rounds); per the skill, a reusable `time.NewTimer`/`Reset` (or a `time.Ticker`) is preferred over repeated `time.After` for repeated waits — fix: hoist a `time.NewTimer(delay)` above the attempt loop and `Reset` it per retry — contract-risk: none
+- [concurrency-4] P3 internal/session/engine.go:1053-1054 — the title goroutine is spawned from `context.WithTimeout(context.Background(), 30s)` and can only exit via that timeout, so it cannot be signalled to stop and does not participate in `Shutdown`/abort, lingering up to 30s independently of the session — fix: derive its ctx from an engine-level cancellable (e.g. a root ctx that Shutdown cancels) so it ends promptly on shutdown — contract-risk: behavior
+- [concurrency-5] P3 internal/session/engine.go:151-159 — on Send's early-fail path (CreateMessage / UpsertPart error) `idleAndRelease` (engine.go:255) publishes a `session.status idle` with no preceding `busy` (busy is only ever published inside runTurn, which never started), emitting a lone status-transition SSE event for a transition no client observed — fix: skip the idle publish when the turn never started (or flip busy to true before persisting) — contract-risk: wire
+- [concurrency-6] P3 internal/session/engine.go:190-197 — `Abort` reads the cancel func under the lock, unlocks, then invokes it (TOCTOU): if the old turn ends and a new turn starts in that window, `cancel()` hits the stale (already-done) ctx yet still returns `true`, so Abort reports success while the newly-started turn keeps running — fix: re-resolve the current cancel under the lock immediately before invoking (or atomically pop-then-cancel) — contract-risk: behavior
 ## Deferred / Noted (no fix in 0.1.2)
-- none
+- nil-logger nil-safety: engine.go:363/603/744 call `e.lg.Infof`/`Errorf` unconditionally on the assumption that `*log.Logger` is nil-receiver-safe (Deps comment "nil = no-op", engine.go:54); verify internal/log methods are nil-safe — a non-nil-safe logger would panic the turn (internal/log is out of scope)
+- concurrent `*storage.DB` access between the turn and title goroutines (e.g. title's UpdateSession vs turn's ListMessages/UpsertPart): full-package `go test -race ./internal/session` is clean, so no detectable race; deep thread-safety confirmation deferred to the storage wave (out of scope)
+- note (evidence, not a fix): `go vet ./internal/session/` clean; `go test -race -count=1 ./internal/session` passes (no runtime-detected data race) — the P2 items above are latent (panic-path / caller-sequencing), not live
 ## Stats
-P0:0 P1:0 P2:0 P3:0
-COVERAGE: skipped — internal/session/* internal/permission/* internal/bus/* (review subagent failed both dispatches: returned empty without writing this file; recorded in PROGRESS.md open items)
+P0:0 P1:0 P2:2 P3:4
+COVERAGE: full — skipped: none
