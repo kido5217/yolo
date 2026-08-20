@@ -27,6 +27,20 @@ func newEnv(t *testing.T) *env {
 	return &env{db: db, bus: b, svc: New(db, b)}
 }
 
+// awaitPending polls Pending until it holds exactly want entries, failing on
+// a 2s deadline — a deterministic park-wait (fixed sleeps flake under load).
+func (e *env) awaitPending(t *testing.T, want int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if pend, _ := e.svc.Pending("ses_1"); len(pend) == want {
+			return
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	t.Fatalf("pending did not reach %d entries", want)
+}
+
 func (e *env) req(id string) Request {
 	return Request{RequestID: id, SessionID: "ses_1", Agent: "build",
 		Permission: "read", Tool: "read", Resources: []string{"src/x.go"}, Always: []string{"src/*"},
@@ -73,7 +87,7 @@ func TestAskAskBlocksThenOnce(t *testing.T) {
 			done <- d
 		}
 	}()
-	time.Sleep(100 * time.Millisecond) // let it park
+	e.awaitPending(t, 1)
 	if pend, _ := e.svc.Pending("ses_1"); len(pend) != 1 {
 		t.Fatalf("pending = %d", len(pend))
 	}
@@ -103,7 +117,7 @@ func TestAlwaysPersistsRuleAndCoveredAutoAnswer(t *testing.T) {
 	r2.Resources = []string{"a/c"}
 	go func() { _, _ = e.svc.Ask(context.Background(), r1) }()
 	go func() { _, _ = e.svc.Ask(context.Background(), r2) }()
-	time.Sleep(100 * time.Millisecond)
+	e.awaitPending(t, 2)
 	if err := e.svc.Reply("per_3", "always"); err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +142,7 @@ func TestRejectCascade(t *testing.T) {
 	res2 := make(chan Decision, 1)
 	go func() { d, _ := e.svc.Ask(context.Background(), r1); res1 <- d }()
 	go func() { d, _ := e.svc.Ask(context.Background(), r2); res2 <- d }()
-	time.Sleep(100 * time.Millisecond)
+	e.awaitPending(t, 2)
 	if err := e.svc.Reply("per_5", "reject"); err != nil {
 		t.Fatal(err)
 	}
