@@ -69,7 +69,11 @@ func TestSaveIs0600(t *testing.T) {
 	if err := auth.Save(s); err != nil {
 		t.Fatal(err)
 	}
-	fi, err := os.Stat(auth.Path())
+	path, err := auth.Path()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fi, err := os.Stat(path)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -23,8 +23,12 @@ type Entry struct {
 type Store map[string]Entry
 
 // Path is <DataYoloDir>/auth.json.
-func Path() string {
-	return filepath.Join(config.DataYoloDir(), "auth.json")
+func Path() (string, error) {
+	d, err := config.DataYoloDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(d, "auth.json"), nil
 }
 
 // LoadFrom reads a store at path; a missing file is an empty store (M5
@@ -48,7 +52,13 @@ func LoadFrom(path string) (Store, error) {
 }
 
 // Load reads the store; a missing file is an empty store.
-func Load() (Store, error) { return LoadFrom(Path()) }
+func Load() (Store, error) {
+	p, err := Path()
+	if err != nil {
+		return nil, err
+	}
+	return LoadFrom(p)
+}
 
 // SaveTo writes the store at path: dir 0700, file 0600 (M5 injectable path;
 // Save delegates here).
@@ -64,7 +74,13 @@ func SaveTo(s Store, path string) error {
 }
 
 // Save writes the store dir 0700, file 0600.
-func Save(s Store) error { return SaveTo(s, Path()) }
+func Save(s Store) error {
+	p, err := Path()
+	if err != nil {
+		return err
+	}
+	return SaveTo(s, p)
+}
 
 // Set upserts a provider's key.
 func (s Store) Set(providerID, key string) {

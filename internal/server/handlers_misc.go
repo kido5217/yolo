@@ -35,7 +35,11 @@ var commands = []protocol.Command{
 // config-defined ones, with per-request auth state and env. (The plan scopes
 // /provider here so config providers resolve against the request directory.)
 func (s *Server) providerEntries(dir string) ([]protocol.Provider, error) {
-	cfg, err := s.Config.LoadAt(s.globalDir(), dir)
+	gdir, err := s.globalDir()
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := s.Config.LoadAt(gdir, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +133,12 @@ func (s *Server) handleProviderAuth(w http.ResponseWriter, _ *http.Request) {
 		envelope(w, http.StatusInternalServerError, "list providers", nil)
 		return
 	}
-	cfg, err := s.Config.LoadAt(s.globalDir(), dir)
+	gdir, gerr := s.globalDir()
+	if gerr != nil {
+		envelope(w, http.StatusInternalServerError, "load config", nil)
+		return
+	}
+	cfg, err := s.Config.LoadAt(gdir, dir)
 	if err != nil {
 		envelope(w, http.StatusInternalServerError, "load config", nil)
 		return
@@ -153,7 +162,12 @@ func (s *Server) handleConfigGet(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	cfg, err := s.Config.LoadAt(s.globalDir(), dir)
+	gdir, gerr := s.globalDir()
+	if gerr != nil {
+		envelope(w, http.StatusInternalServerError, "load config", nil)
+		return
+	}
+	cfg, err := s.Config.LoadAt(gdir, dir)
 	if err != nil {
 		envelope(w, http.StatusInternalServerError, "load config", nil)
 		return
@@ -178,7 +192,12 @@ func (s *Server) handleConfigPatch(w http.ResponseWriter, r *http.Request) {
 		envelope(w, http.StatusInternalServerError, "write project config", nil)
 		return
 	}
-	cfg, err := s.Config.LoadAt(s.globalDir(), dir)
+	gdir, gerr := s.globalDir()
+	if gerr != nil {
+		envelope(w, http.StatusInternalServerError, "load config", nil)
+		return
+	}
+	cfg, err := s.Config.LoadAt(gdir, dir)
 	if err != nil {
 		envelope(w, http.StatusInternalServerError, "load config", nil)
 		return
@@ -208,7 +227,12 @@ func writeProjectLayer(dir string, partial map[string]any) error {
 }
 
 func (s *Server) handleGlobalConfigGet(w http.ResponseWriter, _ *http.Request) {
-	cfg, err := config.LoadGlobal(s.globalDir())
+	gdir, err := s.globalDir()
+	if err != nil {
+		envelope(w, http.StatusInternalServerError, "load global config", nil)
+		return
+	}
+	cfg, err := config.LoadGlobal(gdir)
 	if err != nil {
 		envelope(w, http.StatusInternalServerError, "load global config", nil)
 		return
@@ -225,7 +249,11 @@ func (s *Server) handleGlobalConfigPatch(w http.ResponseWriter, r *http.Request)
 		envelope(w, http.StatusBadRequest, "invalid config JSON", nil)
 		return
 	}
-	dir := s.globalDir()
+	dir, err := s.globalDir()
+	if err != nil {
+		envelope(w, http.StatusInternalServerError, "load global config", nil)
+		return
+	}
 	path := filepath.Join(dir, "yolo.jsonc")
 	existing := map[string]any{}
 	if raw, err := os.ReadFile(path); err == nil {
@@ -265,6 +293,10 @@ func (s *Server) handleAuthPut(w http.ResponseWriter, r *http.Request) {
 		envelope(w, http.StatusBadRequest, "invalid key", nil)
 		return
 	}
+	if s.authErr != nil {
+		envelope(w, http.StatusInternalServerError, "auth store unavailable", nil)
+		return
+	}
 	s.authMu.Lock()
 	s.authStore.Set(r.PathValue("providerID"), body.Key)
 	snap := s.snapshotStoreLocked()
@@ -277,6 +309,10 @@ func (s *Server) handleAuthPut(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAuthDelete(w http.ResponseWriter, r *http.Request) {
+	if s.authErr != nil {
+		envelope(w, http.StatusInternalServerError, "auth store unavailable", nil)
+		return
+	}
 	s.authMu.Lock()
 	s.authStore.Delete(r.PathValue("providerID"))
 	snap := s.snapshotStoreLocked()
@@ -293,17 +329,21 @@ func (s *Server) handleAuthDelete(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAgent(w http.ResponseWriter, _ *http.Request) {
 	out := make([]protocol.Agent, 0, 4)
 	out = append(out, baseAgents...)
-	if cfg, err := s.Config.LoadAt(s.globalDir(), s.WorkDir); err == nil {
-		known := map[string]bool{"build": true, "plan": true, "yolo": true}
-		ids := make([]string, 0, len(cfg.Agents))
-		for id := range cfg.Agents {
-			if !known[id] {
-				ids = append(ids, id)
+	// best-effort: a global-dir or config load failure just omits
+	// config-defined agents.
+	if gdir, gerr := s.globalDir(); gerr == nil {
+		if cfg, err := s.Config.LoadAt(gdir, s.WorkDir); err == nil {
+			known := map[string]bool{"build": true, "plan": true, "yolo": true}
+			ids := make([]string, 0, len(cfg.Agents))
+			for id := range cfg.Agents {
+				if !known[id] {
+					ids = append(ids, id)
+				}
 			}
-		}
-		sort.Strings(ids)
-		for _, id := range ids {
-			out = append(out, protocol.Agent{Name: id, Description: "Custom agent.", Mode: "primary", Options: map[string]any{}})
+			sort.Strings(ids)
+			for _, id := range ids {
+				out = append(out, protocol.Agent{Name: id, Description: "Custom agent.", Mode: "primary", Options: map[string]any{}})
+			}
 		}
 	}
 	writeJSON(w, http.StatusOK, out)

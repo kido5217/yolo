@@ -55,6 +55,9 @@ type Server struct {
 	authMu    sync.Mutex
 	authPath  string
 	authStore auth.Store
+	// authErr is set when initAuth cannot resolve the auth file at all
+	// (zero Dirs plus an unresolvable XDG home); auth routes answer with 500.
+	authErr error
 }
 
 // New returns the core API as a plain http.Handler.
@@ -73,7 +76,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func build(d Deps) http.Handler {
 	s := &Server{Deps: d}
-	s.initAuth()
+	if err := s.initAuth(); err != nil {
+		s.authErr = err
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /global/health", s.handleHealth)
 	mux.HandleFunc("GET /path", s.handlePath)
@@ -112,29 +117,41 @@ func build(d Deps) http.Handler {
 }
 
 // initAuth loads the boot-lifetime auth store from <Dirs.Data>/auth.json
-// (missing file = empty store).
-func (s *Server) initAuth() {
-	s.authPath = authPath(s.Dirs)
-	if st, err := auth.LoadFrom(s.authPath); err == nil {
-		s.authStore = st
-	} else {
-		s.authStore = auth.Store{}
+// (missing file = empty store). A corrupt or unreadable file also starts
+// empty but is logged — never silently; an unresolvable path at all (zero
+// Dirs, broken home) is the returned error.
+func (s *Server) initAuth() error {
+	p, err := authPath(s.Dirs)
+	if err != nil {
+		return err
 	}
+	s.authPath = p
+	st, err := auth.LoadFrom(s.authPath)
+	switch {
+	case err == nil:
+		s.authStore = st
+	case os.IsNotExist(err):
+		s.authStore = auth.Store{}
+	default:
+		s.authStore = auth.Store{}
+		s.Log.Errorf("auth load (%s): %v", s.authPath, err)
+	}
+	return nil
 }
 
-func authPath(d config.Dirs) string {
+func authPath(d config.Dirs) (string, error) {
 	if d.Data == "" {
 		return auth.Path()
 	}
-	return filepath.Join(d.Data, "auth.json")
+	return filepath.Join(d.Data, "auth.json"), nil
 }
 
 // globalDir is <Dirs.Home>/yolo; zero Home falls back to the real XDG home.
-func (s *Server) globalDir() string {
+func (s *Server) globalDir() (string, error) {
 	if s.Dirs.Home == "" {
 		return config.GlobalYoloDir()
 	}
-	return filepath.Join(s.Dirs.Home, "yolo")
+	return filepath.Join(s.Dirs.Home, "yolo"), nil
 }
 
 // Start listens on addr (":0" = ephemeral) and serves in a goroutine.

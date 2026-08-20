@@ -104,7 +104,18 @@ func workDir(flagDir string) (string, error) {
 // network; any other env runs the live registry.
 func buildDeps(workDir string) (*server.Deps, func(), error) {
 	loader := config.Loader{} // nil Env view = real process environment
-	dataDir := config.DataYoloDir()
+	homeDir, err := config.Home()
+	if err != nil {
+		return nil, nil, err
+	}
+	dataDir, err := config.DataYoloDir()
+	if err != nil {
+		return nil, nil, err
+	}
+	cacheDir, err := config.CacheYoloDir()
+	if err != nil {
+		return nil, nil, err
+	}
 	lob := log.New(dataDir)
 
 	fail := func(err error) (*server.Deps, func(), error) {
@@ -124,15 +135,22 @@ func buildDeps(workDir string) (*server.Deps, func(), error) {
 
 	b := bus.New()
 	deps := &server.Deps{
-		DB:      db,
-		Bus:     b,
-		Perm:    permission.New(db, b),
-		Config:  loader,
-		Log:     lob,
-		WorkDir: workDir, // zero Dirs = real XDG roots
+		DB:     db,
+		Bus:    b,
+		Perm:   permission.New(db, b),
+		Config: loader,
+		Log:    lob,
+		// Dirs are resolved above: the server never re-resolves XDG itself
+		// (a broken home is a buildDeps error, not a per-request 500).
+		Dirs:    config.Dirs{Home: homeDir, Data: dataDir, Cache: cacheDir},
+		WorkDir: workDir,
 	}
 
-	globalDir := config.GlobalYoloDir()
+	globalDir, err := config.GlobalYoloDir()
+	if err != nil {
+		closeDB()
+		return fail(err)
+	}
 	cfg, err := loader.LoadAt(globalDir, workDir)
 	if err != nil {
 		closeDB()

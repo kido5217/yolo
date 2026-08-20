@@ -14,7 +14,9 @@ func TestAuthSnapshotIsDecoupledFromLiveStore(t *testing.T) {
 	// Construct the way build() does (NewServer returns a lifecycle-only
 	// wrapper whose auth state lives on the handler-bound instance).
 	s := &Server{Deps: Deps{WorkDir: t.TempDir(), Dirs: config.Dirs{Data: t.TempDir()}}}
-	s.initAuth()
+	if err := s.initAuth(); err != nil {
+		t.Fatal(err)
+	}
 	s.authMu.Lock()
 	s.authStore.Set("openrouter", "old-key")
 	s.authMu.Unlock()

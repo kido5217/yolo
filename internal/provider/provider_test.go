@@ -184,8 +184,11 @@ func TestRegistryListAndResolve(t *testing.T) {
 	d.KidoBase = kidoSrv.URL
 	d.ZenCatalog = zenSrv.URL
 	cfg := &protocol.Config{}
-	reg, err := provider.New(context.Background(), cfg, http.DefaultClient,
-		provider.OverridableDirs(d, true)) // true = use injected URLs
+	odirs, err := provider.OverridableDirs(d, true) // true = use injected URLs
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg, err := provider.New(context.Background(), cfg, http.DefaultClient, odirs)
 	if err != nil {
 		t.Fatal(err)
 	}

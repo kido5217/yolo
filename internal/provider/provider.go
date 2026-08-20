@@ -52,22 +52,33 @@ type Dirs struct {
 	ZenCache   string // production <config.CacheYoloDir>/models.json
 }
 
-func DirsDefaults() Dirs {
+func DirsDefaults() (Dirs, error) {
+	home, err := config.Home()
+	if err != nil {
+		return Dirs{}, err
+	}
+	cache, err := config.CacheYoloDir()
+	if err != nil {
+		return Dirs{}, err
+	}
 	return Dirs{
-		Home:       config.Home(),
+		Home:       home,
 		KidoBase:   "https://ai.kido.ws/v1",
 		ZenBase:    "https://opencode.ai/zen/v1",
 		ZenCatalog: "https://models.opencode.ai/api.json",
-		ZenCache:   config.CacheYoloDir() + "/models.json",
-	}
+		ZenCache:   cache + "/models.json",
+	}, nil
 }
 
 // OverridableDirs fills empty fields with production defaults when fill is
 // true; when false the production defaults are returned verbatim.
-func OverridableDirs(d Dirs, fill bool) Dirs {
-	prod := DirsDefaults()
+func OverridableDirs(d Dirs, fill bool) (Dirs, error) {
+	prod, err := DirsDefaults()
+	if err != nil {
+		return Dirs{}, err
+	}
 	if !fill {
-		return prod
+		return prod, nil
 	}
 	if d.Home == "" {
 		d.Home = prod.Home
@@ -84,7 +95,7 @@ func OverridableDirs(d Dirs, fill bool) Dirs {
 	if d.ZenCache == "" {
 		d.ZenCache = prod.ZenCache
 	}
-	return d
+	return d, nil
 }
 
 // New builds the registry: kido (live/fallback), zen (cached catalog), and
@@ -93,7 +104,10 @@ func New(ctx context.Context, cfg *protocol.Config, httpc *http.Client, homeDirs
 	if httpc == nil {
 		httpc = http.DefaultClient
 	}
-	dirs := OverridableDirs(homeDirs, true)
+	dirs, err := OverridableDirs(homeDirs, true)
+	if err != nil {
+		return nil, err
+	}
 	if cfg == nil {
 		cfg = &protocol.Config{}
 	}

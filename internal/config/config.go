@@ -4,6 +4,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -13,34 +14,65 @@ import (
 	"github.com/kido5217/yolo/internal/protocol"
 )
 
-// XDG roots.
-func Home() string {
+// XDG roots; a broken home (no XDG override, $HOME unset and no passwd
+// entry) is an error so config never silently degrades to CWD-relative
+// paths.
+func Home() (string, error) {
 	if v := os.Getenv("XDG_CONFIG_HOME"); v != "" {
-		return v
+		return v, nil
 	}
-	h, _ := os.UserHomeDir()
-	return filepath.Join(h, ".config")
+	h, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("xdg config home: %w", err)
+	}
+	return filepath.Join(h, ".config"), nil
 }
 
-func Data() string {
+func Data() (string, error) {
 	if v := os.Getenv("XDG_DATA_HOME"); v != "" {
-		return v
+		return v, nil
 	}
-	h, _ := os.UserHomeDir()
-	return filepath.Join(h, ".local", "share")
+	h, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("xdg data home: %w", err)
+	}
+	return filepath.Join(h, ".local", "share"), nil
 }
 
-func Cache() string {
+func Cache() (string, error) {
 	if v := os.Getenv("XDG_CACHE_HOME"); v != "" {
-		return v
+		return v, nil
 	}
-	h, _ := os.UserHomeDir()
-	return filepath.Join(h, ".cache")
+	h, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("xdg cache home: %w", err)
+	}
+	return filepath.Join(h, ".cache"), nil
 }
 
-func GlobalYoloDir() string { return filepath.Join(Home(), "yolo") }
-func DataYoloDir() string   { return filepath.Join(Data(), "yolo") }
-func CacheYoloDir() string  { return filepath.Join(Cache(), "yolo") }
+func GlobalYoloDir() (string, error) {
+	h, err := Home()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(h, "yolo"), nil
+}
+
+func DataYoloDir() (string, error) {
+	d, err := Data()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(d, "yolo"), nil
+}
+
+func CacheYoloDir() (string, error) {
+	c, err := Cache()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(c, "yolo"), nil
+}
 
 // Dirs carries the three XDG roots; zero value = real XDG. Server/test injection.
 type Dirs struct{ Home, Data, Cache string }
@@ -61,7 +93,11 @@ func (l Loader) EnvVal(name string) (string, bool) {
 
 // Load wraps LoadAt with the real global dir and workDir as startDir.
 func (l Loader) Load(workDir string) (*protocol.Config, error) {
-	return l.LoadAt(GlobalYoloDir(), workDir)
+	g, err := GlobalYoloDir()
+	if err != nil {
+		return nil, err
+	}
+	return l.LoadAt(g, workDir)
 }
 
 const (
@@ -208,7 +244,13 @@ func (l Loader) readFile(path string) (map[string]any, error) {
 		}
 		return nil, err
 	}
-	return UnmarshalJSONC(data)
+	m, err := UnmarshalJSONC(data)
+	if err != nil {
+		// LoadAt merges many candidate files; a bare parse error names
+		// none of them.
+		return nil, fmt.Errorf("parsing %s: %w", path, err)
+	}
+	return m, nil
 }
 
 // UnmarshalJSONC parses JSON with comments into a map.
