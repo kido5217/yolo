@@ -99,7 +99,7 @@ func New(ctx context.Context, cfg *protocol.Config, httpc *http.Client, homeDirs
 	}
 	r := &Registry{client: httpc, defProvider: "kido", defModel: "Qwen3.8-27B"}
 
-	kidoModels, err := FetchKido(ctx, dirs.KidoBase, 5000, false)
+	kidoModels, err := FetchKido(ctx, dirs.KidoBase, 5000, false, httpc)
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +110,7 @@ func New(ctx context.Context, cfg *protocol.Config, httpc *http.Client, homeDirs
 	}
 	r.info = append(r.info, kido)
 
-	if raw, lerr := NewCatalogPolicy(dirs.ZenCache, 5, dirs.ZenCatalog).Load(ctx); lerr == nil {
+	if raw, lerr := NewCatalogPolicy(dirs.ZenCache, 5, dirs.ZenCatalog, httpc).Load(ctx); lerr == nil {
 		models, perr := ParseZenCatalog(raw)
 		if perr == nil {
 			meta := zenMeta(raw)

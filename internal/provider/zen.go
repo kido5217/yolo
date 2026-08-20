@@ -96,10 +96,14 @@ type CatalogPolicy struct {
 	cachePath string
 	ttl       time.Duration
 	liveURL   string
+	client    *http.Client
 }
 
-func NewCatalogPolicy(cachePath string, ttlMin int, liveURL string) *CatalogPolicy {
-	return &CatalogPolicy{cachePath: cachePath, ttl: time.Duration(ttlMin) * time.Minute, liveURL: liveURL}
+func NewCatalogPolicy(cachePath string, ttlMin int, liveURL string, client *http.Client) *CatalogPolicy {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	return &CatalogPolicy{cachePath: cachePath, ttl: time.Duration(ttlMin) * time.Minute, liveURL: liveURL, client: client}
 }
 
 func (p *CatalogPolicy) Load(ctx context.Context) ([]byte, error) {
@@ -144,7 +148,7 @@ func (p *CatalogPolicy) fetch(ctx context.Context) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) yolo")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := p.client.Do(req)
 	if err != nil {
 		return nil, err
 	}

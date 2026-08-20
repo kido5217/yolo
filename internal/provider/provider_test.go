@@ -34,7 +34,7 @@ func TestKidoParsesLlamacpp(t *testing.T) {
 		_, _ = w.Write(raw)
 	}))
 	defer srv.Close()
-	m, err := provider.FetchKido(context.Background(), srv.URL+"/v1", 5, false)
+	m, err := provider.FetchKido(context.Background(), srv.URL+"/v1", 5, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,12 +48,38 @@ func TestKidoParsesLlamacpp(t *testing.T) {
 }
 
 func TestKidoFallsBackStaticOnNetworkError(t *testing.T) {
-	m, err := provider.FetchKido(context.Background(), "http://127.0.0.1:1", 200, false)
+	m, err := provider.FetchKido(context.Background(), "http://127.0.0.1:1", 200, false, nil)
 	if err != nil {
 		t.Fatalf("fallback must not error: %v", err)
 	}
 	if len(m) != 1 || m[0].ID != "Qwen3.8-27B" || m[0].Context != 262144 {
 		t.Fatalf("fallback model = %+v", m)
+	}
+}
+
+func TestKidoSkipsInvalidEntries(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[
+			{"id":"","meta":{"n_ctx":4096}},
+			{"id":"broken","meta":{"n_ctx":0}},
+			{"id":"good","meta":{"n_ctx":8192}}
+		]}`))
+	}))
+	defer srv.Close()
+	m, err := provider.FetchKido(context.Background(), srv.URL, 5000, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m) != 1 || m[0].ID != "good" || m[0].Context != 8192 || m[0].Output != 1024 {
+		t.Fatalf("models = %+v", m)
+	}
+	srv2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[{"id":"","meta":{"n_ctx":0}}]}`))
+	}))
+	defer srv2.Close()
+	m2, err := provider.FetchKido(context.Background(), srv2.URL, 5000, false, nil)
+	if err != nil || len(m2) != 1 || m2[0].ID != "Qwen3.8-27B" {
+		t.Fatalf("all-invalid fallback = %+v err %v", m2, err)
 	}
 }
 
@@ -118,7 +144,7 @@ func TestZenCacheTTLAndAtomicRewrite(t *testing.T) {
 		_, _ = w.Write(raw)
 	}))
 	defer srv.Close()
-	pol := provider.NewCatalogPolicy(cache, 5, srv.URL)
+	pol := provider.NewCatalogPolicy(cache, 5, srv.URL, nil)
 	if _, err := pol.Load(context.Background()); err != nil { // miss -> fetch+write
 		t.Fatal(err)
 	}

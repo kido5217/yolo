@@ -19,16 +19,23 @@ var kidoFallback = []Model{{
 // FetchKido probes {baseURL}/models (llamacpp/vLLM shape) and maps live
 // models; on noNet, network failure, bad status, or parse failure it returns
 // the static fallback. It does not return an error for network problems.
-func FetchKido(ctx context.Context, baseURL string, timeoutMS int, noNet bool) ([]Model, error) {
+// client may be nil (http.DefaultClient); the probe is bounded by timeoutMS
+// either way. Entries with an empty id or non-positive n_ctx are skipped;
+// if every entry is skipped the static fallback is returned.
+func FetchKido(ctx context.Context, baseURL string, timeoutMS int, noNet bool, client *http.Client) ([]Model, error) {
 	if noNet {
 		return kidoFallback, nil
 	}
-	httpc := &http.Client{Timeout: time.Duration(timeoutMS) * time.Millisecond}
-	req, err := http.NewRequestWithContext(ctx, "GET", strings.TrimRight(baseURL, "/")+"/models", nil)
+	if client == nil {
+		client = http.DefaultClient
+	}
+	fctx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMS)*time.Millisecond)
+	defer cancel()
+	req, err := http.NewRequestWithContext(fctx, "GET", strings.TrimRight(baseURL, "/")+"/models", nil)
 	if err != nil {
 		return kidoFallback, nil
 	}
-	resp, err := httpc.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return kidoFallback, nil
 	}
@@ -53,11 +60,17 @@ func FetchKido(ctx context.Context, baseURL string, timeoutMS int, noNet bool) (
 	}
 	out := make([]Model, 0, len(parsed.Data))
 	for _, d := range parsed.Data {
+		if d.ID == "" || d.Meta.NCtx <= 0 {
+			continue
+		}
 		out = append(out, Model{
 			ID: d.ID, Name: d.ID, Adapter: "openai",
 			ToolCall: true, Reasoning: true,
 			Context: d.Meta.NCtx, Output: min(32768, d.Meta.NCtx/8),
 		})
+	}
+	if len(out) == 0 {
+		return kidoFallback, nil
 	}
 	return out, nil
 }
