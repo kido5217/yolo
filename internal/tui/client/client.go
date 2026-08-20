@@ -42,7 +42,9 @@ func (c *Client) backoff(n int) time.Duration {
 	if c.Backoff != nil {
 		return c.Backoff(n)
 	}
-	d := time.Second << uint(n)
+	// Clamp the shift: for n >= 64 a duration shift yields 0, which would
+	// tight-loop reconnects during a long outage.
+	d := time.Second << uint(min(n, 5))
 	if d > 30*time.Second {
 		d = 30 * time.Second
 	}

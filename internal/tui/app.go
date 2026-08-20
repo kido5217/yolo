@@ -220,7 +220,8 @@ func (a *App) hydrateCmd() tea.Cmd {
 	if a.route == routeSession && a.cur != "" {
 		id := a.cur
 		return func() tea.Msg {
-			ctx := context.Background()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
 			ses, err := a.GetSession(ctx, id)
 			if errors.Is(err, client.ErrNotFound) {
 				return hydratedMsg{id: id, notFound: true}
@@ -237,7 +238,8 @@ func (a *App) hydrateCmd() tea.Cmd {
 		}
 	}
 	return func() tea.Msg {
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 		list, err := a.ListSessions(ctx)
 		cmds, _ := a.ListCommands(ctx)
 		cfg, _ := a.GetConfig(ctx)
@@ -287,7 +289,9 @@ type sessionCreatedMsg struct {
 // "New session", model from the provider seam).
 func (a *App) createSessionCmd() tea.Cmd {
 	return func() tea.Msg {
-		ses, err := a.CreateSession(context.Background(), "")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		ses, err := a.CreateSession(ctx, "")
 		return sessionCreatedMsg{ses: ses, err: err}
 	}
 }

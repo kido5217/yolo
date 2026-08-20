@@ -45,6 +45,9 @@ func (pm *promptModel) menuItems(cmds []protocol.Command) []protocol.Command {
 	prefix := pm.input.Value()[1:]
 	out := []protocol.Command{}
 	for _, c := range cmds {
+		if len(c.Name) < 2 {
+			continue // wire input: skip malformed (empty) command names
+		}
 		match := strings.HasPrefix(c.Name[1:], prefix)
 		if !match {
 			for _, alias := range commandAliases[c.Name] {
