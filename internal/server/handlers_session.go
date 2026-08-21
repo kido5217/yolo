@@ -91,14 +91,12 @@ func (s *Server) handleSessionList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// newSession inserts a default session in dir; blanks take the defaults
-// ("New session" / "build" / catalog default model).
+// newSession inserts a default session in dir; blank title/model take the
+// defaults ("New session" / catalog default model) and a blank agent takes
+// the storage column default "build" (applied by CreateSession).
 func (s *Server) newSession(dir, title, agent, model string) (protocol.Session, error) {
 	if title == "" {
 		title = "New session"
-	}
-	if agent == "" {
-		agent = "build"
 	}
 	if model == "" {
 		pid, mid := s.Prov.Default()

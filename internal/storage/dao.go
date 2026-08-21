@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/kido5217/yolo/internal/protocol"
@@ -64,11 +63,12 @@ func nullStrPtr(p *int64) any {
 	return *p
 }
 
-// CreateSession inserts a session row.
+// CreateSession inserts a session row; an empty agent takes the column
+// default "build" (agentOrDefault), mirroring the message side.
 func (d *DB) CreateSession(r SessionRow) error {
 	_, err := d.Exec(
 		`INSERT INTO session (id, project_dir, title, model, agent, cost, time_created, time_updated) VALUES (?,?,?,?,?,?,?,?)`,
-		r.ID, r.ProjectDir, r.Title, r.Model, r.Agent, r.Cost, r.TimeCreated, r.TimeUpdated)
+		r.ID, r.ProjectDir, r.Title, r.Model, agentOrDefault(r.Agent), r.Cost, r.TimeCreated, r.TimeUpdated)
 	return err
 }
 
@@ -92,7 +92,8 @@ func (d *DB) ListSessions(projectDir string, limit int) ([]SessionRow, error) {
 	q := `SELECT id, project_dir, title, model, agent, cost, time_created, time_updated FROM session WHERE project_dir=? ORDER BY time_updated DESC`
 	args := []any{projectDir}
 	if limit > 0 {
-		q += ` LIMIT ` + strconv.Itoa(limit)
+		q += ` LIMIT ?`
+		args = append(args, limit)
 	}
 	rows, err := d.Query(q, args...)
 	if err != nil {

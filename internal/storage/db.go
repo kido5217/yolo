@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
-	"strconv"
 	"strings"
 
 	_ "modernc.org/sqlite"
@@ -49,17 +48,7 @@ func Open(path string) (*DB, error) {
 func (d *DB) Close() error { return d.DB.Close() }
 
 // SchemaVersion returns the applied schema version (0 if none).
-func (d *DB) SchemaVersion() (int, error) {
-	var s string
-	err := d.QueryRow(`SELECT value FROM meta WHERE key='schema_version'`).Scan(&s)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return 0, nil
-		}
-		return 0, err
-	}
-	return strconv.Atoi(s)
-}
+func (d *DB) SchemaVersion() (int, error) { return d.currentSchemaVersion() }
 
 // Session returns the wire session with cost/tokens aggregated over its
 // assistant messages.
