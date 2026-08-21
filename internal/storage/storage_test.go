@@ -1,10 +1,10 @@
 package storage_test
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 
@@ -105,8 +105,12 @@ func TestSessionCRUDAndListOrder(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("len = %d, want 3 (scoping broken)", len(got))
 	}
-	if got[0].ID != "ses_ccc" {
-		t.Fatalf("first = %s, want newest-first", got[0].ID)
+	ids := make([]string, 0, len(got))
+	for _, s := range got {
+		ids = append(ids, s.ID)
+	}
+	if want := []string{"ses_ccc", "ses_bbb", "ses_aaa"}; !slices.Equal(ids, want) {
+		t.Fatalf("order = %v, want %v (newest-first)", ids, want)
 	}
 	if _, err := db.GetSession("ses_missing"); !errors.Is(err, storage.ErrNotFound) {
 		t.Fatalf("want ErrNotFound, got %v", err)
@@ -133,6 +137,9 @@ func TestCascadeDelete(t *testing.T) {
 	}
 	if len(msgs) != 0 {
 		t.Fatalf("cascade failed: %d messages", len(msgs))
+	}
+	if _, err := db.GetPart("prt_1"); !errors.Is(err, storage.ErrNotFound) {
+		t.Fatalf("part not cascaded: %v", err)
 	}
 }
 
@@ -200,8 +207,6 @@ func TestTextAndToolPartRoundTrip(t *testing.T) {
 	if pback.State == nil || pback.State.Output != "ok" {
 		t.Fatalf("tool state lost: %+v", pback)
 	}
-	raw, _ := json.Marshal(prow.StateJSON)
-	_ = raw
 }
 
 func TestNullColumnRoundTrips(t *testing.T) {
