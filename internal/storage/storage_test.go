@@ -204,6 +204,106 @@ func TestTextAndToolPartRoundTrip(t *testing.T) {
 	_ = raw
 }
 
+func TestNullColumnRoundTrips(t *testing.T) {
+	db := openDB(t)
+	if err := db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err != nil {
+		t.Fatal(err)
+	}
+	tc := int64(99)
+	if err := db.CreateMessage(storage.MessageRow{ID: "msg_done", SessionID: "ses_1", Role: "assistant", TimeCreated: 1, TimeCompleted: &tc}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CreateMessage(storage.MessageRow{ID: "msg_open", SessionID: "ses_1", Role: "assistant", TimeCreated: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpsertPart(storage.PartRow{ID: "prt_notool", MessageID: "msg_open", SessionID: "ses_1", Type: "text", StateJSON: `{"text":"x"}`, TimeCreated: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpsertPart(storage.PartRow{ID: "prt_tool", MessageID: "msg_open", SessionID: "ses_1", Type: "tool", Tool: "bash", StateJSON: `{"status":"completed"}`, TimeCreated: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SavePermission(storage.PermissionRow{RequestID: "per_new", SessionID: "ses_1", Action: "bash", Resource: "*", TimeCreated: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SavePermission(storage.PermissionRow{RequestID: "per_done", SessionID: "ses_1", Action: "bash", Resource: "*", Response: "once", TimeCreated: 2}); err != nil {
+		t.Fatal(err)
+	}
+	t.Run("message time_completed", func(t *testing.T) {
+		msgs, err := db.ListMessages("ses_1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(msgs) != 2 {
+			t.Fatalf("len = %d, want 2", len(msgs))
+		}
+		if msgs[0].TimeCompleted == nil || *msgs[0].TimeCompleted != 99 {
+			t.Fatalf("msg_done TimeCompleted = %v, want 99", msgs[0].TimeCompleted)
+		}
+		if msgs[1].TimeCompleted != nil {
+			t.Fatalf("msg_open TimeCompleted = %v, want nil", msgs[1].TimeCompleted)
+		}
+	})
+	t.Run("part tool", func(t *testing.T) {
+		row, err := db.GetPart("prt_notool")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if row.Tool != "" {
+			t.Fatalf("prt_notool Tool = %q, want \"\" (NULL round trip)", row.Tool)
+		}
+		row, err = db.GetPart("prt_tool")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if row.Tool != "bash" {
+			t.Fatalf("prt_tool Tool = %q, want bash", row.Tool)
+		}
+	})
+	t.Run("permission response", func(t *testing.T) {
+		pending, err := db.ListPermissions("ses_1", true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(pending) != 1 || pending[0].RequestID != "per_new" {
+			t.Fatalf("pending = %+v, want only per_new", pending)
+		}
+		if pending[0].Response != "" || pending[0].AlwaysJSON != "" {
+			t.Fatalf("per_new (Response, AlwaysJSON) = (%q, %q), want both empty", pending[0].Response, pending[0].AlwaysJSON)
+		}
+		all, err := db.ListPermissions("ses_1", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(all) != 2 || all[1].Response != "once" {
+			t.Fatalf("all = %+v, want 2 rows with per_done responded", all)
+		}
+	})
+}
+
+func TestErrNotFoundForMissingRows(t *testing.T) {
+	db := openDB(t)
+	t.Run("GetPart", func(t *testing.T) {
+		if _, err := db.GetPart("prt_missing"); !errors.Is(err, storage.ErrNotFound) {
+			t.Fatalf("want ErrNotFound, got %v", err)
+		}
+	})
+	t.Run("UpdateSession", func(t *testing.T) {
+		if err := db.UpdateSession("ses_missing", storage.SessionRow{Title: "t"}); !errors.Is(err, storage.ErrNotFound) {
+			t.Fatalf("want ErrNotFound, got %v", err)
+		}
+	})
+	t.Run("UpdateMessage", func(t *testing.T) {
+		if err := db.UpdateMessage(storage.MessageRow{ID: "msg_missing"}); !errors.Is(err, storage.ErrNotFound) {
+			t.Fatalf("want ErrNotFound, got %v", err)
+		}
+	})
+	t.Run("ReplyPermission", func(t *testing.T) {
+		if err := db.ReplyPermission("per_missing", "once"); !errors.Is(err, storage.ErrNotFound) {
+			t.Fatalf("want ErrNotFound, got %v", err)
+		}
+	})
+}
+
 func TestSessionAggregateCostTokens(t *testing.T) {
 	db := openDB(t)
 	if err := db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Title: "x", Model: "kido/m", Agent: "build", TimeCreated: 1, TimeUpdated: 1}); err != nil {
@@ -261,5 +361,38 @@ func TestSchemaVersionTracked(t *testing.T) {
 	}
 	if v < 1 {
 		t.Fatalf("schema version = %d", v)
+	}
+}
+
+func TestReopenAlreadyMigratedDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "yolo.db")
+	db, err := storage.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Title: "t", TimeCreated: 1, TimeUpdated: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db, err = storage.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	v, err := db.SchemaVersion()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v != 2 {
+		t.Fatalf("schema version = %d, want 2", v)
+	}
+	row, err := db.GetSession("ses_1")
+	if err != nil {
+		t.Fatalf("data lost on reopen: %v", err)
+	}
+	if row.Title != "t" {
+		t.Fatalf("title = %q, want t", row.Title)
 	}
 }
