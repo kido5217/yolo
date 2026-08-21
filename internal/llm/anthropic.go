@@ -192,9 +192,9 @@ func (a *Anthropic) anReadSSE(ctx context.Context, body io.ReadCloser, ch chan P
 		}
 	}
 
-	process := func(payload string) {
+	process := func(payload []byte) {
 		var ev anEv
-		if err := json.Unmarshal([]byte(payload), &ev); err != nil {
+		if err := json.Unmarshal(payload, &ev); err != nil {
 			return // ignore malformed frame
 		}
 		switch ev.Type {
@@ -238,20 +238,23 @@ func (a *Anthropic) anReadSSE(ctx context.Context, body io.ReadCloser, ch chan P
 		}
 	}
 
+	// Byte-based line reading: the payload is assembled as []byte and
+	// handed to json.Unmarshal directly, with the same parse semantics as
+	// the string join (per-value trim, multi-data join with '\n').
 	rd := bufio.NewReader(body)
-	var dataLines []string
+	var dataVals [][]byte
 	for {
-		line, err := rd.ReadString('\n')
+		line, err := rd.ReadBytes('\n')
 		if len(line) > 0 {
-			line = strings.TrimRight(line, "\r\n")
+			line = bytes.TrimRight(line, "\r\n")
 			switch {
-			case line == "":
-				if len(dataLines) > 0 {
-					process(strings.Join(dataLines, "\n"))
-					dataLines = nil
+			case len(line) == 0:
+				if len(dataVals) > 0 {
+					process(joinDataLines(dataVals))
+					dataVals = nil
 				}
-			case strings.HasPrefix(line, "data:"):
-				dataLines = append(dataLines, strings.TrimSpace(strings.TrimPrefix(line, "data:")))
+			case bytes.HasPrefix(line, sseDataPrefix):
+				dataVals = append(dataVals, bytes.TrimSpace(line[len(sseDataPrefix):]))
 			}
 		}
 		if err != nil {

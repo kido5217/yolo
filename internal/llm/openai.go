@@ -220,13 +220,13 @@ func (o *OpenAI) oaReadSSE(ctx context.Context, body io.ReadCloser, ch chan Part
 		}
 	}
 
-	process := func(payload string) {
-		if payload == "[DONE]" {
+	process := func(payload []byte) {
+		if bytes.Equal(payload, sseDone) {
 			finish()
 			return
 		}
 		var chunk oaChunk
-		if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
+		if err := json.Unmarshal(payload, &chunk); err != nil {
 			return // ignore malformed frame
 		}
 		if chunk.Usage != nil {
@@ -271,20 +271,23 @@ func (o *OpenAI) oaReadSSE(ctx context.Context, body io.ReadCloser, ch chan Part
 		}
 	}
 
+	// Byte-based line reading: the payload is assembled as []byte and
+	// handed to json.Unmarshal directly, with the same parse semantics as
+	// the string join (per-value trim, multi-data join with '\n').
 	rd := bufio.NewReader(body)
-	var dataLines []string
+	var dataVals [][]byte
 	for {
-		line, err := rd.ReadString('\n')
+		line, err := rd.ReadBytes('\n')
 		if len(line) > 0 {
-			line = strings.TrimRight(line, "\r\n")
+			line = bytes.TrimRight(line, "\r\n")
 			switch {
-			case line == "":
-				if len(dataLines) > 0 {
-					process(strings.Join(dataLines, "\n"))
-					dataLines = nil
+			case len(line) == 0:
+				if len(dataVals) > 0 {
+					process(joinDataLines(dataVals))
+					dataVals = nil
 				}
-			case strings.HasPrefix(line, "data:"):
-				dataLines = append(dataLines, strings.TrimSpace(strings.TrimPrefix(line, "data:")))
+			case bytes.HasPrefix(line, sseDataPrefix):
+				dataVals = append(dataVals, bytes.TrimSpace(line[len(sseDataPrefix):]))
 			}
 		}
 		if err != nil {
@@ -300,10 +303,34 @@ func (o *OpenAI) oaReadSSE(ctx context.Context, body io.ReadCloser, ch chan Part
 			break
 		}
 	}
-	if len(dataLines) > 0 && !finished {
-		process(strings.Join(dataLines, "\n"))
+	if len(dataVals) > 0 && !finished {
+		process(joinDataLines(dataVals))
 	}
 	finish()
+}
+
+// sseDataPrefix is the SSE "data:" field marker; sseDone is the OpenAI
+// stream terminator.
+var (
+	sseDataPrefix = []byte("data:")
+	sseDone       = []byte("[DONE]")
+)
+
+// joinDataLines joins the trimmed "data:" values of one SSE frame with
+// '\n' (multi-line data fields are valid SSE).
+func joinDataLines(vals [][]byte) []byte {
+	n := len(vals) - 1
+	for _, v := range vals {
+		n += len(v)
+	}
+	out := make([]byte, 0, n)
+	for i, v := range vals {
+		if i > 0 {
+			out = append(out, '\n')
+		}
+		out = append(out, v...)
+	}
+	return out
 }
 
 func oaNum(v any) float64 {
