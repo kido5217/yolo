@@ -268,6 +268,7 @@ func (a *App) applyHydrate(m hydratedMsg) tea.Cmd {
 			a.store.Current = &cp
 		}
 		a.store.Messages = m.msgs
+		a.store.ForgetParts()
 		a.store.LastHydrate = time.Now().UnixMilli()
 		return nil
 	default:

@@ -84,6 +84,69 @@ func TestApply(t *testing.T) {
 		}
 	})
 
+	t.Run("message.part.delta re-seeds after full part update", func(t *testing.T) {
+		s := seed(t)
+		s.Apply(ev(t, protocol.EventTypeMessagePartDelta, protocol.MessagePartDeltaProps{
+			SessionID: "ses_1", MessageID: "msg_1", PartID: "prt_1",
+			Field: "text", Delta: "!!",
+		}))
+		if s.Messages[0].Parts[0].Text != "hi!!" {
+			t.Fatalf("text = %q, want hi!!", s.Messages[0].Parts[0].Text)
+		}
+		s.Apply(ev(t, protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
+			SessionID: "ses_1",
+			Time:      124,
+			Part:      protocol.Part{ID: "prt_1", SessionID: "ses_1", MessageID: "msg_1", Type: "text", Text: "brand"},
+		}))
+		s.Apply(ev(t, protocol.EventTypeMessagePartDelta, protocol.MessagePartDeltaProps{
+			SessionID: "ses_1", MessageID: "msg_1", PartID: "prt_1",
+			Field: "text", Delta: "x",
+		}))
+		if s.Messages[0].Parts[0].Text != "brandx" {
+			t.Fatalf("text = %q, want brandx (delta must accumulate from the updated text)", s.Messages[0].Parts[0].Text)
+		}
+	})
+
+	t.Run("message.part.delta input field accumulates in State.Input", func(t *testing.T) {
+		s := seed(t)
+		for _, d := range []string{"pa", "rt"} {
+			s.Apply(ev(t, protocol.EventTypeMessagePartDelta, protocol.MessagePartDeltaProps{
+				SessionID: "ses_1", MessageID: "msg_1", PartID: "prt_tool",
+				Field: "input", Delta: d,
+			}))
+		}
+		pr := s.Messages[0].Parts[1]
+		if pr.Type != "tool" || pr.State == nil || pr.State.Status != "running" {
+			t.Fatalf("part = %+v", pr)
+		}
+		if in, _ := pr.State.Input["input"].(string); in != "part" {
+			t.Fatalf("input = %q, want part (part=%+v)", in, pr)
+		}
+	})
+
+	t.Run("message.removed clears the part shadows", func(t *testing.T) {
+		s := seed(t)
+		s.Apply(ev(t, protocol.EventTypeMessagePartDelta, protocol.MessagePartDeltaProps{
+			SessionID: "ses_1", MessageID: "msg_1", PartID: "prt_1",
+			Field: "text", Delta: "!",
+		}))
+		s.Apply(ev(t, protocol.EventTypeMessageRemoved, protocol.MessageRemovedProps{
+			SessionID: "ses_1", MessageID: "msg_1",
+		}))
+		s.Apply(ev(t, protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
+			SessionID: "ses_1",
+			Time:      200,
+			Part:      protocol.Part{ID: "prt_1", SessionID: "ses_1", MessageID: "msg_1", Type: "text", Text: "fresh"},
+		}))
+		s.Apply(ev(t, protocol.EventTypeMessagePartDelta, protocol.MessagePartDeltaProps{
+			SessionID: "ses_1", MessageID: "msg_1", PartID: "prt_1",
+			Field: "text", Delta: "!",
+		}))
+		if s.Messages[0].Parts[0].Text != "fresh!" {
+			t.Fatalf("text = %q, want fresh! (shadow of the removed message leaked)", s.Messages[0].Parts[0].Text)
+		}
+	})
+
 	t.Run("message.removed drops the message", func(t *testing.T) {
 		s := seed(t)
 		s.Apply(ev(t, protocol.EventTypeMessageRemoved, protocol.MessageRemovedProps{
