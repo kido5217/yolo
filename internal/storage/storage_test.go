@@ -346,22 +346,22 @@ func TestNullColumnRoundTrips(t *testing.T) {
 func TestErrNotFoundForMissingRows(t *testing.T) {
 	t.Parallel()
 	db := openDB(t)
-	t.Run("GetPart", func(t *testing.T) {
+	t.Run("missing part", func(t *testing.T) {
 		if _, err := db.GetPart("prt_missing"); !errors.Is(err, storage.ErrNotFound) {
 			t.Fatalf("want ErrNotFound, got %v", err)
 		}
 	})
-	t.Run("UpdateSession", func(t *testing.T) {
+	t.Run("missing session", func(t *testing.T) {
 		if err := db.UpdateSession("ses_missing", storage.SessionRow{Title: "t"}); !errors.Is(err, storage.ErrNotFound) {
 			t.Fatalf("want ErrNotFound, got %v", err)
 		}
 	})
-	t.Run("UpdateMessage", func(t *testing.T) {
+	t.Run("missing message", func(t *testing.T) {
 		if err := db.UpdateMessage(storage.MessageRow{ID: "msg_missing"}); !errors.Is(err, storage.ErrNotFound) {
 			t.Fatalf("want ErrNotFound, got %v", err)
 		}
 	})
-	t.Run("ReplyPermission", func(t *testing.T) {
+	t.Run("missing permission request", func(t *testing.T) {
 		if err := db.ReplyPermission("per_missing", "once"); !errors.Is(err, storage.ErrNotFound) {
 			t.Fatalf("want ErrNotFound, got %v", err)
 		}

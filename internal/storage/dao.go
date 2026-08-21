@@ -56,8 +56,8 @@ func nullStr(s string) any {
 	return s
 }
 
-// nullStrPtr renders nil as SQL NULL for nullable integer columns.
-func nullStrPtr(p *int64) any {
+// nullPtr renders nil as SQL NULL for nullable integer columns.
+func nullPtr(p *int64) any {
 	if p == nil {
 		return nil
 	}
@@ -169,7 +169,7 @@ func (d *DB) CreateMessage(r MessageRow) error {
 	}
 	_, err = d.Exec(
 		`INSERT INTO message (id, session_id, role, agent, cost, tokens, time_created, time_completed) VALUES (?,?,?,?,?,?,?,?)`,
-		r.ID, r.SessionID, r.Role, agentOrDefault(r.Agent), r.Cost, string(tok), r.TimeCreated, nullStrPtr(r.TimeCompleted))
+		r.ID, r.SessionID, r.Role, agentOrDefault(r.Agent), r.Cost, string(tok), r.TimeCreated, nullPtr(r.TimeCompleted))
 	return err
 }
 
@@ -181,7 +181,7 @@ func (d *DB) UpdateMessage(r MessageRow) error {
 	}
 	res, err := d.Exec(
 		`UPDATE message SET session_id=?, role=?, agent=?, cost=?, tokens=?, time_created=?, time_completed=? WHERE id=?`,
-		r.SessionID, r.Role, agentOrDefault(r.Agent), r.Cost, string(tok), r.TimeCreated, nullStrPtr(r.TimeCompleted), r.ID)
+		r.SessionID, r.Role, agentOrDefault(r.Agent), r.Cost, string(tok), r.TimeCreated, nullPtr(r.TimeCompleted), r.ID)
 	if err != nil {
 		return err
 	}

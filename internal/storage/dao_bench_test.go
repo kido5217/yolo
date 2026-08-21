@@ -12,17 +12,17 @@ import (
 )
 
 // benchText repeats a representative prose page (quotes, unicode, newlines)
-// until it reaches at least want bytes, then trims to a rune boundary: the
+// until it reaches at least size bytes, then trims to a rune boundary: the
 // streamed-content shape without pathological escaping.
-func benchText(want int) string {
+func benchText(size int) string {
 	page := "stream line: build finished, \"tests\" passed, 42 items — ok\n"
 	var sb strings.Builder
-	for sb.Len() < want {
+	for sb.Len() < size {
 		sb.WriteString(page)
 	}
 	s := sb.String()
-	if len(s) > want {
-		cut := want
+	if len(s) > size {
+		cut := size
 		for cut > 0 && !utf8.RuneStart(s[cut]) {
 			cut--
 		}
