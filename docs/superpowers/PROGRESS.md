@@ -1,6 +1,6 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-21 (v0.1.2 in progress: wave 11/16 done, next wave 12 — performance)
+**Updated:** 2026-08-21 (v0.1.2 in progress: wave 12/16 done, next wave 13 — benchmark)
 
 Rolling checkpoint: active task + last-completed + verified facts + v0.1.2-era deviation log +
 open items. Keep it small — `git log --oneline` and the plan files are the archive (no
@@ -27,27 +27,33 @@ roll this file (active → one-line "Last completed", next task → "Active").
 
 ## Active
 
-v0.1.2 skill-driven review — wave 12 (golang-performance, evidence-only) IN PROGRESS.
-Step 1 DONE: R12a (YOLO) `COVERAGE: full` → 12-performance-hotpaths.md, 7 findings
-(P0:0 P1:0 P2:2 P3:5 — deviation 70 count correction), committed 9e2a28b: perf-1
-(per-delta full-text re-encode + full-row SQLite re-upsert, O(n²)/part, 128KB ≈ 13ms
-encode + ~51ms DB) and perf-7 (messagesFor re-derives whole history each round, 13.1ms
-@100 msgs) are `behavior` → auto-deferred to 0.2.0 with the evidence attached;
-perf-2..6 are `contract-risk: none`. Next = Steps 2–6 (Task 1 mechanics verbatim):
-dispatch fix subagent (Template F, `<SKILL>`=`golang-performance`,
-`<FILES>`=12-performance-hotpaths.md, YOLO); count final statuses on finding lines
-(FALSE+WONTFIX > 50% → stop-the-line, ask user); full gate (go vet+test, gofmt,
-golangci-lint); status commit in findings; roll PROGRESS `wave 12/16 done, next wave 13
-— benchmark`; checkpoint commit
-`docs: checkpoint — v0.1.2 wave 12 (performance) done, next wave 13 (benchmark)`.
+v0.1.2 skill-driven review — wave 13 (golang-benchmark, implement hermetic
+benchmarks), not started. Plan:
+docs/superpowers/plans/2026-08-19-v0.1.2-skill-review.md (read ONLY the active task
+slice; resume protocol in the plan header). Step 1: dispatch B13a (ONE subagent, YOLO —
+this one WRITES CODE; the full Template-F-shaped prompt is pinned verbatim in the Task 13
+slice): pick ≤8 hermetic benchmark targets (prefer wave 12's evidence-backed ones), add
+sub-benchmark tables in NEW `*_bench_test.go` files (existing test files NOT modified;
+no network, in-memory/tempdir SQLite, b.ResetTimer + b.ReportAllocs), prove compile/run
+via `go test -bench=. -benchtime=1x -count=1 <pkg>` per package, commit `test: add
+v0.1.2 benchmarks for <paths>`, then write the report. Findings file:
+13-benchmark-hotpaths.md (report shape + P3-count convention in the Task 13 slice). NO
+Template F fix subagent in this wave (code work happens inside B13a under gate). Then:
+verify Stats/COVERAGE, findings commit `docs(review): v0.1.2 — wave 13 (benchmark):
+<K> benchmarks added`, full gate, PROGRESS roll `wave 13/16 done, next wave 14 —
+naming`, checkpoint commit `docs: checkpoint — v0.1.2 wave 13 (benchmark) done, next
+wave 14 (naming)`. Commit gate:
+go vet ./... && go test ./... + gofmt -l . + golangci-lint run ./...
 
 ## Last completed
 
-Wave 11 (data-structures): 13 findings (P0:0 P1:0 P2:6 P3:7) — 12 fixed (12 code commits
-b42b72c…aedd64c, all behavior-neutral: LCS line interning, regex/tool-schema hoists,
-Builder shadows, O(1) streamed-part index, typed stream deltas, [DONE] stream close,
-dirty-flag transcript, fresh toast-evict slice), 1 deferred (datastruct-9, user-paced
-path → 0.2.0), 0 FALSE / 0 WONTFIX (status commit 721693d).
+Wave 12 (performance, evidence-only): 7 findings (P0:0 P1:0 P2:2 P3:5 — deviation 70
+count correction) → 12-performance-hotpaths.md (9e2a28b); 5 fixed (6b1b522 hand-rolled
+text-part StateJSON, cdd6c36 prepared-statement reuse, 256ee6a SSE plain writes,
+bd7e056 byte-based SSE frames, c3a3e57 precomputed static lipgloss renders — all
+behavior-neutral, gate green), 2 deferred as `behavior` with evidence (perf-1 O(n²)
+per-delta re-encode + full-row re-upsert → 0.2.0; perf-7 per-round messagesFor re-map →
+0.2.0), 0 FALSE / 0 WONTFIX (status commit d3c48f1).
 
 ## Open items
 
