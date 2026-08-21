@@ -90,9 +90,9 @@ func TestAnthropicMidStreamError(t *testing.T) {
 		t.Fatalf("first = %+v", first)
 	}
 	var final Part
-	drain := ctx0(t) // one timeout bounds the whole drain
+	drainCtx := ctx0(t) // one timeout bounds the whole drain
 	for {
-		p, err := s.Next(drain)
+		p, err := s.Next(drainCtx)
 		if p.Finish == "error" {
 			final = p
 			break

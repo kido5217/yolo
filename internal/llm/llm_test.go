@@ -136,9 +136,9 @@ func TestOpenAIMidStreamError(t *testing.T) {
 		t.Fatalf("first = %+v", first)
 	}
 	var final Part
-	drain := ctx0(t) // one timeout bounds the whole drain
+	drainCtx := ctx0(t) // one timeout bounds the whole drain
 	for {
-		p, err := s.Next(drain)
+		p, err := s.Next(drainCtx)
 		if p.Finish == "error" {
 			final = p
 			break
@@ -181,10 +181,10 @@ func TestOpenAIClosesStreamAtDone(t *testing.T) {
 		Messages: []Message{{Role: RoleUser, Content: "hi"}},
 	})
 	var parts []Part
-	drain, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	drainCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	for {
-		p, err := s.Next(drain)
+		p, err := s.Next(drainCtx)
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
 				t.Fatalf("drain ended with %v, want io.EOF (stream stuck past [DONE])", err)

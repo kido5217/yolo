@@ -36,7 +36,7 @@ func (a *Anthropic) Stream(ctx context.Context, req Request) (PartStream, error)
 	}
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
-		return PartStream{}, oaUpstreamError(resp) // same {"error":{...}} envelope handling
+		return PartStream{}, upstreamError(resp) // same {"error":{...}} envelope handling
 	}
 	ch := make(chan Part, 64)
 	go a.anReadSSE(ctx, resp.Body, ch)

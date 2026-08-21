@@ -30,16 +30,16 @@ func (o *OpenAI) Stream(ctx context.Context, req Request) (PartStream, error) {
 	}
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
-		return PartStream{}, oaUpstreamError(resp)
+		return PartStream{}, upstreamError(resp)
 	}
 	ch := make(chan Part, 64)
 	go o.oaReadSSE(ctx, resp.Body, ch)
 	return PartStream{Parts: ch}, nil
 }
 
-// oaUpstreamError builds an error from a non-2xx response (body ≤ 4KB drained;
+// upstreamError builds an error from a non-2xx response (body ≤ 4KB drained;
 // 429/5xx wrapped in *TransientError); the message prefers {"error":{...}}.
-func oaUpstreamError(resp *http.Response) error {
+func upstreamError(resp *http.Response) error {
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	var err error
 	var envelope struct {
@@ -56,7 +56,7 @@ func oaUpstreamError(resp *http.Response) error {
 			if json.Unmarshal(envelope.Error, &plain) == nil && plain != "" {
 				err = errors.New(plain)
 			} else {
-				err = fmt.Errorf("upstream error (HTTP %d): %s", resp.StatusCode, strings.TrimSpace(string(data)))
+				err = fmt.Errorf("upstream error (http %d): %s", resp.StatusCode, strings.TrimSpace(string(data)))
 			}
 		}
 	} else {
@@ -64,7 +64,7 @@ func oaUpstreamError(resp *http.Response) error {
 		if msg == "" {
 			msg = resp.Status
 		}
-		err = fmt.Errorf("upstream error (HTTP %d): %s", resp.StatusCode, msg)
+		err = fmt.Errorf("upstream error (http %d): %s", resp.StatusCode, msg)
 	}
 	if resp.StatusCode == 429 || resp.StatusCode >= 500 {
 		return &TransientError{Status: resp.StatusCode, Err: err}

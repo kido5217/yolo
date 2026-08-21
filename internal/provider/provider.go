@@ -70,14 +70,15 @@ func DirsDefaults() (Dirs, error) {
 	}, nil
 }
 
-// OverridableDirs fills empty fields with production defaults when fill is
-// true; when false the production defaults are returned verbatim.
-func OverridableDirs(d Dirs, fill bool) (Dirs, error) {
+// OverridableDirs fills empty fields with production defaults when
+// fillDefaults is true; when false the production defaults are returned
+// verbatim.
+func OverridableDirs(d Dirs, fillDefaults bool) (Dirs, error) {
 	prod, err := DirsDefaults()
 	if err != nil {
 		return Dirs{}, err
 	}
-	if !fill {
+	if !fillDefaults {
 		return prod, nil
 	}
 	if d.Home == "" {
@@ -133,7 +134,7 @@ func New(ctx context.Context, cfg *protocol.Config, httpc *http.Client, homeDirs
 	if raw, lerr := NewCatalogPolicy(dirs.ZenCache, 5, dirs.ZenCatalog, httpc).Load(ctx); lerr == nil {
 		models, perr := ParseZenCatalog(raw)
 		if perr == nil {
-			meta := zenMeta(raw)
+			meta := parseZenMeta(raw)
 			// Guard a malformed-but-parseable catalog missing
 			// "opencode.api" against an empty BaseURL.
 			api := meta.API
@@ -192,8 +193,8 @@ func configProviderInfo(id string, oc protocol.ProviderConfig) Info {
 	return info
 }
 
-func cfgModel(mid string, mv any) Model {
-	m, ok := mv.(map[string]any)
+func cfgModel(mid string, raw any) Model {
+	m, ok := raw.(map[string]any)
 	if !ok {
 		m = map[string]any{}
 	}
@@ -308,7 +309,7 @@ func (r *Registry) DriverFor(m Model) llm.Driver {
 }
 
 // Default returns the default provider/model.
-func (r *Registry) Default() (string, string) {
+func (r *Registry) Default() (providerID, modelID string) {
 	return r.defProvider, r.defModel
 }
 

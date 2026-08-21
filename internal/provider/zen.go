@@ -77,7 +77,7 @@ type ZenMeta struct {
 	Env  []string
 }
 
-func zenMeta(raw []byte) ZenMeta {
+func parseZenMeta(raw []byte) ZenMeta {
 	var cat struct {
 		Opencode struct {
 			Name string   `json:"name"`
@@ -154,7 +154,7 @@ func (p *CatalogPolicy) fetch(ctx context.Context) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("zen catalog: HTTP %d", resp.StatusCode)
+		return nil, fmt.Errorf("zen catalog: http %d", resp.StatusCode)
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if err != nil {

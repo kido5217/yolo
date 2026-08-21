@@ -263,7 +263,7 @@ func TestParallelStreamsRecordEveryRequest(t *testing.T) {
 	d := fake.New(fake.AutoText())
 	const n = 10
 	var wg sync.WaitGroup
-	texts := make([]llm.Part, n)
+	parts := make([]llm.Part, n)
 	errs := make([]error, n)
 	for i := 0; i < n; i++ {
 		wg.Add(1)
@@ -281,7 +281,7 @@ func TestParallelStreamsRecordEveryRequest(t *testing.T) {
 				errs[i] = err
 				return
 			}
-			texts[i] = p
+			parts[i] = p
 		}(i)
 	}
 	wg.Wait()
@@ -294,7 +294,7 @@ func TestParallelStreamsRecordEveryRequest(t *testing.T) {
 		t.Fatalf("requests = %d, want %d", len(reqs), n)
 	}
 	got := make([]string, n)
-	for i, p := range texts {
+	for i, p := range parts {
 		if p.Finish != "stop" {
 			t.Fatalf("part %d = %+v", i, p)
 		}
