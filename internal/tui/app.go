@@ -762,47 +762,34 @@ func (a *App) View() tea.View {
 	return v
 }
 
-// overlayLines counts the lines the below-viewport overlays (slash menu is
-// reserved separately by viewSession) occupy: the permission ask, the
-// toasts, the open dialog and the last error line. The viewport uses this
-// to shrink so the composed frame always fits the terminal height —
-// mandatory under the alt screen, whose frame (unlike the normal-screen
-// frame, which grows with content) is the fixed terminal size.
-func (a *App) overlayLines() int {
-	n := 0
-	for _, v := range []string{a.permissionView(), a.toastsView(), a.dlgView()} {
-		if v != "" {
-			n += 1 + strings.Count(v, "\n")
-		}
-	}
-	if a.lastErr != "" {
-		n++
-	}
-	return n
-}
-
 // view composes the on-screen string: the active route, the slash menu, the
 // permission overlay above the prompt, the prompt line, toasts, the dialog
-// overlay, the last error line and the status footer (both routes).
+// overlay, the last error line and the status footer (both routes). Each
+// overlay is rendered once per frame and passed pre-built to the route
+// (the session route needs it both for line counting and composition).
 func (a *App) view() string {
+	perm := a.permissionView()
+	toasts := a.toastsView()
+	dlg := a.dlgView()
+	menu := a.prompt.menuView(a.store.Commands)
 	var b strings.Builder
 	if a.route == routeSession {
-		b.WriteString(a.viewSession())
+		b.WriteString(a.viewSession(menu, perm, toasts, dlg))
 	} else {
 		b.WriteString(a.home.render(&a.store))
 	}
-	if v := a.prompt.menuView(a.store.Commands); v != "" {
-		b.WriteString("\n" + v)
+	if menu != "" {
+		b.WriteString("\n" + menu)
 	}
-	if v := a.permissionView(); v != "" {
-		b.WriteString("\n" + v)
+	if perm != "" {
+		b.WriteString("\n" + perm)
 	}
 	b.WriteString("\n" + a.prompt.view())
-	if v := a.toastsView(); v != "" {
-		b.WriteString("\n" + v)
+	if toasts != "" {
+		b.WriteString("\n" + toasts)
 	}
-	if v := a.dlgView(); v != "" {
-		b.WriteString("\n" + v)
+	if dlg != "" {
+		b.WriteString("\n" + dlg)
 	}
 	if a.lastErr != "" {
 		b.WriteString("\n" + errRed.Render("! "+a.lastErr))
@@ -813,14 +800,30 @@ func (a *App) view() string {
 
 // viewSession renders the session route: title, the transcript viewport and
 // the locked help line. The viewport reserves a line for the prompt, one for
-// the footer, the open slash menu and every below-viewport overlay (see
-// overlayLines), so the frame fits the terminal height.
-func (a *App) viewSession() string {
+// the footer, the open slash menu and every below-viewport overlay (perm,
+// toasts, dlg, lastErr), so the frame fits the terminal height — mandatory
+// under the alt screen, whose frame (unlike the normal-screen frame, which
+// grows with content) is the fixed terminal size. menu/perm/toasts/dlg are
+// the pre-built overlay strings from view() (rendered once per frame).
+func (a *App) viewSession(menu, perm, toasts, dlg string) string {
 	w := a.size.Width
 	if w < 1 {
 		w = 80
 	}
-	h := a.size.Height - 3 - 1 - 1 - a.prompt.menuLines(a.store.Commands) - a.overlayLines()
+	overlays := 0
+	for _, v := range []string{perm, toasts, dlg} {
+		if v != "" {
+			overlays += 1 + strings.Count(v, "\n")
+		}
+	}
+	if a.lastErr != "" {
+		overlays++
+	}
+	menuLines := 0
+	if menu != "" {
+		menuLines = 1 + strings.Count(menu, "\n")
+	}
+	h := a.size.Height - 3 - 1 - 1 - menuLines - overlays
 	if h < 1 {
 		h = 1
 	}

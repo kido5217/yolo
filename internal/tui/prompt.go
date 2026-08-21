@@ -64,18 +64,6 @@ func (pm *promptModel) menuItems(cmds []protocol.Command) []protocol.Command {
 	return out
 }
 
-// menuLines is the menu block's height in lines (0 closed, 1 open-but-empty).
-func (pm *promptModel) menuLines(cmds []protocol.Command) int {
-	items := pm.menuItems(cmds)
-	if items == nil {
-		return 0
-	}
-	if len(items) == 0 {
-		return 1
-	}
-	return len(items)
-}
-
 func (pm *promptModel) menuView(cmds []protocol.Command) string {
 	items := pm.menuItems(cmds)
 	if items == nil {
