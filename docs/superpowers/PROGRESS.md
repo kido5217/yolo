@@ -1,6 +1,6 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-21 (v0.1.2 in progress: wave 11 mid — Step 1 done, 13 findings all `contract-risk: none`; next: wave 11 fix subagent)
+**Updated:** 2026-08-21 (v0.1.2 in progress: wave 11/16 done, next wave 12 — performance)
 
 Rolling checkpoint: active task + last-completed + verified facts + v0.1.2-era deviation log +
 open items. Keep it small — `git log --oneline` and the plan files are the archive (no
@@ -27,28 +27,33 @@ roll this file (active → one-line "Last completed", next task → "Active").
 
 ## Active
 
-v0.1.2 skill-driven review — wave 11 (golang-data-structures), mid-wave (Step 1 done).
+v0.1.2 skill-driven review — wave 12 (golang-performance, evidence-only), not started.
 Plan: docs/superpowers/plans/2026-08-19-v0.1.2-skill-review.md (read ONLY the active task
-slice; resume protocol in the plan header). R11a (session+server+tool) + R11b (tui+llm) both
-`COVERAGE: full`, 13 findings (P0:0 P1:0 P2:6 P3:7), ALL `contract-risk: none` → fix
-subagent REQUIRED (Template F, `<SKILL>`=`golang-data-structures`, `<FILES>` = the two
-11-datastruct-*.md paths). Preallocation/Builder fixes are behavior-neutral but MUST keep
-golden + teatest suites green (teatest red → roll that fix back). Then: stop-the-line check,
-full gate, PROGRESS roll `wave 11/16 done, next wave 12 — performance`, checkpoint commit
-`docs: checkpoint — v0.1.2 wave 11 (data-structures) done, next wave 12 (performance)`.
-Findings: docs/superpowers/reviews/v0.1.2/ — 11-datastruct-session-server-tool.md (4) +
-11-datastruct-tui-llm.md (9), committed 5f69b51.
+slice; resume protocol in the plan header). Step 1: dispatch R12a (one subagent, Template R,
+lens = golang-performance, IDs `[performance-<n>]`): read 00-inventory.md section 2
+(hot-path candidates) FIRST, then targeted reads of sse.go, engine.go (emit/stream path
+only), prompt.go, dao.go, openai.go, anthropic.go, app.go (View/render path only),
+store.go. Evidence-driven: every finding MUST carry the evidence produced (benchmark
+number or allocation trace) + the cost it removes; allowed: run existing tests with
+`-bench=. -benchtime=1x`; throwaway benchmark code ONLY in /tmp/yolo-v0.1.2-perf/
+(create it — never inside the repo, never under /tmp/opencode). Findings file:
+12-performance-hotpaths.md. Policy B: only behavior-neutral micro-fixes (preallocation,
+strings.Builder, avoiding a copy, hoisting) are `contract-risk: none`; anything requiring
+a redesign / new data structure with different timing or outputs / cache → `behavior`
+(auto-deferred to 0.2.0 with the evidence attached). Then: commit findings, fix subagent
+(Template F, `<SKILL>`=`golang-performance`) iff any `contract-risk: none`, stop-the-line
+check, full gate, PROGRESS roll `wave 12/16 done, next wave 13 — benchmark`, checkpoint
+commit `docs: checkpoint — v0.1.2 wave 12 (performance) done, next wave 13 (benchmark)`.
 Commit gate:
 go vet ./... && go test ./... + gofmt -l . + golangci-lint run ./...
 
 ## Last completed
 
-Wave 10 (testing): 34 findings (P0:0 P1:0 P2:13 P3:21) — 32 fixed (16 test commits
-490da6b…d076676: sleep-gates → event seams, leaked shell Close, vacuous sort assert,
-fake-driver tests added, tui blackbox cmd execution … all test-only), 2 deferred
-(behavior-tagged tui cmd assertions → 0.2.0), 0 FALSE / 0 WONTFIX (findings commit bbe3ca3;
-status commit 73f5623). R10b also covered in-package read_test.go (not in pinned list) —
-coverage-only.
+Wave 11 (data-structures): 13 findings (P0:0 P1:0 P2:6 P3:7) — 12 fixed (12 code commits
+b42b72c…aedd64c, all behavior-neutral: LCS line interning, regex/tool-schema hoists,
+Builder shadows, O(1) streamed-part index, typed stream deltas, [DONE] stream close,
+dirty-flag transcript, fresh toast-evict slice), 1 deferred (datastruct-9, user-paced
+path → 0.2.0), 0 FALSE / 0 WONTFIX (status commit 721693d).
 
 ## Open items
 
