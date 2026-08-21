@@ -410,10 +410,12 @@ func newSrvFakeEnv(t *testing.T, script string) (*testutil.TestServer, *fakellm.
 	return testutil.BootWithDriver(t, drv), drv
 }
 
-// TestFakeEnvE2E drives a two-send conversation through the HTTP API with the
-// env-gated fake driver; verifies messages/parts persist and that a later model
-// request replays history including a tool result.
-func TestFakeEnvE2E(t *testing.T) {
+// TestFakeEnvConversation drives a two-send conversation through the HTTP API
+// with the env-gated fake driver; verifies messages/parts persist and that a
+// later model request replays history including a tool result. Fully offline —
+// the name deliberately avoids the "e2e" of scripts/e2e-live.sh (network,
+// user-run).
+func TestFakeEnvConversation(t *testing.T) {
 	script := `[
 		{"parts":[{"kind":"tool","name":"read","call_id":"call_1","args":{"filePath":"note.txt"},"finish":"tool_calls","usage":{"input":1,"output":1}}],"delay_ms":0},
 		{"parts":[{"kind":"text","text":"Done reading.","finish":"stop","usage":{"input":2,"output":2}}],"delay_ms":0}

@@ -632,13 +632,11 @@ func TestHistoryReplayIncludesToolResults(t *testing.T) {
 	}
 
 	// the read tool executed in the session's project dir
-	ump, err := h.db.ListParts(func() string {
-		msgs, err := h.db.ListMessages(ses)
-		if err != nil || len(msgs) < 3 {
-			t.Fatalf("messages: %v, %v", msgs, err)
-		}
-		return msgs[1].ID
-	}())
+	msgs, err := h.db.ListMessages(ses)
+	if err != nil || len(msgs) < 3 {
+		t.Fatalf("messages: %v, %v", msgs, err)
+	}
+	ump, err := h.db.ListParts(msgs[1].ID)
 	if err != nil {
 		t.Fatal(err)
 	}
