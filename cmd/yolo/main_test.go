@@ -282,7 +282,7 @@ func TestAuthCmd(t *testing.T) {
 		}
 		return p
 	}
-	getStore := func() auth.Store {
+	readStore := func() auth.Store {
 		s, err := auth.LoadFrom(authPath())
 		if err != nil {
 			t.Fatalf("load store: %v", err)
@@ -433,7 +433,7 @@ func TestAuthCmd(t *testing.T) {
 				}
 			}
 			if tc.wantStore != nil {
-				s := getStore()
+				s := readStore()
 				if len(s) != len(tc.wantStore) {
 					t.Fatalf("store = %v, want %v", s, tc.wantStore)
 				}
