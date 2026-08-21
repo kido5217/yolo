@@ -282,8 +282,14 @@ func (o *OpenAI) oaReadSSE(ctx context.Context, body io.ReadCloser, ch chan Part
 			}
 			break
 		}
+		// [DONE] already ended the stream: stop reading so a body that
+		// never terminates does not hold the engine round hostage
+		// (anReadSSE parity).
+		if finished {
+			break
+		}
 	}
-	if len(dataLines) > 0 {
+	if len(dataLines) > 0 && !finished {
 		process(strings.Join(dataLines, "\n"))
 	}
 	finish()

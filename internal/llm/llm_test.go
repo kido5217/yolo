@@ -1,10 +1,14 @@
 package llm
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func openAIChecks(t *testing.T) func(*http.Request) {
@@ -145,6 +149,58 @@ func TestOpenAIMidStreamError(t *testing.T) {
 	}
 	if final.Finish != "error" || final.Err == nil {
 		t.Fatalf("final = %+v", final)
+	}
+}
+
+// TestOpenAIClosesStreamAtDone: a server that sends [DONE] but keeps the
+// connection open (no body EOF) must not stall the stream — consumers drain
+// to io.EOF (the engine's round loop), so the channel has to close at
+// [DONE], not at EOF (anReadSSE parity, anthropic.go:263).
+func TestOpenAIClosesStreamAtDone(t *testing.T) {
+	t.Parallel()
+	release := make(chan struct{})
+	defer close(release)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(200)
+		fl, _ := w.(http.Flusher)
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"}}]}\n\n"))
+		fl.Flush()
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n"))
+		fl.Flush()
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+		fl.Flush()
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	defer srv.Close()
+	s := stream(t, NewOpenAI(srv.Client()), Request{
+		Model: "m", APIKey: "test-key", BaseURL: srv.URL,
+		Messages: []Message{{Role: RoleUser, Content: "hi"}},
+	})
+	var parts []Part
+	drain, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	for {
+		p, err := s.Next(drain)
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				t.Fatalf("drain ended with %v, want io.EOF (stream stuck past [DONE])", err)
+			}
+			break
+		}
+		parts = append(parts, p)
+	}
+	if len(parts) != 2 {
+		t.Fatalf("parts = %+v, want text+finish", parts)
+	}
+	if parts[0].Kind != "text" || parts[0].Text != "hi" {
+		t.Fatalf("first = %+v", parts[0])
+	}
+	if parts[1].Finish != "stop" {
+		t.Fatalf("finish = %+v", parts[1])
 	}
 }
 
