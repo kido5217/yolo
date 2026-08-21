@@ -28,3 +28,19 @@ exists in the package and was reviewed too. `internal/llm/fake/` has no test fil
 ## Stats
 P0:0 P1:0 P2:5 P3:9
 COVERAGE: full — skipped: none (internal/tool/read_test.go was absent from the orchestrator list, located in-package, and reviewed)
+
+## Status (wave 10 fix pass, 2026-08-21)
+- testing-1 → FIXED 02a8a0d
+- testing-2 → FIXED 05b4ff1
+- testing-3 → FIXED ba99613
+- testing-4 → FIXED 02a8a0d
+- testing-5 → FIXED ce4669b
+- testing-6 → FIXED b1952f2
+- testing-7 → FIXED b1952f2
+- testing-8 → FIXED b1952f2
+- testing-9 → FIXED 02a8a0d
+- testing-10 → FIXED e0e590e
+- testing-11 → FIXED e0e590e
+- testing-12 → FIXED 0b54534
+- testing-13 → FIXED bc9665c
+- testing-14 → FIXED 05b4ff1

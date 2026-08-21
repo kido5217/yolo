@@ -27,3 +27,18 @@ Date: 2026-08-21 · chunk: server+session tests · source files: 9
 ## Stats
 P0:0 P1:0 P2:4 P3:9
 COVERAGE: full — skipped: none
+
+## Status (wave 10 fix pass, 2026-08-21)
+- testing-1 → FIXED 490da6b
+- testing-2 → FIXED 490da6b
+- testing-3 → FIXED 12909d0
+- testing-4 → FIXED d8e1a2e
+- testing-5 → FIXED 490da6b
+- testing-6 → FIXED 649d729
+- testing-7 → FIXED 33cd3bc
+- testing-8 → FIXED 5a69e8b
+- testing-9 → FIXED 5a69e8b
+- testing-10 → FIXED 12909d0
+- testing-11 → FIXED 12909d0
+- testing-12 → FIXED 5a69e8b
+- testing-13 → FIXED c685c35

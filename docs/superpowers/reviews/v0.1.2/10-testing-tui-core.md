@@ -16,3 +16,12 @@ Date: 2026-08-21 · chunk: tui+core+cmd tests · source files: 24
 ## Stats
 P0:0 P1:0 P2:4 P3:3
 COVERAGE: full — skipped: none
+
+## Status (wave 10 fix pass, 2026-08-21)
+- testing-1 → DEFERRED contract-risk: behavior (auto-deferred by wave rule; fix pins persisted-rule observable state)
+- testing-2 → DEFERRED contract-risk: behavior (auto-deferred by wave rule; fix pins config-patch target)
+- testing-3 → FIXED 1beb970
+- testing-4 → FIXED 1beb970
+- testing-5 → FIXED d076676
+- testing-6 → FIXED d076676
+- testing-7 → FIXED d076676
