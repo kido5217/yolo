@@ -13,6 +13,7 @@ import (
 // Implements the plan's IMPLEMENTATION FIX (locked): one shell for the whole
 // test; cwd and env persistence are asserted across calls on it.
 func TestBashCwdPersistsAcrossCalls(t *testing.T) {
+	t.Parallel()
 	d := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(d, "sub"), 0o755); err != nil {
 		t.Fatal(err)
@@ -47,6 +48,7 @@ func TestBashCwdPersistsAcrossCalls(t *testing.T) {
 }
 
 func TestBashNonZeroExitIsSuccessWithMeta(t *testing.T) {
+	t.Parallel()
 	d := t.TempDir()
 	env := &Env{Dir: d, Limits: Limits{2000, 50 * 1024}, Shell: NewShell(d, Limits{2000, 50 * 1024})}
 	t.Cleanup(func() {
@@ -68,6 +70,7 @@ func TestBashNonZeroExitIsSuccessWithMeta(t *testing.T) {
 }
 
 func TestBashStderrMerged(t *testing.T) {
+	t.Parallel()
 	d := t.TempDir()
 	env := &Env{Dir: d, Limits: Limits{2000, 50 * 1024}, Shell: NewShell(d, Limits{2000, 50 * 1024})}
 	t.Cleanup(func() {
@@ -83,6 +86,7 @@ func TestBashStderrMerged(t *testing.T) {
 }
 
 func TestBashTimeoutKillsAndReports(t *testing.T) {
+	t.Parallel()
 	d := t.TempDir()
 	env := &Env{Dir: d, Limits: Limits{2000, 50 * 1024}, Shell: NewShell(d, Limits{2000, 50 * 1024})}
 	t.Cleanup(func() {
@@ -108,6 +112,7 @@ func TestBashTimeoutKillsAndReports(t *testing.T) {
 }
 
 func TestShellOutputCapCutsAtRuneBoundary(t *testing.T) {
+	t.Parallel()
 	d := t.TempDir()
 	s := NewShell(d, Limits{2000, 50 * 1024})
 	t.Cleanup(func() {
@@ -133,6 +138,7 @@ func TestShellOutputCapCutsAtRuneBoundary(t *testing.T) {
 }
 
 func TestBashWhitespaceOnlyCommandRejected(t *testing.T) {
+	t.Parallel()
 	raw, _ := json.Marshal(map[string]any{"command": "   "})
 	if _, _, err := Registry()["bash"].Patterns(raw); err == nil {
 		t.Fatal("want error for whitespace-only command")
@@ -140,6 +146,7 @@ func TestBashWhitespaceOnlyCommandRejected(t *testing.T) {
 }
 
 func TestBashPermissionPatterns(t *testing.T) {
+	t.Parallel()
 	raw, _ := json.Marshal(map[string]any{"command": "git commit -m x"})
 	res, always, err := Registry()["bash"].Patterns(raw)
 	if err != nil {

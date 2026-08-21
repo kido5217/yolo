@@ -19,6 +19,7 @@ func openAIChecks(t *testing.T) func(*http.Request) {
 }
 
 func TestOpenAIBasicStream(t *testing.T) {
+	t.Parallel()
 	srv := sseServer(t, "openai", "stream_basic.txt", openAIChecks(t))
 	defer srv.Close()
 	parts := collect(t, stream(t, NewOpenAI(srv.Client()), Request{
@@ -37,6 +38,7 @@ func TestOpenAIBasicStream(t *testing.T) {
 }
 
 func TestOpenAIMidFrameSplits(t *testing.T) {
+	t.Parallel()
 	srv := sseServerSplit(t, "openai", "stream_split_frames.txt", openAIChecks(t))
 	defer srv.Close()
 	parts := collect(t, stream(t, NewOpenAI(srv.Client()), Request{
@@ -55,6 +57,7 @@ func TestOpenAIMidFrameSplits(t *testing.T) {
 }
 
 func TestOpenAIReasoningAndToolCalls(t *testing.T) {
+	t.Parallel()
 	srv := sseServer(t, "openai", "stream_reasoning_tools.txt", openAIChecks(t))
 	defer srv.Close()
 	parts := collect(t, stream(t, NewOpenAI(srv.Client()), Request{
@@ -91,6 +94,7 @@ func TestOpenAIReasoningAndToolCalls(t *testing.T) {
 }
 
 func TestOpenAIUsageFinal(t *testing.T) {
+	t.Parallel()
 	srv := sseServer(t, "openai", "stream_usage_only_final.txt", openAIChecks(t))
 	defer srv.Close()
 	parts := collect(t, stream(t, NewOpenAI(srv.Client()), Request{
@@ -116,6 +120,7 @@ func TestOpenAIUsageFinal(t *testing.T) {
 }
 
 func TestOpenAIMidStreamError(t *testing.T) {
+	t.Parallel()
 	srv := sseServer(t, "openai", "midstream_error.txt", openAIChecks(t))
 	defer srv.Close()
 	s := stream(t, NewOpenAI(srv.Client()), Request{
@@ -144,6 +149,7 @@ func TestOpenAIMidStreamError(t *testing.T) {
 }
 
 func TestOpenAIUpstream429IsTransient(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(429)
 		_, _ = w.Write([]byte(`{"error":{"message":"slow down"}}`))
@@ -159,6 +165,7 @@ func TestOpenAIUpstream429IsTransient(t *testing.T) {
 }
 
 func TestOpenAIRequestShape(t *testing.T) {
+	t.Parallel()
 	var got map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewDecoder(r.Body).Decode(&got)

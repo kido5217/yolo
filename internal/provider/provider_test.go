@@ -26,6 +26,7 @@ func dirs(t *testing.T) provider.Dirs {
 }
 
 func TestKidoParsesLlamacpp(t *testing.T) {
+	t.Parallel()
 	raw, _ := os.ReadFile("testdata/kido-models.json")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/models" {
@@ -45,6 +46,7 @@ func TestKidoParsesLlamacpp(t *testing.T) {
 }
 
 func TestKidoFallsBackStaticOnNetworkError(t *testing.T) {
+	t.Parallel()
 	// Network failure falls back to the static list without an error
 	// (FetchKido never reports probe problems).
 	m := provider.FetchKido(context.Background(), "http://127.0.0.1:1", 200, false, nil)
@@ -54,7 +56,9 @@ func TestKidoFallsBackStaticOnNetworkError(t *testing.T) {
 }
 
 func TestKidoSkipsInvalidEntries(t *testing.T) {
+	t.Parallel()
 	t.Run("skips invalid entries", func(t *testing.T) {
+		t.Parallel()
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte(`{"data":[
 				{"id":"","meta":{"n_ctx":4096}},
@@ -69,6 +73,7 @@ func TestKidoSkipsInvalidEntries(t *testing.T) {
 		}
 	})
 	t.Run("all-invalid falls back to static", func(t *testing.T) {
+		t.Parallel()
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte(`{"data":[{"id":"","meta":{"n_ctx":0}}]}`))
 		}))
@@ -81,6 +86,7 @@ func TestKidoSkipsInvalidEntries(t *testing.T) {
 }
 
 func TestZenFiltersAndAdapterMap(t *testing.T) {
+	t.Parallel()
 	raw, err := os.ReadFile("testdata/zen-opencode.json")
 	if err != nil {
 		t.Fatal(err)
@@ -132,6 +138,7 @@ func TestZenFiltersAndAdapterMap(t *testing.T) {
 }
 
 func TestZenCacheTTLAndAtomicRewrite(t *testing.T) {
+	t.Parallel()
 	d := t.TempDir()
 	cache := filepath.Join(d, "models.json")
 	hits := 0

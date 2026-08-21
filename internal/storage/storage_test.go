@@ -23,6 +23,7 @@ func openDB(t *testing.T) *storage.DB {
 }
 
 func TestOpenAppliesPragmasToEveryConnection(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "yolo.db")
 	db, err := storage.Open(path)
 	if err != nil {
@@ -71,6 +72,7 @@ func TestOpenAppliesPragmasToEveryConnection(t *testing.T) {
 }
 
 func TestOpenBoundsConnectionPool(t *testing.T) {
+	t.Parallel()
 	db := openDB(t)
 	// Single-process SQLite store: one shared connection keeps at most
 	// one writer and makes the per-connection PRAGMAs total.
@@ -80,6 +82,7 @@ func TestOpenBoundsConnectionPool(t *testing.T) {
 }
 
 func TestSessionCRUDAndListOrder(t *testing.T) {
+	t.Parallel()
 	db := openDB(t)
 	mk := storage.SessionRow{ProjectDir: "/w", Title: "t", Model: "kido/Qwen3.8-27B", Agent: "build"}
 	for i, id := range []string{"ses_aaa", "ses_bbb", "ses_ccc"} {
@@ -118,6 +121,7 @@ func TestSessionCRUDAndListOrder(t *testing.T) {
 }
 
 func TestCascadeDelete(t *testing.T) {
+	t.Parallel()
 	db := openDB(t)
 	if err := db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err != nil {
 		t.Fatal(err)
@@ -144,6 +148,7 @@ func TestCascadeDelete(t *testing.T) {
 }
 
 func TestMessageAgentRoundTrip(t *testing.T) {
+	t.Parallel()
 	db := openDB(t)
 	if err := db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err != nil {
 		t.Fatal(err)
@@ -170,6 +175,7 @@ func TestMessageAgentRoundTrip(t *testing.T) {
 }
 
 func TestTextAndToolPartRoundTrip(t *testing.T) {
+	t.Parallel()
 	db := openDB(t)
 	if err := db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err != nil {
 		t.Fatal(err)
@@ -210,6 +216,7 @@ func TestTextAndToolPartRoundTrip(t *testing.T) {
 }
 
 func TestNullColumnRoundTrips(t *testing.T) {
+	t.Parallel()
 	db := openDB(t)
 	if err := db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err != nil {
 		t.Fatal(err)
@@ -286,6 +293,7 @@ func TestNullColumnRoundTrips(t *testing.T) {
 }
 
 func TestErrNotFoundForMissingRows(t *testing.T) {
+	t.Parallel()
 	db := openDB(t)
 	t.Run("GetPart", func(t *testing.T) {
 		if _, err := db.GetPart("prt_missing"); !errors.Is(err, storage.ErrNotFound) {
@@ -310,6 +318,7 @@ func TestErrNotFoundForMissingRows(t *testing.T) {
 }
 
 func TestSessionAggregateCostTokens(t *testing.T) {
+	t.Parallel()
 	db := openDB(t)
 	if err := db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Title: "x", Model: "kido/m", Agent: "build", TimeCreated: 1, TimeUpdated: 1}); err != nil {
 		t.Fatal(err)
@@ -334,6 +343,7 @@ func TestSessionAggregateCostTokens(t *testing.T) {
 }
 
 func TestAlwaysRules(t *testing.T) {
+	t.Parallel()
 	db := openDB(t)
 	if err := db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err != nil {
 		t.Fatal(err)
@@ -359,6 +369,7 @@ func TestAlwaysRules(t *testing.T) {
 }
 
 func TestSchemaVersionTracked(t *testing.T) {
+	t.Parallel()
 	db := openDB(t)
 	v, err := db.SchemaVersion()
 	if err != nil {
@@ -370,6 +381,7 @@ func TestSchemaVersionTracked(t *testing.T) {
 }
 
 func TestReopenAlreadyMigratedDatabase(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "yolo.db")
 	db, err := storage.Open(path)
 	if err != nil {

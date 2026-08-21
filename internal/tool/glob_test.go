@@ -25,7 +25,9 @@ func globFixture(t *testing.T) (*Env, string) {
 }
 
 func TestGlobTool(t *testing.T) {
+	t.Parallel()
 	t.Run("matches nested, skips hidden", func(t *testing.T) {
+		t.Parallel()
 		env, _ := globFixture(t)
 		out, err := runTool(t, "glob", env, map[string]any{"pattern": "**/*.go"})
 		if err != nil {
@@ -48,6 +50,7 @@ func TestGlobTool(t *testing.T) {
 		}
 	})
 	t.Run("path must be a directory", func(t *testing.T) {
+		t.Parallel()
 		env, d := globFixture(t)
 		_, err := runTool(t, "glob", env, map[string]any{"pattern": "*", "path": filepath.Join(d, "a", "x.go")})
 		if err == nil || !strings.Contains(err.Error(), "glob path must be a directory") {
@@ -55,6 +58,7 @@ func TestGlobTool(t *testing.T) {
 		}
 	})
 	t.Run("no match", func(t *testing.T) {
+		t.Parallel()
 		env, _ := globFixture(t)
 		out, _ := runTool(t, "glob", env, map[string]any{"pattern": "nomatch*"})
 		if out.Text != "No files found" {

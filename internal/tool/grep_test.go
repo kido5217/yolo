@@ -21,7 +21,9 @@ func grepFixture(t *testing.T) (*Env, string) {
 }
 
 func TestGrepTool(t *testing.T) {
+	t.Parallel()
 	t.Run("matches", func(t *testing.T) {
+		t.Parallel()
 		env, d := grepFixture(t)
 		out, err := runTool(t, "grep", env, map[string]any{"pattern": "alpha"})
 		if err != nil {
@@ -36,6 +38,7 @@ func TestGrepTool(t *testing.T) {
 		}
 	})
 	t.Run("include filter", func(t *testing.T) {
+		t.Parallel()
 		env, _ := grepFixture(t)
 		out, _ := runTool(t, "grep", env, map[string]any{"pattern": "alpha", "include": "*.md"})
 		if !strings.Contains(out.Text, "Found 1 matches") || strings.Contains(out.Text, "a.txt") {
@@ -43,6 +46,7 @@ func TestGrepTool(t *testing.T) {
 		}
 	})
 	t.Run("no match", func(t *testing.T) {
+		t.Parallel()
 		env, _ := grepFixture(t)
 		out, _ := runTool(t, "grep", env, map[string]any{"pattern": "nope"})
 		if out.Text != "No files found" {
@@ -52,6 +56,7 @@ func TestGrepTool(t *testing.T) {
 }
 
 func TestGrepLimit100(t *testing.T) {
+	t.Parallel()
 	d := t.TempDir()
 	var b strings.Builder
 	for i := 0; i < 150; i++ {
@@ -69,6 +74,7 @@ func TestGrepLimit100(t *testing.T) {
 }
 
 func TestGrepExactBlock(t *testing.T) {
+	t.Parallel()
 	d := t.TempDir()
 	if err := os.WriteFile(filepath.Join(d, "only.txt"), []byte("x\nalpha\n"), 0o644); err != nil {
 		t.Fatal(err)

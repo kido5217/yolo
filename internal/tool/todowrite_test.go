@@ -26,7 +26,9 @@ func todoEnv(t *testing.T) (*storage.DB, *Env) {
 }
 
 func TestTodoWritePersistsAndTitles(t *testing.T) {
+	t.Parallel()
 	t.Run("persist, title and round trip", func(t *testing.T) {
+		t.Parallel()
 		db, env := todoEnv(t)
 		raw, _ := json.Marshal(map[string]any{"todos": []map[string]any{
 			{"content": "a", "status": "completed", "priority": "high"},
@@ -61,6 +63,7 @@ func TestTodoWritePersistsAndTitles(t *testing.T) {
 		}
 	})
 	t.Run("update replaces", func(t *testing.T) {
+		t.Parallel()
 		db, env := todoEnv(t)
 		raw, _ := json.Marshal(map[string]any{"todos": []map[string]any{{"content": "z", "status": "pending"}}})
 		if _, err := Registry()["todowrite"].Run(context.Background(), raw, env); err != nil {
@@ -72,6 +75,7 @@ func TestTodoWritePersistsAndTitles(t *testing.T) {
 		}
 	})
 	t.Run("invalid status rejected", func(t *testing.T) {
+		t.Parallel()
 		_, env := todoEnv(t)
 		raw, _ := json.Marshal(map[string]any{"todos": []map[string]any{{"content": "x", "status": "bogus"}}})
 		if _, err := Registry()["todowrite"].Run(context.Background(), raw, env); err == nil || !strings.Contains(err.Error(), "invalid status") {

@@ -8,6 +8,7 @@ import (
 )
 
 func TestEditExactReplace(t *testing.T) {
+	t.Parallel()
 	d := t.TempDir()
 	f := filepath.Join(d, "f.txt")
 	if err := os.WriteFile(f, []byte("one\ntwo\nthree\n"), 0o644); err != nil {
@@ -28,6 +29,7 @@ func TestEditExactReplace(t *testing.T) {
 }
 
 func TestEditErrorsPinned(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		rel  string // path suffix under the per-case dir; "" = f.txt
@@ -48,6 +50,7 @@ func TestEditErrorsPinned(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			d := t.TempDir()
 			f := filepath.Join(d, "f.txt")
 			if err := os.WriteFile(f, []byte("a\nb\na\n"), 0o644); err != nil {
@@ -77,6 +80,7 @@ func TestEditErrorsPinned(t *testing.T) {
 }
 
 func TestEditreplaceAll(t *testing.T) {
+	t.Parallel()
 	d := t.TempDir()
 	f := filepath.Join(d, "f.txt")
 	if err := os.WriteFile(f, []byte("a\nb\na\n"), 0o644); err != nil {
@@ -94,6 +98,7 @@ func TestEditreplaceAll(t *testing.T) {
 }
 
 func TestEditPatternsAndExternal(t *testing.T) {
+	t.Parallel()
 	// Plan deviation: the plan expected Patterns(raw) to return the
 	// env.Dir-relative path ("sub/f.txt"), but the committed Task 11
 	// interface takes raw args only — paths are emitted as given and the

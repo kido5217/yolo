@@ -39,6 +39,7 @@ func runRead(t *testing.T, p string, offset, limit int) (Output, error) {
 }
 
 func TestReadHugeLimitNoPanic(t *testing.T) {
+	t.Parallel()
 	d := t.TempDir()
 	fp := filepath.Join(d, "big.log")
 	if err := os.WriteFile(fp, []byte("a\nb\nc\n"), 0o644); err != nil {
@@ -59,6 +60,7 @@ func TestReadHugeLimitNoPanic(t *testing.T) {
 }
 
 func TestReadDirListingOverflowSafe(t *testing.T) {
+	t.Parallel()
 	d := t.TempDir()
 	for _, n := range []string{"a", "b", "c"} {
 		if err := os.WriteFile(filepath.Join(d, n), []byte("x"), 0o644); err != nil {
@@ -78,6 +80,7 @@ func TestReadDirListingOverflowSafe(t *testing.T) {
 }
 
 func TestReadFileExactFormat(t *testing.T) {
+	t.Parallel()
 	p := tmpFile(t, "a.txt", "l1\nl2\nl3\n")
 	out, err := runRead(t, p, 0, 0)
 	if err != nil {
@@ -93,6 +96,7 @@ func TestReadFileExactFormat(t *testing.T) {
 }
 
 func TestReadFileOffsetLimit(t *testing.T) {
+	t.Parallel()
 	p := tmpFile(t, "a.txt", strings.Repeat("x\n", 10))
 	out, err := runRead(t, p, 3, 2)
 	if err != nil {
@@ -105,6 +109,7 @@ func TestReadFileOffsetLimit(t *testing.T) {
 }
 
 func TestReadFileOffsetOutOfRange(t *testing.T) {
+	t.Parallel()
 	p := tmpFile(t, "a.txt", "a\nb\n")
 	_, err := runRead(t, p, 99, 0)
 	if err == nil || !strings.Contains(err.Error(), "offset 99 is out of range for this file") {
@@ -113,6 +118,7 @@ func TestReadFileOffsetOutOfRange(t *testing.T) {
 }
 
 func TestReadDirListing(t *testing.T) {
+	t.Parallel()
 	d := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(d, "sub"), 0o755); err != nil {
 		t.Fatal(err)
@@ -138,6 +144,7 @@ func TestReadDirListing(t *testing.T) {
 // nothing under the pinned case-insensitive-substring-either-direction
 // algorithm; the "myapp.go"/"app.go" pair exercises it.
 func TestReadMissingFileSuggests(t *testing.T) {
+	t.Parallel()
 	p := tmpFile(t, "src/myapp.go", "x")
 	_, err := runRead(t, strings.Replace(p, "myapp.go", "app.go", 1), 0, 0)
 	if err == nil || !strings.Contains(err.Error(), "Did you mean one of these?") {
@@ -146,6 +153,7 @@ func TestReadMissingFileSuggests(t *testing.T) {
 }
 
 func TestReadBinaryRefused(t *testing.T) {
+	t.Parallel()
 	p := tmpFile(t, "bin.dat", "\x00\x01\x02"+strings.Repeat("a", 100))
 	_, err := runRead(t, p, 0, 0)
 	if err == nil || !strings.HasPrefix(err.Error(), "cannot read binary file:") {
@@ -157,6 +165,7 @@ func TestReadBinaryRefused(t *testing.T) {
 // the 50KB cap under any accounting; 3000 lines x 40 bytes (120000 bytes)
 // cuts around line 1305, before the 2000-line limit, as the test promises.
 func TestReadByteCap(t *testing.T) {
+	t.Parallel()
 	line := strings.Repeat("a", 39) + "\n"
 	p := tmpFile(t, "big.txt", strings.Repeat(line, 3000))
 	out, err := runRead(t, p, 0, 0)
@@ -169,6 +178,7 @@ func TestReadByteCap(t *testing.T) {
 }
 
 func TestTruncateTail(t *testing.T) {
+	t.Parallel()
 	lines := make([]string, 3000)
 	for i := range lines {
 		lines[i] = "line"
@@ -184,6 +194,7 @@ func TestTruncateTail(t *testing.T) {
 }
 
 func TestTruncateSingleLineUTF8Cut(t *testing.T) {
+	t.Parallel()
 	// upstream tail(): a single over-long line keeps its LAST MaxBytes
 	// bytes, advanced to a UTF-8 boundary. One 80000-byte line (40000 x
 	// U+00E9, 2 bytes each) cuts at byte 28800 (already a boundary) and
@@ -214,6 +225,7 @@ func TestTruncateSingleLineUTF8Cut(t *testing.T) {
 }
 
 func TestReadSchema(t *testing.T) {
+	t.Parallel()
 	s := SchemaFor(Registry()["read"])
 	fn := s["function"].(map[string]any)
 	if fn["name"] != "read" {
@@ -228,6 +240,7 @@ func TestReadSchema(t *testing.T) {
 }
 
 func TestDescPinned(t *testing.T) {
+	t.Parallel()
 	// sha256 of upstream v1.18.18 packages/opencode/src/tool/read.txt
 	if !sha256Ok(t, "desc/read.txt", []byte(readDesc), "98ee843341c2dab2227add0019e48d4b2f0f00f9b042b853d1ee52bb34e6363d") {
 		t.Fatal("desc drifted")

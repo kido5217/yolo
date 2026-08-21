@@ -49,6 +49,7 @@ func drain(t *testing.T, s llm.PartStream) []llm.Part {
 }
 
 func TestScriptedTurnsOrder(t *testing.T) {
+	t.Parallel()
 	d := fake.New(
 		fake.Turn{Parts: []llm.Part{{Kind: "text", Text: "one", Finish: "stop"}}},
 		fake.Turn{Parts: []llm.Part{{Kind: "text", Text: "two", Finish: "stop"}}},
@@ -74,6 +75,7 @@ func TestScriptedTurnsOrder(t *testing.T) {
 }
 
 func TestTitleTurnsRouting(t *testing.T) {
+	t.Parallel()
 	d := fake.New(
 		fake.Turn{Parts: []llm.Part{{Kind: "text", Text: "chat", Finish: "stop"}}},
 	)
@@ -114,6 +116,7 @@ func TestTitleTurnsRouting(t *testing.T) {
 }
 
 func TestAutoTextSynthesizesNumbered(t *testing.T) {
+	t.Parallel()
 	d := fake.New(fake.AutoText())
 	want := []string{"ok-1", "ok-2", "ok-3"}
 	for _, w := range want {
@@ -132,6 +135,7 @@ func TestAutoTextSynthesizesNumbered(t *testing.T) {
 }
 
 func TestErrTurn(t *testing.T) {
+	t.Parallel()
 	boom := errors.New("boom")
 	d := fake.New(fake.Turn{Err: boom})
 	s, err := d.Stream(context.Background(), userReq("q"))
@@ -144,6 +148,7 @@ func TestErrTurn(t *testing.T) {
 }
 
 func TestDelayHeldUntilCanceled(t *testing.T) {
+	t.Parallel()
 	d := fake.New(fake.Turn{Parts: []llm.Part{{Kind: "text", Text: "late", Finish: "stop"}}, Delay: 2 * time.Second})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancelAfter(t, cancel, 50*time.Millisecond)
@@ -161,6 +166,7 @@ func TestDelayHeldUntilCanceled(t *testing.T) {
 }
 
 func TestSetDelayAppliesToSynthesizedReplies(t *testing.T) {
+	t.Parallel()
 	d := fake.New(fake.AutoText())
 	d.SetDelay(2 * time.Second)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -179,6 +185,7 @@ func TestSetDelayAppliesToSynthesizedReplies(t *testing.T) {
 }
 
 func TestRequestsCopyIsDetached(t *testing.T) {
+	t.Parallel()
 	d := fake.New()
 	if _, err := d.Stream(context.Background(), userReq("q")); err != nil {
 		t.Fatal(err)
@@ -194,6 +201,7 @@ func TestRequestsCopyIsDetached(t *testing.T) {
 }
 
 func TestFromScript(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "script.json")
 	script := `[
 		{"parts":[{"kind":"text","text":"hi","finish":"stop","usage":{"input":2,"output":3}}],"delay_ms":0},
@@ -233,6 +241,7 @@ func TestFromScript(t *testing.T) {
 }
 
 func TestFromScriptBadJSON(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "bad.json")
 	if err := os.WriteFile(path, []byte(`{"not":"a list"`), 0o644); err != nil {
 		t.Fatal(err)
@@ -243,12 +252,14 @@ func TestFromScriptBadJSON(t *testing.T) {
 }
 
 func TestFromScriptMissingFile(t *testing.T) {
+	t.Parallel()
 	if _, err := fake.FromScript(filepath.Join(t.TempDir(), "nope.json")); err == nil {
 		t.Fatal("want error for missing script")
 	}
 }
 
 func TestParallelStreamsRecordEveryRequest(t *testing.T) {
+	t.Parallel()
 	d := fake.New(fake.AutoText())
 	const n = 10
 	var wg sync.WaitGroup
