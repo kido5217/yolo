@@ -10,13 +10,13 @@ import (
 )
 
 // recoverMiddleware turns handler panics into a 500 envelope (M5). Panics
-// are diagnosed to lob with the stack trace (nil = dropped); the value alone
-// usually cannot locate the fault.
-func recoverMiddleware(lob *log.Logger, next http.Handler) http.Handler {
+// are diagnosed to the logger with the stack trace (nil = dropped); the value
+// alone usually cannot locate the fault.
+func recoverMiddleware(logger *log.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rec := recover(); rec != nil {
-				lob.Errorf("handler panic (path=%s): %v\n%s", r.URL.Path, rec, debug.Stack())
+				logger.Errorf("handler panic (path=%s): %v\n%s", r.URL.Path, rec, debug.Stack())
 				envelope(w, http.StatusInternalServerError, "internal error", nil)
 			}
 		}()

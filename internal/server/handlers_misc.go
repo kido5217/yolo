@@ -93,7 +93,7 @@ func (s *Server) snapshotStoreLocked() auth.Store {
 
 // authState recomputes a provider's auth state in spec order (env ->
 // auth.json -> config apiKey), mirroring auth.ResolveKey.
-func (s *Server) authState(id string, keyRequired bool, store auth.Store, cfg *protocol.Config) (string, string) {
+func (s *Server) authState(id string, keyRequired bool, store auth.Store, cfg *protocol.Config) (status, source string) {
 	if !keyRequired {
 		return "not-required", "none"
 	}

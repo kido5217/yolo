@@ -110,12 +110,12 @@ func bootLog(t *testing.T, drv *fakellm.Driver, cfg *protocol.Config, logDir str
 	}
 	dir := t.TempDir()
 	home := filepath.Join(root, "home")
-	var lob *log.Logger
+	var logger *log.Logger
 	if logDir != "" {
-		lob = log.New(logDir)
-		t.Cleanup(lob.Close)
+		logger = log.New(logDir)
+		t.Cleanup(logger.Close)
 	}
-	h := server.New(server.Deps{
+	h := server.NewHandler(server.Deps{
 		DB:      db,
 		Bus:     b,
 		Engine:  eng,
@@ -124,7 +124,7 @@ func bootLog(t *testing.T, drv *fakellm.Driver, cfg *protocol.Config, logDir str
 		Config:  config.Loader{Env: map[string]string{}},
 		WorkDir: dir,
 		Dirs:    config.Dirs{Home: home, Data: dataDir, Cache: filepath.Join(root, "cache")},
-		Log:     lob,
+		Log:     logger,
 	})
 	ts := httptest.NewServer(h)
 	t.Cleanup(ts.Close)
