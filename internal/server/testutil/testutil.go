@@ -127,6 +127,25 @@ func (ts *TestServer) WaitSubscribe(t *testing.T, n int) {
 	t.Fatalf("timed out waiting for %d bus subscriber(s); have %d", n, ts.Bus.SubscriberCount())
 }
 
+// WaitBusy polls /session/status until the session reports busy (deterministic
+// busy window for 409 tests instead of a fixed sleep). Fails on a 5s deadline.
+func (ts *TestServer) WaitBusy(t *testing.T, dir, id string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		_, b := Req(t, ts, "GET", "/session/status", dir, "")
+		var st struct {
+			Sessions map[string]string `json:"sessions"`
+		}
+		_ = json.Unmarshal(b, &st)
+		if st.Sessions[id] == "busy" {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("session %s never became busy", id)
+}
+
 // FakeDelay makes subsequent fake turns hold open for d (slow-turn tests).
 func (ts *TestServer) FakeDelay(d time.Duration) { ts.Fake.SetDelay(d) }
 

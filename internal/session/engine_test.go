@@ -341,6 +341,19 @@ func waitIdle(t *testing.T, h *harness, ses string, fn func()) {
 	}
 }
 
+// waitBusy polls Status until the session reports busy, so 409/abort tests
+// act inside a deterministic busy window instead of a fixed sleep.
+func waitBusy(t *testing.T, h *harness, ses string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for h.eng.Status(ses) != protocol.StatusBusy {
+		if time.Now().After(deadline) {
+			t.Fatal("turn did not become busy")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
 // waitPart polls the DB until a part of kind (tool parts: in state status)
 // exists in the session; timeout -> fail.
 func waitPart(t *testing.T, h *harness, ses, kind, status string, timeout time.Duration) {

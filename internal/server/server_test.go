@@ -233,6 +233,7 @@ func TestSendMessage409AndEvents(t *testing.T) {
 
 	// subscribe SSE BEFORE sending (no pre-read: nothing is published yet)
 	res := testutil.SSEConnect(t, s, d)
+	s.WaitSubscribe(t, 1) // subscription live before we publish the turn
 	resp, b := testutil.Req(t, s, "POST", "/session/"+id+"/message", d, `{"text":"hello"}`)
 	if resp.StatusCode != 202 {
 		t.Fatalf("send: %d %s", resp.StatusCode, b)
@@ -260,7 +261,7 @@ func TestSendMessage409AndEvents(t *testing.T) {
 	if resp2.StatusCode != 202 {
 		t.Fatalf("second send: %d", resp2.StatusCode)
 	}
-	time.Sleep(50 * time.Millisecond)
+	s.WaitBusy(t, d, id)
 	resp3, b3 := testutil.Req(t, s, "POST", "/session/"+id+"/message", d, `{"text":"thrice"}`)
 	if resp3.StatusCode != 409 {
 		t.Fatalf("want 409 during busy, got %d %s", resp3.StatusCode, b3)

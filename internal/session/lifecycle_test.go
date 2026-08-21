@@ -291,7 +291,7 @@ func TestConcurrentSend409(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(50 * time.Millisecond)
+	waitBusy(t, h, ses)
 	_, err2 := h.eng.Send(context.Background(), ses, "two", nil)
 	if !errors.Is(err2, session.ErrSessionBusy) {
 		t.Fatalf("want ErrSessionBusy, got %v", err2)
