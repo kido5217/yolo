@@ -155,27 +155,34 @@ func TestApply(t *testing.T) {
 }
 
 func TestApplyIgnoresOtherSessions(t *testing.T) {
-	s := seed(t)
-	s.Apply(ev(t, protocol.EventTypeMessageUpdated, protocol.MessageUpdatedProps{
-		SessionID: "ses_9",
-		Info:      protocol.Message{ID: "msg_9", SessionID: "ses_9", Role: "user"},
-	}))
-	if len(s.Messages) != 1 || s.Messages[0].Info.ID != "msg_1" {
-		t.Fatalf("foreign message leaked: %+v", s.Messages)
-	}
-	s.Apply(ev(t, protocol.EventTypeSessionStatus, protocol.SessionStatusProps{
-		SessionID: "ses_9",
-		Status:    protocol.SessionStatus{Type: "busy"},
-	}))
-	if s.Status.Type != "" {
-		t.Fatalf("foreign status leaked: %+v", s.Status)
-	}
-	// a session.updated for the current session updates the list title
-	s.Apply(ev(t, protocol.EventTypeSessionUpdated, protocol.SessionUpdatedProps{
-		SessionID: "ses_1",
-		Info:      protocol.Session{ID: "ses_1", Title: "New Title", ProjectID: "prj_1", Directory: "/d"},
-	}))
-	if s.Sessions[0].Title != "New Title" || s.Current.Title != "New Title" {
-		t.Fatalf("list = %+v current = %+v", s.Sessions, s.Current)
-	}
+	t.Run("foreign message ignored", func(t *testing.T) {
+		s := seed(t)
+		s.Apply(ev(t, protocol.EventTypeMessageUpdated, protocol.MessageUpdatedProps{
+			SessionID: "ses_9",
+			Info:      protocol.Message{ID: "msg_9", SessionID: "ses_9", Role: "user"},
+		}))
+		if len(s.Messages) != 1 || s.Messages[0].Info.ID != "msg_1" {
+			t.Fatalf("foreign message leaked: %+v", s.Messages)
+		}
+	})
+	t.Run("foreign status ignored", func(t *testing.T) {
+		s := seed(t)
+		s.Apply(ev(t, protocol.EventTypeSessionStatus, protocol.SessionStatusProps{
+			SessionID: "ses_9",
+			Status:    protocol.SessionStatus{Type: "busy"},
+		}))
+		if s.Status.Type != "" {
+			t.Fatalf("foreign status leaked: %+v", s.Status)
+		}
+	})
+	t.Run("own session.updated updates title", func(t *testing.T) {
+		s := seed(t)
+		s.Apply(ev(t, protocol.EventTypeSessionUpdated, protocol.SessionUpdatedProps{
+			SessionID: "ses_1",
+			Info:      protocol.Session{ID: "ses_1", Title: "New Title", ProjectID: "prj_1", Directory: "/d"},
+		}))
+		if s.Sessions[0].Title != "New Title" || s.Current.Title != "New Title" {
+			t.Fatalf("list = %+v current = %+v", s.Sessions, s.Current)
+		}
+	})
 }

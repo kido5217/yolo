@@ -11,11 +11,16 @@ import (
 
 // footerApp builds the root app with a fixed 80x24 window and a preloaded
 // store (footer unit table; the client is a dead endpoint, no requests are
-// made). The Current pointer is deep-copied so subtest mutations stay local.
+// made). The Current session and its Model ref are copied (the only field
+// with a pointer) so subtest mutations stay local.
 func footerApp(st store.Store) *recApp {
 	a := testApp()
 	if st.Current != nil {
 		cp := *st.Current
+		if st.Current.Model != nil {
+			m := *st.Current.Model
+			cp.Model = &m
+		}
 		st.Current = &cp
 	}
 	a.store = st

@@ -48,6 +48,7 @@ func TestRenderMessages(t *testing.T) {
 		name     string
 		mutate   func(s *store.Store)
 		expanded map[string]bool
+		empty    bool // use the empty store instead of sessionFixture()
 		want     string
 	}{
 		{
@@ -111,14 +112,15 @@ func TestRenderMessages(t *testing.T) {
 				"! something broke",
 		},
 		{
-			name: "empty store renders nothing",
-			want: "",
+			name:  "empty store renders nothing",
+			empty: true,
+			want:  "",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := sessionFixture()
-			if tt.name == "empty store renders nothing" {
+			if tt.empty {
 				s = store.Store{Current: &protocol.Session{ID: "ses_0"}}
 			}
 			if tt.mutate != nil {
