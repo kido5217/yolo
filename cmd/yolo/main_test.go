@@ -23,7 +23,7 @@ import (
 	"github.com/kido5217/yolo/internal/tui/client"
 )
 
-func TestDispatchServeFlag(t *testing.T) {
+func TestHelpListsSubcommands(t *testing.T) {
 	bin := buildBinary(t)
 	out, err := exec.Command(bin, "help").CombinedOutput()
 	if err != nil {
