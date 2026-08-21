@@ -147,6 +147,60 @@ func TestApply(t *testing.T) {
 		}
 	})
 
+	t.Run("message.part.delta fast path across messages", func(t *testing.T) {
+		s := seed(t)
+		delta := func(partID, msgID, d string) {
+			s.Apply(ev(t, protocol.EventTypeMessagePartDelta, protocol.MessagePartDeltaProps{
+				SessionID: "ses_1", MessageID: msgID, PartID: partID,
+				Field: "text", Delta: d,
+			}))
+		}
+		// first delta primes prt_1's index location
+		delta("prt_1", "msg_1", "!")
+		// a second message with its own part
+		s.Apply(ev(t, protocol.EventTypeMessageUpdated, protocol.MessageUpdatedProps{
+			SessionID: "ses_1",
+			Info:      protocol.Message{ID: "msg_2", SessionID: "ses_1", Role: "assistant"},
+		}))
+		s.Apply(ev(t, protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
+			SessionID: "ses_1",
+			Time:      130,
+			Part:      protocol.Part{ID: "prt_9", SessionID: "ses_1", MessageID: "msg_2", Type: "text", Text: "x"},
+		}))
+		// interleaved second deltas must hit the right part via the index
+		delta("prt_1", "msg_1", "?")
+		delta("prt_9", "msg_2", "y")
+		if got := s.Messages[0].Parts[0].Text; got != "hi!?" {
+			t.Fatalf("prt_1 = %q, want hi!?", got)
+		}
+		if got := s.Messages[1].Parts[0].Text; got != "xy" {
+			t.Fatalf("prt_9 = %q, want xy", got)
+		}
+	})
+
+	t.Run("message.part.delta part removal keeps index valid", func(t *testing.T) {
+		s := seed(t)
+		s.Apply(ev(t, protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
+			SessionID: "ses_1",
+			Time:      130,
+			Part:      protocol.Part{ID: "prt_a", SessionID: "ses_1", MessageID: "msg_1", Type: "text", Text: "a"},
+		}))
+		deltaPart := func(d string) {
+			s.Apply(ev(t, protocol.EventTypeMessagePartDelta, protocol.MessagePartDeltaProps{
+				SessionID: "ses_1", MessageID: "msg_1", PartID: "prt_1",
+				Field: "text", Delta: d,
+			}))
+		}
+		deltaPart("!") // primes prt_1 index at part 0
+		s.Apply(ev(t, protocol.EventTypeMessagePartRemoved, protocol.MessagePartRemovedProps{
+			SessionID: "ses_1", MessageID: "msg_1", PartID: "prt_a",
+		}))
+		deltaPart("?") // prt_a went out at part 1; prt_1 still at part 0
+		if got := s.Messages[0].Parts[0].Text; got != "hi!?" {
+			t.Fatalf("prt_1 = %q, want hi!?", got)
+		}
+	})
+
 	t.Run("message.removed drops the message", func(t *testing.T) {
 		s := seed(t)
 		s.Apply(ev(t, protocol.EventTypeMessageRemoved, protocol.MessageRemovedProps{

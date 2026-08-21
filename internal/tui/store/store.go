@@ -25,15 +25,19 @@ type Store struct {
 	Conn        bool // SSE live (set by the app loop, not Apply)
 	LastHydrate int64
 
-	// parts holds the streamed-part accumulation shadow: one builder per
-	// part so a per-token delta appends instead of re-copying the whole
-	// accumulated text.
+	// parts holds the streamed-part state: the part's location in Messages
+	// (delta fast path) plus one builder per part so a per-token delta
+	// appends instead of re-copying the whole accumulated text.
 	parts map[string]*partState
 }
 
-// partState is one part's delta accumulation: the field last appended to
-// and its shadow text.
+// partPos locates one part inside Messages.
+type partPos struct{ msg, part int }
+
+// partState is one part's delta accumulation: where the part sits, the
+// field last appended to and its shadow text.
 type partState struct {
+	pos   partPos
 	field string // "text" | "reasoning" | "input"
 	buf   strings.Builder
 }
@@ -64,7 +68,6 @@ func (s *Store) Apply(ev protocol.Event) {
 		if json.Unmarshal(ev.Properties, &p) != nil || !s.isCurrent(p.SessionID) {
 			return
 		}
-		s.dropPartsOf(p.MessageID)
 		kept := make([]protocol.MessageWithParts, 0, len(s.Messages))
 		for _, m := range s.Messages {
 			if m.Info.ID != p.MessageID {
@@ -72,12 +75,13 @@ func (s *Store) Apply(ev protocol.Event) {
 			}
 		}
 		s.Messages = kept
+		// The removal shifts message positions: re-derive the index.
+		s.rebuildPartIndex()
 	case protocol.EventTypeMessagePartRemoved:
 		var p protocol.MessagePartRemovedProps
 		if json.Unmarshal(ev.Properties, &p) != nil || !s.isCurrent(p.SessionID) {
 			return
 		}
-		delete(s.parts, p.PartID)
 		for i := range s.Messages {
 			if s.Messages[i].Info.ID != p.MessageID {
 				continue
@@ -90,6 +94,8 @@ func (s *Store) Apply(ev protocol.Event) {
 			}
 			s.Messages[i].Parts = kept
 		}
+		// The removal shifts part positions within the message.
+		s.rebuildPartIndex()
 	case protocol.EventTypeSessionUpdated:
 		var p protocol.SessionUpdatedProps
 		if json.Unmarshal(ev.Properties, &p) != nil {
@@ -172,52 +178,69 @@ func (s *Store) upsertMessage(m protocol.Message) {
 }
 
 func (s *Store) upsertPart(part protocol.Part) {
+	// A full part update is authoritative in every branch: drop any
+	// accumulation shadow so the next delta re-seeds from the new text.
+	s.deletePartState(part.ID)
 	for i := range s.Messages {
 		if s.Messages[i].Info.ID != part.MessageID {
 			continue
 		}
 		for j := range s.Messages[i].Parts {
 			if s.Messages[i].Parts[j].ID == part.ID {
-				// A full part update is authoritative: drop the accumulation
-				// shadow so the next delta re-seeds from the new text.
-				s.deletePartState(part.ID)
 				s.Messages[i].Parts[j] = part
 				return
 			}
 		}
 		s.Messages[i].Parts = append(s.Messages[i].Parts, part)
+		s.placePart(part.ID, i, len(s.Messages[i].Parts)-1)
 		return
 	}
 	s.Messages = append(s.Messages, protocol.MessageWithParts{
 		Info:  protocol.Message{ID: part.MessageID, SessionID: part.SessionID},
 		Parts: []protocol.Part{part},
 	})
+	s.placePart(part.ID, len(s.Messages)-1, 0)
 }
 
 func (s *Store) applyDelta(p protocol.MessagePartDeltaProps) {
+	// Fast path: the streaming part's location is known. The re-check
+	// keeps a stale index entry from writing through the wrong slot.
+	if st := s.parts[p.PartID]; st != nil {
+		pp := st.pos
+		if pp.msg < len(s.Messages) && pp.part < len(s.Messages[pp.msg].Parts) &&
+			s.Messages[pp.msg].Info.ID == p.MessageID && s.Messages[pp.msg].Parts[pp.part].ID == p.PartID {
+			s.appendDelta(&s.Messages[pp.msg].Parts[pp.part], p.Field, p.Delta)
+			return
+		}
+		delete(s.parts, p.PartID)
+	}
 	for i := range s.Messages {
 		if s.Messages[i].Info.ID != p.MessageID {
 			continue
 		}
 		for j := range s.Messages[i].Parts {
-			if s.Messages[i].Parts[j].ID == p.PartID {
-				s.appendDelta(&s.Messages[i].Parts[j], p.Field, p.Delta)
-				return
+			if s.Messages[i].Parts[j].ID != p.PartID {
+				continue
 			}
+			s.appendDelta(&s.Messages[i].Parts[j], p.Field, p.Delta)
+			s.placePart(p.PartID, i, j)
+			return
 		}
 		// delta before the part announce: synthesize the part
-		pr := protocol.Part{ID: p.PartID, SessionID: p.SessionID, MessageID: p.MessageID}
-		s.appendDelta(&pr, p.Field, p.Delta)
-		s.Messages[i].Parts = append(s.Messages[i].Parts, pr)
+		s.Messages[i].Parts = append(s.Messages[i].Parts, protocol.Part{
+			ID: p.PartID, SessionID: p.SessionID, MessageID: p.MessageID,
+		})
+		s.placePart(p.PartID, i, len(s.Messages[i].Parts)-1)
+		s.appendDelta(&s.Messages[i].Parts[len(s.Messages[i].Parts)-1], p.Field, p.Delta)
 		return
 	}
 	// delta for an unknown message: synthesize message and part
-	pr := protocol.Part{ID: p.PartID, SessionID: p.SessionID, MessageID: p.MessageID}
-	s.appendDelta(&pr, p.Field, p.Delta)
 	s.Messages = append(s.Messages, protocol.MessageWithParts{
 		Info:  protocol.Message{ID: p.MessageID, SessionID: p.SessionID},
-		Parts: []protocol.Part{pr},
+		Parts: []protocol.Part{{ID: p.PartID, SessionID: p.SessionID, MessageID: p.MessageID}},
 	})
+	s.placePart(p.PartID, len(s.Messages)-1, 0)
+	s.appendDelta(&s.Messages[len(s.Messages)-1].Parts[0], p.Field, p.Delta)
 }
 
 // appendDelta appends a streamed delta to the part per field ("text" |
@@ -283,29 +306,41 @@ func (s *Store) builderFor(pr *protocol.Part, field string) *strings.Builder {
 	return &st.buf
 }
 
-// deletePartState drops one part's accumulation shadow (the full part
-// update that replaces it is authoritative; the next delta re-seeds).
+// deletePartState drops one part's state (the full part update that
+// replaces it is authoritative; the next delta re-seeds).
 func (s *Store) deletePartState(partID string) {
 	delete(s.parts, partID)
 }
 
-// dropPartsOf drops the accumulation shadows of one message's parts.
-func (s *Store) dropPartsOf(messageID string) {
+// placePart records the part's location, creating the (empty) state when
+// absent — the shadow text is seeded lazily by the first delta.
+func (s *Store) placePart(partID string, i, j int) {
 	if s.parts == nil {
-		return
+		s.parts = make(map[string]*partState)
 	}
-	for i := range s.Messages {
-		if s.Messages[i].Info.ID != messageID {
-			continue
-		}
-		for _, pr := range s.Messages[i].Parts {
-			delete(s.parts, pr.ID)
-		}
+	st := s.parts[partID]
+	if st == nil {
+		st = &partState{}
+		s.parts[partID] = st
 	}
+	st.pos = partPos{msg: i, part: j}
 }
 
-// ForgetParts drops every accumulation shadow; call when Messages is
-// replaced wholesale (e.g. a session-route hydrate).
+// rebuildPartIndex derives every part location fresh from Messages (rare:
+// a message or part removal shifts the slice). Accumulation shadows are
+// dropped with it; the next delta re-seeds from the part's current text.
+func (s *Store) rebuildPartIndex() {
+	next := make(map[string]*partState)
+	for i := range s.Messages {
+		for j := range s.Messages[i].Parts {
+			next[s.Messages[i].Parts[j].ID] = &partState{pos: partPos{msg: i, part: j}}
+		}
+	}
+	s.parts = next
+}
+
+// ForgetParts drops every part state and accumulation shadow; call when
+// Messages is replaced wholesale (e.g. a session-route hydrate).
 func (s *Store) ForgetParts() {
 	s.parts = nil
 }
