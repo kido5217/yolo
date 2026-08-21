@@ -2,16 +2,19 @@ package client
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/kido5217/yolo/internal/protocol"
 )
+
+// sseDataPrefix is the SSE data-line prefix; events carry their JSON after it.
+var sseDataPrefix = []byte("data: ")
 
 // Events streams server events (GET /event, SSE) until ctx is done. On a
 // dropped connection it backs off (c.backoff(attempt)) and reconnects; the
@@ -57,12 +60,14 @@ func (c *Client) stream(ctx context.Context, ch chan<- protocol.Event) error {
 	sc := bufio.NewScanner(resp.Body)
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for sc.Scan() {
-		line := sc.Text()
-		if !strings.HasPrefix(line, "data: ") {
+		// sc.Bytes() is valid until the next Scan; unmarshalling copies the
+		// payload out, so no per-line []byte conversion is needed.
+		line := sc.Bytes()
+		if !bytes.HasPrefix(line, sseDataPrefix) {
 			continue
 		}
 		var ev protocol.Event
-		if err := json.Unmarshal([]byte(line[len("data: "):]), &ev); err != nil {
+		if err := json.Unmarshal(line[len(sseDataPrefix):], &ev); err != nil {
 			continue
 		}
 		select {
