@@ -21,8 +21,8 @@ import (
 // parked.
 var ErrNoPending = errors.New("permission: no pending request")
 
-// Request is one permission ask. DecisionPre carries the engine's
-// pre-evaluation (Allow|Deny | AskAction); zero means "decide now". CallID and
+// Request is one permission ask. PreDecision carries the engine's
+// pre-evaluation (Allow|Deny|Ask); zero means "decide now". CallID and
 // MessageID identify the originating tool call (wire tool ref); they may be
 // empty for non-tool asks.
 type Request struct {
@@ -33,7 +33,7 @@ type Request struct {
 	Always                      []string // suggested always patterns
 	CallID, MessageID           string
 	Meta                        map[string]any
-	DecisionPre                 Decision
+	PreDecision                 Decision
 	CreatedAt                   int64
 }
 
@@ -43,7 +43,7 @@ type pendingEntry struct {
 }
 
 // Service enforces+blocks: the engine evaluates (EvaluateRules) and passes
-// the verdict via DecisionPre; the service persists, parks, and resolves.
+// the verdict via PreDecision; the service persists, parks, and resolves.
 type Service struct {
 	db      *storage.DB
 	bus     *bus.Bus
@@ -123,13 +123,13 @@ func (s *Service) decisionFor(req Request) Decision {
 		}
 	}
 	if anyAsk {
-		return AskAction
+		return Ask
 	}
 	return Allow
 }
 
 // Ask resolves a permission request. A decisive verdict persists the row and
-// returns immediately; AskAction parks the request until Reply (or ctx
+// returns immediately; an Ask verdict parks the request until Reply (or ctx
 // cancel, which stores response='aborted' and denies).
 func (s *Service) Ask(ctx context.Context, req Request) (Decision, error) {
 	if req.RequestID == "" {
@@ -138,11 +138,11 @@ func (s *Service) Ask(ctx context.Context, req Request) (Decision, error) {
 	if req.CreatedAt == 0 {
 		req.CreatedAt = now()
 	}
-	decision := req.DecisionPre
-	if decision == "" || decision == AskAction {
+	decision := req.PreDecision
+	if decision == "" || decision == Ask {
 		decision = s.decisionFor(req)
 	}
-	if decision != AskAction {
+	if decision != Ask {
 		if err := s.persist(req, storedResponse(decision)); err != nil {
 			return "", err
 		}
@@ -237,9 +237,9 @@ func (s *Service) autoAllow(req Request) {
 
 // cascade applies the verdict to every other parked request in the session
 // (used by "reject").
-func (s *Service) cascade(sessionID, skipID string, d Decision, stored, wire string) {
+func (s *Service) cascade(sessionID, skipID string, d Decision, dbResponse, wireReply string) {
 	for _, e := range s.sessionPending(sessionID, skipID) {
-		s.resolve(e.req.RequestID, d, stored, wire, true)
+		s.resolve(e.req.RequestID, d, dbResponse, wireReply, true)
 	}
 }
 
@@ -260,7 +260,7 @@ func (s *Service) sessionPending(sessionID, skipID string) []*pendingEntry {
 // decision to the waiting asker. Reply persistence is best-effort here: the
 // decision is already in memory, so deliver and publish happen regardless of
 // the DB result — a failed write must not strand the blocked Ask.
-func (s *Service) resolve(requestID string, d Decision, stored, wire string, auto bool) {
+func (s *Service) resolve(requestID string, d Decision, dbResponse, wireReply string, auto bool) {
 	s.mu.Lock()
 	e, ok := s.pending[requestID]
 	delete(s.pending, requestID)
@@ -270,12 +270,12 @@ func (s *Service) resolve(requestID string, d Decision, stored, wire string, aut
 	}
 	s.mu.Unlock()
 
-	if err := s.db.ReplyPermission(requestID, stored); err != nil {
+	if err := s.db.ReplyPermission(requestID, dbResponse); err != nil {
 		if !errors.Is(err, storage.ErrNotFound) {
 			s.lg.Errorf("permission: persist reply %s: %v", requestID, err)
 		}
 	}
-	props := protocol.PermissionRepliedProps{RequestID: requestID, Reply: wire, Auto: auto}
+	props := protocol.PermissionRepliedProps{RequestID: requestID, Reply: wireReply, Auto: auto}
 	if sessionID != "" {
 		props.SessionID = sessionID
 	}

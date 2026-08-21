@@ -12,13 +12,13 @@ func r(perm, pattern, effect string) protocol.Rule {
 
 func TestEvaluateFindLastNoMatchAsk(t *testing.T) {
 	rules := []protocol.Rule{r("*", "*", "allow"), r("read", "*.env", "ask")}
-	if got := Evaluate(rules, "read", []string{"a.env"}); got != AskAction {
+	if got := Evaluate(rules, "read", []string{"a.env"}); got != Ask {
 		t.Fatalf("got %v", got)
 	}
 	if got := Evaluate(rules, "read", []string{"a.go"}); got != Allow {
 		t.Fatalf("got %v", got)
 	}
-	if got := Evaluate([]protocol.Rule{}, "bash", []string{"ls *"}); got != AskAction {
+	if got := Evaluate([]protocol.Rule{}, "bash", []string{"ls *"}); got != Ask {
 		t.Fatalf("no rule → ask, got %v", got)
 	}
 }
@@ -35,7 +35,7 @@ func TestMultiResourceAnyDenyWins(t *testing.T) {
 // ask — so mixed ask+allow is Ask, not Allow.
 func TestMultiResourceAskAllowMixesToAsk(t *testing.T) {
 	rules := []protocol.Rule{r("*", "*", "allow"), r("read", "*.env", "ask")}
-	if got := Evaluate(rules, "read", []string{"a.env", "a.go"}); got != AskAction {
+	if got := Evaluate(rules, "read", []string{"a.env", "a.go"}); got != Ask {
 		t.Fatalf("mixed ask+allow → %v, want ask", got)
 	}
 }

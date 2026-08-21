@@ -54,7 +54,7 @@ func TestAskPreAllowNoBlock(t *testing.T) {
 		t.Fatal(err)
 	}
 	req := e.req("per_1")
-	req.DecisionPre = Allow
+	req.PreDecision = Allow
 	done := make(chan Decision, 1)
 	go func() {
 		d, err := e.svc.Ask(context.Background(), req)

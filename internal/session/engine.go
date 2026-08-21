@@ -985,7 +985,7 @@ func (e *Engine) executeTool(ctx context.Context, sessionID, agent string, row s
 			Permission: "doom_loop", Tool: t.ID(),
 			Resources: []string{name},
 			CallID:    callID, MessageID: asstID,
-			DecisionPre: d, CreatedAt: e.clock(),
+			PreDecision: d, CreatedAt: e.clock(),
 		}
 		decision, err := e.perm.Ask(ctx, doomReq)
 		if err != nil {
@@ -1025,7 +1025,7 @@ func (e *Engine) executeTool(ctx context.Context, sessionID, agent string, row s
 			Permission: "external_directory", Tool: t.ID(),
 			Resources: []string{pattern},
 			CallID:    callID, MessageID: asstID,
-			DecisionPre: d, CreatedAt: e.clock(),
+			PreDecision: d, CreatedAt: e.clock(),
 		}
 		decision, aerr := e.perm.Ask(ctx, extReq)
 		if aerr != nil || decision != permission.Allow {
@@ -1041,7 +1041,7 @@ func (e *Engine) executeTool(ctx context.Context, sessionID, agent string, row s
 		Permission: t.Permission(), Tool: t.ID(),
 		Resources: resources, Always: always,
 		CallID: callID, MessageID: asstID,
-		DecisionPre: d, CreatedAt: e.clock(),
+		PreDecision: d, CreatedAt: e.clock(),
 	}
 	decision, err := e.perm.Ask(ctx, preq)
 	if err != nil {

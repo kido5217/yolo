@@ -11,9 +11,9 @@ import (
 type Action string
 
 const (
-	Allow     Action = "allow"
-	Deny      Action = "denied"
-	AskAction Action = "ask"
+	Allow Action = "allow"
+	Deny  Action = "denied"
+	Ask   Action = "ask"
 )
 
 // Decision is an evaluation outcome.
@@ -48,7 +48,7 @@ func Evaluate(rules []protocol.Rule, action string, resources []string) Decision
 		}
 	}
 	if anyAsk {
-		return AskAction
+		return Ask
 	}
 	return Allow
 }
