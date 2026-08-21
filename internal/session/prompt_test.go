@@ -128,6 +128,13 @@ func TestEnvBlock(t *testing.T) {
 	}
 }
 
+// buildSystemPromptForTest is the test seam over buildCore: instructions are
+// given explicitly and no config is involved (the engine appends the config
+// instructions itself, see messagesFor).
+func buildSystemPromptForTest(dir string, model provider.Model, providerID string, instructionPaths []string) ([]string, error) {
+	return buildCore(dir, model.ID, providerID, instructionPaths)
+}
+
 func TestBuildSystemPromptInstructions(t *testing.T) {
 	d := t.TempDir()
 	if err := os.WriteFile(filepath.Join(d, "AGENTS.md"), []byte("PROJECT RULES"), 0o644); err != nil {

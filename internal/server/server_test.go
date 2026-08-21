@@ -428,7 +428,7 @@ func TestSendLogsFailedTurn(t *testing.T) {
 	prov := provider.NewStaticForTest()
 	permSvc := permission.New(db, b, nil, dataDir)
 	drv := fakellm.New(fakellm.Turn{Err: errors.New("boom")})
-	eng := session.New(session.Deps{
+	eng, err := session.New(session.Deps{
 		DB:      db,
 		Bus:     b,
 		Prov:    prov,
@@ -440,6 +440,9 @@ func TestSendLogsFailedTurn(t *testing.T) {
 		Backoff: func(int) time.Duration { return time.Millisecond },
 		Clock:   func() int64 { return time.Now().UnixMilli() },
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	logDir := t.TempDir()
 	lob := log.New(logDir)
 	t.Cleanup(lob.Close)

@@ -159,12 +159,6 @@ func BuildSystemPrompt(dir string, model provider.Model, apiID, providerID strin
 	return buildCore(dir, apiID, providerID, nil)
 }
 
-// buildSystemPromptForTest is the core used by tests (and the future engine):
-// instructions are given explicitly and no config is involved.
-func buildSystemPromptForTest(dir string, model provider.Model, providerID string, instructionPaths []string) ([]string, error) {
-	return buildCore(dir, model.ID, providerID, instructionPaths)
-}
-
 func buildCore(dir, apiID, providerID string, instructionPaths []string) ([]string, error) {
 	_, famText, err := FamilyPrompt(apiID, providerID)
 	if err != nil {

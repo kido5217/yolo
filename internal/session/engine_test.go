@@ -140,7 +140,7 @@ func (h *harness) build(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.drv = drv
-	h.eng = session.New(session.Deps{
+	eng, err := session.New(session.Deps{
 		DB:      h.db,
 		Bus:     h.bus,
 		Prov:    reg,
@@ -161,6 +161,10 @@ func (h *harness) build(t *testing.T) {
 			return time.Second << uint(attempt-1)
 		},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.eng = eng
 }
 
 // wiredDriver picks the driver for the test provider: the slowDriver
@@ -192,6 +196,54 @@ func (s slowDriver) Stream(ctx context.Context, req llm.Request) (llm.PartStream
 		}
 	}
 	return s.h.drv.Stream(ctx, req)
+}
+
+// TestNewValidatesRequiredDeps: a miswired dep is a construction error, not
+// a nil panic deep in an un-recovered turn goroutine (single-binary crash).
+func TestNewValidatesRequiredDeps(t *testing.T) {
+	valid := func() session.Deps {
+		return session.Deps{
+			DB:    nil, // filled per case
+			Bus:   bus.New(),
+			Prov:  provider.NewStaticForTest(),
+			Perm:  nil, // filled per case
+			Tools: tool.Registry(),
+		}
+	}
+	db, err := storage.Open(filepath.Join(t.TempDir(), "yolo.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	perm := permission.New(db, bus.New(), nil, "")
+
+	cases := []struct {
+		name string
+		mut  func(d *session.Deps)
+	}{
+		{"nil DB", func(d *session.Deps) { d.DB = nil; d.Perm = perm }},
+		{"nil Bus", func(d *session.Deps) { d.DB = db; d.Bus = nil; d.Perm = perm }},
+		{"nil Prov", func(d *session.Deps) { d.DB = db; d.Prov = nil; d.Perm = perm }},
+		{"nil Perm", func(d *session.Deps) { d.DB = db; d.Perm = nil }},
+		{"nil Tools", func(d *session.Deps) { d.DB = db; d.Perm = perm; d.Tools = nil }},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			d := valid()
+			c.mut(&d)
+			if _, err := session.New(d); err == nil {
+				t.Fatal("New accepted a required dep as nil")
+			}
+		})
+	}
+	t.Run("valid deps construct", func(t *testing.T) {
+		d := valid()
+		d.DB = db
+		d.Perm = perm
+		if _, err := session.New(d); err != nil {
+			t.Fatalf("New(valid) = %v", err)
+		}
+	})
 }
 
 // cfgLoader mirrors h.cfgPermission into the config permission map. The

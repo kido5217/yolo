@@ -81,7 +81,7 @@ func boot(t *testing.T, drv *fakellm.Driver, cfg *protocol.Config) *TestServer {
 	b := bus.New()
 	prov := provider.NewStaticForTest()
 	permSvc := permission.New(db, b, nil, dataDir)
-	eng := session.New(session.Deps{
+	eng, err := session.New(session.Deps{
 		DB:      db,
 		Bus:     b,
 		Prov:    prov,
@@ -92,6 +92,9 @@ func boot(t *testing.T, drv *fakellm.Driver, cfg *protocol.Config) *TestServer {
 		Drivers: map[string]llm.Driver{"kido": drv},
 		Clock:   func() int64 { return time.Now().UnixMilli() },
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	dir := t.TempDir()
 	home := filepath.Join(root, "home")
 	h := server.New(server.Deps{

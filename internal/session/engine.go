@@ -82,7 +82,22 @@ type Engine struct {
 	shells map[string]*tool.Shell
 }
 
-func New(d Deps) *Engine {
+// New builds the engine from its deps. DB, Bus, Prov, Perm and Tools are
+// required: a miswired dep is a construction error, not a nil panic deep in
+// an un-recovered turn goroutine (which would crash the single binary).
+func New(d Deps) (*Engine, error) {
+	switch {
+	case d.DB == nil:
+		return nil, errors.New("session: Deps.DB required")
+	case d.Bus == nil:
+		return nil, errors.New("session: Deps.Bus required")
+	case d.Prov == nil:
+		return nil, errors.New("session: Deps.Prov required")
+	case d.Perm == nil:
+		return nil, errors.New("session: Deps.Perm required")
+	case d.Tools == nil:
+		return nil, errors.New("session: Deps.Tools required")
+	}
 	clock := d.Clock
 	if clock == nil {
 		clock = func() int64 { return time.Now().UnixMilli() }
@@ -105,7 +120,7 @@ func New(d Deps) *Engine {
 		backoff: backoff,
 		busy:    map[string]context.CancelFunc{},
 		shells:  map[string]*tool.Shell{},
-	}
+	}, nil
 }
 
 // defaultBackoff is the production retry delay after a failed attempt

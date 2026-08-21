@@ -162,16 +162,10 @@ func buildDeps(workDir string) (*server.Deps, func(), error) {
 		closeDB()
 		return fail(err)
 	}
+	var drivers map[string]llm.Driver
 	if fake != nil {
 		deps.Prov = provider.NewStaticForTest()
-		deps.Engine = session.New(session.Deps{
-			DB: db, Bus: deps.Bus, Prov: deps.Prov, Perm: deps.Perm,
-			Tools: tool.Registry(), DataDir: dataDir, Log: lob,
-			Cfg: func(dir string) (*protocol.Config, error) {
-				return loader.LoadAt(globalDir, dir)
-			},
-			Drivers: map[string]llm.Driver{"kido": fake},
-		})
+		drivers = map[string]llm.Driver{"kido": fake}
 	} else {
 		prov, err := provider.New(context.Background(), cfg, nil, provider.Dirs{})
 		if err != nil {
@@ -179,14 +173,20 @@ func buildDeps(workDir string) (*server.Deps, func(), error) {
 			return fail(err)
 		}
 		deps.Prov = prov
-		deps.Engine = session.New(session.Deps{
-			DB: db, Bus: deps.Bus, Prov: deps.Prov, Perm: deps.Perm,
-			Tools: tool.Registry(), DataDir: dataDir, Log: lob,
-			Cfg: func(dir string) (*protocol.Config, error) {
-				return loader.LoadAt(globalDir, dir)
-			},
-		})
 	}
+	engine, err := session.New(session.Deps{
+		DB: db, Bus: deps.Bus, Prov: deps.Prov, Perm: deps.Perm,
+		Tools: tool.Registry(), DataDir: dataDir, Log: lob,
+		Cfg: func(dir string) (*protocol.Config, error) {
+			return loader.LoadAt(globalDir, dir)
+		},
+		Drivers: drivers,
+	})
+	if err != nil {
+		closeDB()
+		return fail(err)
+	}
+	deps.Engine = engine
 	return deps, closeDB, nil
 }
 
