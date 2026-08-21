@@ -1,6 +1,6 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-21 (v0.1.2 in progress: wave 7/16 done, next wave 8 — refactoring)
+**Updated:** 2026-08-21 (v0.1.2 in progress: wave 8/16 done, next wave 9 — cli)
 
 Rolling checkpoint: active task + last-completed + verified facts + v0.1.2-era deviation log +
 open items. Keep it small — `git log --oneline` and the plan files are the archive (no
@@ -27,28 +27,23 @@ roll this file (active → one-line "Last completed", next task → "Active").
 
 ## Active
 
-v0.1.2 skill-driven review — wave 8 (golang-refactoring, ASSESSMENT-ONLY: no code changes,
-NO fix subagent; findings file doubles as the 0.2.0 refactor backlog), not started. Plan:
+v0.1.2 skill-driven review — wave 9 (golang-cli), not started. Plan:
 docs/superpowers/plans/2026-08-19-v0.1.2-skill-review.md (read ONLY the active task slice;
-resume protocol in the plan header). Task 8 = single chunk R8a (Template R with the
-replacements pinned in Task 8 Step 1: IDs `[refactor-<n>]`, header
-`# golang-refactoring — repo-wide`; method = size/long-function scans, read the 6 largest
-files in full, package-boundary grep; every backlog item states target end-state + effort,
-contract-risk behavior|none). Findings → 08-refactoring-backlog.md, then Steps 2–5
-(coverage verify, commit `docs(review): v0.1.2 — wave 8 (refactoring): <N> backlog items`,
-gate, PROGRESS roll + checkpoint `wave 8/16 done, next wave 9 — cli`). Findings under
-docs/superpowers/reviews/v0.1.2/.
+resume protocol in the plan header). Task 9 = single chunk R9a (Template R: lens =
+golang-cli, IDs `[cli-<n>]`, scope block in Task 9 Step 1 — cmd/yolo/main.go,
+main_test.go, scripts/e2e-live.sh read in full; findings → 09-cli-cmd.md), then Steps 2–6
+same shape as Task 1 (coverage verify, findings commit `docs(review): v0.1.2 — wave 9
+(cli): <N> findings (…)`, fix subagent (Template F, `<SKILL>`=`golang-cli`) iff any
+`contract-risk: none`, gate, PROGRESS roll + checkpoint `wave 9/16 done, next wave 10 —
+testing`). Findings under docs/superpowers/reviews/v0.1.2/.
 Commit gate:
 go vet ./... && go test ./... + gofmt -l . + golangci-lint run ./...
 
 ## Last completed
 
-Wave 7 (design-patterns): 17 findings (P0:0 P1:2 P2:8 P3:7) — 10 fixed (39a196e
-permission ctor + dead-Meta seam; b15a220 session.New dep validation + test seam to
-_test.go; 6cbff51 single Server instance + ReadHeaderTimeout; ed51579 fetched row through
-handlers + shared config merge; 3632e98 TUI store by value + cmd capture to test wrapper),
-7 deferred (policy B: 5 behavior + 2 wire → 0.2.0 backlog), 0 FALSE / 0 WONTFIX
-(findings commit 5e59950; status commit 0f1d36c).
+Wave 8 (refactoring, assessment-only): 16 backlog items for 0.2.0 (08-refactoring-backlog.md,
+P2:5 P3:11 — engine.go concern-split + runRound/executeTool extraction, shared llm SSE
+pump, app.go split; package import map verified clean). No code changed, no fix subagent.
 
 ## Open items
 
