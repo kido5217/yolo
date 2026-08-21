@@ -321,6 +321,40 @@ func TestAbortEndpoint(t *testing.T) {
 	}
 }
 
+// TestMalformedBody400 pins the basic error path: a truncated/invalid JSON
+// body on POST/PATCH answers 400 with the error envelope (bad dir and bad
+// command values are covered elsewhere).
+func TestMalformedBody400(t *testing.T) {
+	t.Parallel()
+	s := testutil.Boot(t)
+	d := t.TempDir()
+	id := mkSession(t, s, d, "Bad")
+	cases := []struct {
+		name, method, path, body string
+	}{
+		{"session_create", "POST", "/session", `{"title":`},
+		{"message_send", "POST", "/session/" + id + "/message", `{"text":`},
+		{"config_patch", "PATCH", "/config", `{"model":`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			resp, b := testutil.Req(t, s, c.method, c.path, d, c.body)
+			if resp.StatusCode != 400 {
+				t.Fatalf("%s %s: status = %d, want 400: %s", c.method, c.path, resp.StatusCode, b)
+			}
+			var env struct {
+				Error struct{ Message string } `json:"error"`
+			}
+			if err := json.Unmarshal(b, &env); err != nil {
+				t.Fatalf("envelope decode: %v (%s)", err, b)
+			}
+			if env.Error.Message == "" {
+				t.Fatalf("empty error envelope: %s", b)
+			}
+		})
+	}
+}
+
 func TestCommandEndpoint(t *testing.T) {
 	s := testutil.Boot(t)
 	d := t.TempDir()

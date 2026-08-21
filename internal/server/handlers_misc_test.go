@@ -146,30 +146,36 @@ func TestAuthPutDelete(t *testing.T) {
 	if resp.StatusCode != 204 {
 		t.Fatalf("put: %d", resp.StatusCode)
 	}
-	_, b := testutil.Req(t, s, "GET", "/provider", "", "")
-	var ps []protocol.Provider
-	if err := json.Unmarshal(b, &ps); err != nil {
-		t.Fatalf("unmarshal: %v (%s)", err, b)
-	}
-	for _, p := range ps {
-		if p.ID == "opencode" {
-			if p.Auth == nil || p.Auth.Status != "loaded" {
-				t.Fatalf("zen auth after put = %+v", p.Auth)
-			}
+	byID := func(t *testing.T) map[string]protocol.Provider {
+		t.Helper()
+		_, b := testutil.Req(t, s, "GET", "/provider", "", "")
+		var ps []protocol.Provider
+		if err := json.Unmarshal(b, &ps); err != nil {
+			t.Fatalf("unmarshal: %v (%s)", err, b)
 		}
+		out := map[string]protocol.Provider{}
+		for _, p := range ps {
+			out[p.ID] = p
+		}
+		return out
+	}
+	z, ok := byID(t)["opencode"]
+	if !ok {
+		t.Fatal("opencode missing from provider list")
+	}
+	if z.Auth == nil || z.Auth.Status != "loaded" {
+		t.Fatalf("zen auth after put = %+v", z.Auth)
 	}
 	resp, _ = testutil.Req(t, s, "DELETE", "/auth/opencode", "", "")
 	if resp.StatusCode != 204 {
 		t.Fatalf("delete: %d", resp.StatusCode)
 	}
-	_, b = testutil.Req(t, s, "GET", "/provider", "", "")
-	if err := json.Unmarshal(b, &ps); err != nil {
-		t.Fatalf("unmarshal: %v (%s)", err, b)
+	z, ok = byID(t)["opencode"]
+	if !ok {
+		t.Fatal("opencode missing from provider list after delete")
 	}
-	for _, p := range ps {
-		if p.ID == "opencode" && p.Auth != nil && p.Auth.Status == "loaded" {
-			t.Fatalf("key still loaded after delete")
-		}
+	if z.Auth != nil && z.Auth.Status == "loaded" {
+		t.Fatalf("key still loaded after delete: %+v", z.Auth)
 	}
 }
 
@@ -210,9 +216,10 @@ func TestPermissionListAndReply(t *testing.T) {
 	if resp.StatusCode != 404 {
 		t.Fatalf("unknown reply: %d", resp.StatusCode)
 	}
+	// LOCKED: validate body first → 400 (not 404)
 	resp, _ = testutil.Req(t, s, "POST", "/permission/per_missing/reply", d, `{"response":"bogus"}`)
-	if resp.StatusCode == 404 { // 404 wins over 400? LOCKED: validate body first → 400
-		t.Fatalf("bad response should be 400")
+	if resp.StatusCode != 400 {
+		t.Fatalf("bad response: status = %d, want 400", resp.StatusCode)
 	}
 }
 
