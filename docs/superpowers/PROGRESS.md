@@ -1,6 +1,6 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-21 (v0.1.2 in progress: wave 6/16 done, next wave 7 — design-patterns)
+**Updated:** 2026-08-21 (v0.1.2 in progress: wave 7/16 done, next wave 8 — refactoring)
 
 Rolling checkpoint: active task + last-completed + verified facts + v0.1.2-era deviation log +
 open items. Keep it small — `git log --oneline` and the plan files are the archive (no
@@ -27,29 +27,28 @@ roll this file (active → one-line "Last completed", next task → "Active").
 
 ## Active
 
-v0.1.2 skill-driven review — wave 7 (golang-design-patterns), not started. Plan:
+v0.1.2 skill-driven review — wave 8 (golang-refactoring, ASSESSMENT-ONLY: no code changes,
+NO fix subagent; findings file doubles as the 0.2.0 refactor backlog), not started. Plan:
 docs/superpowers/plans/2026-08-19-v0.1.2-skill-review.md (read ONLY the active task slice;
-resume protocol in the plan header). Task 7 = 2 chunks, one at a time R7a (core+session+
-permission) → R7b (server+tui-core), both grep-driven, Template R, lens =
-golang-design-patterns, IDs `[design-<n>]`, scope blocks in Task 7 Step 1, ASSESSMENT-
-BIASED (policy B: structural findings → contract-risk: behavior unless provably
-behavior-neutral; local behavior-neutral fixes → none). Findings →
-07-design-core-session.md + 07-design-server-tui.md, then Steps 2–6 same shape as Task 1
-(coverage verify, findings commit `docs(review): v0.1.2 — wave 7 (design-patterns): <N>
-findings (…)`, fix subagent (Template F, `<SKILL>`=`golang-design-patterns`) iff any
-`contract-risk: none` — expect few, dispatch only if any, gate, PROGRESS roll +
-checkpoint `wave 7/16 done, next wave 8 — refactoring`). Findings under
+resume protocol in the plan header). Task 8 = single chunk R8a (Template R with the
+replacements pinned in Task 8 Step 1: IDs `[refactor-<n>]`, header
+`# golang-refactoring — repo-wide`; method = size/long-function scans, read the 6 largest
+files in full, package-boundary grep; every backlog item states target end-state + effort,
+contract-risk behavior|none). Findings → 08-refactoring-backlog.md, then Steps 2–5
+(coverage verify, commit `docs(review): v0.1.2 — wave 8 (refactoring): <N> backlog items`,
+gate, PROGRESS roll + checkpoint `wave 8/16 done, next wave 9 — cli`). Findings under
 docs/superpowers/reviews/v0.1.2/.
 Commit gate:
 go vet ./... && go test ./... + gofmt -l . + golangci-lint run ./...
 
 ## Last completed
 
-Wave 6 (database): 8 findings (P0:0 P1:1 P2:3 P3:4) — 6 fixed (c6dd42c per-connection
-PRAGMAs via DSN; a0ba445 pool capped at 1 conn; ff44b2b NULL/reopen/ErrNotFound tests;
-67c3b27 param LIMIT + SchemaVersion/agent-default dedupe), 2 deferred (database-3 ctx
-propagation → 0.2.0, API churn; database-6 ORDER BY tiebreaker — render tag), 0 FALSE /
-0 WONTFIX (findings commit fb1d282; status commit 3437cff).
+Wave 7 (design-patterns): 17 findings (P0:0 P1:2 P2:8 P3:7) — 10 fixed (39a196e
+permission ctor + dead-Meta seam; b15a220 session.New dep validation + test seam to
+_test.go; 6cbff51 single Server instance + ReadHeaderTimeout; ed51579 fetched row through
+handlers + shared config merge; 3632e98 TUI store by value + cmd capture to test wrapper),
+7 deferred (policy B: 5 behavior + 2 wire → 0.2.0 backlog), 0 FALSE / 0 WONTFIX
+(findings commit 5e59950; status commit 0f1d36c).
 
 ## Open items
 
