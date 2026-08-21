@@ -215,6 +215,29 @@ func TestTextAndToolPartRoundTrip(t *testing.T) {
 	}
 }
 
+func TestClosedDBReturnsErrors(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "yolo.db")
+	db, err := storage.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.GetPart("prt_x"); err == nil {
+		t.Error("GetPart on closed DB: want error, got nil")
+	}
+	if _, err := db.Exec(`SELECT 1`); err == nil {
+		t.Error("Exec on closed DB: want error, got nil")
+	}
+	if _, err := db.Query(`SELECT 1`); err == nil {
+		t.Error("Query on closed DB: want error, got nil")
+	}
+	if err := db.CreateSession(storage.SessionRow{ID: "s", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err == nil {
+		t.Error("CreateSession on closed DB: want error, got nil")
+	}
+}
+
 func TestProtocolToPartTextStateJSONBytes(t *testing.T) {
 	// The text branch of ProtocolToPart is on the streaming hot path; its
 	// output is a round-trip contract with PartToProtocol. The encoder may

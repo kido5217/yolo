@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"strings"
+	"sync"
 
 	_ "modernc.org/sqlite"
 
@@ -16,9 +17,13 @@ import (
 // ErrNotFound is returned when a row does not exist.
 var ErrNotFound = errors.New("storage: not found")
 
-// DB wraps a SQL database.
+// DB wraps a SQL database. Exec/Query/QueryRow route through a cache of
+// prepared statements, so repeated calls reuse the driver's prepared
+// statement instead of re-parsing the SQL on every call.
 type DB struct {
 	*sql.DB
+	mu    sync.Mutex
+	stmts map[string]*sql.Stmt
 }
 
 // Open opens (creates if missing) the database at path and runs pending
@@ -36,7 +41,7 @@ func Open(path string) (*DB, error) {
 	// construction (no pooled connections can bypass them).
 	raw.SetMaxOpenConns(1)
 	raw.SetMaxIdleConns(1)
-	d := &DB{raw}
+	d := &DB{DB: raw, stmts: make(map[string]*sql.Stmt)}
 	if err := d.migrate(); err != nil {
 		raw.Close()
 		return nil, err
@@ -44,8 +49,69 @@ func Open(path string) (*DB, error) {
 	return d, nil
 }
 
-// Close closes the underlying database.
-func (d *DB) Close() error { return d.DB.Close() }
+// Close closes the cached prepared statements and the underlying database.
+func (d *DB) Close() error {
+	d.mu.Lock()
+	var errs []error
+	for q, st := range d.stmts {
+		if err := st.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		delete(d.stmts, q)
+	}
+	d.mu.Unlock()
+	if err := d.DB.Close(); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
+}
+
+// Exec executes query through the cached prepared statement.
+func (d *DB) Exec(query string, args ...any) (sql.Result, error) {
+	st, err := d.prepare(query)
+	if err != nil {
+		return nil, err
+	}
+	return st.Exec(args...)
+}
+
+// Query executes query through the cached prepared statement.
+func (d *DB) Query(query string, args ...any) (*sql.Rows, error) {
+	st, err := d.prepare(query)
+	if err != nil {
+		return nil, err
+	}
+	return st.Query(args...)
+}
+
+// QueryRow executes query through the cached prepared statement. A failed
+// prepare (e.g. after Close) falls through to the underlying *sql.DB so
+// callers see the same error from Scan as before caching was introduced.
+func (d *DB) QueryRow(query string, args ...any) *sql.Row {
+	st, err := d.prepare(query)
+	if err != nil {
+		return d.DB.QueryRow(query, args...)
+	}
+	return st.QueryRow(args...)
+}
+
+// prepare returns the cached prepared statement for query, preparing and
+// caching it on first use. Mutex held only across the map update;
+// Exec/Query never run under it (a blocking Exec must not serialize the
+// statement lookup).
+func (d *DB) prepare(query string) (*sql.Stmt, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if st, ok := d.stmts[query]; ok {
+		return st, nil
+	}
+	st, err := d.Prepare(query)
+	if err != nil {
+		return nil, err
+	}
+	d.stmts[query] = st
+	return st, nil
+}
 
 // SchemaVersion returns the applied schema version (0 if none).
 func (d *DB) SchemaVersion() (int, error) { return d.currentSchemaVersion() }
