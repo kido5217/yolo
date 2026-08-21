@@ -24,13 +24,13 @@ func testCommands() []protocol.Command {
 // pressAlt builds an alt-modified keypress (the T25 rebound expand/think keys).
 func pressAlt(r rune) tea.KeyPressMsg { return tea.KeyPressMsg{Code: r, Mod: tea.ModAlt} }
 
-func typeStr(a *App, s string) {
+func typeStr(a *recApp, s string) {
 	for _, r := range s {
 		a.handleKey(press(r))
 	}
 }
 
-func hasToast(a *App, msg string) bool {
+func hasToast(a *recApp, msg string) bool {
 	for _, t := range a.toasts {
 		if t.msg == msg {
 			return true

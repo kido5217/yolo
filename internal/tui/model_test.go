@@ -58,7 +58,7 @@ func tuiAgentFixture() []protocol.Agent {
 }
 
 // modelFixture builds a session-route app with the offline catalog hydrated.
-func modelFixture() *App {
+func modelFixture() *recApp {
 	a := testApp()
 	a.store.Current = &protocol.Session{ID: "ses_1", Agent: "build", Model: refModel("kido", "q")}
 	a.store.Providers = tuiProviderFixture()
@@ -70,14 +70,14 @@ func modelFixture() *App {
 }
 
 // openModelAt opens the model dialog and resets the recorded cmds.
-func openModelAt() *App {
+func openModelAt() *recApp {
 	a := modelFixture()
 	a.openModelDialog()
 	a.Cmds = nil
 	return a
 }
 
-func modelBlock(t *testing.T, a *App, want string) {
+func modelBlock(t *testing.T, a *recApp, want string) {
 	t.Helper()
 	if got := stripANSI(a.modelDlg.view(&a.store)); got != want {
 		t.Errorf("model dialog mismatch:\ngot:\n%q\nwant:\n%q", got, want)
@@ -391,7 +391,7 @@ func TestTUIModelDialog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	a := NewApp(c, &store.Store{}, ses.ID)
+	a := newRecApp(c, store.Store{}, ses.ID)
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 

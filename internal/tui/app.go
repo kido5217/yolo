@@ -55,20 +55,20 @@ type App struct {
 	lastErr   string
 	spinIdx   int // footer spinner frame
 	// tea plumbing
-	size    tea.WindowSizeMsg
-	eventCh chan protocol.Event
-	stop    context.CancelFunc
-	record  bool
-	Cmds    []tea.Cmd // test hook: emitted cmds are captured here when record
+	size     tea.WindowSizeMsg
+	eventCh  chan protocol.Event
+	stop     context.CancelFunc
+	emitSink func(cmds ...tea.Cmd) // test seam, set from _test.go only
 }
 
 // NewApp builds the root model. A non-empty startSessionID starts on that
 // session (resume); empty starts at home. The prompt is always focused with a
 // static (non-blinking) cursor.
-func NewApp(c *client.Client, s *store.Store, startSessionID string) *App {
+func NewApp(c *client.Client, s store.Store, startSessionID string) *App {
 	ctx, cancel := context.WithCancel(context.Background())
 	a := &App{
 		Client:  c,
+		store:   s,
 		route:   routeHome,
 		home:    homeModel{now: nowMillis},
 		sess:    newSessionModel(80, 21),
@@ -83,9 +83,6 @@ func NewApp(c *client.Client, s *store.Store, startSessionID string) *App {
 	in.SetStyles(st)
 	in.Focus()
 	a.prompt.input = in
-	if s != nil {
-		a.store = *s
-	}
 	if startSessionID != "" {
 		a.route = routeSession
 		a.cur = startSessionID
@@ -732,14 +729,18 @@ func (a *App) abortCmd() tea.Cmd {
 	}
 }
 
-// emit returns cmds unchanged; when record is set (tests) it also captures
-// them in a.Cmds.
+// emit returns cmds unchanged; when a test sink is installed (emitSink), it
+// also captures the non-nil cmds there.
 func (a *App) emit(cmds ...tea.Cmd) []tea.Cmd {
-	if a.record {
+	if a.emitSink != nil {
+		nonNil := make([]tea.Cmd, 0, len(cmds))
 		for _, c := range cmds {
 			if c != nil {
-				a.Cmds = append(a.Cmds, c)
+				nonNil = append(nonNil, c)
 			}
+		}
+		if len(nonNil) > 0 {
+			a.emitSink(nonNil...)
 		}
 	}
 	return cmds

@@ -171,10 +171,8 @@ func TestRenderMessagesTitleFallbacks(t *testing.T) {
 	}
 }
 
-func testSessionApp(s store.Store) *App {
-	a := NewApp(client.New("http://127.0.0.1:9", ""), &s, "ses_0")
-	a.record = true
-	return a
+func testSessionApp(s store.Store) *recApp {
+	return newRecApp(client.New("http://127.0.0.1:9", ""), s, "ses_0")
 }
 
 func TestSessionKeys(t *testing.T) {

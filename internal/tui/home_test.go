@@ -25,11 +25,10 @@ func refModel(p, m string) *protocol.ModelRef {
 	return &r
 }
 
-func testApp(sessions ...protocol.Session) *App {
-	a := NewApp(client.New("http://127.0.0.1:9", ""), &store.Store{}, "")
+func testApp(sessions ...protocol.Session) *recApp {
+	a := newRecApp(client.New("http://127.0.0.1:9", ""), store.Store{}, "")
 	a.store.Sessions = sessions
 	a.home.now = func() int64 { return testNow }
-	a.record = true
 	return a
 }
 

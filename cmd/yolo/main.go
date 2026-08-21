@@ -269,7 +269,7 @@ func tuiMode(args []string) int {
 		}
 	}
 
-	app := tui.NewApp(cl, &store.Store{}, sessionID)
+	app := tui.NewApp(cl, store.Store{}, sessionID)
 	_, runErr := tea.NewProgram(app).Run()
 	app.Close()
 	drain(deps, srv)

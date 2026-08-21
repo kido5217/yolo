@@ -31,7 +31,7 @@ func permProps() protocol.PermissionAskedProps {
 	}
 }
 
-func permApp() *App {
+func permApp() *recApp {
 	a := testApp()
 	a.store.Pending = []protocol.PermissionAskedProps{permProps()}
 	a.route = routeSession
@@ -210,7 +210,7 @@ func permHarness(t *testing.T) (*testutil.TestServer, *client.Client, *teatest.T
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	a := NewApp(c, &store.Store{}, ses.ID)
+	a := newRecApp(c, store.Store{}, ses.ID)
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 10))
 	return ts, c, tm, ses.ID

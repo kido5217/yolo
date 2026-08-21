@@ -27,7 +27,7 @@ const wantHelp = "Help\n" +
 	"  | alt+e / alt+t | expand tool part / toggle reasoning |\n" +
 	"  pgup/pgdn scroll \u00B7 \\+enter newline"
 
-func openHelp(t *testing.T) *App {
+func openHelp(t *testing.T) *recApp {
 	t.Helper()
 	a := testApp()
 	a.dlg.push(dialog{kind: dlgHelp})
