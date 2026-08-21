@@ -49,6 +49,11 @@ func TestBashCwdPersistsAcrossCalls(t *testing.T) {
 func TestBashNonZeroExitIsSuccessWithMeta(t *testing.T) {
 	d := t.TempDir()
 	env := &Env{Dir: d, Limits: Limits{2000, 50 * 1024}, Shell: NewShell(d, Limits{2000, 50 * 1024})}
+	t.Cleanup(func() {
+		if err := env.Shell.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	raw, _ := json.Marshal(map[string]any{"command": "echo oops; exit 3"})
 	out, err := Registry()["bash"].Run(context.Background(), raw, env)
 	if err != nil {
@@ -65,6 +70,11 @@ func TestBashNonZeroExitIsSuccessWithMeta(t *testing.T) {
 func TestBashStderrMerged(t *testing.T) {
 	d := t.TempDir()
 	env := &Env{Dir: d, Limits: Limits{2000, 50 * 1024}, Shell: NewShell(d, Limits{2000, 50 * 1024})}
+	t.Cleanup(func() {
+		if err := env.Shell.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	raw, _ := json.Marshal(map[string]any{"command": "echo err >&2"})
 	out, _ := Registry()["bash"].Run(context.Background(), raw, env)
 	if !strings.Contains(out.Text, "err") {
@@ -75,6 +85,11 @@ func TestBashStderrMerged(t *testing.T) {
 func TestBashTimeoutKillsAndReports(t *testing.T) {
 	d := t.TempDir()
 	env := &Env{Dir: d, Limits: Limits{2000, 50 * 1024}, Shell: NewShell(d, Limits{2000, 50 * 1024})}
+	t.Cleanup(func() {
+		if err := env.Shell.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	raw, _ := json.Marshal(map[string]any{"command": "sleep 5", "timeout": 300})
 	_, err := Registry()["bash"].Run(context.Background(), raw, env)
 	if err == nil {
@@ -127,13 +142,19 @@ func TestBashWhitespaceOnlyCommandRejected(t *testing.T) {
 func TestBashPermissionPatterns(t *testing.T) {
 	raw, _ := json.Marshal(map[string]any{"command": "git commit -m x"})
 	res, always, err := Registry()["bash"].Patterns(raw)
-	if err != nil || res[0] != "git *" || always[0] != "git *" {
-		t.Fatalf("patterns %v %v %v", res, always, err)
+	if err != nil {
+		t.Fatalf("patterns err = %v", err)
+	}
+	if len(res) != 1 || res[0] != "git *" {
+		t.Fatalf("patterns = %v, want [git *]", res)
+	}
+	if len(always) != 1 || always[0] != "git *" {
+		t.Fatalf("always = %v, want [git *]", always)
 	}
 	raw2, _ := json.Marshal(map[string]any{"command": "ls"})
 	res2, _, _ := Registry()["bash"].Patterns(raw2)
-	if res2[0] != "ls" {
-		t.Fatalf("single-token = %v", res2)
+	if len(res2) != 1 || res2[0] != "ls" {
+		t.Fatalf("single-token = %v, want [ls]", res2)
 	}
 	if Registry()["bash"].Permission() != "bash" {
 		t.Fatal("perm action")
