@@ -27,25 +27,19 @@ roll this file (active → one-line "Last completed", next task → "Active").
 
 ## Active
 
-v0.1.2 skill-driven review — wave 12 (golang-performance, evidence-only), not started.
-Plan: docs/superpowers/plans/2026-08-19-v0.1.2-skill-review.md (read ONLY the active task
-slice; resume protocol in the plan header). Step 1: dispatch R12a (one subagent, Template R,
-lens = golang-performance, IDs `[performance-<n>]`): read 00-inventory.md section 2
-(hot-path candidates) FIRST, then targeted reads of sse.go, engine.go (emit/stream path
-only), prompt.go, dao.go, openai.go, anthropic.go, app.go (View/render path only),
-store.go. Evidence-driven: every finding MUST carry the evidence produced (benchmark
-number or allocation trace) + the cost it removes; allowed: run existing tests with
-`-bench=. -benchtime=1x`; throwaway benchmark code ONLY in /tmp/yolo-v0.1.2-perf/
-(create it — never inside the repo, never under /tmp/opencode). Findings file:
-12-performance-hotpaths.md. Policy B: only behavior-neutral micro-fixes (preallocation,
-strings.Builder, avoiding a copy, hoisting) are `contract-risk: none`; anything requiring
-a redesign / new data structure with different timing or outputs / cache → `behavior`
-(auto-deferred to 0.2.0 with the evidence attached). Then: commit findings, fix subagent
-(Template F, `<SKILL>`=`golang-performance`) iff any `contract-risk: none`, stop-the-line
-check, full gate, PROGRESS roll `wave 12/16 done, next wave 13 — benchmark`, checkpoint
-commit `docs: checkpoint — v0.1.2 wave 12 (performance) done, next wave 13 (benchmark)`.
-Commit gate:
-go vet ./... && go test ./... + gofmt -l . + golangci-lint run ./...
+v0.1.2 skill-driven review — wave 12 (golang-performance, evidence-only) IN PROGRESS.
+Step 1 DONE: R12a (YOLO) `COVERAGE: full` → 12-performance-hotpaths.md, 7 findings
+(P0:0 P1:0 P2:2 P3:5 — deviation 70 count correction), committed 9e2a28b: perf-1
+(per-delta full-text re-encode + full-row SQLite re-upsert, O(n²)/part, 128KB ≈ 13ms
+encode + ~51ms DB) and perf-7 (messagesFor re-derives whole history each round, 13.1ms
+@100 msgs) are `behavior` → auto-deferred to 0.2.0 with the evidence attached;
+perf-2..6 are `contract-risk: none`. Next = Steps 2–6 (Task 1 mechanics verbatim):
+dispatch fix subagent (Template F, `<SKILL>`=`golang-performance`,
+`<FILES>`=12-performance-hotpaths.md, YOLO); count final statuses on finding lines
+(FALSE+WONTFIX > 50% → stop-the-line, ask user); full gate (go vet+test, gofmt,
+golangci-lint); status commit in findings; roll PROGRESS `wave 12/16 done, next wave 13
+— benchmark`; checkpoint commit
+`docs: checkpoint — v0.1.2 wave 12 (performance) done, next wave 13 (benchmark)`.
 
 ## Last completed
 
@@ -131,3 +125,9 @@ supersedes plan text: root agent is YOLO → subagents must be YOLO. Wave-5 fix 
 dispatched as YOLO (first run 3 fixes + status commit 9d463d4; resumed once for
 deferred-status backfill ea67e84). Plan text left unedited — principle 8 governs all
 remaining dispatches; historical (waves 1–4) dispatch records unrewritten.
+70. Wave-12 count correction (process, minor, 2026-08-21): R12a returned a Stats line
+`P0:0 P1:0 P2:2 P3:4` (6) but its `## Findings` section holds 7 lines (P2:2 P3:5,
+perf-1..7). Per core principle 5 the finding lines are the contract: orchestrator
+corrected the Stats line to `P3:5` and amended the still-local, unreferenced findings
+commit to `docs(review): v0.1.2 — wave 12 (performance): 7 findings (P0:0 P1:0 P2:2
+P3:5)` (9e2a28b) before any other commit referenced it.
