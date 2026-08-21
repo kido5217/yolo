@@ -20,6 +20,7 @@ type sessionModel struct {
 	vm       viewport.Model
 	expanded map[string]bool
 	follow   bool
+	dirty    bool // transcript needs a re-render (store mutation, expand toggle)
 	content  string
 }
 
@@ -43,6 +44,7 @@ func newSessionModel(w, h int) sessionModel {
 		vm:       viewport.New(viewport.WithWidth(w), viewport.WithHeight(h)),
 		expanded: map[string]bool{},
 		follow:   true,
+		dirty:    true,
 	}
 }
 
@@ -60,15 +62,21 @@ const sessionHelp = "pgup/pgdn scroll \u00B7 alt+e expand \u00B7 alt+t think \u0
 // sync updates viewport size/content and applies auto-follow: while the
 // session is busy and follow is on, the viewport stays pinned to the bottom;
 // a user scroll-up (pgup) pauses follow until pgdn reaches the bottom again.
+// The transcript re-renders only when dirty (store mutation or expand
+// toggle); frames that only advance the footer spinner or report a status
+// tick reuse the existing viewport content instead of rebuilding it.
 func (sm *sessionModel) sync(st *store.Store, w, h int) {
 	if sm.vm.Width() != w || sm.vm.Height() != h {
 		sm.vm.SetWidth(w)
 		sm.vm.SetHeight(h)
 	}
-	content := renderMessages(st, sm.expanded, w)
-	if content != sm.content {
-		sm.content = content
-		sm.vm.SetContent(content)
+	if sm.dirty {
+		sm.dirty = false
+		content := renderMessages(st, sm.expanded, w)
+		if content != sm.content {
+			sm.content = content
+			sm.vm.SetContent(content)
+		}
 	}
 	if sm.follow && sessionBusy(st) {
 		sm.vm.GotoBottom()
@@ -82,7 +90,7 @@ func (sm *sessionModel) sync(st *store.Store, w, h int) {
 // expanded maps partID to the parts whose I/O block or reasoning text is
 // shown.
 func renderMessages(st *store.Store, expanded map[string]bool, w int) string {
-	var blocks []string
+	blocks := make([]string, 0, len(st.Messages))
 	for _, m := range st.Messages {
 		if m.Info.Role == "user" {
 			blocks = append(blocks, renderUser(m))
@@ -285,6 +293,7 @@ func (a *App) handleSessionKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 		} else {
 			a.sess.expanded[id] = true
 		}
+		a.sess.dirty = true
 		return nil, true
 	case key.Matches(k, sessKeyMap.Think):
 		expand := false
@@ -306,6 +315,9 @@ func (a *App) handleSessionKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 			} else {
 				delete(a.sess.expanded, id)
 			}
+		}
+		if expand {
+			a.sess.dirty = true
 		}
 		return nil, true
 	case key.Matches(k, escBinding):

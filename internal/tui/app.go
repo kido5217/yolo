@@ -126,6 +126,9 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 	case EventMsg:
 		a.store.Conn = true
 		a.store.Apply(m.Ev)
+		// Any applied event may have changed the transcript (message/part
+		// family); re-render once instead of on every frame.
+		a.sess.dirty = true
 		return a.afterApply(a.eventPump())
 	case connLostMsg:
 		a.store.Conn = false
@@ -269,6 +272,7 @@ func (a *App) applyHydrate(m hydratedMsg) tea.Cmd {
 		}
 		a.store.Messages = m.msgs
 		a.store.ForgetParts()
+		a.sess.dirty = true
 		a.store.LastHydrate = time.Now().UnixMilli()
 		return nil
 	default:
