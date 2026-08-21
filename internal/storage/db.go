@@ -22,24 +22,17 @@ type DB struct {
 	*sql.DB
 }
 
-// Open opens (creates if missing) the database at path, applies PRAGMAs and
-// runs pending migrations.
+// Open opens (creates if missing) the database at path and runs pending
+// migrations. The PRAGMAs are set per connection via DSN keys, since
+// busy_timeout and foreign_keys are not persisted: every connection the
+// pool opens carries them, including replacements after idle reaping.
 func Open(path string) (*DB, error) {
-	raw, err := sql.Open("sqlite", path)
+	dsn := "file:" + path + "?_foreign_keys=1&_busy_timeout=5000&_journal_mode=WAL"
+	raw, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}
 	d := &DB{raw}
-	for _, pragma := range []string{
-		`PRAGMA journal_mode=WAL`,
-		`PRAGMA busy_timeout=5000`,
-		`PRAGMA foreign_keys=ON`,
-	} {
-		if _, err := d.Exec(pragma); err != nil {
-			raw.Close()
-			return nil, err
-		}
-	}
 	if err := d.migrate(); err != nil {
 		raw.Close()
 		return nil, err

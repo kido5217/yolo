@@ -3,7 +3,9 @@ package storage_test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/kido5217/yolo/internal/protocol"
@@ -18,6 +20,54 @@ func openDB(t *testing.T) *storage.DB {
 	}
 	t.Cleanup(func() { db.Close() })
 	return db
+}
+
+func TestOpenAppliesPragmasToEveryConnection(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "yolo.db")
+	db, err := storage.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	// A transaction stays bound to its pool connection until rollback, so
+	// concurrent txs hold one distinct connection each; every one of them
+	// must carry the per-connection PRAGMAs.
+	const n = 4
+	errs := make(chan error, n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			tx, err := db.Begin()
+			if err != nil {
+				errs <- err
+				return
+			}
+			defer tx.Rollback()
+			var fk, busy int
+			if err := tx.QueryRow(`PRAGMA foreign_keys`).Scan(&fk); err != nil {
+				errs <- err
+				return
+			}
+			if err := tx.QueryRow(`PRAGMA busy_timeout`).Scan(&busy); err != nil {
+				errs <- err
+				return
+			}
+			if fk != 1 {
+				errs <- fmt.Errorf("connection foreign_keys = %d, want 1", fk)
+				return
+			}
+			if busy != 5000 {
+				errs <- fmt.Errorf("connection busy_timeout = %d, want 5000", busy)
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Error(err)
+	}
 }
 
 func TestSessionCRUDAndListOrder(t *testing.T) {
