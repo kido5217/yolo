@@ -73,6 +73,27 @@ func TestGrepLimit100(t *testing.T) {
 	}
 }
 
+func TestGrepLineSplitSemantics(t *testing.T) {
+	t.Parallel()
+	d := t.TempDir()
+	// "a\n" splits into ["a", ""] and "" splits into [""]: a pattern that
+	// matches empty lines must hit the trailing empty segment as its own
+	// (last) line number.
+	if err := os.WriteFile(filepath.Join(d, "a.txt"), []byte("a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(d, "empty.txt"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	env := &Env{Dir: d, Limits: Limits{2000, 50 * 1024}}
+	out, _ := runTool(t, "grep", env, map[string]any{"pattern": "^$"})
+	want := "Found 2 matches\n\n" + filepath.Join(d, "a.txt") + ":\n  Line 2: \n\n" +
+		filepath.Join(d, "empty.txt") + ":\n  Line 1: "
+	if out.Text != want {
+		t.Fatalf("block = %q, want %q", out.Text, want)
+	}
+}
+
 func TestGrepExactBlock(t *testing.T) {
 	t.Parallel()
 	d := t.TempDir()
