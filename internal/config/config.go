@@ -101,9 +101,9 @@ func (l Loader) Load(workDir string) (*protocol.Config, error) {
 }
 
 const (
-	globalFiles   = "config.json"
-	yoloFilesJSON = "yolo.json"
-	yoloFilesC    = "yolo.jsonc"
+	globalFile    = "config.json"
+	yoloFileJSON  = "yolo.json"
+	yoloFileJSONC = "yolo.jsonc"
 )
 
 // LoadGlobal reads the global config layer in globalDir: config.json, then
@@ -113,7 +113,7 @@ const (
 func LoadGlobal(globalDir string) (*protocol.Config, error) {
 	l := Loader{}
 	merged := map[string]any{}
-	for _, f := range []string{globalFiles, yoloFilesJSON, yoloFilesC} {
+	for _, f := range []string{globalFile, yoloFileJSON, yoloFileJSONC} {
 		m, err := l.readFile(filepath.Join(globalDir, f))
 		if err != nil {
 			return nil, err
@@ -152,7 +152,7 @@ func SaveGlobal(globalDir string, cfg *protocol.Config) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(globalDir, yoloFilesC), b, 0o644)
+	return os.WriteFile(filepath.Join(globalDir, yoloFileJSONC), b, 0o644)
 }
 
 func cfgFromMap(merged map[string]any) (*protocol.Config, error) {
@@ -185,7 +185,7 @@ func (l Loader) LoadAt(globalDir, startDir string) (*protocol.Config, error) {
 	merged := map[string]any{}
 
 	// Global precedence: config.json -> yolo.json -> yolo.jsonc.
-	for _, f := range []string{globalFiles, yoloFilesJSON, yoloFilesC} {
+	for _, f := range []string{globalFile, yoloFileJSON, yoloFileJSONC} {
 		m, err := l.readFile(filepath.Join(globalDir, f))
 		if err != nil {
 			return nil, err
@@ -205,7 +205,7 @@ func (l Loader) LoadAt(globalDir, startDir string) (*protocol.Config, error) {
 		dir = parent
 	}
 	for i := len(chain) - 1; i >= 0; i-- {
-		for _, f := range []string{yoloFilesJSON, yoloFilesC} {
+		for _, f := range []string{yoloFileJSON, yoloFileJSONC} {
 			m, err := l.readFile(filepath.Join(chain[i], f))
 			if err != nil {
 				return nil, err
@@ -215,7 +215,7 @@ func (l Loader) LoadAt(globalDir, startDir string) (*protocol.Config, error) {
 	}
 
 	// startDir/.yolo, innermost override of the project directory.
-	for _, f := range []string{yoloFilesJSON, yoloFilesC} {
+	for _, f := range []string{yoloFileJSON, yoloFileJSONC} {
 		m, err := l.readFile(filepath.Join(startDir, ".yolo", f))
 		if err != nil {
 			return nil, err
