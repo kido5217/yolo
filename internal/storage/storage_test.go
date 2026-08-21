@@ -70,6 +70,15 @@ func TestOpenAppliesPragmasToEveryConnection(t *testing.T) {
 	}
 }
 
+func TestOpenBoundsConnectionPool(t *testing.T) {
+	db := openDB(t)
+	// Single-process SQLite store: one shared connection keeps at most
+	// one writer and makes the per-connection PRAGMAs total.
+	if got := db.Stats().MaxOpenConnections; got != 1 {
+		t.Errorf("MaxOpenConnections = %d, want 1", got)
+	}
+}
+
 func TestSessionCRUDAndListOrder(t *testing.T) {
 	db := openDB(t)
 	mk := storage.SessionRow{ProjectDir: "/w", Title: "t", Model: "kido/Qwen3.8-27B", Agent: "build"}

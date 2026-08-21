@@ -32,6 +32,11 @@ func Open(path string) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	// One shared connection: a single-writer SQLite store needs at most
+	// one writer, and it makes the per-connection PRAGMAs total by
+	// construction (no pooled connections can bypass them).
+	raw.SetMaxOpenConns(1)
+	raw.SetMaxIdleConns(1)
 	d := &DB{raw}
 	if err := d.migrate(); err != nil {
 		raw.Close()
