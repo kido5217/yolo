@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -52,6 +53,11 @@ type harness struct {
 
 	eventsMu sync.Mutex
 	events   []protocol.Event
+
+	// slowCancel counts held slow-driver streams that observed ctx
+	// cancellation (asserted after Shutdown, so "abort, not wait" is
+	// deterministic instead of a wall-clock margin).
+	slowCancel atomic.Int32
 
 	replies chan string
 	done    chan struct{} // closed on cleanup; lets the watcher exit a pending wait
@@ -192,6 +198,7 @@ func (s slowDriver) Stream(ctx context.Context, req llm.Request) (llm.PartStream
 		select {
 		case <-time.After(500 * time.Millisecond):
 		case <-ctx.Done():
+			s.h.slowCancel.Add(1)
 			return llm.PartStream{}, ctx.Err()
 		}
 	}
@@ -658,8 +665,9 @@ func TestHistoryReplayIncludesToolResults(t *testing.T) {
 
 // TestShutdownAbortsActiveAndWaits: two sessions with active turns (the
 // slowTurn seam holds each stream open 500 ms); Shutdown aborts all of
-// them and returns once every turn has released — well under the 500 ms
-// hold, i.e. it aborts rather than waits.
+// them — each held stream observes its context cancelled, so "abort, not
+// wait" is asserted deterministically, not on a wall-clock margin — and
+// returns once every turn has released.
 func TestShutdownAbortsActiveAndWaits(t *testing.T) {
 	h := newHarness(t)
 	h.build(t)
@@ -679,9 +687,7 @@ func TestShutdownAbortsActiveAndWaits(t *testing.T) {
 		t.Fatalf("status(%s) = %s, want busy", sesB, got)
 	}
 
-	start := time.Now()
 	h.eng.Shutdown(context.Background())
-	elapsed := time.Since(start)
 
 	if got := h.eng.Status(sesA); got != protocol.StatusIdle {
 		t.Fatalf("status(%s) = %s, want idle", sesA, got)
@@ -689,7 +695,10 @@ func TestShutdownAbortsActiveAndWaits(t *testing.T) {
 	if got := h.eng.Status(sesB); got != protocol.StatusIdle {
 		t.Fatalf("status(%s) = %s, want idle", sesB, got)
 	}
-	if elapsed > 400*time.Millisecond {
-		t.Fatalf("Shutdown took %s; slowTurn holds each stream 500 ms, so it should abort, not wait", elapsed)
+	// a stream only takes the ctx.Done() branch when its context is
+	// cancelled; if Shutdown had waited out the 500 ms holds, no held
+	// stream would have observed a cancellation.
+	if got := h.slowCancel.Load(); got < 2 {
+		t.Fatalf("held streams observing ctx cancellation = %d, want >= 2 (one per session)", got)
 	}
 }
