@@ -426,7 +426,7 @@ func TestSendLogsFailedTurn(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 	b := bus.New()
 	prov := provider.NewStaticForTest()
-	permSvc := permission.New(db, b)
+	permSvc := permission.New(db, b, nil, dataDir)
 	drv := fakellm.New(fakellm.Turn{Err: errors.New("boom")})
 	eng := session.New(session.Deps{
 		DB:      db,

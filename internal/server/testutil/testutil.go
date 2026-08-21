@@ -80,7 +80,7 @@ func boot(t *testing.T, drv *fakellm.Driver, cfg *protocol.Config) *TestServer {
 	t.Cleanup(func() { _ = db.Close() })
 	b := bus.New()
 	prov := provider.NewStaticForTest()
-	permSvc := permission.New(db, b)
+	permSvc := permission.New(db, b, nil, dataDir)
 	eng := session.New(session.Deps{
 		DB:      db,
 		Bus:     b,

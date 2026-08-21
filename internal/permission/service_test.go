@@ -25,7 +25,7 @@ func newEnv(t *testing.T) *env {
 	}
 	t.Cleanup(func() { db.Close() })
 	b := bus.New()
-	return &env{db: db, bus: b, svc: New(db, b)}
+	return &env{db: db, bus: b, svc: New(db, b, nil, "")}
 }
 
 // awaitPending polls Pending until it holds exactly want entries, failing on

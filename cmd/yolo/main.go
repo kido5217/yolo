@@ -137,7 +137,7 @@ func buildDeps(workDir string) (*server.Deps, func(), error) {
 	deps := &server.Deps{
 		DB:     db,
 		Bus:    b,
-		Perm:   permission.New(db, b),
+		Perm:   permission.New(db, b, lob, dataDir),
 		Config: loader,
 		Log:    lob,
 		// Dirs are resolved above: the server never re-resolves XDG itself
@@ -145,7 +145,6 @@ func buildDeps(workDir string) (*server.Deps, func(), error) {
 		Dirs:    config.Dirs{Home: homeDir, Data: dataDir, Cache: cacheDir},
 		WorkDir: workDir,
 	}
-	deps.Perm.SetLogger(lob)
 
 	globalDir, err := config.GlobalYoloDir()
 	if err != nil {

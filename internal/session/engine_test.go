@@ -30,6 +30,10 @@ type harness struct {
 	drv *fakellm.Driver
 	svc *permission.Service
 
+	// dataDir is shared by the engine Deps and the permission service (the
+	// engine used to push it per turn; the service now carries it at build).
+	dataDir string
+
 	// cfgPermission feeds the Cfg seam (read per turn, so it may be set
 	// after build, before Send).
 	cfgPermission []protocol.Rule
@@ -61,9 +65,11 @@ func newHarness(t *testing.T) *harness {
 	}
 	b := bus.New()
 	ch, unsub := b.Subscribe()
+	dataDir := t.TempDir()
 	h := &harness{
 		t: t, db: db, bus: b,
-		svc:     permission.New(db, b),
+		svc:     permission.New(db, b, nil, dataDir),
+		dataDir: dataDir,
 		replies: make(chan string, 32),
 		done:    make(chan struct{}),
 	}
@@ -140,7 +146,7 @@ func (h *harness) build(t *testing.T) {
 		Prov:    reg,
 		Perm:    h.svc,
 		Tools:   tool.Registry(),
-		DataDir: t.TempDir(),
+		DataDir: h.dataDir,
 		Cfg:     h.cfgLoader(),
 		// slowDriver reads h.slowTurn per Stream call (the test sets it
 		// after build) and slows the call by sleeping in the wrapper before

@@ -335,7 +335,6 @@ func (e *Engine) runTurn(ctx context.Context, sessionID string, row storage.Sess
 	})
 
 	cfg, cfgErr := e.loadCfg(row.ProjectDir)
-	e.perm.SetDataDir(e.dataDir)
 	cfgRules := []protocol.Rule{}
 	if cfgErr == nil && cfg != nil {
 		// Invalid permission entries degrade to no config rules (config

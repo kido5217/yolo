@@ -45,27 +45,21 @@ type pendingEntry struct {
 // Service enforces+blocks: the engine evaluates (EvaluateRules) and passes
 // the verdict via DecisionPre; the service persists, parks, and resolves.
 type Service struct {
-	db  *storage.DB
-	bus *bus.Bus
-	lg  *log.Logger // nil = no-op
+	db      *storage.DB
+	bus     *bus.Bus
+	lg      *log.Logger // nil = no-op, constructor-carried
+	dataDir string      // plan-matrix dir, process-constant (constructor)
 
 	mu       sync.Mutex
 	pending  map[string]*pendingEntry
 	cfgRules []protocol.Rule
-	dataDir  string
 }
 
-func New(db *storage.DB, b *bus.Bus) *Service {
-	return &Service{db: db, bus: b, pending: map[string]*pendingEntry{}}
-}
-
-// SetLogger sets the diagnostic logger (nil is a no-op). Production wiring
-// calls this before the service is used; like SetDataDir it is a
-// set-once-before-use seam, not a concurrent config surface.
-func (s *Service) SetLogger(lg *log.Logger) {
-	s.mu.Lock()
-	s.lg = lg
-	s.mu.Unlock()
+// New builds the service. lg may be nil (no-op logging). dataDir is the
+// process-constant data directory used for the plan matrix in DecisionFor.
+func New(db *storage.DB, b *bus.Bus, lg *log.Logger, dataDir string) *Service {
+	return &Service{db: db, bus: b, lg: lg, dataDir: dataDir,
+		pending: map[string]*pendingEntry{}}
 }
 
 // SetConfigRules stores the config permission rules used by DecisionFor
@@ -73,14 +67,6 @@ func (s *Service) SetLogger(lg *log.Logger) {
 func (s *Service) SetConfigRules(rules []protocol.Rule) {
 	s.mu.Lock()
 	s.cfgRules = rules
-	s.mu.Unlock()
-}
-
-// SetDataDir sets the data directory used for the plan matrix in
-// DecisionFor. The engine calls this at session start.
-func (s *Service) SetDataDir(dir string) {
-	s.mu.Lock()
-	s.dataDir = dir
 	s.mu.Unlock()
 }
 
@@ -102,13 +88,9 @@ func (s *Service) DecisionFor(req Request) Decision {
 }
 
 func (s *Service) decisionFor(req Request) Decision {
-	dataDir := s.dataDir
-	if v, ok := req.Meta["data_dir"].(string); ok {
-		dataDir = v
-	}
 	// Unknown (custom) agents fall back to the build matrix via
 	// BuiltinsFor (mirrors the engine's ruleset path).
-	rules := BuiltinsFor(req.Agent, dataDir)
+	rules := BuiltinsFor(req.Agent, s.dataDir)
 	s.mu.Lock()
 	cfg := s.cfgRules
 	s.mu.Unlock()
