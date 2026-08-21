@@ -1,6 +1,6 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-21 (v0.1.2 in progress: wave 5/16 done, next wave 6 — database)
+**Updated:** 2026-08-21 (v0.1.2 in progress: wave 6/16 done, next wave 7 — design-patterns)
 
 Rolling checkpoint: active task + last-completed + verified facts + v0.1.2-era deviation log +
 open items. Keep it small — `git log --oneline` and the plan files are the archive (no
@@ -27,29 +27,29 @@ roll this file (active → one-line "Last completed", next task → "Active").
 
 ## Active
 
-v0.1.2 skill-driven review — wave 6 (golang-database), not started. Plan:
+v0.1.2 skill-driven review — wave 7 (golang-design-patterns), not started. Plan:
 docs/superpowers/plans/2026-08-19-v0.1.2-skill-review.md (read ONLY the active task slice;
-resume protocol in the plan header). Task 6 = single chunk R6a (Template R: lens =
-golang-database, IDs `[database-<n>]`, scope block in Task 6 Step 1 — storage/dao.go,
-db.go, migrate.go, storage_test.go in full + deps.go/main.go call-site reads; findings →
-06-database-storage.md), then Steps 2–6 same shape as Task 1 (coverage verify, findings
-commit `docs(review): v0.1.2 — wave 6 (database): <N> findings (…)`, fix subagent
-(Template F, `<SKILL>`=`golang-database`) iff any `contract-risk: none`, gate, PROGRESS
-roll + checkpoint `wave 6/16 done, next wave 7 — design-patterns`). Findings under
+resume protocol in the plan header). Task 7 = 2 chunks, one at a time R7a (core+session+
+permission) → R7b (server+tui-core), both grep-driven, Template R, lens =
+golang-design-patterns, IDs `[design-<n>]`, scope blocks in Task 7 Step 1, ASSESSMENT-
+BIASED (policy B: structural findings → contract-risk: behavior unless provably
+behavior-neutral; local behavior-neutral fixes → none). Findings →
+07-design-core-session.md + 07-design-server-tui.md, then Steps 2–6 same shape as Task 1
+(coverage verify, findings commit `docs(review): v0.1.2 — wave 7 (design-patterns): <N>
+findings (…)`, fix subagent (Template F, `<SKILL>`=`golang-design-patterns`) iff any
+`contract-risk: none` — expect few, dispatch only if any, gate, PROGRESS roll +
+checkpoint `wave 7/16 done, next wave 8 — refactoring`). Findings under
 docs/superpowers/reviews/v0.1.2/.
 Commit gate:
 go vet ./... && go test ./... + gofmt -l . + golangci-lint run ./...
 
 ## Last completed
 
-Wave 5 (security): 9 findings (P0:0 P1:1 P2:5 P3:2) — 3 fixed (ff2fb09 auth.json
-re-chmod 0600 after every save; 6f16faf zen cache CreateTemp vs predictable `.tmp`
-symlink target; ad9fc09 log dir 0700 / file 0600), 5 deferred (all contract-tagged:
-http.Server read timeouts, the P1 unbounded glob tree walk (glob.go:115 — stopping
-early or dropping the full-tree sort changes which paths fill the capped 100-result
-output), bash `timeout: 0`/overflow, full-DP LCS in write/edit counts, log-injection
-sanitize), 0 FALSE / 0 WONTFIX (findings commit 0adc84e; status commits 9d463d4
-ea67e84). Fix subagent ran as YOLO per core principle 8 (deviation 69).
+Wave 6 (database): 8 findings (P0:0 P1:1 P2:3 P3:4) — 6 fixed (c6dd42c per-connection
+PRAGMAs via DSN; a0ba445 pool capped at 1 conn; ff44b2b NULL/reopen/ErrNotFound tests;
+67c3b27 param LIMIT + SchemaVersion/agent-default dedupe), 2 deferred (database-3 ctx
+propagation → 0.2.0, API churn; database-6 ORDER BY tiebreaker — render tag), 0 FALSE /
+0 WONTFIX (findings commit fb1d282; status commit 3437cff).
 
 ## Open items
 
