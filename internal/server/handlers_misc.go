@@ -188,7 +188,7 @@ func (s *Server) handleConfigPatch(w http.ResponseWriter, r *http.Request) {
 		envelope(w, http.StatusBadRequest, "invalid config JSON", nil)
 		return
 	}
-	if err := writeProjectLayer(dir, partial); err != nil {
+	if _, err := mergeWriteConfig(filepath.Join(dir, "yolo.jsonc"), partial, false); err != nil {
 		s.fail(w, http.StatusInternalServerError, "write project config", err)
 		return
 	}
@@ -205,25 +205,36 @@ func (s *Server) handleConfigPatch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, cfg)
 }
 
-// writeProjectLayer merge-writes <dir>/yolo.jsonc: existing file (JSONC)
-// deep-merged under partial, rewritten 2-space JSON.
-func writeProjectLayer(dir string, partial map[string]any) error {
-	path := filepath.Join(dir, "yolo.jsonc")
+// mergeWriteConfig deep-merges partial on top of the existing JSONC layer at
+// path, rewrites it as 2-space JSON (comments not preserved, flagged
+// deviation), and returns the merged object. ensureDir creates path's parent
+// directory before writing (used by the global route; project layer sits in
+// the already-existing working directory).
+func mergeWriteConfig(path string, partial map[string]any, ensureDir bool) (map[string]any, error) {
 	existing := map[string]any{}
 	if raw, err := os.ReadFile(path); err == nil {
 		m, uerr := config.UnmarshalJSONC(raw)
 		if uerr != nil {
-			return uerr
+			return nil, uerr
 		}
 		existing = m
 	} else if !os.IsNotExist(err) {
-		return err
+		return nil, err
 	}
-	b, err := json.MarshalIndent(config.Merge(existing, partial), "", "  ")
+	merged := config.Merge(existing, partial)
+	if ensureDir {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return nil, err
+		}
+	}
+	b, err := json.MarshalIndent(merged, "", "  ")
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return os.WriteFile(path, b, 0o644)
+	if err := os.WriteFile(path, b, 0o644); err != nil {
+		return nil, err
+	}
+	return merged, nil
 }
 
 func (s *Server) handleGlobalConfigGet(w http.ResponseWriter, _ *http.Request) {
@@ -254,30 +265,8 @@ func (s *Server) handleGlobalConfigPatch(w http.ResponseWriter, r *http.Request)
 		s.fail(w, http.StatusInternalServerError, "load global config", err)
 		return
 	}
-	path := filepath.Join(dir, "yolo.jsonc")
-	existing := map[string]any{}
-	if raw, err := os.ReadFile(path); err == nil {
-		m, uerr := config.UnmarshalJSONC(raw)
-		if uerr != nil {
-			s.fail(w, http.StatusInternalServerError, "parse global config", uerr)
-			return
-		}
-		existing = m
-	} else if !os.IsNotExist(err) {
-		s.fail(w, http.StatusInternalServerError, "read global config", err)
-		return
-	}
-	merged := config.Merge(existing, partial)
-	b, err := json.MarshalIndent(merged, "", "  ")
+	merged, err := mergeWriteConfig(filepath.Join(dir, "yolo.jsonc"), partial, true)
 	if err != nil {
-		s.fail(w, http.StatusInternalServerError, "encode global config", err)
-		return
-	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		s.fail(w, http.StatusInternalServerError, "write global config", err)
-		return
-	}
-	if err := os.WriteFile(path, b, 0o644); err != nil {
 		s.fail(w, http.StatusInternalServerError, "write global config", err)
 		return
 	}
@@ -364,10 +353,6 @@ func (s *Server) handlePermissionList(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.fail(w, http.StatusInternalServerError, "list sessions", err)
 		return
-	}
-	seen := map[string]bool{}
-	for _, row := range rows {
-		seen[row.ID] = true
 	}
 	out := make([]protocol.PermissionAskedProps, 0)
 	for _, row := range rows {
