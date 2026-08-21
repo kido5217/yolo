@@ -1,6 +1,6 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-21 (v0.1.2 in progress: wave 9/16 done, next wave 10 — testing)
+**Updated:** 2026-08-21 (v0.1.2 in progress: wave 10/16 done, next wave 11 — data-structures)
 
 Rolling checkpoint: active task + last-completed + verified facts + v0.1.2-era deviation log +
 open items. Keep it small — `git log --oneline` and the plan files are the archive (no
@@ -27,28 +27,30 @@ roll this file (active → one-line "Last completed", next task → "Active").
 
 ## Active
 
-v0.1.2 skill-driven review — wave 10 (golang-testing), not started. Plan:
+v0.1.2 skill-driven review — wave 11 (golang-data-structures), not started. Plan:
 docs/superpowers/plans/2026-08-19-v0.1.2-skill-review.md (read ONLY the active task slice;
-resume protocol in the plan header). Task 10 = 3 chunks, one at a time R10a (server+session
-tests, read-heavy) → R10b (tool+llm+provider+storage tests, read-heavy) → R10c (tui+core+
-cmd tests, grep-driven), Template R, lens = golang-testing, IDs `[testing-<n>]`, scope
-blocks in Task 10 Step 1 + the wave scope note (test files only; the teatest v2 harness
-quirks in PROGRESS key facts are LOCKED behavior — don't flag). Findings →
-10-testing-server-session.md + 10-testing-tool-llm-storage.md + 10-testing-tui-core.md,
-then Steps 2–6 same shape as Task 1 (coverage verify, findings commit `docs(review):
-v0.1.2 — wave 10 (testing): <N> findings (…)`, fix subagent (Template F,
-`<SKILL>`=`golang-testing`) iff any `contract-risk: none`, gate, PROGRESS roll +
-checkpoint `wave 10/16 done, next wave 11 — data-structures`). Findings under
+resume protocol in the plan header). Task 11 = 2 chunks, one at a time R11a (session+server+
+tool production, grep-driven, 4376 lines) → R11b (tui+llm production, grep-driven, 3480),
+Template R, lens = golang-data-structures, IDs `[datastruct-<n>]`, scope blocks in Task 11
+Step 1 (append/make/copy/Builder greps; production files only). Findings →
+11-datastruct-session-server-tool.md + 11-datastruct-tui-llm.md, then Steps 2–6 same shape
+as Task 1 (coverage verify, findings commit `docs(review): v0.1.2 — wave 11
+(data-structures): <N> findings (…)`, fix subagent (Template F,
+`<SKILL>`=`golang-data-structures`) iff any `contract-risk: none` — preallocation/Builder
+fixes are behavior-neutral but MUST keep golden + teatest suites green, gate, PROGRESS roll
++ checkpoint `wave 11/16 done, next wave 12 — performance`). Findings under
 docs/superpowers/reviews/v0.1.2/.
 Commit gate:
 go vet ./... && go test ./... + gofmt -l . + golangci-lint run ./...
 
 ## Last completed
 
-Wave 9 (cli): 11 findings (P0:0 P1:0 P2:4 P3:7) — 2 fixed (b693502 authCmd dispatch + run
-exit-code tests; 2a3e936 test renamed to match behavior — both test-only), 9 deferred
-(all behavior-tagged: silent `tea.Run` error, swallowed SIGINT, empty-credential save, `-v`
-flag … → 0.2.0), 0 FALSE / 0 WONTFIX (findings commit c03819b; status commit 3a219c7).
+Wave 10 (testing): 34 findings (P0:0 P1:0 P2:13 P3:21) — 32 fixed (16 test commits
+490da6b…d076676: sleep-gates → event seams, leaked shell Close, vacuous sort assert,
+fake-driver tests added, tui blackbox cmd execution … all test-only), 2 deferred
+(behavior-tagged tui cmd assertions → 0.2.0), 0 FALSE / 0 WONTFIX (findings commit bbe3ca3;
+status commit 73f5623). R10b also covered in-package read_test.go (not in pinned list) —
+coverage-only.
 
 ## Open items
 
