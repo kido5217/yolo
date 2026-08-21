@@ -551,6 +551,31 @@ func (s *dialogStack) top() (dialog, bool) {
 
 func (s dialogStack) has() bool { return len(s.items) > 0 }
 
+// Static frame parts render once at package init instead of on every frame:
+// the styles involved (title, dim, divider) set no width, border, padding,
+// or alignment, and lipgloss v2 Style.Render is a pure function of the style
+// and the input (SGR output derives from the color type, no terminal state),
+// so the results are process-constants. The session-title line in
+// viewSession is the only dynamic render left.
+var (
+	dividerLineRendered = divider.Render(dividerLine())
+	sessionHelpRendered = dim.Render(sessionHelp)
+	quitDialogRendered  = title.Render("quit? [y/n]")
+	helpDialogRendered  = title.Render("Help") +
+		"\n" + dim.Render("  | Key | Action |") +
+		"\n" + dim.Render("  |---|---|") +
+		"\n" + dim.Render("  | enter | send prompt |") +
+		"\n" + dim.Render("  | esc | abort turn (busy) / close dialog |") +
+		"\n" + dim.Render("  | ctrl+c | quit (confirm) |") +
+		"\n" + dim.Render("  | ctrl+p | model dialog |") +
+		"\n" + dim.Render("  | ctrl+a | agent dialog |") +
+		"\n" + dim.Render("  | / | command menu |") +
+		"\n" + dim.Render("  | pgup/pgdn | viewport scroll |") +
+		"\n" + dim.Render("  | 1/2/3 | permission reply |") +
+		"\n" + dim.Render("  | alt+e / alt+t | expand tool part / toggle reasoning |") +
+		"\n" + dim.Render("  pgup/pgdn scroll \u00B7 \\+enter newline")
+)
+
 func (s dialogStack) view() string {
 	d, ok := s.top()
 	if !ok {
@@ -558,21 +583,9 @@ func (s dialogStack) view() string {
 	}
 	switch d.kind {
 	case dlgQuit:
-		return title.Render("quit? [y/n]")
+		return quitDialogRendered
 	case dlgHelp:
-		return title.Render("Help") +
-			"\n" + dim.Render("  | Key | Action |") +
-			"\n" + dim.Render("  |---|---|") +
-			"\n" + dim.Render("  | enter | send prompt |") +
-			"\n" + dim.Render("  | esc | abort turn (busy) / close dialog |") +
-			"\n" + dim.Render("  | ctrl+c | quit (confirm) |") +
-			"\n" + dim.Render("  | ctrl+p | model dialog |") +
-			"\n" + dim.Render("  | ctrl+a | agent dialog |") +
-			"\n" + dim.Render("  | / | command menu |") +
-			"\n" + dim.Render("  | pgup/pgdn | viewport scroll |") +
-			"\n" + dim.Render("  | 1/2/3 | permission reply |") +
-			"\n" + dim.Render("  | alt+e / alt+t | expand tool part / toggle reasoning |") +
-			"\n" + dim.Render("  pgup/pgdn scroll \u00B7 \\+enter newline")
+		return helpDialogRendered
 	}
 	return ""
 }
@@ -834,6 +847,6 @@ func (a *App) viewSession(menu, perm, toasts, dlg string) string {
 	}
 	return title.Render(t) +
 		"\n" + a.sess.vm.View() +
-		"\n" + divider.Render(dividerLine()) +
-		"\n" + dim.Render(sessionHelp)
+		"\n" + dividerLineRendered +
+		"\n" + sessionHelpRendered
 }
