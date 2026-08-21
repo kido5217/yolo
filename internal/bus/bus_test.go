@@ -53,19 +53,22 @@ func TestCancelStopsDelivery(t *testing.T) {
 func TestOverflowCancelsSubscribers(t *testing.T) {
 	b := bus.New()
 	ch, _ := b.Subscribe()
-	// exhaust buffer (1024) + a few
+	// exhaust buffer (1024) + a few: the overflow publish must drop the
+	// subscriber (close its channel), per spec §7.
 	for i := 0; i < 1100; i++ {
 		b.Publish(mustEvent(t))
 	}
-	select {
-	case ev, ok := <-ch:
-		if !ok {
-			return // channel closed = subscriber dropped, as specified
+	closed := false
+	deadline := time.After(2 * time.Second)
+	for !closed {
+		select {
+		case _, ok := <-ch:
+			closed = !ok
+		case <-deadline:
+			t.Fatal("subscriber not dropped after overflow: channel never closed")
 		}
-		_ = ev
-	case <-time.After(200 * time.Millisecond):
 	}
-	// after overflow the subscriber must be gone: subsequent publish must not panic
+	// secondary: subsequent publishes must not panic on the dropped subscriber
 	for i := 0; i < 10; i++ {
 		b.Publish(mustEvent(t))
 	}

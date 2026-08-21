@@ -30,6 +30,16 @@ func TestMultiResourceAnyDenyWins(t *testing.T) {
 	}
 }
 
+// Upstream ask-loop reduction pinned: per-resource deny short-circuits,
+// allow continues, anything else (ask or no rule) forces the whole call to
+// ask — so mixed ask+allow is Ask, not Allow.
+func TestMultiResourceAskAllowMixesToAsk(t *testing.T) {
+	rules := []protocol.Rule{r("*", "*", "allow"), r("read", "*.env", "ask")}
+	if got := Evaluate(rules, "read", []string{"a.env", "a.go"}); got != AskAction {
+		t.Fatalf("mixed ask+allow → %v, want ask", got)
+	}
+}
+
 func TestHiddenWildcardDenyLastWins(t *testing.T) {
 	// build: no edit rule → findLast("*") = allow → not hidden
 	hidden := Hidden(base, []string{"edit", "write", "bash"})
