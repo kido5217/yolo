@@ -61,10 +61,16 @@ type Server struct {
 }
 
 // New returns the core API as a plain http.Handler.
-func New(d Deps) http.Handler { return build(d) }
+func New(d Deps) http.Handler { return NewServer(d).Handler() }
 
-// NewServer builds the handler and exposes the listener lifecycle.
-func NewServer(d Deps) *Server { return &Server{Deps: d, handler: build(d)} }
+// NewServer builds the handler on the returned instance (initAuth plus the
+// mux) and exposes the listener lifecycle. There is exactly one *Server per
+// Deps: handlers and the auth state always live on the same instance.
+func NewServer(d Deps) *Server {
+	s := &Server{Deps: d}
+	s.handler = s.build()
+	return s
+}
 
 // Handler returns the core API handler.
 func (s *Server) Handler() http.Handler { return s.handler }
@@ -74,8 +80,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.handler.ServeHTTP(w, r)
 }
 
-func build(d Deps) http.Handler {
-	s := &Server{Deps: d}
+func (s *Server) build() http.Handler {
 	if err := s.initAuth(); err != nil {
 		s.authErr = err
 	}
@@ -113,7 +118,7 @@ func build(d Deps) http.Handler {
 	mux.HandleFunc("PATCH /{tail...}", s.handleNotFound)
 	mux.HandleFunc("DELETE /{tail...}", s.handleNotFound)
 	mux.HandleFunc("PUT /{tail...}", s.handleNotFound)
-	return recoverMiddleware(d.Log, mux)
+	return recoverMiddleware(s.Log, mux)
 }
 
 // initAuth loads the boot-lifetime auth store from <Dirs.Data>/auth.json
@@ -160,7 +165,10 @@ func (s *Server) Start(addr string) (net.Addr, error) {
 	if err != nil {
 		return nil, err
 	}
-	srv := &http.Server{Handler: s.handler}
+	// ReadHeaderTimeout bounds slowloris-style header sends on
+	// user-overridable listen addresses; Read/Write/Idle stay off for the
+	// long-lived SSE endpoint.
+	srv := &http.Server{Handler: s.handler, ReadHeaderTimeout: 10 * time.Second}
 	s.mu.Lock()
 	s.srv = srv
 	s.addr = ln.Addr()
