@@ -19,6 +19,7 @@ import (
 )
 
 func TestHealthAndPathAndProject(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	resp, b := testutil.Req(t, s, "GET", "/global/health", "", "")
 	if resp.StatusCode != 200 || !strings.Contains(string(b), `"ok"`) {
@@ -49,6 +50,7 @@ func TestHealthAndPathAndProject(t *testing.T) {
 }
 
 func TestScopedHeaderURLDecoded(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	odd := filepath.Join(t.TempDir(), "odd dir")
 	if err := os.MkdirAll(odd, 0o755); err != nil {
@@ -69,6 +71,7 @@ func TestScopedHeaderURLDecoded(t *testing.T) {
 }
 
 func TestSessionLifecycleAndScoping(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	d := t.TempDir()
 	other := t.TempDir()
@@ -143,6 +146,7 @@ func TestSessionLifecycleAndScoping(t *testing.T) {
 }
 
 func TestMessagesEndpoint(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	d := t.TempDir()
 	_, b := testutil.Req(t, s, "POST", "/session", d, `{}`)
@@ -197,6 +201,7 @@ func TestMessagesEndpoint(t *testing.T) {
 }
 
 func TestSendMessage409AndEvents(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	d := t.TempDir()
 	_, b := testutil.Req(t, s, "POST", "/session", d, `{}`)
@@ -254,6 +259,7 @@ func TestSendMessage409AndEvents(t *testing.T) {
 }
 
 func TestAbortEndpoint(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	d := t.TempDir()
 	_, b := testutil.Req(t, s, "POST", "/session", d, `{}`)
@@ -331,6 +337,7 @@ func TestMalformedBody400(t *testing.T) {
 }
 
 func TestCommandEndpoint(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	d := t.TempDir()
 	_, b := testutil.Req(t, s, "POST", "/session", d, `{}`)
@@ -382,6 +389,7 @@ func TestCommandEndpoint(t *testing.T) {
 }
 
 func TestFakeFromEnv(t *testing.T) {
+	t.Parallel()
 	t.Run("unset", func(t *testing.T) {
 		drv, err := server.FakeFromEnv(map[string]string{})
 		if err != nil || drv != nil {
@@ -424,6 +432,7 @@ func TestFakeFromEnv(t *testing.T) {
 // the send handler logs the turn's final error to yolo.log (upstream
 // promptAsync parity), so the "invisible failure" has a diagnostic home.
 func TestSendLogsFailedTurn(t *testing.T) {
+	t.Parallel()
 	logDir := t.TempDir()
 	drv := fakellm.New(fakellm.Turn{Err: errors.New("boom")})
 	s := testutil.BootWithDriverLog(t, drv, logDir)

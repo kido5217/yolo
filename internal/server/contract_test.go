@@ -168,37 +168,44 @@ func mkSession(t *testing.T, s *testutil.TestServer, dir, title string) string {
 
 func TestGoldenResponses(t *testing.T) {
 	t.Run("health", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		golden(t, s, "health", "GET", "/global/health", "", "", 200)
 	})
 	t.Run("path", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		d := t.TempDir()
 		golden(t, s, "path", "GET", "/path", d, "", 200)
 	})
 	t.Run("project", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		d := t.TempDir()
 		golden(t, s, "project", "GET", "/project/current", d, "", 200)
 	})
 	t.Run("session_list", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		d := t.TempDir()
 		mkSession(t, s, d, "Golden")
 		golden(t, s, "session_list", "GET", "/session", d, "", 200)
 	})
 	t.Run("session_create", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		d := t.TempDir()
 		golden(t, s, "session_create", "POST", "/session", d, `{"title":"Golden"}`, 201)
 	})
 	t.Run("session_get", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		d := t.TempDir()
 		id := mkSession(t, s, d, "Golden")
 		golden(t, s, "session_get", "GET", "/session/"+id, d, "", 200)
 	})
 	t.Run("session_patch", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		d := t.TempDir()
 		id := mkSession(t, s, d, "Golden")
@@ -206,6 +213,7 @@ func TestGoldenResponses(t *testing.T) {
 			`{"title":"Patched","agent":"yolo","model":"opencode/gpt-5-nano"}`, 200)
 	})
 	t.Run("message_list", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		d := t.TempDir()
 		id := mkSession(t, s, d, "Golden")
@@ -217,30 +225,36 @@ func TestGoldenResponses(t *testing.T) {
 		golden(t, s, "message_list", "GET", "/session/"+id+"/message", d, "", 200)
 	})
 	t.Run("provider", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		d := t.TempDir()
 		golden(t, s, "provider", "GET", "/provider", d, "", 200)
 	})
 	t.Run("config", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		d := t.TempDir()
 		testutil.WriteCfg(t, d, `{"model":"kido/q","permission":{"edit":"ask"}}`)
 		golden(t, s, "config", "GET", "/config", d, "", 200)
 	})
 	t.Run("agent", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		golden(t, s, "agent", "GET", "/agent", "", "", 200)
 	})
 	t.Run("command", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		golden(t, s, "command", "GET", "/command", "", "", 200)
 	})
 	t.Run("permission_empty", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		d := t.TempDir()
 		golden(t, s, "permission_empty", "GET", "/permission", d, "", 200)
 	})
 	t.Run("status", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		d := t.TempDir()
 		mkSession(t, s, d, "Golden")
@@ -279,6 +293,7 @@ func sseTypes(frames []testutil.SSEFrame) []string {
 // BEFORE the turn goroutine emits busy — matching upstream v1.18.18, and
 // deviating from the plan's pinned "busy first" order (see PROGRESS.md).
 func TestSSEOrdering(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	d := t.TempDir()
 	id := mkSession(t, s, d, "Sse") // explicit title: no title-generation side request
@@ -524,6 +539,7 @@ func TestFakeEnvConversation(t *testing.T) {
 // server work dir, and every id-scoped route 404s for a session id belonging to
 // a different directory.
 func TestScopeMatrix(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	wd := s.Dir
 

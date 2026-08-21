@@ -12,6 +12,7 @@ import (
 )
 
 func TestProviderListAndAuth(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	resp, b := testutil.Req(t, s, "GET", "/provider", "", "")
 	if resp.StatusCode != 200 {
@@ -56,6 +57,7 @@ func TestProviderListAndAuth(t *testing.T) {
 // body shape LOCKED): key_required + env per provider, merged with the
 // loaded key source/status.
 func TestProviderAuthEndpoint(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	resp, b := testutil.Req(t, s, "GET", "/provider/auth", "", "")
 	if resp.StatusCode != 200 {
@@ -79,6 +81,7 @@ func TestProviderAuthEndpoint(t *testing.T) {
 }
 
 func TestConfigGetPatchRoundtrip(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	d := s.Dir
 	resp, b := testutil.Req(t, s, "GET", "/config", d, "")
@@ -113,6 +116,7 @@ func TestConfigGetPatchRoundtrip(t *testing.T) {
 }
 
 func TestGlobalConfig(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	resp, b := testutil.Req(t, s, "PATCH", "/global/config", "", `{"model": "kido/m"}`)
 	if resp.StatusCode != 200 {
@@ -141,6 +145,7 @@ func TestGlobalConfig(t *testing.T) {
 }
 
 func TestAuthPutDelete(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	resp, _ := testutil.Req(t, s, "PUT", "/auth/opencode", "", `{"key": "sk-test"}`)
 	if resp.StatusCode != 204 {
@@ -180,6 +185,7 @@ func TestAuthPutDelete(t *testing.T) {
 }
 
 func TestPermissionListAndReply(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	d := t.TempDir()
 	_, b := testutil.Req(t, s, "POST", "/session", d, `{}`)
@@ -224,6 +230,7 @@ func TestPermissionListAndReply(t *testing.T) {
 }
 
 func TestAgentAndCommand(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	_, b := testutil.Req(t, s, "GET", "/agent", "", "")
 	var agents []protocol.Agent
@@ -264,6 +271,7 @@ func TestAgentAndCommand(t *testing.T) {
 }
 
 func TestUnknownRoutes404(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	for _, p := range []string{"/", "/api/v2/sessions", "/mcp/x", "/skill/s", "/nope"} {
 		resp, _ := testutil.Req(t, s, "GET", p, "", "")
