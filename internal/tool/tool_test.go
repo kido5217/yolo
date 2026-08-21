@@ -87,14 +87,10 @@ func TestReadDirListing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// localeCompare sort: "A.txt" < "b.txt" < "sub/"
-	if !strings.Contains(out.Text, "A.txt\nb.txt\nsub/\n") && !strings.Contains(out.Text, "A.txt") {
-		t.Fatalf("listing = %q", out.Text)
-	}
-	for _, frag := range []string{"A.txt", "b.txt", "sub/"} {
-		if !strings.Contains(out.Text, frag) {
-			t.Fatalf("listing missing %q: %q", frag, out.Text)
-		}
+	// case-insensitive sort: "A.txt" < "b.txt" < "sub/" (dir suffix pinned)
+	want := "<path>" + d + "</path>\n<type>directory</type>\n<entries>\nA.txt\nb.txt\nsub/\n\n(3 entries)\n</entries>"
+	if out.Text != want {
+		t.Fatalf("listing mismatch:\n%q\nwant:\n%q", out.Text, want)
 	}
 }
 
@@ -193,14 +189,14 @@ func TestReadSchema(t *testing.T) {
 
 func TestDescPinned(t *testing.T) {
 	// sha256 of upstream v1.18.18 packages/opencode/src/tool/read.txt
-	if !sha256Ok(t, "desc/read.txt", "98ee843341c2dab2227add0019e48d4b2f0f00f9b042b853d1ee52bb34e6363d") {
+	if !sha256Ok(t, "desc/read.txt", []byte(readDesc), "98ee843341c2dab2227add0019e48d4b2f0f00f9b042b853d1ee52bb34e6363d") {
 		t.Fatal("desc drifted")
 	}
 }
 
-func sha256Ok(t *testing.T, label, want string) bool {
+func sha256Ok(t *testing.T, label string, content []byte, want string) bool {
 	t.Helper()
-	sum := sha256.Sum256([]byte(readDesc))
+	sum := sha256.Sum256(content)
 	got := hex.EncodeToString(sum[:])
 	if got != want {
 		t.Logf("%s sha256 = %s, want %s", label, got, want)
