@@ -17,6 +17,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/kido5217/yolo/internal/auth"
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/server"
 	"github.com/kido5217/yolo/internal/tui/client"
@@ -261,5 +262,225 @@ func TestServeSigtermDrainsAndExitsZero(t *testing.T) {
 		t.Fatalf("serve output: %v\nstderr: %s", err, stderr.String())
 	case <-time.After(10 * time.Second):
 		t.Fatal("serve did not announce its address within 10s")
+	}
+}
+
+// TestAuthCmd pins the yolo auth CLI surface: subcommand dispatch, usage
+// and exit code on missing args, key handling (explicit arg and stdin
+// prompt), and store load/save errors. State is isolated to a temp XDG
+// data dir; os.Stdin/Stdout/Stderr are swapped per case.
+func TestAuthCmd(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
+
+	authPath := func() string {
+		p, err := auth.Path()
+		if err != nil {
+			t.Fatalf("auth.Path: %v", err)
+		}
+		return p
+	}
+	getStore := func() auth.Store {
+		s, err := auth.LoadFrom(authPath())
+		if err != nil {
+			t.Fatalf("load store: %v", err)
+		}
+		return s
+	}
+	// runAuth runs authCmd with the process stdio swapped for pipes and
+	// returns (exit code, stdout, stderr).
+	runAuth := func(t *testing.T, stdin string, args ...string) (int, string, string) {
+		t.Helper()
+		oldIn, oldOut, oldErr := os.Stdin, os.Stdout, os.Stderr
+		t.Cleanup(func() { os.Stdin, os.Stdout, os.Stderr = oldIn, oldOut, oldErr })
+		if stdin != "" {
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _ = w.WriteString(stdin)
+			_ = w.Close()
+			os.Stdin = r
+		}
+		outR, outW, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		errR, errW, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		os.Stdout, os.Stderr = outW, errW
+		code := authCmd(args)
+		_ = outW.Close()
+		_ = errW.Close()
+		outB, _ := io.ReadAll(outR)
+		errB, _ := io.ReadAll(errR)
+		return code, string(outB), string(errB)
+	}
+
+	tests := []struct {
+		name        string
+		seed        map[string]auth.Entry
+		corrupt     bool
+		stdin       string
+		args        []string
+		wantCode    int
+		wantOutPart string
+		wantErrPart string
+		wantOrder   [2]string
+		wantStore   map[string]string
+	}{
+		{
+			name:        "no subcommand: usage, exit 2",
+			args:        nil,
+			wantCode:    2,
+			wantErrPart: "Usage:",
+		},
+		{
+			name:        "unknown subcommand: usage, exit 2",
+			args:        []string{"bogus"},
+			wantCode:    2,
+			wantErrPart: "Usage:",
+		},
+		{
+			name:        "list without credentials",
+			args:        []string{"list"},
+			wantCode:    0,
+			wantOutPart: "no credentials",
+		},
+		{
+			name:      "add with explicit key persists store",
+			args:      []string{"add", "kido", "sk-test"},
+			wantCode:  0,
+			wantStore: map[string]string{"kido": "sk-test"},
+		},
+		{
+			name:        "add missing provider: usage, exit 2",
+			args:        []string{"add"},
+			wantCode:    2,
+			wantErrPart: "Usage:",
+		},
+		{
+			name:      "remove existing provider",
+			seed:      map[string]auth.Entry{"kido": {Type: "api", Key: "sk-old"}},
+			args:      []string{"remove", "kido"},
+			wantCode:  0,
+			wantStore: map[string]string{},
+		},
+		{
+			name:      "remove missing provider is a no-op",
+			args:      []string{"remove", "nope"},
+			wantCode:  0,
+			wantStore: map[string]string{},
+		},
+		{
+			name: "list shows sorted entries",
+			seed: map[string]auth.Entry{
+				"zeta": {Type: "api", Key: "sk-zeta"},
+				"kido": {Type: "api", Key: "sk-kido"},
+			},
+			args:        []string{"list"},
+			wantCode:    0,
+			wantOutPart: "api  (set)",
+			wantOrder:   [2]string{"kido", "zeta"},
+		},
+		{
+			name:        "add via stdin prompt",
+			stdin:       "sk-stdin\n",
+			args:        []string{"add", "kido"},
+			wantCode:    0,
+			wantErrPart: "API key: ",
+			wantStore:   map[string]string{"kido": "sk-stdin"},
+		},
+		{
+			name:        "corrupt store: load error, exit 1",
+			corrupt:     true,
+			args:        []string{"list"},
+			wantCode:    1,
+			wantErrPart: "auth list:",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_ = os.Remove(authPath())
+			if tc.corrupt {
+				if err := os.WriteFile(authPath(), []byte("{not json"), 0o600); err != nil {
+					t.Fatalf("write corrupt store: %v", err)
+				}
+			} else if tc.seed != nil {
+				if err := auth.SaveTo(auth.Store(tc.seed), authPath()); err != nil {
+					t.Fatalf("seed store: %v", err)
+				}
+			}
+
+			code, out, errOut := runAuth(t, tc.stdin, tc.args...)
+			if code != tc.wantCode {
+				t.Fatalf("authCmd exit = %d, want %d\nstdout: %s\nstderr: %s", code, tc.wantCode, out, errOut)
+			}
+			if tc.wantOutPart != "" && !strings.Contains(out, tc.wantOutPart) {
+				t.Fatalf("stdout missing %q:\n%s", tc.wantOutPart, out)
+			}
+			if tc.wantErrPart != "" && !strings.Contains(errOut, tc.wantErrPart) {
+				t.Fatalf("stderr missing %q:\n%s", tc.wantErrPart, errOut)
+			}
+			if tc.wantOrder[0] != "" {
+				i, j := strings.Index(out, tc.wantOrder[0]), strings.Index(out, tc.wantOrder[1])
+				if i < 0 || j < 0 || i > j {
+					t.Fatalf("stdout order %q before %q violated:\n%s", tc.wantOrder[0], tc.wantOrder[1], out)
+				}
+			}
+			if tc.wantStore != nil {
+				s := getStore()
+				if len(s) != len(tc.wantStore) {
+					t.Fatalf("store = %v, want %v", s, tc.wantStore)
+				}
+				for p, k := range tc.wantStore {
+					e, ok := s[p]
+					if !ok || e.Key != k || e.Type != "api" {
+						t.Fatalf("store[%q] = %+v, want key %q type api", p, e, k)
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestDispatchExitCodes pins run()'s dispatch contract that has no
+// in-process seam: version prints the version and exits 0, the explicit
+// help flag prints usage and exits 0, unknown flags and too many
+// positionals fail with usage and exit 2.
+func TestDispatchExitCodes(t *testing.T) {
+	bin := buildBinary(t)
+	tests := []struct {
+		name     string
+		args     []string
+		wantCode int
+		wantPart string
+	}{
+		{name: "version", args: []string{"version"}, wantCode: 0, wantPart: "yolo 0.0.0-dev"},
+		{name: "explicit help flag", args: []string{"--help"}, wantCode: 0, wantPart: "Usage:"},
+		{name: "unknown flag exits 2", args: []string{"--bogus"}, wantCode: 2},
+		{name: "too many positionals exit 2", args: []string{"a", "b"}, wantCode: 2},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := exec.Command(bin, tc.args...).CombinedOutput()
+			if tc.wantCode == 0 {
+				if err != nil {
+					t.Fatalf("exit = %v, want 0\n%s", err, out)
+				}
+			} else {
+				var ee *exec.ExitError
+				if !errors.As(err, &ee) || ee.ExitCode() != tc.wantCode {
+					t.Fatalf("exit = %v, want %d\n%s", err, tc.wantCode, out)
+				}
+			}
+			if tc.wantPart != "" && !strings.Contains(string(out), tc.wantPart) {
+				t.Fatalf("output missing %q:\n%s", tc.wantPart, out)
+			}
+		})
 	}
 }
