@@ -31,15 +31,22 @@ var errShellTimeout = errors.New("shell timeout")
 // tool rewrites it to "command aborted".
 var errShellAborted = errors.New("shell aborted")
 
+// endMarkerRe matches any end-marker line; Exec accepts a match only when
+// the captured counter equals its own n (a marker with another counter —
+// e.g. echoed by the command itself — falls through as normal output, as
+// with the old per-n regex).
+var endMarkerRe = regexp.MustCompile(`^__YOLO_END_(\d+)_([^\s]*)$`)
+
 // Shell is the per-session persistent shell (plan Task 14 pinned protocol).
 // It keeps one `bash --norc --noprofile` process alive across Exec calls so
 // that `cd`, environment assignments, and other shell state carry over.
 // Each command is written as its lines followed by a marker line
 // `echo __YOLO_END_{n}_:$?_$(pwd | base64 -w0)`; output (stderr wired to the
-// same pipe) is read until a line matches `^__YOLO_END_{n}_(\d+)_(\S*)$` —
-// the exit code and the new cwd come from the marker. On timeout/abort the
-// process group is SIGKILL'd and the shell is marked dead; the next Exec
-// respawns from the last known cwd (Dir if it no longer exists).
+// same pipe) is read until the emitted line matches the shared endMarkerRe
+// with counter n — the exit code and the new cwd come from the marker.
+// On timeout/abort the process group is SIGKILL'd and the shell is marked
+// dead; the next Exec respawns from the last known cwd (Dir if it no longer
+// exists).
 type Shell struct {
 	Executable string // default "bash"; test override
 	Dir        string
@@ -97,12 +104,12 @@ func (s *Shell) Exec(ctx context.Context, command string, timeoutMS int, onLine 
 	n := s.nextMarker
 	s.nextMarker++
 	// Pinned protocol: the marker line echoes the previous command's exit
-	// code and the new cwd (base64, unwrapped). The reader matches
-	// `^__YOLO_END_{n}_(\d+)_(\S*)$` on the emitted line; the emitted form
-	// therefore has no separator before $? and the regex captures the code
-	// then the base64 cwd. (Plan pin line 2739.)
+	// code and the new cwd (base64, unwrapped). The reader accepts a line
+	// matching endMarkerRe only when the captured counter is n; the emitted
+	// form therefore has no separator before $? and the regex captures the
+	// code then the base64 cwd. (Plan pin line 2739.)
 	marker := fmt.Sprintf("echo __YOLO_END_%d_$?_$(pwd | base64 -w0)", n)
-	re := regexp.MustCompile(fmt.Sprintf(`^__YOLO_END_%d_(\d+)_([^\s]*)$`, n))
+	markerN := strconv.Itoa(n)
 
 	if _, err := io.WriteString(st.stdin, command+"\n"+marker+"\n"); err != nil {
 		s.st = nil
@@ -134,7 +141,7 @@ func (s *Shell) Exec(ctx context.Context, command string, timeoutMS int, onLine 
 				code := reapProc(st2, false)
 				return code, buf.String(), nil
 			}
-			if m := re.FindStringSubmatch(ev.line); m != nil {
+			if m := endMarkerRe.FindStringSubmatch(ev.line); m != nil && m[1] == markerN {
 				code := 0
 				if c, aerr := strconv.Atoi(m[1]); aerr == nil {
 					code = c
