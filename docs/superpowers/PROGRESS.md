@@ -1,6 +1,6 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-21 (v0.1.2 in progress: wave 8/16 done, next wave 9 — cli)
+**Updated:** 2026-08-21 (v0.1.2 in progress: wave 9/16 done, next wave 10 — testing)
 
 Rolling checkpoint: active task + last-completed + verified facts + v0.1.2-era deviation log +
 open items. Keep it small — `git log --oneline` and the plan files are the archive (no
@@ -27,23 +27,28 @@ roll this file (active → one-line "Last completed", next task → "Active").
 
 ## Active
 
-v0.1.2 skill-driven review — wave 9 (golang-cli), not started. Plan:
+v0.1.2 skill-driven review — wave 10 (golang-testing), not started. Plan:
 docs/superpowers/plans/2026-08-19-v0.1.2-skill-review.md (read ONLY the active task slice;
-resume protocol in the plan header). Task 9 = single chunk R9a (Template R: lens =
-golang-cli, IDs `[cli-<n>]`, scope block in Task 9 Step 1 — cmd/yolo/main.go,
-main_test.go, scripts/e2e-live.sh read in full; findings → 09-cli-cmd.md), then Steps 2–6
-same shape as Task 1 (coverage verify, findings commit `docs(review): v0.1.2 — wave 9
-(cli): <N> findings (…)`, fix subagent (Template F, `<SKILL>`=`golang-cli`) iff any
-`contract-risk: none`, gate, PROGRESS roll + checkpoint `wave 9/16 done, next wave 10 —
-testing`). Findings under docs/superpowers/reviews/v0.1.2/.
+resume protocol in the plan header). Task 10 = 3 chunks, one at a time R10a (server+session
+tests, read-heavy) → R10b (tool+llm+provider+storage tests, read-heavy) → R10c (tui+core+
+cmd tests, grep-driven), Template R, lens = golang-testing, IDs `[testing-<n>]`, scope
+blocks in Task 10 Step 1 + the wave scope note (test files only; the teatest v2 harness
+quirks in PROGRESS key facts are LOCKED behavior — don't flag). Findings →
+10-testing-server-session.md + 10-testing-tool-llm-storage.md + 10-testing-tui-core.md,
+then Steps 2–6 same shape as Task 1 (coverage verify, findings commit `docs(review):
+v0.1.2 — wave 10 (testing): <N> findings (…)`, fix subagent (Template F,
+`<SKILL>`=`golang-testing`) iff any `contract-risk: none`, gate, PROGRESS roll +
+checkpoint `wave 10/16 done, next wave 11 — data-structures`). Findings under
+docs/superpowers/reviews/v0.1.2/.
 Commit gate:
 go vet ./... && go test ./... + gofmt -l . + golangci-lint run ./...
 
 ## Last completed
 
-Wave 8 (refactoring, assessment-only): 16 backlog items for 0.2.0 (08-refactoring-backlog.md,
-P2:5 P3:11 — engine.go concern-split + runRound/executeTool extraction, shared llm SSE
-pump, app.go split; package import map verified clean). No code changed, no fix subagent.
+Wave 9 (cli): 11 findings (P0:0 P1:0 P2:4 P3:7) — 2 fixed (b693502 authCmd dispatch + run
+exit-code tests; 2a3e936 test renamed to match behavior — both test-only), 9 deferred
+(all behavior-tagged: silent `tea.Run` error, swallowed SIGINT, empty-credential save, `-v`
+flag … → 0.2.0), 0 FALSE / 0 WONTFIX (findings commit c03819b; status commit 3a219c7).
 
 ## Open items
 
