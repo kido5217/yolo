@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/kido5217/yolo/internal/protocol"
@@ -310,14 +311,23 @@ func ProtocolToPart(p protocol.Part) PartRow {
 		b, _ := json.Marshal(p.State)
 		r.StateJSON = string(b)
 	default:
-		m := map[string]any{"text": p.Text}
+		// Hot path (streamed deltas): build the fixed 3-key document
+		// directly. Must stay byte-identical to the map marshal: sorted
+		// keys (end, synthetic, text), compact separators.
+		t, _ := json.Marshal(p.Text)
+		b := make([]byte, 0, len(t)+16)
+		b = append(b, '{')
 		if p.Time.End != 0 {
-			m["end"] = p.Time.End
+			b = append(b, `"end":`...)
+			b = strconv.AppendInt(b, p.Time.End, 10)
+			b = append(b, ',')
 		}
 		if p.Synthetic != nil && *p.Synthetic {
-			m["synthetic"] = true
+			b = append(b, `"synthetic":true,`...)
 		}
-		b, _ := json.Marshal(m)
+		b = append(b, `"text":`...)
+		b = append(b, t...)
+		b = append(b, '}')
 		r.StateJSON = string(b)
 	}
 	return r
