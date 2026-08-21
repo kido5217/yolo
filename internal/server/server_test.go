@@ -1,13 +1,9 @@
 package server_test
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
-	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -15,19 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kido5217/yolo/internal/bus"
-	"github.com/kido5217/yolo/internal/config"
 	"github.com/kido5217/yolo/internal/llm"
 	fakellm "github.com/kido5217/yolo/internal/llm/fake"
-	"github.com/kido5217/yolo/internal/log"
-	"github.com/kido5217/yolo/internal/permission"
 	"github.com/kido5217/yolo/internal/protocol"
-	"github.com/kido5217/yolo/internal/provider"
 	"github.com/kido5217/yolo/internal/server"
 	"github.com/kido5217/yolo/internal/server/testutil"
-	"github.com/kido5217/yolo/internal/session"
-	"github.com/kido5217/yolo/internal/storage"
-	"github.com/kido5217/yolo/internal/tool"
 )
 
 func TestHealthAndPathAndProject(t *testing.T) {
@@ -167,20 +155,7 @@ func TestMessagesEndpoint(t *testing.T) {
 		t.Fatalf("send: %d", resp.StatusCode)
 	}
 	// wait for the turn to settle
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		_, b = testutil.Req(t, s, "GET", "/session/status", d, "")
-		var st struct {
-			Sessions map[string]string `json:"sessions"`
-		}
-		if err := json.Unmarshal(b, &st); err != nil {
-			t.Fatalf("unmarshal: %v (%s)", err, b)
-		}
-		if st.Sessions[ses.ID] == "idle" {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	s.WaitIdle(t, d, ses.ID)
 	resp, b = testutil.Req(t, s, "GET", "/session/"+ses.ID+"/message", d, "")
 	if resp.StatusCode != 200 {
 		t.Fatalf("messages: %d %s", resp.StatusCode, b)
@@ -449,94 +424,25 @@ func TestFakeFromEnv(t *testing.T) {
 // the send handler logs the turn's final error to yolo.log (upstream
 // promptAsync parity), so the "invisible failure" has a diagnostic home.
 func TestSendLogsFailedTurn(t *testing.T) {
-	root := t.TempDir()
-	dataDir := filepath.Join(root, "data")
-	if err := os.MkdirAll(filepath.Join(dataDir, "storage"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	db, err := storage.Open(filepath.Join(dataDir, "storage", "yolo.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	b := bus.New()
-	prov := provider.NewStaticForTest()
-	permSvc := permission.New(db, b, nil, dataDir)
-	drv := fakellm.New(fakellm.Turn{Err: errors.New("boom")})
-	eng, err := session.New(session.Deps{
-		DB:      db,
-		Bus:     b,
-		Prov:    prov,
-		Perm:    permSvc,
-		Tools:   tool.Registry(),
-		DataDir: dataDir,
-		Cfg:     func(string) (*protocol.Config, error) { return &protocol.Config{}, nil },
-		Drivers: map[string]llm.Driver{"kido": drv},
-		Backoff: func(int) time.Duration { return time.Millisecond },
-		Clock:   func() int64 { return time.Now().UnixMilli() },
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	logDir := t.TempDir()
-	lob := log.New(logDir)
-	t.Cleanup(lob.Close)
-	dir := t.TempDir()
-	h := server.New(server.Deps{
-		DB:      db,
-		Bus:     b,
-		Engine:  eng,
-		Prov:    prov,
-		Perm:    permSvc,
-		Config:  config.Loader{Env: map[string]string{}},
-		WorkDir: dir,
-		Dirs:    config.Dirs{Home: filepath.Join(root, "home"), Data: dataDir, Cache: filepath.Join(root, "cache")},
-		Log:     lob,
-	})
-	ts := httptest.NewServer(h)
-	t.Cleanup(ts.Close)
-
-	do := func(path, payload string) (int, []byte) {
-		req, e2 := http.NewRequest("POST", ts.URL+path, strings.NewReader(payload))
-		if e2 != nil {
-			t.Fatal(e2)
-		}
-		req.Header.Set("x-yolo-directory", dir)
-		req.Header.Set("Content-Type", "application/json")
-		resp, e2 := http.DefaultClient.Do(req)
-		if e2 != nil {
-			t.Fatal(e2)
-		}
-		defer resp.Body.Close()
-		var buf bytes.Buffer
-		_, _ = io.Copy(&buf, resp.Body)
-		return resp.StatusCode, buf.Bytes()
-	}
-
-	code, body := do("/session", `{}`)
-	if code/100 != 2 {
-		t.Fatalf("create session: %d %s", code, body)
+	drv := fakellm.New(fakellm.Turn{Err: errors.New("boom")})
+	s := testutil.BootWithDriverLog(t, drv, logDir)
+	d := t.TempDir()
+	resp, b := testutil.Req(t, s, "POST", "/session", d, `{}`)
+	if resp.StatusCode != 201 {
+		t.Fatalf("create session: %d %s", resp.StatusCode, b)
 	}
 	var ses struct {
 		ID string
 	}
-	if err := json.Unmarshal(body, &ses); err != nil {
-		t.Fatalf("unmarshal session: %v (%s)", err, body)
+	if err := json.Unmarshal(b, &ses); err != nil {
+		t.Fatalf("unmarshal session: %v (%s)", err, b)
 	}
-	code, body = do("/session/"+ses.ID+"/message", `{"text":"hi"}`)
-	if code != 202 {
-		t.Fatalf("send: %d %s", code, body)
+	resp, b = testutil.Req(t, s, "POST", "/session/"+ses.ID+"/message", d, `{"text":"hi"}`)
+	if resp.StatusCode != 202 {
+		t.Fatalf("send: %d %s", resp.StatusCode, b)
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		if s := eng.Status(ses.ID); s == protocol.StatusIdle {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("turn did not settle")
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	s.WaitIdle(t, d, ses.ID)
 	data, err := os.ReadFile(filepath.Join(logDir, "log", "yolo.log"))
 	if err != nil {
 		t.Fatalf("read yolo.log: %v", err)

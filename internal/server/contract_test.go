@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/kido5217/yolo/internal/llm"
 	fakellm "github.com/kido5217/yolo/internal/llm/fake"
@@ -167,24 +166,6 @@ func mkSession(t *testing.T, s *testutil.TestServer, dir, title string) string {
 	return ses.ID
 }
 
-// waitIdle polls /session/status until the session reports idle.
-func waitIdle(t *testing.T, s *testutil.TestServer, dir, id string) {
-	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		_, b := testutil.Req(t, s, "GET", "/session/status", dir, "")
-		var st struct {
-			Sessions map[string]string `json:"sessions"`
-		}
-		_ = json.Unmarshal(b, &st)
-		if st.Sessions[id] == "idle" {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("session %s never went idle", id)
-}
-
 func TestGoldenResponses(t *testing.T) {
 	t.Run("health", func(t *testing.T) {
 		s := testutil.Boot(t)
@@ -232,7 +213,7 @@ func TestGoldenResponses(t *testing.T) {
 		if resp.StatusCode != 202 {
 			t.Fatalf("send: %d %s", resp.StatusCode, b)
 		}
-		waitIdle(t, s, d, id)
+		s.WaitIdle(t, d, id)
 		golden(t, s, "message_list", "GET", "/session/"+id+"/message", d, "", 200)
 	})
 	t.Run("provider", func(t *testing.T) {
@@ -454,12 +435,12 @@ func TestFakeEnvE2E(t *testing.T) {
 	if resp.StatusCode != 202 {
 		t.Fatalf("send 1: %d %s", resp.StatusCode, b)
 	}
-	waitIdle(t, s, s.Dir, id)
+	s.WaitIdle(t, s.Dir, id)
 	resp, b = testutil.Req(t, s, "POST", "/session/"+id+"/message", s.Dir, `{"text":"again"}`)
 	if resp.StatusCode != 202 {
 		t.Fatalf("send 2: %d %s", resp.StatusCode, b)
 	}
-	waitIdle(t, s, s.Dir, id)
+	s.WaitIdle(t, s.Dir, id)
 
 	// messages + parts persisted: user x2, an assistant with a completed
 	// `read` tool part (output = the note) and the closing text part.

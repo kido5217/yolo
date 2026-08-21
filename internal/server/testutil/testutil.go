@@ -20,6 +20,7 @@ import (
 	"github.com/kido5217/yolo/internal/config"
 	"github.com/kido5217/yolo/internal/llm"
 	fakellm "github.com/kido5217/yolo/internal/llm/fake"
+	"github.com/kido5217/yolo/internal/log"
 	"github.com/kido5217/yolo/internal/permission"
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/provider"
@@ -40,20 +41,23 @@ type TestServer struct {
 	PermSvc *permission.Service
 	Dir     string
 	Home    string
+	// LogDir, when set (BootWithDriverLog), is the server's log directory
+	// (yolo.log at LogDir/log/yolo.log).
+	LogDir string
 }
 
 // Boot boots the full stack with the auto-text fake driver and registers
 // cleanup on t.
 func Boot(t *testing.T) *TestServer {
 	t.Helper()
-	return boot(t, fakellm.New(fakellm.AutoText()), &protocol.Config{})
+	return bootLog(t, fakellm.New(fakellm.AutoText()), &protocol.Config{}, "")
 }
 
 // BootWithDriver boots the full stack with a caller-provided fake driver
 // (the env-gate variant, YOLO_LLM=fake).
 func BootWithDriver(t *testing.T, drv *fakellm.Driver) *TestServer {
 	t.Helper()
-	return boot(t, drv, &protocol.Config{})
+	return bootLog(t, drv, &protocol.Config{}, "")
 }
 
 // BootWithDriverConfig boots the full stack with a caller-provided fake driver
@@ -62,11 +66,20 @@ func BootWithDriver(t *testing.T, drv *fakellm.Driver) *TestServer {
 // permission rules without a yolo.jsonc file.
 func BootWithDriverConfig(t *testing.T, drv *fakellm.Driver, cfg *protocol.Config) *TestServer {
 	t.Helper()
-	return boot(t, drv, cfg)
+	return bootLog(t, drv, cfg, "")
 }
 
-// boot boots the FULL stack on the given kido driver (no network).
-func boot(t *testing.T, drv *fakellm.Driver, cfg *protocol.Config) *TestServer {
+// BootWithDriverLog boots the full stack with a caller-provided fake driver,
+// writing server logs to logDir (TestServer.LogDir) so tests can read
+// <logDir>/log/yolo.log.
+func BootWithDriverLog(t *testing.T, drv *fakellm.Driver, logDir string) *TestServer {
+	t.Helper()
+	return bootLog(t, drv, &protocol.Config{}, logDir)
+}
+
+// bootLog boots the FULL stack on the given kido driver (no network); with
+// logDir set, server logs go to <logDir>/log/yolo.log.
+func bootLog(t *testing.T, drv *fakellm.Driver, cfg *protocol.Config, logDir string) *TestServer {
 	t.Helper()
 	root := t.TempDir()
 	dataDir := filepath.Join(root, "data")
@@ -97,6 +110,11 @@ func boot(t *testing.T, drv *fakellm.Driver, cfg *protocol.Config) *TestServer {
 	}
 	dir := t.TempDir()
 	home := filepath.Join(root, "home")
+	var lob *log.Logger
+	if logDir != "" {
+		lob = log.New(logDir)
+		t.Cleanup(lob.Close)
+	}
 	h := server.New(server.Deps{
 		DB:      db,
 		Bus:     b,
@@ -106,10 +124,11 @@ func boot(t *testing.T, drv *fakellm.Driver, cfg *protocol.Config) *TestServer {
 		Config:  config.Loader{Env: map[string]string{}},
 		WorkDir: dir,
 		Dirs:    config.Dirs{Home: home, Data: dataDir, Cache: filepath.Join(root, "cache")},
+		Log:     lob,
 	})
 	ts := httptest.NewServer(h)
 	t.Cleanup(ts.Close)
-	return &TestServer{Server: ts, DB: db, Bus: b, Eng: eng, Fake: drv, PermSvc: permSvc, Dir: dir, Home: home}
+	return &TestServer{Server: ts, DB: db, Bus: b, Eng: eng, Fake: drv, PermSvc: permSvc, Dir: dir, Home: home, LogDir: logDir}
 }
 
 // WaitSubscribe blocks until the bus has at least n live subscribers (an SSE
@@ -125,6 +144,25 @@ func (ts *TestServer) WaitSubscribe(t *testing.T, n int) {
 		time.Sleep(2 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for %d bus subscriber(s); have %d", n, ts.Bus.SubscriberCount())
+}
+
+// WaitIdle polls /session/status until the session reports idle. Fails on a
+// 10s deadline.
+func (ts *TestServer) WaitIdle(t *testing.T, dir, id string) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		_, b := Req(t, ts, "GET", "/session/status", dir, "")
+		var st struct {
+			Sessions map[string]string `json:"sessions"`
+		}
+		_ = json.Unmarshal(b, &st)
+		if st.Sessions[id] == "idle" {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("session %s never went idle", id)
 }
 
 // WaitBusy polls /session/status until the session reports busy (deterministic
