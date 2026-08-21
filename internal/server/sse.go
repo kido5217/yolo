@@ -2,7 +2,7 @@ package server
 
 import (
 	"encoding/json"
-	"fmt"
+	"io"
 	"net/http"
 )
 
@@ -34,7 +34,18 @@ func (s *Server) handleEvent(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				continue
 			}
-			fmt.Fprintf(w, "data: %s\n\n", b)
+			// Three writes instead of Fprintf: identical wire bytes,
+			// no fmt buffer growth for large frames. A failed write
+			// means the stream is dead (the loop exits on ctx done).
+			if _, err := io.WriteString(w, "data: "); err != nil {
+				continue
+			}
+			if _, err := w.Write(b); err != nil {
+				continue
+			}
+			if _, err := io.WriteString(w, "\n\n"); err != nil {
+				continue
+			}
 			fl.Flush()
 		}
 	}
