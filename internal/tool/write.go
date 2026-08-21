@@ -116,8 +116,8 @@ func (writeTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output
 // diffCounts is a minimal LCS line diff (upstream edit/write use the JS
 // diff package's diffLines): added/removed = lines not shared by the two
 // contents, split on "\n".
-func diffCounts(old, new string) (added, removed int) {
-	oa, na := strings.Split(old, "\n"), strings.Split(new, "\n")
+func diffCounts(before, after string) (added, removed int) {
+	oa, na := strings.Split(before, "\n"), strings.Split(after, "\n")
 	common := lcsLen(oa, na)
 	return len(na) - common, len(oa) - common
 }

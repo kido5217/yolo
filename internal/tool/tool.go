@@ -22,8 +22,8 @@ const (
 // Limits bounds tool output.
 type Limits struct{ MaxLines, MaxBytes int }
 
-// def fills zero fields with the upstream defaults.
-func (l Limits) def() Limits {
+// withDefaults fills zero fields with the upstream defaults.
+func (l Limits) withDefaults() Limits {
 	if l.MaxLines <= 0 {
 		l.MaxLines = DefaultMaxLines
 	}

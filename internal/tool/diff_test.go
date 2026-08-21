@@ -7,8 +7,8 @@ import "testing"
 // (write/edit part meta are the contract).
 func TestDiffCountsPins(t *testing.T) {
 	cases := []struct {
-		old, new  string
-		added, rm int
+		oldText, newText string
+		added, removed   int
 	}{
 		{"", "a\nb\n", 2, 0},
 		{"one\ntwo\nthree\n", "one\nTWO\nthree\n", 1, 1},
@@ -22,10 +22,10 @@ func TestDiffCountsPins(t *testing.T) {
 		{"a\nb\nc\nd\n", "b\nd\na\nc\n", 2, 2},
 	}
 	for i, c := range cases {
-		added, removed := diffCounts(c.old, c.new)
-		if added != c.added || removed != c.rm {
+		added, removed := diffCounts(c.oldText, c.newText)
+		if added != c.added || removed != c.removed {
 			t.Errorf("case %d: diffCounts(%q,%q) = (%d,%d), want (%d,%d)",
-				i, c.old, c.new, added, removed, c.added, c.rm)
+				i, c.oldText, c.newText, added, removed, c.added, c.removed)
 		}
 	}
 }

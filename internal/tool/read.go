@@ -123,7 +123,7 @@ func (readTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 	if env == nil {
 		env = &Env{}
 	}
-	lim := env.Limits.def()
+	lim := env.Limits.withDefaults()
 	if limit == 0 {
 		limit = lim.MaxLines
 	}
@@ -142,7 +142,7 @@ func (readTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 
 	fi, err := os.Stat(fp)
 	if errors.Is(err, os.ErrNotExist) {
-		return Output{}, miss(fp)
+		return Output{}, notFoundWithSuggestions(fp)
 	}
 	if err != nil {
 		return Output{}, err
@@ -150,7 +150,7 @@ func (readTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 	if fi.IsDir() {
 		return readDirListing(env.Dir, fp, offset, limit)
 	}
-	if binaryFile(fp) {
+	if isBinaryFile(fp) {
 		return Output{}, fmt.Errorf("cannot read binary file: %s", fp)
 	}
 
@@ -340,17 +340,17 @@ func readDirListing(base, fp string, offset, limit int) (Output, error) {
 	return Output{Title: readTitle(base, fp), Text: strings.Join(out, "\n"), Meta: meta}, nil
 }
 
-// miss ports upstream: up to 3 sibling entries whose name contains the
-// missing basename (case-insensitive, either direction), else the plain
-// not-found error.
-func miss(fp string) error {
+// notFoundWithSuggestions ports upstream: up to 3 sibling entries whose name
+// contains the missing basename (case-insensitive, either direction), else
+// the plain not-found error.
+func notFoundWithSuggestions(fp string) error {
 	dir, base := filepath.Dir(fp), filepath.Base(fp)
 	hits := []string{}
 	if items, err := os.ReadDir(dir); err == nil {
-		lb := strings.ToLower(base)
+		lowerName := strings.ToLower(base)
 		for _, it := range items {
-			ln := strings.ToLower(it.Name())
-			if strings.Contains(ln, lb) || strings.Contains(lb, ln) {
+			name := strings.ToLower(it.Name())
+			if strings.Contains(name, lowerName) || strings.Contains(lowerName, name) {
 				hits = append(hits, filepath.Join(dir, it.Name()))
 			}
 			if len(hits) >= 3 {
@@ -364,8 +364,8 @@ func miss(fp string) error {
 	return fmt.Errorf("file not found: %s", fp)
 }
 
-// binaryFile sniffs NUL bytes in the first binarySniffBytes.
-func binaryFile(fp string) bool {
+// isBinaryFile sniffs NUL bytes in the first binarySniffBytes.
+func isBinaryFile(fp string) bool {
 	f, err := os.Open(fp)
 	if err != nil {
 		return false

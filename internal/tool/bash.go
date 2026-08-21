@@ -112,7 +112,7 @@ func (bashTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 	case err != nil:
 		return Output{}, err
 	}
-	text, cut := Truncate(out, env.Limits.def())
+	text, cut := Truncate(out, env.Limits.withDefaults())
 	if text == "" {
 		text = "(no output)"
 	}
