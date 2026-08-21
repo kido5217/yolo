@@ -147,10 +147,31 @@ func oaRequest(req Request) oaReq {
 
 // wire chunk types
 
+type oaDeltaFunc struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+type oaDeltaToolCall struct {
+	Index    float64     `json:"index"`
+	ID       string      `json:"id"`
+	Function oaDeltaFunc `json:"function"`
+}
+
+// oaDelta is the typed stream delta: only the fields the driver reads
+// (content, reasoning, tool_calls) exist, so a chunk decodes without per-
+// token map allocation and interface boxing.
+type oaDelta struct {
+	Content          string            `json:"content"`
+	ReasoningContent string            `json:"reasoning_content"`
+	Reasoning        string            `json:"reasoning"`
+	ToolCalls        []oaDeltaToolCall `json:"tool_calls"`
+}
+
 type oaChunkChoice struct {
-	Index        int            `json:"index"`
-	Delta        map[string]any `json:"delta"`
-	FinishReason *string        `json:"finish_reason"`
+	Index        int     `json:"index"`
+	Delta        oaDelta `json:"delta"`
+	FinishReason *string `json:"finish_reason"`
 }
 
 type oaChunk struct {
@@ -213,43 +234,33 @@ func (o *OpenAI) oaReadSSE(ctx context.Context, body io.ReadCloser, ch chan Part
 			return
 		}
 		for _, c := range chunk.Choices {
-			delta := c.Delta
-			if content, _ := delta["content"].(string); content != "" {
-				send(Part{Kind: "text", Text: content})
+			d := c.Delta
+			if d.Content != "" {
+				send(Part{Kind: "text", Text: d.Content})
 			}
-			rc, _ := delta["reasoning_content"].(string)
+			rc := d.ReasoningContent
 			if rc == "" {
-				rc, _ = delta["reasoning"].(string)
+				rc = d.Reasoning
 			}
 			if rc != "" {
 				send(Part{Kind: "reasoning", Text: rc})
 			}
-			if tcs, _ := delta["tool_calls"].([]any); tcs != nil {
-				for _, raw := range tcs {
-					tc, ok := raw.(map[string]any)
-					if !ok {
-						continue
-					}
-					idx := int(oaNum(tc["index"]))
-					a, ok := tools[idx]
-					if !ok {
-						a = &oaAccum{}
-						tools[idx] = a
-						tcOrder = append(tcOrder, idx)
-					}
-					if id, _ := tc["id"].(string); id != "" {
-						a.id = id
-					}
-					fn, _ := tc["function"].(map[string]any)
-					if fn == nil {
-						continue
-					}
-					if name, _ := fn["name"].(string); name != "" {
-						a.name = name
-					}
-					if args, _ := fn["arguments"].(string); args != "" {
-						a.args.WriteString(args)
-					}
+			for _, tc := range d.ToolCalls {
+				idx := int(tc.Index)
+				a, ok := tools[idx]
+				if !ok {
+					a = &oaAccum{}
+					tools[idx] = a
+					tcOrder = append(tcOrder, idx)
+				}
+				if tc.ID != "" {
+					a.id = tc.ID
+				}
+				if tc.Function.Name != "" {
+					a.name = tc.Function.Name
+				}
+				if tc.Function.Arguments != "" {
+					a.args.WriteString(tc.Function.Arguments)
 				}
 			}
 		}
