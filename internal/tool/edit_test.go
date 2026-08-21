@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -29,38 +28,62 @@ func TestEditExactReplace(t *testing.T) {
 }
 
 func TestEditErrorsPinned(t *testing.T) {
+	cases := []struct {
+		name string
+		rel  string // path suffix under the per-case dir; "" = f.txt
+		old  string
+		new  string
+		want string
+	}{
+		{name: "identical strings", old: "a", new: "a",
+			want: "no changes to apply: oldString and newString are identical"},
+		{name: "empty oldString", old: "", new: "a",
+			want: "oldString cannot be empty when editing an existing file. Provide the exact text to replace, or use write for an intentional full-file replacement"},
+		{name: "missing file", rel: "nope.txt", old: "x", new: "y", want: ""}, // "file <fp> not found", fp filled in below
+		{name: "path is a directory", rel: ".", old: "x", new: "y", want: ""}, // "path is a directory, not a file: <d>", d filled in below
+		{name: "oldString not found", old: "zzz", new: "y",
+			want: "could not find oldString in the file. It must match exactly, including whitespace, indentation, and line endings"},
+		{name: "multiple matches", old: "a", new: "b",
+			want: "found multiple matches for oldString. Provide more surrounding context to make the match unique"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			d := t.TempDir()
+			f := filepath.Join(d, "f.txt")
+			if err := os.WriteFile(f, []byte("a\nb\na\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			fp := f
+			want := tc.want
+			if tc.rel != "" {
+				fp = filepath.Join(d, tc.rel)
+			}
+			switch tc.name {
+			case "missing file":
+				want = "file " + fp + " not found"
+			case "path is a directory":
+				want = "path is a directory, not a file: " + fp
+			}
+			env := &Env{Dir: d, Limits: Limits{2000, 50 * 1024}}
+			_, err := runTool(t, "edit", env, map[string]any{"filePath": fp, "oldString": tc.old, "newString": tc.new})
+			if err == nil {
+				t.Fatal("want error")
+			}
+			if err.Error() != want {
+				t.Fatalf("err = %q, want %q", err, want)
+			}
+		})
+	}
+}
+
+func TestEditreplaceAll(t *testing.T) {
 	d := t.TempDir()
 	f := filepath.Join(d, "f.txt")
 	if err := os.WriteFile(f, []byte("a\nb\na\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	env := &Env{Dir: d, Limits: Limits{2000, 50 * 1024}}
-
-	_, err := runTool(t, "edit", env, map[string]any{"filePath": f, "oldString": "a", "newString": "a"})
-	if err == nil || err.Error() != "no changes to apply: oldString and newString are identical" {
-		t.Fatalf("err = %v", err)
-	}
-	_, err = runTool(t, "edit", env, map[string]any{"filePath": f, "oldString": "", "newString": "a"})
-	if err == nil || !strings.HasPrefix(err.Error(), "oldString cannot be empty") {
-		t.Fatalf("err = %v", err)
-	}
-	_, err = runTool(t, "edit", env, map[string]any{"filePath": filepath.Join(d, "nope.txt"), "oldString": "x", "newString": "y"})
-	if err == nil || err.Error() != "file "+filepath.Join(d, "nope.txt")+" not found" {
-		t.Fatalf("err = %v", err)
-	}
-	_, err = runTool(t, "edit", env, map[string]any{"filePath": d, "oldString": "x", "newString": "y"})
-	if err == nil || !strings.Contains(err.Error(), "path is a directory, not a file") {
-		t.Fatalf("err = %v", err)
-	}
-	_, err = runTool(t, "edit", env, map[string]any{"filePath": f, "oldString": "zzz", "newString": "y"})
-	if err == nil || err.Error() != "could not find oldString in the file. It must match exactly, including whitespace, indentation, and line endings" {
-		t.Fatalf("err = %v", err)
-	}
-	_, err = runTool(t, "edit", env, map[string]any{"filePath": f, "oldString": "a", "newString": "b"})
-	if err == nil || err.Error() != "found multiple matches for oldString. Provide more surrounding context to make the match unique" {
-		t.Fatalf("err = %v", err)
-	}
-	_, err = runTool(t, "edit", env, map[string]any{"filePath": f, "oldString": "a", "newString": "b", "replaceAll": true})
+	_, err := runTool(t, "edit", env, map[string]any{"filePath": f, "oldString": "a", "newString": "b", "replaceAll": true})
 	if err != nil {
 		t.Fatal(err)
 	}

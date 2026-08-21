@@ -54,26 +54,30 @@ func TestKidoFallsBackStaticOnNetworkError(t *testing.T) {
 }
 
 func TestKidoSkipsInvalidEntries(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"data":[
-			{"id":"","meta":{"n_ctx":4096}},
-			{"id":"broken","meta":{"n_ctx":0}},
-			{"id":"good","meta":{"n_ctx":8192}}
-		]}`))
-	}))
-	defer srv.Close()
-	m := provider.FetchKido(context.Background(), srv.URL, 5000, false, nil)
-	if len(m) != 1 || m[0].ID != "good" || m[0].Context != 8192 || m[0].Output != 1024 {
-		t.Fatalf("models = %+v", m)
-	}
-	srv2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"data":[{"id":"","meta":{"n_ctx":0}}]}`))
-	}))
-	defer srv2.Close()
-	m2 := provider.FetchKido(context.Background(), srv2.URL, 5000, false, nil)
-	if len(m2) != 1 || m2[0].ID != "Qwen3.8-27B" {
-		t.Fatalf("all-invalid fallback = %+v", m2)
-	}
+	t.Run("skips invalid entries", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(`{"data":[
+				{"id":"","meta":{"n_ctx":4096}},
+				{"id":"broken","meta":{"n_ctx":0}},
+				{"id":"good","meta":{"n_ctx":8192}}
+			]}`))
+		}))
+		defer srv.Close()
+		m := provider.FetchKido(context.Background(), srv.URL, 5000, false, nil)
+		if len(m) != 1 || m[0].ID != "good" || m[0].Context != 8192 || m[0].Output != 1024 {
+			t.Fatalf("models = %+v", m)
+		}
+	})
+	t.Run("all-invalid falls back to static", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(`{"data":[{"id":"","meta":{"n_ctx":0}}]}`))
+		}))
+		defer srv.Close()
+		m := provider.FetchKido(context.Background(), srv.URL, 5000, false, nil)
+		if len(m) != 1 || m[0].ID != "Qwen3.8-27B" {
+			t.Fatalf("fallback = %+v", m)
+		}
+	})
 }
 
 func TestZenFiltersAndAdapterMap(t *testing.T) {

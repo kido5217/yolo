@@ -8,7 +8,8 @@ import (
 	"testing"
 )
 
-func TestGlobTool(t *testing.T) {
+func globFixture(t *testing.T) (*Env, string) {
+	t.Helper()
 	d := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(d, "a", "b"), 0o755); err != nil {
 		t.Fatal(err)
@@ -21,40 +22,50 @@ func TestGlobTool(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	env := &Env{Dir: d, Limits: Limits{2000, 50 * 1024}}
-
-	out, err := runTool(t, "glob", env, map[string]any{"pattern": "**/*.go"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Plan test bug: expected 3 lines, but only 2 files can match
-	// "**/*.go" — .git/skip.go is excluded by the hidden-skip rule the
-	// same test asserts, and a/z.md is not a .go file.
-	lines := strings.Split(strings.TrimSpace(out.Text), "\n")
-	if len(lines) != 2 {
-		t.Fatalf("lines = %d: %v", len(lines), lines)
-	}
-	for _, frag := range []string{"/a/x.go", "/a/b/y.go"} {
-		if !strings.Contains(out.Text, frag) {
-			t.Fatalf("missing %q in %q", frag, out.Text)
-		}
-	}
-	if strings.Contains(out.Text, ".git") {
-		t.Fatal(".git leaked")
-	}
-
-	_, err = runTool(t, "glob", env, map[string]any{"pattern": "*", "path": filepath.Join(d, "a", "x.go")})
-	if err == nil || !strings.Contains(err.Error(), "glob path must be a directory") {
-		t.Fatalf("err = %v", err)
-	}
-
-	out2, _ := runTool(t, "glob", env, map[string]any{"pattern": "nomatch*"})
-	if out2.Text != "No files found" {
-		t.Fatalf("empty = %q", out2.Text)
-	}
+	return &Env{Dir: d, Limits: Limits{2000, 50 * 1024}}, d
 }
 
-func TestGrepTool(t *testing.T) {
+func TestGlobTool(t *testing.T) {
+	t.Run("matches nested, skips hidden", func(t *testing.T) {
+		env, _ := globFixture(t)
+		out, err := runTool(t, "glob", env, map[string]any{"pattern": "**/*.go"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Plan test bug: expected 3 lines, but only 2 files can match
+		// "**/*.go" — .git/skip.go is excluded by the hidden-skip rule the
+		// same test asserts, and a/z.md is not a .go file.
+		lines := strings.Split(strings.TrimSpace(out.Text), "\n")
+		if len(lines) != 2 {
+			t.Fatalf("lines = %d: %v", len(lines), lines)
+		}
+		for _, frag := range []string{"/a/x.go", "/a/b/y.go"} {
+			if !strings.Contains(out.Text, frag) {
+				t.Fatalf("missing %q in %q", frag, out.Text)
+			}
+		}
+		if strings.Contains(out.Text, ".git") {
+			t.Fatal(".git leaked")
+		}
+	})
+	t.Run("path must be a directory", func(t *testing.T) {
+		env, d := globFixture(t)
+		_, err := runTool(t, "glob", env, map[string]any{"pattern": "*", "path": filepath.Join(d, "a", "x.go")})
+		if err == nil || !strings.Contains(err.Error(), "glob path must be a directory") {
+			t.Fatalf("err = %v", err)
+		}
+	})
+	t.Run("no match", func(t *testing.T) {
+		env, _ := globFixture(t)
+		out, _ := runTool(t, "glob", env, map[string]any{"pattern": "nomatch*"})
+		if out.Text != "No files found" {
+			t.Fatalf("empty = %q", out.Text)
+		}
+	})
+}
+
+func grepFixture(t *testing.T) (*Env, string) {
+	t.Helper()
 	d := t.TempDir()
 	if err := os.WriteFile(filepath.Join(d, "a.txt"), []byte("alpha\nbeta\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -62,29 +73,38 @@ func TestGrepTool(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(d, "b.md"), []byte("alpha here\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	env := &Env{Dir: d, Limits: Limits{2000, 50 * 1024}}
+	return &Env{Dir: d, Limits: Limits{2000, 50 * 1024}}, d
+}
 
-	out, err := runTool(t, "grep", env, map[string]any{"pattern": "alpha"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	joined := out.Text
-	if !strings.Contains(joined, "Found 2 matches") ||
-		!strings.Contains(joined, filepath.Join(d, "a.txt")+":") ||
-		!strings.Contains(joined, "  Line 1: alpha") ||
-		!strings.Contains(joined, filepath.Join(d, "b.md")+":") {
-		t.Fatalf("output = %q", joined)
-	}
-
-	out2, _ := runTool(t, "grep", env, map[string]any{"pattern": "alpha", "include": "*.md"})
-	if !strings.Contains(out2.Text, "Found 1 matches") || strings.Contains(out2.Text, "a.txt") {
-		t.Fatalf("include filter broken: %q", out2.Text)
-	}
-
-	out3, _ := runTool(t, "grep", env, map[string]any{"pattern": "nope"})
-	if out3.Text != "No files found" {
-		t.Fatalf("no match = %q", out3.Text)
-	}
+func TestGrepTool(t *testing.T) {
+	t.Run("matches", func(t *testing.T) {
+		env, d := grepFixture(t)
+		out, err := runTool(t, "grep", env, map[string]any{"pattern": "alpha"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		joined := out.Text
+		if !strings.Contains(joined, "Found 2 matches") ||
+			!strings.Contains(joined, filepath.Join(d, "a.txt")+":") ||
+			!strings.Contains(joined, "  Line 1: alpha") ||
+			!strings.Contains(joined, filepath.Join(d, "b.md")+":") {
+			t.Fatalf("output = %q", joined)
+		}
+	})
+	t.Run("include filter", func(t *testing.T) {
+		env, _ := grepFixture(t)
+		out, _ := runTool(t, "grep", env, map[string]any{"pattern": "alpha", "include": "*.md"})
+		if !strings.Contains(out.Text, "Found 1 matches") || strings.Contains(out.Text, "a.txt") {
+			t.Fatalf("include filter broken: %q", out.Text)
+		}
+	})
+	t.Run("no match", func(t *testing.T) {
+		env, _ := grepFixture(t)
+		out, _ := runTool(t, "grep", env, map[string]any{"pattern": "nope"})
+		if out.Text != "No files found" {
+			t.Fatalf("no match = %q", out.Text)
+		}
+	})
 }
 
 func TestGrepLimit100(t *testing.T) {
