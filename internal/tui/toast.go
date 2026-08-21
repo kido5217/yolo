@@ -32,7 +32,11 @@ func (a *App) toast(msg string) {
 	id := a.toastSeq
 	a.toasts = append(a.toasts, toast{id: id, msg: msg})
 	if len(a.toasts) > maxToasts {
-		a.toasts = a.toasts[len(a.toasts)-maxToasts:]
+		// Fresh slice: eviction drops the old backing array's head so an
+		// in-flight View of pre-eviction toasts is not mutated out from it.
+		kept := make([]toast, maxToasts)
+		copy(kept, a.toasts[len(a.toasts)-maxToasts:])
+		a.toasts = kept
 	}
 	a.toastCmds = append(a.toastCmds, tea.Tick(toastTTL, func(_ time.Time) tea.Msg {
 		return toastExpireMsg{id: id}
