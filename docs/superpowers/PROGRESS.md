@@ -1,6 +1,6 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-21 (v0.1.2 in progress: wave 12/16 done, next wave 13 — benchmark)
+**Updated:** 2026-08-21 (v0.1.2 in progress: wave 13/16 done, next wave 14 — naming)
 
 Rolling checkpoint: active task + last-completed + verified facts + v0.1.2-era deviation log +
 open items. Keep it small — `git log --oneline` and the plan files are the archive (no
@@ -27,33 +27,35 @@ roll this file (active → one-line "Last completed", next task → "Active").
 
 ## Active
 
-v0.1.2 skill-driven review — wave 13 (golang-benchmark, implement hermetic
-benchmarks), not started. Plan:
+v0.1.2 skill-driven review — wave 14 (golang-naming), not started. Plan:
 docs/superpowers/plans/2026-08-19-v0.1.2-skill-review.md (read ONLY the active task
-slice; resume protocol in the plan header). Step 1: dispatch B13a (ONE subagent, YOLO —
-this one WRITES CODE; the full Template-F-shaped prompt is pinned verbatim in the Task 13
-slice): pick ≤8 hermetic benchmark targets (prefer wave 12's evidence-backed ones), add
-sub-benchmark tables in NEW `*_bench_test.go` files (existing test files NOT modified;
-no network, in-memory/tempdir SQLite, b.ResetTimer + b.ReportAllocs), prove compile/run
-via `go test -bench=. -benchtime=1x -count=1 <pkg>` per package, commit `test: add
-v0.1.2 benchmarks for <paths>`, then write the report. Findings file:
-13-benchmark-hotpaths.md (report shape + P3-count convention in the Task 13 slice). NO
-Template F fix subagent in this wave (code work happens inside B13a under gate). Then:
-verify Stats/COVERAGE, findings commit `docs(review): v0.1.2 — wave 13 (benchmark):
-<K> benchmarks added`, full gate, PROGRESS roll `wave 13/16 done, next wave 14 —
-naming`, checkpoint commit `docs: checkpoint — v0.1.2 wave 13 (benchmark) done, next
-wave 14 (naming)`. Commit gate:
+slice; resume protocol in the plan header). Step 1: dispatch R14a → R14d one at a time
+(YOLO per core principle 8 — deviation 69; Template R, lens golang-naming, IDs
+[naming-<n>], class identifier-driven, append the Task 14 scope note: renames reflecting
+in JSON tags/wire strings = contract-risk: wire; internal renames may be none only when
+mechanical risk is zero, cross-package renames touching >5 files = behavior).
+Per-chunk scope + findings paths verbatim in the Task 14 slice: R14a →
+14-naming-core.md, R14b → 14-naming-server-tool.md, R14c → 14-naming-llm-cmd.md,
+R14d → 14-naming-tui.md. Then: verify Stats/COVERAGE (one split re-dispatch per
+partial), findings commit `docs(review): v0.1.2 — wave 14 (naming): <N> findings
+(P0:<a> P1:<b> P2:<c> P3:<d>)`, fix subagent (Template F, renames-only; existing tests
+are the safety net) iff any `contract-risk: none`, stop-the-line, full gate, PROGRESS
+roll `wave 14/16 done, next wave 15 — code-style`, checkpoint commit `docs: checkpoint
+— v0.1.2 wave 14 (naming) done, next wave 15 (code-style)`. Commit gate:
 go vet ./... && go test ./... + gofmt -l . + golangci-lint run ./...
 
 ## Last completed
 
-Wave 12 (performance, evidence-only): 7 findings (P0:0 P1:0 P2:2 P3:5 — deviation 70
-count correction) → 12-performance-hotpaths.md (9e2a28b); 5 fixed (6b1b522 hand-rolled
-text-part StateJSON, cdd6c36 prepared-statement reuse, 256ee6a SSE plain writes,
-bd7e056 byte-based SSE frames, c3a3e57 precomputed static lipgloss renders — all
-behavior-neutral, gate green), 2 deferred as `behavior` with evidence (perf-1 O(n²)
-per-delta re-encode + full-row re-upsert → 0.2.0; perf-7 per-round messagesFor re-map →
-0.2.0), 0 FALSE / 0 WONTFIX (status commit d3c48f1).
+Wave 13 (benchmark, in-subagent code work — no Template F fix subagent by plan): B13a
+added 8 hermetic benchmarks in 5 NEW `*_bench_test.go` files (e2946cf:
+internal/storage/dao_bench_test.go, internal/session/engine_bench_test.go,
+internal/llm/openai_bench_test.go + anthropic_bench_test.go,
+internal/tui/session_bench_test.go), 2 inventory candidates deferred with reason
+(store.Apply, Truncate) → 13-benchmark-hotpaths.md (Stats P0:0 P1:0 P2:0 P3:8,
+COVERAGE full — 5edac05). Baselines (1x, relative only): 10k-frame SSE decode
+15.7–17.2ms, per-round messagesFor 26.0ms, 200-msg TUI frame 2.26ms, UpsertPart 64KB
+301µs, ProtocolToPart 128KB 494µs. Gate green (vet+test, gofmt, golangci-lint 0
+issues).
 
 ## Open items
 
