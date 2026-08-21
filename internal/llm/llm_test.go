@@ -127,8 +127,9 @@ func TestOpenAIMidStreamError(t *testing.T) {
 		t.Fatalf("first = %+v", first)
 	}
 	var final Part
+	drain := ctx0(t) // one timeout bounds the whole drain
 	for {
-		p, err := s.Next(ctx0(t))
+		p, err := s.Next(drain)
 		if p.Finish == "error" {
 			final = p
 			break
@@ -173,6 +174,21 @@ func TestOpenAIRequestShape(t *testing.T) {
 	})
 	if got["stream"] != true {
 		t.Fatalf("stream = %v", got["stream"])
+	}
+	if got["max_tokens"] != float64(100) {
+		t.Fatalf("max_tokens = %v", got["max_tokens"])
+	}
+	msgs, _ := got["messages"].([]any)
+	if len(msgs) != 2 {
+		t.Fatalf("messages = %v", got["messages"])
+	}
+	m0 := msgs[0].(map[string]any)
+	if m0["role"] != "system" || m0["content"] != "sys" {
+		t.Fatalf("msg0 = %v", m0)
+	}
+	m1 := msgs[1].(map[string]any)
+	if m1["role"] != "user" || m1["content"] != "hi" {
+		t.Fatalf("msg1 = %v", m1)
 	}
 	tools, _ := got["tools"].([]any)
 	if len(tools) != 1 {

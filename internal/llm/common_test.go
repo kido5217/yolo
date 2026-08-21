@@ -63,9 +63,13 @@ func stream(t *testing.T, d Driver, req Request) PartStream {
 
 func collect(t *testing.T, s PartStream) []Part {
 	t.Helper()
+	// one ctx bounds the WHOLE drain: a stream that emits parts forever
+	// without Finish fails fast here instead of getting a fresh 10 s
+	// context per Next call.
+	ctx := ctx0(t)
 	var out []Part
 	for {
-		p, err := s.Next(ctx0(t))
+		p, err := s.Next(ctx)
 		if err != nil {
 			break
 		}
