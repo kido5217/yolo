@@ -70,6 +70,7 @@ type Engine struct {
 	prov    *provider.Registry
 	perm    *permission.Service
 	tools   map[string]tool.Tool
+	schemas map[string]json.RawMessage // marshalled tool Schema per id, built once in New
 	lg      *log.Logger
 	dataDir string
 	cfg     func(projectDir string) (*protocol.Config, error)
@@ -98,6 +99,16 @@ func New(d Deps) (*Engine, error) {
 	case d.Tools == nil:
 		return nil, errors.New("session: Deps.Tools required")
 	}
+	// Schemas are marshalled once (encoding is deterministic), so every
+	// round serves the same wire bytes without re-building the schema maps.
+	schemas := make(map[string]json.RawMessage, len(d.Tools))
+	for id, t := range d.Tools {
+		raw, err := json.Marshal(t.Schema())
+		if err != nil {
+			return nil, fmt.Errorf("session: tool %q schema: %w", id, err)
+		}
+		schemas[id] = raw
+	}
 	clock := d.Clock
 	if clock == nil {
 		clock = func() int64 { return time.Now().UnixMilli() }
@@ -112,6 +123,7 @@ func New(d Deps) (*Engine, error) {
 		prov:    d.Prov,
 		perm:    d.Perm,
 		tools:   d.Tools,
+		schemas: schemas,
 		lg:      d.Log,
 		dataDir: d.DataDir,
 		cfg:     d.Cfg,

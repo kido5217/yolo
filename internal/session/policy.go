@@ -1,7 +1,6 @@
 package session
 
 import (
-	"encoding/json"
 	"sort"
 
 	"github.com/kido5217/yolo/internal/llm"
@@ -64,7 +63,9 @@ func (e *Engine) VisibleToolsFor(sessionID string) (map[string]tool.Tool, error)
 }
 
 // toolSchemaList renders the LLM tool schemas for the visible tools in
-// stable (sorted) id order.
+// stable (sorted) id order. Parameter bytes come from the schemas
+// marshalled once at engine construction (encoding is deterministic, so
+// wire bytes are identical to per-round marshalling).
 func (e *Engine) toolSchemaList(sessionID string) ([]llm.ToolDef, error) {
 	visible, err := e.VisibleToolsFor(sessionID)
 	if err != nil {
@@ -78,11 +79,7 @@ func (e *Engine) toolSchemaList(sessionID string) ([]llm.ToolDef, error) {
 	tools := make([]llm.ToolDef, 0, len(ids))
 	for _, id := range ids {
 		t := visible[id]
-		params, err := json.Marshal(t.Schema())
-		if err != nil {
-			return nil, err
-		}
-		tools = append(tools, llm.ToolDef{Name: t.ID(), Description: t.Desc(), Parameters: params})
+		tools = append(tools, llm.ToolDef{Name: t.ID(), Description: t.Desc(), Parameters: e.schemas[id]})
 	}
 	return tools, nil
 }
