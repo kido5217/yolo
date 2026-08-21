@@ -1,6 +1,6 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-21 (v0.1.2 in progress: wave 10/16 done, next wave 11 — data-structures)
+**Updated:** 2026-08-21 (v0.1.2 in progress: wave 11 mid — Step 1 done, 13 findings all `contract-risk: none`; next: wave 11 fix subagent)
 
 Rolling checkpoint: active task + last-completed + verified facts + v0.1.2-era deviation log +
 open items. Keep it small — `git log --oneline` and the plan files are the archive (no
@@ -27,19 +27,17 @@ roll this file (active → one-line "Last completed", next task → "Active").
 
 ## Active
 
-v0.1.2 skill-driven review — wave 11 (golang-data-structures), not started. Plan:
-docs/superpowers/plans/2026-08-19-v0.1.2-skill-review.md (read ONLY the active task slice;
-resume protocol in the plan header). Task 11 = 2 chunks, one at a time R11a (session+server+
-tool production, grep-driven, 4376 lines) → R11b (tui+llm production, grep-driven, 3480),
-Template R, lens = golang-data-structures, IDs `[datastruct-<n>]`, scope blocks in Task 11
-Step 1 (append/make/copy/Builder greps; production files only). Findings →
-11-datastruct-session-server-tool.md + 11-datastruct-tui-llm.md, then Steps 2–6 same shape
-as Task 1 (coverage verify, findings commit `docs(review): v0.1.2 — wave 11
-(data-structures): <N> findings (…)`, fix subagent (Template F,
-`<SKILL>`=`golang-data-structures`) iff any `contract-risk: none` — preallocation/Builder
-fixes are behavior-neutral but MUST keep golden + teatest suites green, gate, PROGRESS roll
-+ checkpoint `wave 11/16 done, next wave 12 — performance`). Findings under
-docs/superpowers/reviews/v0.1.2/.
+v0.1.2 skill-driven review — wave 11 (golang-data-structures), mid-wave (Step 1 done).
+Plan: docs/superpowers/plans/2026-08-19-v0.1.2-skill-review.md (read ONLY the active task
+slice; resume protocol in the plan header). R11a (session+server+tool) + R11b (tui+llm) both
+`COVERAGE: full`, 13 findings (P0:0 P1:0 P2:6 P3:7), ALL `contract-risk: none` → fix
+subagent REQUIRED (Template F, `<SKILL>`=`golang-data-structures`, `<FILES>` = the two
+11-datastruct-*.md paths). Preallocation/Builder fixes are behavior-neutral but MUST keep
+golden + teatest suites green (teatest red → roll that fix back). Then: stop-the-line check,
+full gate, PROGRESS roll `wave 11/16 done, next wave 12 — performance`, checkpoint commit
+`docs: checkpoint — v0.1.2 wave 11 (data-structures) done, next wave 12 (performance)`.
+Findings: docs/superpowers/reviews/v0.1.2/ — 11-datastruct-session-server-tool.md (4) +
+11-datastruct-tui-llm.md (9), committed 5f69b51.
 Commit gate:
 go vet ./... && go test ./... + gofmt -l . + golangci-lint run ./...
 
