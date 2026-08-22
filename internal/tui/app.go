@@ -23,7 +23,7 @@ import (
 
 // EventMsg carries one server SSE event. It is exported so the test harness
 // can drive the app with it.
-type EventMsg struct{ Ev protocol.Event }
+type EventMsg struct{ Event protocol.Event }
 
 // HydrateMsg asks the app to re-hydrate its current route over REST. It is
 // exported so the test harness can drive the app with it.
@@ -40,35 +40,35 @@ const (
 // event pump.
 type App struct {
 	*client.Client
-	store     store.Store
-	route     route
-	cur       string
-	home      homeModel
-	sess      sessionModel
-	prompt    promptModel
-	dlg       dialogStack
-	modelDlg  *modelDlg
-	agentDlg  *agentDlg
-	toasts    []toast
-	toastSeq  int
-	toastCmds []tea.Cmd
-	lastErr   string
-	spinIdx   int // footer spinner frame
+	store        store.Store
+	route        route
+	curSessionID string
+	home         homeModel
+	sess         sessionModel
+	prompt       promptModel
+	dlg          dialogStack
+	modelDlg     *modelDlg
+	agentDlg     *agentDlg
+	toasts       []toast
+	toastSeq     int
+	toastCmds    []tea.Cmd
+	lastErr      string
+	spinIdx      int // footer spinner frame
 	// tea plumbing
-	size    tea.WindowSizeMsg
-	eventCh chan protocol.Event
-	stop    context.CancelFunc
-	record  bool
-	Cmds    []tea.Cmd // test hook: emitted cmds are captured here when record
+	size     tea.WindowSizeMsg
+	eventCh  chan protocol.Event
+	stop     context.CancelFunc
+	emitSink func(cmds ...tea.Cmd) // test seam, set from _test.go only
 }
 
 // NewApp builds the root model. A non-empty startSessionID starts on that
 // session (resume); empty starts at home. The prompt is always focused with a
 // static (non-blinking) cursor.
-func NewApp(c *client.Client, s *store.Store, startSessionID string) *App {
+func NewApp(c *client.Client, s store.Store, startSessionID string) *App {
 	ctx, cancel := context.WithCancel(context.Background())
 	a := &App{
 		Client:  c,
+		store:   s,
 		route:   routeHome,
 		home:    homeModel{now: nowMillis},
 		sess:    newSessionModel(80, 21),
@@ -83,12 +83,9 @@ func NewApp(c *client.Client, s *store.Store, startSessionID string) *App {
 	in.SetStyles(st)
 	in.Focus()
 	a.prompt.input = in
-	if s != nil {
-		a.store = *s
-	}
 	if startSessionID != "" {
 		a.route = routeSession
-		a.cur = startSessionID
+		a.curSessionID = startSessionID
 	}
 	return a
 }
@@ -127,11 +124,14 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 		}
 		return nil
 	case EventMsg:
-		a.store.Conn = true
-		a.store.Apply(m.Ev)
+		a.store.Live = true
+		a.store.Apply(m.Event)
+		// Any applied event may have changed the transcript (message/part
+		// family); re-render once instead of on every frame.
+		a.sess.isDirty = true
 		return a.afterApply(a.eventPump())
 	case connLostMsg:
-		a.store.Conn = false
+		a.store.Live = false
 		return nil
 	case spinMsg:
 		a.spinIdx++
@@ -198,7 +198,7 @@ func (a *App) eventPump() tea.Cmd {
 		if !ok {
 			return connLostMsg{}
 		}
-		return EventMsg{Ev: ev}
+		return EventMsg{Event: ev}
 	}
 }
 
@@ -206,7 +206,7 @@ func (a *App) eventPump() tea.Cmd {
 // details, or the resume not-found case. Fetch failures that don't invalidate
 // the payload (ListMessages, ListCommands) degrade the corresponding slice.
 type hydratedMsg struct {
-	id       string
+	sessID   string
 	list     []protocol.Session
 	sess     *protocol.Session
 	msgs     []protocol.MessageWithParts
@@ -217,27 +217,29 @@ type hydratedMsg struct {
 }
 
 func (a *App) hydrateCmd() tea.Cmd {
-	if a.route == routeSession && a.cur != "" {
-		id := a.cur
+	if a.route == routeSession && a.curSessionID != "" {
+		id := a.curSessionID
 		return func() tea.Msg {
-			ctx := context.Background()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
 			ses, err := a.GetSession(ctx, id)
 			if errors.Is(err, client.ErrNotFound) {
-				return hydratedMsg{id: id, notFound: true}
+				return hydratedMsg{sessID: id, notFound: true}
 			}
 			if err != nil {
-				return hydratedMsg{id: id, err: err}
+				return hydratedMsg{sessID: id, err: err}
 			}
 			cmds, _ := a.ListCommands(ctx)
 			msgs, merr := a.ListMessages(ctx, id)
 			if merr != nil {
-				return hydratedMsg{id: id, sess: &ses, cmds: cmds, err: merr}
+				return hydratedMsg{sessID: id, sess: &ses, cmds: cmds, err: merr}
 			}
-			return hydratedMsg{id: id, sess: &ses, msgs: msgs, cmds: cmds}
+			return hydratedMsg{sessID: id, sess: &ses, msgs: msgs, cmds: cmds}
 		}
 	}
 	return func() tea.Msg {
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 		list, err := a.ListSessions(ctx)
 		cmds, _ := a.ListCommands(ctx)
 		cfg, _ := a.GetConfig(ctx)
@@ -256,9 +258,9 @@ func (a *App) applyHydrate(m hydratedMsg) tea.Cmd {
 	case m.notFound:
 		// Resume hit a missing session: visible error line, exit to the
 		// cmd layer, which maps this Quit to exit code 2 (T30).
-		a.lastErr = "session not found: " + m.id
+		a.lastErr = "session not found: " + m.sessID
 		a.route = routeHome
-		a.cur = ""
+		a.curSessionID = ""
 		return quitCmd()
 	case m.err != nil:
 		a.lastErr = m.err.Error()
@@ -269,6 +271,8 @@ func (a *App) applyHydrate(m hydratedMsg) tea.Cmd {
 			a.store.Current = &cp
 		}
 		a.store.Messages = m.msgs
+		a.store.ForgetParts()
+		a.sess.isDirty = true
 		a.store.LastHydrate = time.Now().UnixMilli()
 		return nil
 	default:
@@ -287,7 +291,9 @@ type sessionCreatedMsg struct {
 // "New session", model from the provider seam).
 func (a *App) createSessionCmd() tea.Cmd {
 	return func() tea.Msg {
-		ses, err := a.CreateSession(context.Background(), "")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		ses, err := a.CreateSession(ctx, "")
 		return sessionCreatedMsg{ses: ses, err: err}
 	}
 }
@@ -316,7 +322,7 @@ func (a *App) putSessionFirst(s protocol.Session) {
 
 func (a *App) openSession(id string) {
 	a.route = routeSession
-	a.cur = id
+	a.curSessionID = id
 }
 
 var (
@@ -434,7 +440,7 @@ func (a *App) promptEnter() []tea.Cmd {
 // sendMessageCmd posts the composed line as a user message for the current
 // session.
 func (a *App) sendMessageCmd(text string) tea.Cmd {
-	id := a.cur
+	id := a.curSessionID
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -476,7 +482,7 @@ func (a *App) runCommand(name string) []tea.Cmd {
 	case "/agents":
 		return a.openAgentDialog()
 	case "/new":
-		if a.cur == "" {
+		if a.curSessionID == "" {
 			return a.emit(a.createSessionCmd())
 		}
 		return a.emit(a.commandCmd("/new"))
@@ -486,7 +492,7 @@ func (a *App) runCommand(name string) []tea.Cmd {
 
 // commandCmd posts a slash command to the server for the current session.
 func (a *App) commandCmd(cmd string) tea.Cmd {
-	id := a.cur
+	id := a.curSessionID
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -527,46 +533,59 @@ type dialog struct{ kind dialogKind }
 
 type dialogStack struct{ items []dialog }
 
-func (s *dialogStack) push(d dialog) { s.items = append(s.items, d) }
+func (d *dialogStack) push(item dialog) { d.items = append(d.items, item) }
 
-func (s *dialogStack) pop() {
-	if n := len(s.items); n > 0 {
-		s.items = s.items[:n-1]
+func (d *dialogStack) pop() {
+	if n := len(d.items); n > 0 {
+		d.items = d.items[:n-1]
 	}
 }
 
-func (s *dialogStack) top() (dialog, bool) {
-	n := len(s.items)
+func (d *dialogStack) top() (dialog, bool) {
+	n := len(d.items)
 	if n == 0 {
 		return dialog{}, false
 	}
-	return s.items[n-1], true
+	return d.items[n-1], true
 }
 
-func (s dialogStack) has() bool { return len(s.items) > 0 }
+func (d dialogStack) empty() bool { return len(d.items) == 0 }
 
-func (s dialogStack) view() string {
-	d, ok := s.top()
+// Static frame parts render once at package init instead of on every frame:
+// the styles involved (title, dim, divider) set no width, border, padding,
+// or alignment, and lipgloss v2 Style.Render is a pure function of the style
+// and the input (SGR output derives from the color type, no terminal state),
+// so the results are process-constants. The session-title line in
+// viewSession is the only dynamic render left.
+var (
+	dividerLineRendered = divider.Render(dividerLine())
+	sessionHelpRendered = dim.Render(sessionHelp)
+	quitDialogRendered  = title.Render("quit? [y/n]")
+	helpDialogRendered  = title.Render("Help") +
+		"\n" + dim.Render("  | Key | Action |") +
+		"\n" + dim.Render("  |---|---|") +
+		"\n" + dim.Render("  | enter | send prompt |") +
+		"\n" + dim.Render("  | esc | abort turn (busy) / close dialog |") +
+		"\n" + dim.Render("  | ctrl+c | quit (confirm) |") +
+		"\n" + dim.Render("  | ctrl+p | model dialog |") +
+		"\n" + dim.Render("  | ctrl+a | agent dialog |") +
+		"\n" + dim.Render("  | / | command menu |") +
+		"\n" + dim.Render("  | pgup/pgdn | viewport scroll |") +
+		"\n" + dim.Render("  | 1/2/3 | permission reply |") +
+		"\n" + dim.Render("  | alt+e / alt+t | expand tool part / toggle reasoning |") +
+		"\n" + dim.Render("  pgup/pgdn scroll \u00B7 \\+enter newline")
+)
+
+func (d dialogStack) view() string {
+	top, ok := d.top()
 	if !ok {
 		return ""
 	}
-	switch d.kind {
+	switch top.kind {
 	case dlgQuit:
-		return title.Render("quit? [y/n]")
+		return quitDialogRendered
 	case dlgHelp:
-		return title.Render("Help") +
-			"\n" + dim.Render("  | Key | Action |") +
-			"\n" + dim.Render("  |---|---|") +
-			"\n" + dim.Render("  | enter | send prompt |") +
-			"\n" + dim.Render("  | esc | abort turn (busy) / close dialog |") +
-			"\n" + dim.Render("  | ctrl+c | quit (confirm) |") +
-			"\n" + dim.Render("  | ctrl+p | model dialog |") +
-			"\n" + dim.Render("  | ctrl+a | agent dialog |") +
-			"\n" + dim.Render("  | / | command menu |") +
-			"\n" + dim.Render("  | pgup/pgdn | viewport scroll |") +
-			"\n" + dim.Render("  | 1/2/3 | permission reply |") +
-			"\n" + dim.Render("  | alt+e / alt+t | expand tool part / toggle reasoning |") +
-			"\n" + dim.Render("  pgup/pgdn scroll \u00B7 \\+enter newline")
+		return helpDialogRendered
 	}
 	return ""
 }
@@ -667,7 +686,7 @@ type dlgPatchMsg struct {
 // patchDlgCmd patches the session or config with the chosen value.
 func (a *App) patchDlgCmd(field, value string, thisSession bool) tea.Cmd {
 	if thisSession {
-		id := a.cur
+		id := a.curSessionID
 		return func() tea.Msg {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
@@ -719,7 +738,7 @@ type abortedMsg struct{ err error }
 
 // abortCmd posts the server abort for the current session.
 func (a *App) abortCmd() tea.Cmd {
-	id := a.cur
+	id := a.curSessionID
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -728,14 +747,18 @@ func (a *App) abortCmd() tea.Cmd {
 	}
 }
 
-// emit returns cmds unchanged; when record is set (tests) it also captures
-// them in a.Cmds.
+// emit returns cmds unchanged; when a test sink is installed (emitSink), it
+// also captures the non-nil cmds there.
 func (a *App) emit(cmds ...tea.Cmd) []tea.Cmd {
-	if a.record {
+	if a.emitSink != nil {
+		nonNil := make([]tea.Cmd, 0, len(cmds))
 		for _, c := range cmds {
 			if c != nil {
-				a.Cmds = append(a.Cmds, c)
+				nonNil = append(nonNil, c)
 			}
+		}
+		if len(nonNil) > 0 {
+			a.emitSink(nonNil...)
 		}
 	}
 	return cmds
@@ -752,47 +775,34 @@ func (a *App) View() tea.View {
 	return v
 }
 
-// overlayLines counts the lines the below-viewport overlays (slash menu is
-// reserved separately by viewSession) occupy: the permission ask, the
-// toasts, the open dialog and the last error line. The viewport uses this
-// to shrink so the composed frame always fits the terminal height —
-// mandatory under the alt screen, whose frame (unlike the normal-screen
-// frame, which grows with content) is the fixed terminal size.
-func (a *App) overlayLines() int {
-	n := 0
-	for _, v := range []string{a.permissionView(), a.toastsView(), a.dlgView()} {
-		if v != "" {
-			n += 1 + strings.Count(v, "\n")
-		}
-	}
-	if a.lastErr != "" {
-		n++
-	}
-	return n
-}
-
 // view composes the on-screen string: the active route, the slash menu, the
 // permission overlay above the prompt, the prompt line, toasts, the dialog
-// overlay, the last error line and the status footer (both routes).
+// overlay, the last error line and the status footer (both routes). Each
+// overlay is rendered once per frame and passed pre-built to the route
+// (the session route needs it both for line counting and composition).
 func (a *App) view() string {
+	perm := a.permissionView()
+	toasts := a.toastsView()
+	dlg := a.dlgView()
+	menu := a.prompt.menuView(a.store.Commands)
 	var b strings.Builder
 	if a.route == routeSession {
-		b.WriteString(a.viewSession())
+		b.WriteString(a.viewSession(menu, perm, toasts, dlg))
 	} else {
 		b.WriteString(a.home.render(&a.store))
 	}
-	if v := a.prompt.menuView(a.store.Commands); v != "" {
-		b.WriteString("\n" + v)
+	if menu != "" {
+		b.WriteString("\n" + menu)
 	}
-	if v := a.permissionView(); v != "" {
-		b.WriteString("\n" + v)
+	if perm != "" {
+		b.WriteString("\n" + perm)
 	}
 	b.WriteString("\n" + a.prompt.view())
-	if v := a.toastsView(); v != "" {
-		b.WriteString("\n" + v)
+	if toasts != "" {
+		b.WriteString("\n" + toasts)
 	}
-	if v := a.dlgView(); v != "" {
-		b.WriteString("\n" + v)
+	if dlg != "" {
+		b.WriteString("\n" + dlg)
 	}
 	if a.lastErr != "" {
 		b.WriteString("\n" + errRed.Render("! "+a.lastErr))
@@ -803,14 +813,30 @@ func (a *App) view() string {
 
 // viewSession renders the session route: title, the transcript viewport and
 // the locked help line. The viewport reserves a line for the prompt, one for
-// the footer, the open slash menu and every below-viewport overlay (see
-// overlayLines), so the frame fits the terminal height.
-func (a *App) viewSession() string {
+// the footer, the open slash menu and every below-viewport overlay (perm,
+// toasts, dlg, lastErr), so the frame fits the terminal height — mandatory
+// under the alt screen, whose frame (unlike the normal-screen frame, which
+// grows with content) is the fixed terminal size. menu/perm/toasts/dlg are
+// the pre-built overlay strings from view() (rendered once per frame).
+func (a *App) viewSession(menu, perm, toasts, dlg string) string {
 	w := a.size.Width
 	if w < 1 {
 		w = 80
 	}
-	h := a.size.Height - 3 - 1 - 1 - a.prompt.menuLines(a.store.Commands) - a.overlayLines()
+	overlays := 0
+	for _, v := range []string{perm, toasts, dlg} {
+		if v != "" {
+			overlays += 1 + strings.Count(v, "\n")
+		}
+	}
+	if a.lastErr != "" {
+		overlays++
+	}
+	menuLines := 0
+	if menu != "" {
+		menuLines = 1 + strings.Count(menu, "\n")
+	}
+	h := a.size.Height - 3 - 1 - 1 - menuLines - overlays
 	if h < 1 {
 		h = 1
 	}
@@ -821,6 +847,6 @@ func (a *App) viewSession() string {
 	}
 	return title.Render(t) +
 		"\n" + a.sess.vm.View() +
-		"\n" + divider.Render(dividerLine()) +
-		"\n" + dim.Render(sessionHelp)
+		"\n" + dividerLineRendered +
+		"\n" + sessionHelpRendered
 }

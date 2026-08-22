@@ -4,6 +4,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -13,34 +14,65 @@ import (
 	"github.com/kido5217/yolo/internal/protocol"
 )
 
-// XDG roots.
-func Home() string {
+// XDG roots; a broken home (no XDG override, $HOME unset and no passwd
+// entry) is an error so config never silently degrades to CWD-relative
+// paths.
+func Home() (string, error) {
 	if v := os.Getenv("XDG_CONFIG_HOME"); v != "" {
-		return v
+		return v, nil
 	}
-	h, _ := os.UserHomeDir()
-	return filepath.Join(h, ".config")
+	h, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("xdg config home: %w", err)
+	}
+	return filepath.Join(h, ".config"), nil
 }
 
-func Data() string {
+func Data() (string, error) {
 	if v := os.Getenv("XDG_DATA_HOME"); v != "" {
-		return v
+		return v, nil
 	}
-	h, _ := os.UserHomeDir()
-	return filepath.Join(h, ".local", "share")
+	h, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("xdg data home: %w", err)
+	}
+	return filepath.Join(h, ".local", "share"), nil
 }
 
-func Cache() string {
+func Cache() (string, error) {
 	if v := os.Getenv("XDG_CACHE_HOME"); v != "" {
-		return v
+		return v, nil
 	}
-	h, _ := os.UserHomeDir()
-	return filepath.Join(h, ".cache")
+	h, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("xdg cache home: %w", err)
+	}
+	return filepath.Join(h, ".cache"), nil
 }
 
-func GlobalYoloDir() string { return filepath.Join(Home(), "yolo") }
-func DataYoloDir() string   { return filepath.Join(Data(), "yolo") }
-func CacheYoloDir() string  { return filepath.Join(Cache(), "yolo") }
+func GlobalYoloDir() (string, error) {
+	h, err := Home()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(h, "yolo"), nil
+}
+
+func DataYoloDir() (string, error) {
+	d, err := Data()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(d, "yolo"), nil
+}
+
+func CacheYoloDir() (string, error) {
+	c, err := Cache()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(c, "yolo"), nil
+}
 
 // Dirs carries the three XDG roots; zero value = real XDG. Server/test injection.
 type Dirs struct{ Home, Data, Cache string }
@@ -61,13 +93,17 @@ func (l Loader) EnvVal(name string) (string, bool) {
 
 // Load wraps LoadAt with the real global dir and workDir as startDir.
 func (l Loader) Load(workDir string) (*protocol.Config, error) {
-	return l.LoadAt(GlobalYoloDir(), workDir)
+	g, err := GlobalYoloDir()
+	if err != nil {
+		return nil, err
+	}
+	return l.LoadAt(g, workDir)
 }
 
 const (
-	globalFiles   = "config.json"
-	yoloFilesJSON = "yolo.json"
-	yoloFilesC    = "yolo.jsonc"
+	globalFile    = "config.json"
+	yoloFileJSON  = "yolo.json"
+	yoloFileJSONC = "yolo.jsonc"
 )
 
 // LoadGlobal reads the global config layer in globalDir: config.json, then
@@ -77,7 +113,7 @@ const (
 func LoadGlobal(globalDir string) (*protocol.Config, error) {
 	l := Loader{}
 	merged := map[string]any{}
-	for _, f := range []string{globalFiles, yoloFilesJSON, yoloFilesC} {
+	for _, f := range []string{globalFile, yoloFileJSON, yoloFileJSONC} {
 		m, err := l.readFile(filepath.Join(globalDir, f))
 		if err != nil {
 			return nil, err
@@ -116,7 +152,7 @@ func SaveGlobal(globalDir string, cfg *protocol.Config) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(globalDir, yoloFilesC), b, 0o644)
+	return os.WriteFile(filepath.Join(globalDir, yoloFileJSONC), b, 0o644)
 }
 
 func cfgFromMap(merged map[string]any) (*protocol.Config, error) {
@@ -149,7 +185,7 @@ func (l Loader) LoadAt(globalDir, startDir string) (*protocol.Config, error) {
 	merged := map[string]any{}
 
 	// Global precedence: config.json -> yolo.json -> yolo.jsonc.
-	for _, f := range []string{globalFiles, yoloFilesJSON, yoloFilesC} {
+	for _, f := range []string{globalFile, yoloFileJSON, yoloFileJSONC} {
 		m, err := l.readFile(filepath.Join(globalDir, f))
 		if err != nil {
 			return nil, err
@@ -169,7 +205,7 @@ func (l Loader) LoadAt(globalDir, startDir string) (*protocol.Config, error) {
 		dir = parent
 	}
 	for i := len(chain) - 1; i >= 0; i-- {
-		for _, f := range []string{yoloFilesJSON, yoloFilesC} {
+		for _, f := range []string{yoloFileJSON, yoloFileJSONC} {
 			m, err := l.readFile(filepath.Join(chain[i], f))
 			if err != nil {
 				return nil, err
@@ -179,7 +215,7 @@ func (l Loader) LoadAt(globalDir, startDir string) (*protocol.Config, error) {
 	}
 
 	// startDir/.yolo, innermost override of the project directory.
-	for _, f := range []string{yoloFilesJSON, yoloFilesC} {
+	for _, f := range []string{yoloFileJSON, yoloFileJSONC} {
 		m, err := l.readFile(filepath.Join(startDir, ".yolo", f))
 		if err != nil {
 			return nil, err
@@ -208,7 +244,13 @@ func (l Loader) readFile(path string) (map[string]any, error) {
 		}
 		return nil, err
 	}
-	return UnmarshalJSONC(data)
+	m, err := UnmarshalJSONC(data)
+	if err != nil {
+		// LoadAt merges many candidate files; a bare parse error names
+		// none of them.
+		return nil, fmt.Errorf("parsing %s: %w", path, err)
+	}
+	return m, nil
 }
 
 // UnmarshalJSONC parses JSON with comments into a map.
@@ -232,25 +274,37 @@ func Merge(dst, src map[string]any) map[string]any {
 	}
 	for k, v := range src {
 		dv, ok := out[k]
-		if ok {
-			if dm, dok := dv.(map[string]any); dok {
-				if sm, sok := v.(map[string]any); sok {
-					out[k] = Merge(dm, sm)
-					continue
-				}
-			}
-			if k == "instructions" {
-				if da, dok := dv.([]any); dok {
-					if sa, sok := v.([]any); sok {
-						out[k] = concatDedupe(da, sa)
-						continue
-					}
-				}
-			}
+		if !ok {
+			out[k] = v
+			continue
 		}
-		out[k] = v
+		if merged, mergedOK := mergePair(k, dv, v); mergedOK {
+			out[k] = merged
+		} else {
+			out[k] = v
+		}
 	}
 	return out
+}
+
+// mergePair applies Merge's per-key rule to a dst/src value pair: map over
+// map recurses, "instructions" slice over slice concatenates; ok is false
+// when no merge applies (src wins as-is).
+func mergePair(key string, dst, src any) (any, bool) {
+	if dm, ok := dst.(map[string]any); ok {
+		if sm, ok := src.(map[string]any); ok {
+			return Merge(dm, sm), true
+		}
+		return nil, false
+	}
+	if key == "instructions" {
+		if da, ok := dst.([]any); ok {
+			if sa, ok := src.([]any); ok {
+				return concatDedupe(da, sa), true
+			}
+		}
+	}
+	return nil, false
 }
 
 func concatDedupe(dst, src []any) []any {

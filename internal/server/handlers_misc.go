@@ -35,7 +35,11 @@ var commands = []protocol.Command{
 // config-defined ones, with per-request auth state and env. (The plan scopes
 // /provider here so config providers resolve against the request directory.)
 func (s *Server) providerEntries(dir string) ([]protocol.Provider, error) {
-	cfg, err := s.Config.LoadAt(s.globalDir(), dir)
+	gdir, err := s.globalDir()
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := s.Config.LoadAt(gdir, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -73,12 +77,23 @@ func (s *Server) providerEntries(dir string) ([]protocol.Provider, error) {
 func (s *Server) authSnapshot() auth.Store {
 	s.authMu.Lock()
 	defer s.authMu.Unlock()
-	return s.authStore
+	return s.snapshotStoreLocked()
+}
+
+// snapshotStoreLocked deep-copies the auth store so callers can read it
+// without authMu while handleAuthPut/Delete mutate the live map. The caller
+// must hold authMu.
+func (s *Server) snapshotStoreLocked() auth.Store {
+	out := make(auth.Store, len(s.authStore))
+	for k, v := range s.authStore {
+		out[k] = v
+	}
+	return out
 }
 
 // authState recomputes a provider's auth state in spec order (env ->
 // auth.json -> config apiKey), mirroring auth.ResolveKey.
-func (s *Server) authState(id string, keyRequired bool, store auth.Store, cfg *protocol.Config) (string, string) {
+func (s *Server) authState(id string, keyRequired bool, store auth.Store, cfg *protocol.Config) (status, source string) {
 	if !keyRequired {
 		return "not-required", "none"
 	}
@@ -103,7 +118,7 @@ func (s *Server) handleProvider(w http.ResponseWriter, r *http.Request) {
 	}
 	entries, err := s.providerEntries(dir)
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "list providers", nil)
+		s.fail(w, http.StatusInternalServerError, "list providers", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, entries)
@@ -115,12 +130,17 @@ func (s *Server) handleProviderAuth(w http.ResponseWriter, _ *http.Request) {
 	dir := s.WorkDir
 	entries, err := s.providerEntries(dir)
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "list providers", nil)
+		s.fail(w, http.StatusInternalServerError, "list providers", err)
 		return
 	}
-	cfg, err := s.Config.LoadAt(s.globalDir(), dir)
+	gdir, gerr := s.globalDir()
+	if gerr != nil {
+		s.fail(w, http.StatusInternalServerError, "load config", gerr)
+		return
+	}
+	cfg, err := s.Config.LoadAt(gdir, dir)
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "load config", nil)
+		s.fail(w, http.StatusInternalServerError, "load config", err)
 		return
 	}
 	store := s.authSnapshot()
@@ -142,9 +162,14 @@ func (s *Server) handleConfigGet(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	cfg, err := s.Config.LoadAt(s.globalDir(), dir)
+	gdir, gerr := s.globalDir()
+	if gerr != nil {
+		s.fail(w, http.StatusInternalServerError, "load config", gerr)
+		return
+	}
+	cfg, err := s.Config.LoadAt(gdir, dir)
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "load config", nil)
+		s.fail(w, http.StatusInternalServerError, "load config", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, cfg)
@@ -163,43 +188,64 @@ func (s *Server) handleConfigPatch(w http.ResponseWriter, r *http.Request) {
 		envelope(w, http.StatusBadRequest, "invalid config JSON", nil)
 		return
 	}
-	if err := writeProjectLayer(dir, partial); err != nil {
-		envelope(w, http.StatusInternalServerError, "write project config", nil)
+	if _, err := mergeWriteConfig(filepath.Join(dir, "yolo.jsonc"), partial, false); err != nil {
+		s.fail(w, http.StatusInternalServerError, "write project config", err)
 		return
 	}
-	cfg, err := s.Config.LoadAt(s.globalDir(), dir)
+	gdir, gerr := s.globalDir()
+	if gerr != nil {
+		s.fail(w, http.StatusInternalServerError, "load config", gerr)
+		return
+	}
+	cfg, err := s.Config.LoadAt(gdir, dir)
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "load config", nil)
+		s.fail(w, http.StatusInternalServerError, "load config", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, cfg)
 }
 
-// writeProjectLayer merge-writes <dir>/yolo.jsonc: existing file (JSONC)
-// deep-merged under partial, rewritten 2-space JSON.
-func writeProjectLayer(dir string, partial map[string]any) error {
-	path := filepath.Join(dir, "yolo.jsonc")
+// mergeWriteConfig deep-merges partial on top of the existing JSONC layer at
+// path, rewrites it as 2-space JSON (comments not preserved, flagged
+// deviation), and returns the merged object. ensureDir creates path's parent
+// directory before writing (used by the global route; project layer sits in
+// the already-existing working directory).
+func mergeWriteConfig(path string, partial map[string]any, ensureDir bool) (map[string]any, error) {
 	existing := map[string]any{}
 	if raw, err := os.ReadFile(path); err == nil {
 		m, uerr := config.UnmarshalJSONC(raw)
 		if uerr != nil {
-			return uerr
+			return nil, uerr
 		}
 		existing = m
 	} else if !os.IsNotExist(err) {
-		return err
+		return nil, err
 	}
-	b, err := json.MarshalIndent(config.Merge(existing, partial), "", "  ")
+	merged := config.Merge(existing, partial)
+	if ensureDir {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return nil, err
+		}
+	}
+	b, err := json.MarshalIndent(merged, "", "  ")
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return os.WriteFile(path, b, 0o644)
+	if err := os.WriteFile(path, b, 0o644); err != nil {
+		return nil, err
+	}
+	return merged, nil
 }
 
 func (s *Server) handleGlobalConfigGet(w http.ResponseWriter, _ *http.Request) {
-	cfg, err := config.LoadGlobal(s.globalDir())
+	gdir, err := s.globalDir()
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "load global config", nil)
+		s.fail(w, http.StatusInternalServerError, "load global config", err)
+		return
+	}
+	cfg, err := config.LoadGlobal(gdir)
+	if err != nil {
+		s.fail(w, http.StatusInternalServerError, "load global config", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, cfg)
@@ -214,32 +260,14 @@ func (s *Server) handleGlobalConfigPatch(w http.ResponseWriter, r *http.Request)
 		envelope(w, http.StatusBadRequest, "invalid config JSON", nil)
 		return
 	}
-	dir := s.globalDir()
-	path := filepath.Join(dir, "yolo.jsonc")
-	existing := map[string]any{}
-	if raw, err := os.ReadFile(path); err == nil {
-		m, uerr := config.UnmarshalJSONC(raw)
-		if uerr != nil {
-			envelope(w, http.StatusInternalServerError, "parse global config", nil)
-			return
-		}
-		existing = m
-	} else if !os.IsNotExist(err) {
-		envelope(w, http.StatusInternalServerError, "read global config", nil)
-		return
-	}
-	merged := config.Merge(existing, partial)
-	b, err := json.MarshalIndent(merged, "", "  ")
+	dir, err := s.globalDir()
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "encode global config", nil)
+		s.fail(w, http.StatusInternalServerError, "load global config", err)
 		return
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		envelope(w, http.StatusInternalServerError, "write global config", nil)
-		return
-	}
-	if err := os.WriteFile(path, b, 0o644); err != nil {
-		envelope(w, http.StatusInternalServerError, "write global config", nil)
+	merged, err := mergeWriteConfig(filepath.Join(dir, "yolo.jsonc"), partial, true)
+	if err != nil {
+		s.fail(w, http.StatusInternalServerError, "write global config", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, merged)
@@ -254,24 +282,32 @@ func (s *Server) handleAuthPut(w http.ResponseWriter, r *http.Request) {
 		envelope(w, http.StatusBadRequest, "invalid key", nil)
 		return
 	}
+	if s.authErr != nil {
+		s.fail(w, http.StatusInternalServerError, "auth store unavailable", s.authErr)
+		return
+	}
 	s.authMu.Lock()
 	s.authStore.Set(r.PathValue("providerID"), body.Key)
-	err := auth.SaveTo(s.authStore, s.authPath)
+	snap := s.snapshotStoreLocked()
 	s.authMu.Unlock()
-	if err != nil {
-		envelope(w, http.StatusInternalServerError, "save auth", nil)
+	if err := auth.SaveTo(snap, s.authPath); err != nil {
+		s.fail(w, http.StatusInternalServerError, "save auth", err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handleAuthDelete(w http.ResponseWriter, r *http.Request) {
+	if s.authErr != nil {
+		s.fail(w, http.StatusInternalServerError, "auth store unavailable", s.authErr)
+		return
+	}
 	s.authMu.Lock()
 	s.authStore.Delete(r.PathValue("providerID"))
-	err := auth.SaveTo(s.authStore, s.authPath)
+	snap := s.snapshotStoreLocked()
 	s.authMu.Unlock()
-	if err != nil {
-		envelope(w, http.StatusInternalServerError, "save auth", nil)
+	if err := auth.SaveTo(snap, s.authPath); err != nil {
+		s.fail(w, http.StatusInternalServerError, "save auth", err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -282,17 +318,21 @@ func (s *Server) handleAuthDelete(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAgent(w http.ResponseWriter, _ *http.Request) {
 	out := make([]protocol.Agent, 0, 4)
 	out = append(out, baseAgents...)
-	if cfg, err := s.Config.LoadAt(s.globalDir(), s.WorkDir); err == nil {
-		known := map[string]bool{"build": true, "plan": true, "yolo": true}
-		ids := make([]string, 0, len(cfg.Agents))
-		for id := range cfg.Agents {
-			if !known[id] {
-				ids = append(ids, id)
+	// best-effort: a global-dir or config load failure just omits
+	// config-defined agents.
+	if gdir, gerr := s.globalDir(); gerr == nil {
+		if cfg, err := s.Config.LoadAt(gdir, s.WorkDir); err == nil {
+			known := map[string]bool{"build": true, "plan": true, "yolo": true}
+			ids := make([]string, 0, len(cfg.Agents))
+			for id := range cfg.Agents {
+				if !known[id] {
+					ids = append(ids, id)
+				}
 			}
-		}
-		sort.Strings(ids)
-		for _, id := range ids {
-			out = append(out, protocol.Agent{Name: id, Description: "Custom agent.", Mode: "primary", Options: map[string]any{}})
+			sort.Strings(ids)
+			for _, id := range ids {
+				out = append(out, protocol.Agent{Name: id, Description: "Custom agent.", Mode: "primary", Options: map[string]any{}})
+			}
 		}
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -311,18 +351,14 @@ func (s *Server) handlePermissionList(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := s.DB.ListSessions(dir, 0)
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "list sessions", nil)
+		s.fail(w, http.StatusInternalServerError, "list sessions", err)
 		return
-	}
-	seen := map[string]bool{}
-	for _, row := range rows {
-		seen[row.ID] = true
 	}
 	out := make([]protocol.PermissionAskedProps, 0)
 	for _, row := range rows {
 		reqs, err := s.Perm.Pending(row.ID)
 		if err != nil {
-			envelope(w, http.StatusInternalServerError, "list permissions", nil)
+			s.fail(w, http.StatusInternalServerError, "list permissions", err)
 			return
 		}
 		for _, q := range reqs {
@@ -375,7 +411,7 @@ func (s *Server) handlePermissionReply(w http.ResponseWriter, r *http.Request) {
 			envelope(w, http.StatusNotFound, "no pending permission request", nil)
 			return
 		}
-		envelope(w, http.StatusInternalServerError, "reply permission", nil)
+		s.fail(w, http.StatusInternalServerError, "reply permission", err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

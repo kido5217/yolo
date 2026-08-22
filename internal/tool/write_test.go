@@ -15,6 +15,7 @@ func runTool(t *testing.T, id string, env *Env, args map[string]any) (Output, er
 }
 
 func TestWriteCreatesAndReports(t *testing.T) {
+	t.Parallel()
 	d := t.TempDir()
 	env := &Env{Dir: d, Limits: Limits{2000, 50 * 1024}}
 	out, err := runTool(t, "write", env, map[string]any{
@@ -37,12 +38,21 @@ func TestWriteCreatesAndReports(t *testing.T) {
 }
 
 func TestWriteMissingDirCreated(t *testing.T) {
+	t.Parallel()
 	d := t.TempDir()
+	fp := filepath.Join(d, "a", "b", "c.txt")
 	env := &Env{Dir: d, Limits: Limits{2000, 50 * 1024}}
 	_, err := runTool(t, "write", env, map[string]any{
-		"filePath": filepath.Join(d, "a", "b", "c.txt"), "content": "x",
+		"filePath": fp, "content": "x",
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	b, err := os.ReadFile(fp)
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if string(b) != "x" {
+		t.Fatalf("content = %q, want x", b)
 	}
 }

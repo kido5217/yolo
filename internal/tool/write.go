@@ -116,21 +116,40 @@ func (writeTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output
 // diffCounts is a minimal LCS line diff (upstream edit/write use the JS
 // diff package's diffLines): added/removed = lines not shared by the two
 // contents, split on "\n".
-func diffCounts(old, new string) (added, removed int) {
-	oa, na := strings.Split(old, "\n"), strings.Split(new, "\n")
+func diffCounts(before, after string) (added, removed int) {
+	oa, na := strings.Split(before, "\n"), strings.Split(after, "\n")
 	common := lcsLen(oa, na)
 	return len(na) - common, len(oa) - common
 }
 
 // lcsLen is a rolling two-row LCS length over lines: O(len(a)*len(b))
-// time, O(len(b)) memory.
+// time, O(len(b)) memory. Lines are interned to int codes first (one map
+// scan over the distinct lines) so the DP inner loop compares ints
+// instead of re-running string comparisons on every cell.
 func lcsLen(a, b []string) int {
+	id := make(map[string]int, len(a)+len(b))
+	code := func(s string) int {
+		if v, ok := id[s]; ok {
+			return v
+		}
+		v := len(id)
+		id[s] = v
+		return v
+	}
+	ai := make([]int, len(a))
+	for i, s := range a {
+		ai[i] = code(s)
+	}
+	bi := make([]int, len(b))
+	for j, s := range b {
+		bi[j] = code(s)
+	}
 	prev := make([]int, len(b)+1)
 	cur := make([]int, len(b)+1)
 	for i := len(a) - 1; i >= 0; i-- {
 		for j := len(b) - 1; j >= 0; j-- {
 			switch {
-			case a[i] == b[j]:
+			case ai[i] == bi[j]:
 				cur[j] = prev[j+1] + 1
 			case prev[j] > cur[j+1]:
 				cur[j] = prev[j]

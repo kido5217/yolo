@@ -22,6 +22,7 @@ func anthropicChecks(t *testing.T) func(*http.Request) {
 }
 
 func TestAnthropicBasicStream(t *testing.T) {
+	t.Parallel()
 	srv := sseServer(t, "anthropic", "stream_basic.txt", anthropicChecks(t))
 	defer srv.Close()
 	parts := collect(t, stream(t, NewAnthropic(srv.Client()), Request{
@@ -43,6 +44,7 @@ func TestAnthropicBasicStream(t *testing.T) {
 }
 
 func TestAnthropicThinkingAndToolUse(t *testing.T) {
+	t.Parallel()
 	srv := sseServer(t, "anthropic", "stream_thinking_tool.txt", anthropicChecks(t))
 	defer srv.Close()
 	parts := collect(t, stream(t, NewAnthropic(srv.Client()), Request{
@@ -76,6 +78,7 @@ func TestAnthropicThinkingAndToolUse(t *testing.T) {
 }
 
 func TestAnthropicMidStreamError(t *testing.T) {
+	t.Parallel()
 	srv := sseServer(t, "anthropic", "midstream_error.txt", anthropicChecks(t))
 	defer srv.Close()
 	s := stream(t, NewAnthropic(srv.Client()), Request{
@@ -87,8 +90,9 @@ func TestAnthropicMidStreamError(t *testing.T) {
 		t.Fatalf("first = %+v", first)
 	}
 	var final Part
+	drainCtx := ctx0(t) // one timeout bounds the whole drain
 	for {
-		p, err := s.Next(ctx0(t))
+		p, err := s.Next(drainCtx)
 		if p.Finish == "error" {
 			final = p
 			break
@@ -103,6 +107,7 @@ func TestAnthropicMidStreamError(t *testing.T) {
 }
 
 func TestAnthropicRequestShape(t *testing.T) {
+	t.Parallel()
 	var got map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("x-api-key") != "k" {

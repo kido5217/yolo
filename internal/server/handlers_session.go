@@ -50,28 +50,29 @@ func (s *Server) handleProjectCurrent(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// scopedSession resolves {id} within the request's directory scope; unknown
-// or out-of-scope ids are 404 (M5).
-func (s *Server) scopedSession(w http.ResponseWriter, r *http.Request) (string, bool) {
+// scopedSession resolves {id} within the request's directory scope (unknown
+// or out-of-scope ids are 404, M5) and returns the already-fetched row so
+// callers don't re-read it behind a second lookup.
+func (s *Server) scopedSession(w http.ResponseWriter, r *http.Request) (storage.SessionRow, bool) {
 	id := r.PathValue("id")
 	dir, ok := s.scoped(w, r)
 	if !ok {
-		return "", false
+		return storage.SessionRow{}, false
 	}
 	row, err := s.DB.GetSession(id)
 	if errors.Is(err, storage.ErrNotFound) {
 		envelope(w, http.StatusNotFound, "session not found", nil)
-		return "", false
+		return storage.SessionRow{}, false
 	}
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "lookup session", nil)
-		return "", false
+		s.fail(w, http.StatusInternalServerError, "lookup session", err)
+		return storage.SessionRow{}, false
 	}
 	if row.ProjectDir != dir {
 		envelope(w, http.StatusNotFound, "session not found", nil)
-		return "", false
+		return storage.SessionRow{}, false
 	}
-	return id, true
+	return row, true
 }
 
 func (s *Server) handleSessionList(w http.ResponseWriter, r *http.Request) {
@@ -81,7 +82,7 @@ func (s *Server) handleSessionList(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := s.DB.ListSessions(dir, 0)
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "list sessions", nil)
+		s.fail(w, http.StatusInternalServerError, "list sessions", err)
 		return
 	}
 	out := make([]protocol.Session, 0, len(rows))
@@ -91,14 +92,12 @@ func (s *Server) handleSessionList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// newSession inserts a default session in dir; blanks take the defaults
-// ("New session" / "build" / catalog default model).
+// newSession inserts a default session in dir; blank title/model take the
+// defaults ("New session" / catalog default model) and a blank agent takes
+// the storage column default "build" (applied by CreateSession).
 func (s *Server) newSession(dir, title, agent, model string) (protocol.Session, error) {
 	if title == "" {
 		title = "New session"
-	}
-	if agent == "" {
-		agent = "build"
 	}
 	if model == "" {
 		pid, mid := s.Prov.Default()
@@ -132,27 +131,29 @@ func (s *Server) handleSessionCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	ses, err := s.newSession(dir, in.Title, in.Agent, in.Model)
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "create session", nil)
+		s.fail(w, http.StatusInternalServerError, "create session", err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, ses)
 }
 
 func (s *Server) handleSessionGet(w http.ResponseWriter, r *http.Request) {
-	id, ok := s.scopedSession(w, r)
+	row, ok := s.scopedSession(w, r)
 	if !ok {
 		return
 	}
-	ses, err := s.DB.Session(id)
+	// DB.Session = GetSession + ListMessages; the row is the one
+	// scopedSession already fetched, so only the message aggregation remains.
+	msgs, err := s.DB.ListMessages(row.ID)
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "lookup session", nil)
+		s.fail(w, http.StatusInternalServerError, "lookup session", err)
 		return
 	}
-	writeJSON(w, http.StatusOK, ses)
+	writeJSON(w, http.StatusOK, storage.SessionFromRow(row, msgs))
 }
 
 func (s *Server) handleSessionPatch(w http.ResponseWriter, r *http.Request) {
-	id, ok := s.scopedSession(w, r)
+	row, ok := s.scopedSession(w, r)
 	if !ok {
 		return
 	}
@@ -179,11 +180,13 @@ func (s *Server) handleSessionPatch(w http.ResponseWriter, r *http.Request) {
 	if in.Time != nil {
 		patch.TimeUpdated = *in.Time
 	}
-	if err := s.DB.UpdateSession(id, patch); err != nil && !errors.Is(err, storage.ErrNotFound) {
-		envelope(w, http.StatusInternalServerError, "update session", nil)
+	if err := s.DB.UpdateSession(row.ID, patch); err != nil && !errors.Is(err, storage.ErrNotFound) {
+		s.fail(w, http.StatusInternalServerError, "update session", err)
 		return
 	}
-	ses, err := s.DB.Session(id)
+	// The response reflects the POST-update state (cost/tokens aggregated
+	// over messages), so the one remaining re-read is the updated row.
+	ses, err := s.DB.Session(row.ID)
 	if err != nil {
 		envelope(w, http.StatusNotFound, "session not found", nil)
 		return
@@ -192,21 +195,25 @@ func (s *Server) handleSessionPatch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSessionDelete(w http.ResponseWriter, r *http.Request) {
-	id, ok := s.scopedSession(w, r)
+	row, ok := s.scopedSession(w, r)
 	if !ok {
 		return
 	}
-	ses, err := s.DB.Session(id)
+	// The deleted event carries the pre-delete row (cost/tokens over the
+	// still-present messages); the row is scopedSession's, no re-fetch.
+	msgs, err := s.DB.ListMessages(row.ID)
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "lookup session", nil)
+		s.fail(w, http.StatusInternalServerError, "lookup session", err)
 		return
 	}
-	if err := s.DB.DeleteSession(id); err != nil {
-		envelope(w, http.StatusInternalServerError, "delete session", nil)
+	if err := s.DB.DeleteSession(row.ID); err != nil {
+		s.fail(w, http.StatusInternalServerError, "delete session", err)
 		return
 	}
-	s.Engine.Close(id)
-	s.emit(protocol.EventTypeSessionDeleted, protocol.SessionDeletedProps{SessionID: id, Info: ses})
+	s.Engine.Close(row.ID)
+	s.emit(protocol.EventTypeSessionDeleted, protocol.SessionDeletedProps{
+		SessionID: row.ID, Info: storage.SessionFromRow(row, msgs),
+	})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -224,27 +231,27 @@ func messageWire(m storage.MessageRow) protocol.Message {
 }
 
 func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
-	id, ok := s.scopedSession(w, r)
+	row, ok := s.scopedSession(w, r)
 	if !ok {
 		return
 	}
-	rows, err := s.DB.ListMessages(id)
+	rows, err := s.DB.ListMessages(row.ID)
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "list messages", nil)
+		s.fail(w, http.StatusInternalServerError, "list messages", err)
 		return
 	}
 	out := make([]protocol.MessageWithParts, 0, len(rows))
 	for _, m := range rows {
 		partRows, err := s.DB.ListParts(m.ID)
 		if err != nil {
-			envelope(w, http.StatusInternalServerError, "list parts", nil)
+			s.fail(w, http.StatusInternalServerError, "list parts", err)
 			return
 		}
 		mp := protocol.MessageWithParts{Info: messageWire(m), Parts: make([]protocol.Part, 0, len(partRows))}
 		for _, p := range partRows {
 			wire, err := storage.PartToProtocol(p)
 			if err != nil {
-				envelope(w, http.StatusInternalServerError, "decode part", nil)
+				s.fail(w, http.StatusInternalServerError, "decode part", err)
 				return
 			}
 			mp.Parts = append(mp.Parts, wire)
@@ -255,10 +262,11 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
-	id, ok := s.scopedSession(w, r)
+	row, ok := s.scopedSession(w, r)
 	if !ok {
 		return
 	}
+	id := row.ID
 	var in struct {
 		Text string `json:"text"`
 	}
@@ -270,7 +278,20 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 		envelope(w, http.StatusBadRequest, "empty message", nil)
 		return
 	}
-	res, err := s.Engine.Send(context.Background(), id, in.Text, func(error) {})
+	// The send boundary is the single log site for a turn's terminal
+	// state: an aborted turn is user-initiated (info), a failed model
+	// turn must not vanish (the 202 is already on its way and the TUI
+	// stays idle-looking — upstream promptAsync logs it too).
+	res, err := s.Engine.Send(context.Background(), id, in.Text, func(err error) {
+		if err == nil {
+			return
+		}
+		if errors.Is(err, context.Canceled) {
+			s.Log.Infof("session: turn aborted (session=%s)", id)
+			return
+		}
+		s.Log.Errorf("session: turn failed (session=%s): %v", id, err)
+	})
 	switch {
 	case err == nil:
 		writeJSON(w, http.StatusAccepted, map[string]string{"message_id": res.MessageID})
@@ -279,19 +300,19 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, storage.ErrNotFound):
 		envelope(w, http.StatusNotFound, "session not found", nil)
 	default:
-		envelope(w, http.StatusInternalServerError, "start turn", nil)
+		s.fail(w, http.StatusInternalServerError, "start turn", err)
 	}
 }
 
 func (s *Server) handleAbort(w http.ResponseWriter, r *http.Request) {
-	id, ok := s.scopedSession(w, r)
+	row, ok := s.scopedSession(w, r)
 	if !ok {
 		return
 	}
-	aborted := s.Engine.Abort(id)
+	aborted := s.Engine.Abort(row.ID)
 	// settle until the turn reports idle so status reads agree right away
 	deadline := time.Now().Add(2 * time.Second)
-	for s.Engine.Status(id) != protocol.StatusIdle && time.Now().Before(deadline) {
+	for s.Engine.Status(row.ID) != protocol.StatusIdle && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"aborted": aborted})
@@ -304,7 +325,7 @@ func (s *Server) handleSessionStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := s.DB.ListSessions(dir, 0)
 	if err != nil {
-		envelope(w, http.StatusInternalServerError, "list sessions", nil)
+		s.fail(w, http.StatusInternalServerError, "list sessions", err)
 		return
 	}
 	out := make(map[string]string, len(rows))
@@ -315,7 +336,8 @@ func (s *Server) handleSessionStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.scopedSession(w, r); !ok {
+	row, ok := s.scopedSession(w, r)
+	if !ok {
 		return
 	}
 	var in struct {
@@ -336,13 +358,11 @@ func (s *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if cmd == "/new" {
-		dir, ok := s.scoped(w, r)
-		if !ok {
-			return
-		}
-		ses, err := s.newSession(dir, "", "", "")
+		// scopedSession already checked row.ProjectDir == the resolved
+		// directory, so no second s.scoped call is needed.
+		ses, err := s.newSession(row.ProjectDir, "", "", "")
 		if err != nil {
-			envelope(w, http.StatusInternalServerError, "create session", nil)
+			s.fail(w, http.StatusInternalServerError, "create session", err)
 			return
 		}
 		s.emit(protocol.EventTypeSessionUpdated, protocol.SessionUpdatedProps{SessionID: ses.ID, Info: ses})
@@ -352,10 +372,12 @@ func (s *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, protocol.CommandResponse{Handled: "client"})
 }
 
-// emit publishes a bus event, dropping marshal failures (never block the API).
+// emit publishes a bus event, never blocking the API. A marshal failure is an
+// invariant violation for our own wire DTOs — log it, then drop.
 func (s *Server) emit(t string, props any) {
 	ev, err := protocol.MakeEvent(t, props)
 	if err != nil {
+		s.Log.Errorf("emit %s: %v", t, err)
 		return
 	}
 	s.Bus.Publish(ev)

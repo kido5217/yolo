@@ -103,9 +103,9 @@ func (d *Driver) Stream(ctx context.Context, req llm.Request) (llm.PartStream, e
 			turn, d.Turns = d.Turns[0], d.Turns[1:]
 		}
 	}
-	synth := d.auto && turn.Err == nil && len(turn.Parts) == 0
+	synthesized := d.auto && turn.Err == nil && len(turn.Parts) == 0
 	delay := turn.Delay
-	if synth {
+	if synthesized {
 		delay = d.baseDelay
 	}
 	d.mu.Unlock()
@@ -114,7 +114,7 @@ func (d *Driver) Stream(ctx context.Context, req llm.Request) (llm.PartStream, e
 		return llm.PartStream{}, turn.Err
 	}
 	parts := turn.Parts
-	if synth {
+	if synthesized {
 		parts = []llm.Part{{
 			Kind:   "text",
 			Text:   "ok-" + strconv.Itoa(n),

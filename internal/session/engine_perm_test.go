@@ -288,15 +288,11 @@ func TestPermissionAbortDuringAskAbortsTool(t *testing.T) {
 		close(finished)
 	}()
 
-	deadline := time.Now().Add(5 * time.Second)
-	for h.eng.Status(ses) != protocol.StatusBusy {
-		if time.Now().After(deadline) {
-			t.Fatal("turn did not become busy")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	// let the ask settle, then cancel the turn mid-prompt.
-	time.Sleep(50 * time.Millisecond)
+	waitBusy(t, h, ses)
+	// wait for the ask to park, then cancel the turn mid-prompt.
+	h.waitForEvent(t, func(e protocol.Event) bool {
+		return e.Type == protocol.EventTypePermissionAsked
+	})
 	if !h.eng.Abort(ses) {
 		t.Fatal("Abort returned false (no active turn)")
 	}
@@ -309,7 +305,7 @@ func TestPermissionAbortDuringAskAbortsTool(t *testing.T) {
 	if sendErr != nil {
 		t.Fatalf("Send: %v", sendErr)
 	}
-	deadline = time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(5 * time.Second)
 	for h.eng.Status(ses) == protocol.StatusBusy {
 		if time.Now().After(deadline) {
 			t.Fatal("engine did not go idle after abort")

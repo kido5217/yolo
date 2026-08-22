@@ -12,6 +12,7 @@ import (
 )
 
 func TestProviderListAndAuth(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	resp, b := testutil.Req(t, s, "GET", "/provider", "", "")
 	if resp.StatusCode != 200 {
@@ -56,6 +57,7 @@ func TestProviderListAndAuth(t *testing.T) {
 // body shape LOCKED): key_required + env per provider, merged with the
 // loaded key source/status.
 func TestProviderAuthEndpoint(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	resp, b := testutil.Req(t, s, "GET", "/provider/auth", "", "")
 	if resp.StatusCode != 200 {
@@ -79,6 +81,7 @@ func TestProviderAuthEndpoint(t *testing.T) {
 }
 
 func TestConfigGetPatchRoundtrip(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	d := s.Dir
 	resp, b := testutil.Req(t, s, "GET", "/config", d, "")
@@ -113,6 +116,7 @@ func TestConfigGetPatchRoundtrip(t *testing.T) {
 }
 
 func TestGlobalConfig(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	resp, b := testutil.Req(t, s, "PATCH", "/global/config", "", `{"model": "kido/m"}`)
 	if resp.StatusCode != 200 {
@@ -141,39 +145,47 @@ func TestGlobalConfig(t *testing.T) {
 }
 
 func TestAuthPutDelete(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	resp, _ := testutil.Req(t, s, "PUT", "/auth/opencode", "", `{"key": "sk-test"}`)
 	if resp.StatusCode != 204 {
 		t.Fatalf("put: %d", resp.StatusCode)
 	}
-	_, b := testutil.Req(t, s, "GET", "/provider", "", "")
-	var ps []protocol.Provider
-	if err := json.Unmarshal(b, &ps); err != nil {
-		t.Fatalf("unmarshal: %v (%s)", err, b)
-	}
-	for _, p := range ps {
-		if p.ID == "opencode" {
-			if p.Auth == nil || p.Auth.Status != "loaded" {
-				t.Fatalf("zen auth after put = %+v", p.Auth)
-			}
+	byID := func(t *testing.T) map[string]protocol.Provider {
+		t.Helper()
+		_, b := testutil.Req(t, s, "GET", "/provider", "", "")
+		var ps []protocol.Provider
+		if err := json.Unmarshal(b, &ps); err != nil {
+			t.Fatalf("unmarshal: %v (%s)", err, b)
 		}
+		out := map[string]protocol.Provider{}
+		for _, p := range ps {
+			out[p.ID] = p
+		}
+		return out
+	}
+	z, ok := byID(t)["opencode"]
+	if !ok {
+		t.Fatal("opencode missing from provider list")
+	}
+	if z.Auth == nil || z.Auth.Status != "loaded" {
+		t.Fatalf("zen auth after put = %+v", z.Auth)
 	}
 	resp, _ = testutil.Req(t, s, "DELETE", "/auth/opencode", "", "")
 	if resp.StatusCode != 204 {
 		t.Fatalf("delete: %d", resp.StatusCode)
 	}
-	_, b = testutil.Req(t, s, "GET", "/provider", "", "")
-	if err := json.Unmarshal(b, &ps); err != nil {
-		t.Fatalf("unmarshal: %v (%s)", err, b)
+	z, ok = byID(t)["opencode"]
+	if !ok {
+		t.Fatal("opencode missing from provider list after delete")
 	}
-	for _, p := range ps {
-		if p.ID == "opencode" && p.Auth != nil && p.Auth.Status == "loaded" {
-			t.Fatalf("key still loaded after delete")
-		}
+	if z.Auth != nil && z.Auth.Status == "loaded" {
+		t.Fatalf("key still loaded after delete: %+v", z.Auth)
 	}
 }
 
 func TestPermissionListAndReply(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	d := t.TempDir()
 	_, b := testutil.Req(t, s, "POST", "/session", d, `{}`)
@@ -183,7 +195,7 @@ func TestPermissionListAndReply(t *testing.T) {
 	}
 	// park a pending ask (action with no rules → ask) via the permission
 	// service directly (harness seam permSvc.Ask in a goroutine):
-	s.ParkAsk(ses.ID, "custom", "res1")
+	s.ParkAsk(t, ses.ID, "custom", "res1")
 	resp, b := testutil.Req(t, s, "GET", "/permission", d, "")
 	if resp.StatusCode != 200 {
 		t.Fatalf("%d %s", resp.StatusCode, b)
@@ -210,13 +222,15 @@ func TestPermissionListAndReply(t *testing.T) {
 	if resp.StatusCode != 404 {
 		t.Fatalf("unknown reply: %d", resp.StatusCode)
 	}
+	// LOCKED: validate body first → 400 (not 404)
 	resp, _ = testutil.Req(t, s, "POST", "/permission/per_missing/reply", d, `{"response":"bogus"}`)
-	if resp.StatusCode == 404 { // 404 wins over 400? LOCKED: validate body first → 400
-		t.Fatalf("bad response should be 400")
+	if resp.StatusCode != 400 {
+		t.Fatalf("bad response: status = %d, want 400", resp.StatusCode)
 	}
 }
 
 func TestAgentAndCommand(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	_, b := testutil.Req(t, s, "GET", "/agent", "", "")
 	var agents []protocol.Agent
@@ -257,6 +271,7 @@ func TestAgentAndCommand(t *testing.T) {
 }
 
 func TestUnknownRoutes404(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	for _, p := range []string{"/", "/api/v2/sessions", "/mcp/x", "/skill/s", "/nope"} {
 		resp, _ := testutil.Req(t, s, "GET", p, "", "")

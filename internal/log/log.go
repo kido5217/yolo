@@ -38,10 +38,10 @@ func New(dir string) *Logger {
 
 // open (re)creates the active file and refreshes its size; best-effort.
 func (l *Logger) open() error {
-	if err := os.MkdirAll(filepath.Dir(l.path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(l.path), 0o700); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	f, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return err
 	}

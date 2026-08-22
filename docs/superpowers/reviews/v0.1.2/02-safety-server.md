@@ -1,0 +1,16 @@
+# golang-safety — server+cmd
+Date: 2026-08-20 · chunk: server+cmd · source files: 12
+## Findings
+- [safety-1] P2 internal/server/handlers_misc.go:191 — `writeProjectLayer` (and the parallel `handleGlobalConfigPatch`, handlers_misc.go:222–257) does an unsynchronized read-modify-write on `yolo.jsonc`: every request is served in its own goroutine, so two concurrent `PATCH /config` (or `PATCH /global/config`) calls both ReadFile→Merge→WriteFile and the last writer silently discards the other's update (lost update); the server already serializes the auth store with `authMu` but the config file writes have no equivalent — fix: serialize config-file writes per path (e.g. a `sync.Mutex` on Server like `authMu`, or a small map of per-path locks), optionally via temp-file+rename for atomicity — contract-risk: behavior
+- [safety-2] P3 internal/server/testutil/testutil.go:276 — `SSEReader.Frame` blocks on `for r.sc.Scan()` with no deadline: if the expected frame never arrives (e.g. a regression stops emitting it) the test hangs to the `go test` 10-minute timeout instead of failing fast, inconsistent with `WaitSubscribe` (testutil.go:115, 2s) and `ParkAsk` (testutil.go:168, 2s) which do bound themselves — fix: bound the scan with a timer (e.g. select with `time.After`) and `t.Fatalf` on expiry — contract-risk: none
+  - status: FIXED 4ba4c2f
+- [safety-3] P3 internal/server/testutil/testutil.go:166 — `ParkAsk` uses `panic(err)` when `DB.GetSession` fails: it runs in the test's own goroutine, so the test aborts with a raw stack trace and no helper context instead of a clean failure; the rest of the harness is uniformly `t.Fatal*` — fix: `t.Fatalf("park ask: get session %s: %v", sessionID, err)` — contract-risk: none
+  - status: FIXED 4ba4c2f
+## Deferred / Noted (no fix in 0.1.2)
+- internal/server/handlers_session.go:231–253 — `handleMessages` is N+1 (one `ListParts` per message row); performance, not safety; a single parts-by-session query would remove it.
+- internal/server/server.go:205–216 — `decode` has no request-body size cap (`http.MaxBytesReader`); a huge JSON body is an OOM surface on the localhost server; upstream-faithful scope.
+- internal/server/handlers_misc.go:222–257 — `handleGlobalConfigPatch` inlines the read-merge-write that `writeProjectLayer` performs instead of reusing it (DRY); share one path when a write lock lands (safety-1).
+- Cleared during review (no finding): `recoverMiddleware` nil-Log (`internal/log` is nil-receiver safe); double `lob.Close()` in cmd/yolo main.go `fail`/`closeDB`/`drain` (idempotent, log.go:107–118); `providerEntries` `p.Env` aliasing (fresh slice per handler call); `&m.Tokens` loop-var in `messageWire` (Go ≥1.22 per-iteration semantics); `handleAbort` ≤2s poll (CONTEXT deviation 33); `handleSend` `context.Background()` (turn must outlive the request, upstream parity).
+## Stats
+P0:0 P1:0 P2:1 P3:2
+COVERAGE: full — skipped: none

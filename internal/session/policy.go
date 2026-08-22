@@ -1,7 +1,6 @@
 package session
 
 import (
-	"encoding/json"
 	"sort"
 
 	"github.com/kido5217/yolo/internal/llm"
@@ -32,19 +31,18 @@ func (e *Engine) rulesetForRow(row storage.SessionRow) ([]protocol.Rule, error) 
 	if agent == "" {
 		agent = "build"
 	}
-	builtins, err := permission.LoadBuiltins(agent, e.dataDir)
-	if err != nil {
-		// unknown (custom) agent: fall back to the build matrix (v1
-		// custom-agent behavior)
-		builtins, err = permission.LoadBuiltins("build", e.dataDir)
-		if err != nil {
-			return nil, err
-		}
-	}
+	// unknown (custom) agent: fall back to the build matrix (v1
+	// custom-agent behavior) — the same fallback the service's decision
+	// path uses (permission.BuiltinsFor).
+	builtins := permission.BuiltinsFor(agent, e.dataDir)
 	ruleset := make([]protocol.Rule, 0, len(builtins)+4)
 	ruleset = append(ruleset, builtins...)
 	if cfg, err := e.loadCfg(row.ProjectDir); err == nil && cfg != nil {
-		ruleset = append(ruleset, protocol.ParsePerms(cfg.Permission)...)
+		// Invalid permission entries degrade to no config rules (config
+		// load is non-fatal per turn).
+		if perms, perr := protocol.ParsePerms(cfg.Permission); perr == nil {
+			ruleset = append(ruleset, perms...)
+		}
 	}
 	always, err := e.db.AlwaysRules(row.ID)
 	if err != nil {
@@ -65,7 +63,9 @@ func (e *Engine) VisibleToolsFor(sessionID string) (map[string]tool.Tool, error)
 }
 
 // toolSchemaList renders the LLM tool schemas for the visible tools in
-// stable (sorted) id order.
+// stable (sorted) id order. Parameter bytes come from the schemas
+// marshalled once at engine construction (encoding is deterministic, so
+// wire bytes are identical to per-round marshalling).
 func (e *Engine) toolSchemaList(sessionID string) ([]llm.ToolDef, error) {
 	visible, err := e.VisibleToolsFor(sessionID)
 	if err != nil {
@@ -79,11 +79,7 @@ func (e *Engine) toolSchemaList(sessionID string) ([]llm.ToolDef, error) {
 	tools := make([]llm.ToolDef, 0, len(ids))
 	for _, id := range ids {
 		t := visible[id]
-		params, err := json.Marshal(t.Schema())
-		if err != nil {
-			return nil, err
-		}
-		tools = append(tools, llm.ToolDef{Name: t.ID(), Description: t.Desc(), Parameters: params})
+		tools = append(tools, llm.ToolDef{Name: t.ID(), Description: t.Desc(), Parameters: e.schemas[id]})
 	}
 	return tools, nil
 }

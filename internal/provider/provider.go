@@ -52,22 +52,34 @@ type Dirs struct {
 	ZenCache   string // production <config.CacheYoloDir>/models.json
 }
 
-func DirsDefaults() Dirs {
+func DirsDefaults() (Dirs, error) {
+	home, err := config.Home()
+	if err != nil {
+		return Dirs{}, err
+	}
+	cache, err := config.CacheYoloDir()
+	if err != nil {
+		return Dirs{}, err
+	}
 	return Dirs{
-		Home:       config.Home(),
+		Home:       home,
 		KidoBase:   "https://ai.kido.ws/v1",
 		ZenBase:    "https://opencode.ai/zen/v1",
 		ZenCatalog: "https://models.opencode.ai/api.json",
-		ZenCache:   config.CacheYoloDir() + "/models.json",
-	}
+		ZenCache:   cache + "/models.json",
+	}, nil
 }
 
-// OverridableDirs fills empty fields with production defaults when fill is
-// true; when false the production defaults are returned verbatim.
-func OverridableDirs(d Dirs, fill bool) Dirs {
-	prod := DirsDefaults()
-	if !fill {
-		return prod
+// OverridableDirs fills empty fields with production defaults when
+// fillDefaults is true; when false the production defaults are returned
+// verbatim.
+func OverridableDirs(d Dirs, fillDefaults bool) (Dirs, error) {
+	prod, err := DirsDefaults()
+	if err != nil {
+		return Dirs{}, err
+	}
+	if !fillDefaults {
+		return prod, nil
 	}
 	if d.Home == "" {
 		d.Home = prod.Home
@@ -84,25 +96,32 @@ func OverridableDirs(d Dirs, fill bool) Dirs {
 	if d.ZenCache == "" {
 		d.ZenCache = prod.ZenCache
 	}
-	return d
+	return d, nil
 }
 
-// New builds the registry: kido (live/fallback), zen (cached catalog), and
+// New builds the registry: kido (live probe with static fallback — see
+// FetchKido: probe problems never fail startup), the zen catalog, and
 // config-defined providers.
+//
+// The zen catalog is best-effort by contract: a failed cache/live load, a
+// parse failure, or missing "opencode" metadata simply omits the opencode
+// provider from the catalog (yolo keeps working on kido); an empty
+// "opencode.api" falls back to the production Zen base. Startup never fails
+// because of it.
 func New(ctx context.Context, cfg *protocol.Config, httpc *http.Client, homeDirs Dirs) (*Registry, error) {
 	if httpc == nil {
 		httpc = http.DefaultClient
 	}
-	dirs := OverridableDirs(homeDirs, true)
+	dirs, err := OverridableDirs(homeDirs, true)
+	if err != nil {
+		return nil, err
+	}
 	if cfg == nil {
 		cfg = &protocol.Config{}
 	}
 	r := &Registry{client: httpc, defProvider: "kido", defModel: "Qwen3.8-27B"}
 
-	kidoModels, err := FetchKido(ctx, dirs.KidoBase, 5000, false)
-	if err != nil {
-		return nil, err
-	}
+	kidoModels := FetchKido(ctx, dirs.KidoBase, 5000, false, httpc)
 	kido := Info{ID: "kido", Name: "Kido", Source: "builtin", BaseURL: dirs.KidoBase,
 		KeyRequired: false, KeyLoaded: true, Models: kidoModels}
 	if oc, ok := cfg.Provider["kido"]; ok && oc.BaseURL != "" {
@@ -110,12 +129,20 @@ func New(ctx context.Context, cfg *protocol.Config, httpc *http.Client, homeDirs
 	}
 	r.info = append(r.info, kido)
 
-	if raw, lerr := NewCatalogPolicy(dirs.ZenCache, 5, dirs.ZenCatalog).Load(ctx); lerr == nil {
+	// Best-effort zen catalog (see doc): load/parse/meta problems simply
+	// omit the provider.
+	if raw, lerr := NewCatalogPolicy(dirs.ZenCache, 5, dirs.ZenCatalog, httpc).Load(ctx); lerr == nil {
 		models, perr := ParseZenCatalog(raw)
 		if perr == nil {
-			meta := zenMeta(raw)
+			meta := parseZenMeta(raw)
+			// Guard a malformed-but-parseable catalog missing
+			// "opencode.api" against an empty BaseURL.
+			api := meta.API
+			if api == "" {
+				api = dirs.ZenBase
+			}
 			zen := Info{ID: "opencode", Name: meta.Name, Source: "builtin",
-				BaseURL: meta.API, KeyRequired: true, Env: meta.Env, Models: models}
+				BaseURL: api, KeyRequired: true, Env: meta.Env, Models: models}
 			if oc, ok := cfg.Provider["opencode"]; ok && oc.BaseURL != "" {
 				zen.BaseURL = oc.BaseURL
 			}
@@ -166,8 +193,8 @@ func configProviderInfo(id string, oc protocol.ProviderConfig) Info {
 	return info
 }
 
-func cfgModel(mid string, mv any) Model {
-	m, ok := mv.(map[string]any)
+func cfgModel(mid string, raw any) Model {
+	m, ok := raw.(map[string]any)
 	if !ok {
 		m = map[string]any{}
 	}
@@ -282,7 +309,7 @@ func (r *Registry) DriverFor(m Model) llm.Driver {
 }
 
 // Default returns the default provider/model.
-func (r *Registry) Default() (string, string) {
+func (r *Registry) Default() (providerID, modelID string) {
 	return r.defProvider, r.defModel
 }
 

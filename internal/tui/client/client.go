@@ -27,7 +27,7 @@ var (
 // Client talks to one core server. Dir is the scope directory (abs); ""
 // falls back to the server work dir (header omitted).
 type Client struct {
-	Base    string
+	BaseURL string
 	Dir     string
 	HC      *http.Client
 	Backoff func(int) time.Duration // SSE reconnect backoff (tests override)
@@ -35,14 +35,16 @@ type Client struct {
 
 // New returns a client for base with scope dir.
 func New(base, dir string) *Client {
-	return &Client{Base: base, Dir: dir, HC: &http.Client{}}
+	return &Client{BaseURL: base, Dir: dir, HC: &http.Client{}}
 }
 
 func (c *Client) backoff(n int) time.Duration {
 	if c.Backoff != nil {
 		return c.Backoff(n)
 	}
-	d := time.Second << uint(n)
+	// Clamp the shift: for n >= 64 a duration shift yields 0, which would
+	// tight-loop reconnects during a long outage.
+	d := time.Second << uint(min(n, 5))
 	if d > 30*time.Second {
 		d = 30 * time.Second
 	}
@@ -56,6 +58,8 @@ func (c *Client) dirHeader(req *http.Request) {
 }
 
 // do performs one request: dir header, JSON body, JSON decode, error mapping.
+// The (method, path, in, out) 5-parameter form is an accepted wire-helper
+// exception to the ≤4-parameter guideline: every wrapper routes through it.
 func (c *Client) do(ctx context.Context, method, path string, in, out any) error {
 	var rd io.Reader
 	if in != nil {
@@ -65,7 +69,7 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) error
 		}
 		rd = bytes.NewReader(b)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, c.Base+path, rd)
+	req, err := http.NewRequestWithContext(ctx, method, c.BaseURL+path, rd)
 	if err != nil {
 		return err
 	}
@@ -174,7 +178,11 @@ func (c *Client) SendMessage(ctx context.Context, id, text string) (string, erro
 	var out struct {
 		MessageID string `json:"message_id"`
 	}
-	if err := c.do(ctx, http.MethodPost, "/session/"+PathEscapeID(id)+"/message", map[string]string{"text": text}, &out); err != nil {
+	err := c.do(
+		ctx, http.MethodPost, "/session/"+PathEscapeID(id)+"/message",
+		map[string]string{"text": text}, &out,
+	)
+	if err != nil {
 		return "", err
 	}
 	return out.MessageID, nil
@@ -283,5 +291,8 @@ func (c *Client) ListPermissions(ctx context.Context) ([]protocol.PermissionAske
 
 // ReplyPermission is POST /permission/{requestID}/reply (204).
 func (c *Client) ReplyPermission(ctx context.Context, requestID, reply string) error {
-	return c.do(ctx, http.MethodPost, "/permission/"+PathEscapeID(requestID)+"/reply", map[string]string{"response": reply}, nil)
+	return c.do(
+		ctx, http.MethodPost, "/permission/"+PathEscapeID(requestID)+"/reply",
+		map[string]string{"response": reply}, nil,
+	)
 }

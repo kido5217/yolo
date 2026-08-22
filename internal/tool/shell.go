@@ -31,22 +31,29 @@ var errShellTimeout = errors.New("shell timeout")
 // tool rewrites it to "command aborted".
 var errShellAborted = errors.New("shell aborted")
 
+// endMarkerRe matches any end-marker line; Exec accepts a match only when
+// the captured counter equals its own n (a marker with another counter —
+// e.g. echoed by the command itself — falls through as normal output, as
+// with the old per-n regex).
+var endMarkerRe = regexp.MustCompile(`^__YOLO_END_(\d+)_([^\s]*)$`)
+
 // Shell is the per-session persistent shell (plan Task 14 pinned protocol).
 // It keeps one `bash --norc --noprofile` process alive across Exec calls so
 // that `cd`, environment assignments, and other shell state carry over.
 // Each command is written as its lines followed by a marker line
 // `echo __YOLO_END_{n}_:$?_$(pwd | base64 -w0)`; output (stderr wired to the
-// same pipe) is read until a line matches `^__YOLO_END_{n}_(\d+)_(\S*)$` —
-// the exit code and the new cwd come from the marker. On timeout/abort the
-// process group is SIGKILL'd and the shell is marked dead; the next Exec
-// respawns from the last known cwd (Dir if it no longer exists).
+// same pipe) is read until the emitted line matches the shared endMarkerRe
+// with counter n — the exit code and the new cwd come from the marker.
+// On timeout/abort the process group is SIGKILL'd and the shell is marked
+// dead; the next Exec respawns from the last known cwd (Dir if it no longer
+// exists).
 type Shell struct {
 	Executable string // default "bash"; test override
 	Dir        string
 	limits     Limits
 	mu         sync.Mutex
 	cwd        string
-	st         *shellProc
+	proc       *shellProc
 	nextMarker int
 }
 
@@ -56,7 +63,7 @@ func NewShell(dir string, limits Limits) *Shell {
 	if dir == "" {
 		dir = "."
 	}
-	return &Shell{Executable: "bash", Dir: dir, limits: limits.def(), cwd: dir}
+	return &Shell{Executable: "bash", Dir: dir, limits: limits.withDefaults(), cwd: dir}
 }
 
 // Cwd returns the shell's current working directory.
@@ -70,10 +77,10 @@ func (s *Shell) Cwd() string {
 func (s *Shell) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.st != nil {
-		st := s.st
-		s.st = nil
-		reapProc(st, true)
+	if s.proc != nil {
+		proc := s.proc
+		s.proc = nil
+		reapProc(proc, true)
 	}
 	return nil
 }
@@ -88,29 +95,29 @@ func (s *Shell) Exec(ctx context.Context, command string, timeoutMS int, onLine 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.st == nil {
+	if s.proc == nil {
 		if err := s.spawnLocked(); err != nil {
 			return 0, "", err
 		}
 	}
-	st := s.st
+	proc := s.proc
 	n := s.nextMarker
 	s.nextMarker++
 	// Pinned protocol: the marker line echoes the previous command's exit
-	// code and the new cwd (base64, unwrapped). The reader matches
-	// `^__YOLO_END_{n}_(\d+)_(\S*)$` on the emitted line; the emitted form
-	// therefore has no separator before $? and the regex captures the code
-	// then the base64 cwd. (Plan pin line 2739.)
+	// code and the new cwd (base64, unwrapped). The reader accepts a line
+	// matching endMarkerRe only when the captured counter is n; the emitted
+	// form therefore has no separator before $? and the regex captures the
+	// code then the base64 cwd. (Plan pin line 2739.)
 	marker := fmt.Sprintf("echo __YOLO_END_%d_$?_$(pwd | base64 -w0)", n)
-	re := regexp.MustCompile(fmt.Sprintf(`^__YOLO_END_%d_(\d+)_([^\s]*)$`, n))
+	markerN := strconv.Itoa(n)
 
-	if _, err := io.WriteString(st.stdin, command+"\n"+marker+"\n"); err != nil {
-		s.st = nil
-		reapProc(st, true)
-		return 0, "", err
+	if _, err := io.WriteString(proc.stdin, command+"\n"+marker+"\n"); err != nil {
+		s.proc = nil
+		reapProc(proc, true)
+		return 0, "", fmt.Errorf("shell: command process died: %w", err)
 	}
 
-	lines := st.lines
+	lines := proc.lines
 	var buf strings.Builder
 	var timer <-chan time.Time
 	var timerStop func() bool
@@ -128,29 +135,22 @@ func (s *Shell) Exec(ctx context.Context, command string, timeoutMS int, onLine 
 	for {
 		select {
 		case ev, ok := <-lines:
-			if !ok || ev.last {
-				st2 := s.st
-				s.st = nil
-				code := reapProc(st2, false)
+			if !ok || ev.isLast {
+				proc2 := s.proc
+				s.proc = nil
+				code := reapProc(proc2, false)
 				return code, buf.String(), nil
 			}
-			if m := re.FindStringSubmatch(ev.line); m != nil {
-				code := 0
-				if c, aerr := strconv.Atoi(m[1]); aerr == nil {
-					code = c
-				}
-				if b64 := m[2]; b64 != "" {
-					if p, derr := base64.StdEncoding.DecodeString(b64); derr == nil {
-						if dir := string(p); dir != "" {
-							s.cwd = dir
-						}
-					}
+			if m := endMarkerRe.FindStringSubmatch(ev.line); m != nil && m[1] == markerN {
+				code, dir := decodeMarker(m)
+				if dir != "" {
+					s.cwd = dir
 				}
 				return code, buf.String(), nil
 			}
 			if room := shellOutputCap - buf.Len(); room > 0 {
 				if len(ev.raw) > room {
-					buf.WriteString(ev.raw[:room])
+					buf.WriteString(ev.raw[:cutAtRuneBoundary(ev.raw, room)])
 				} else {
 					buf.WriteString(ev.raw)
 				}
@@ -159,23 +159,49 @@ func (s *Shell) Exec(ctx context.Context, command string, timeoutMS int, onLine 
 				onLine(ev.line)
 			}
 		case <-timer:
-			s.st = nil
-			reapProc(st, true)
+			s.proc = nil
+			reapProc(proc, true)
 			return 0, buf.String(), errShellTimeout
 		case <-ctx.Done():
-			s.st = nil
-			reapProc(st, true)
+			s.proc = nil
+			reapProc(proc, true)
 			return 0, buf.String(), errShellAborted
 		}
 	}
+}
+
+// decodeMarker decodes a matched end-marker into the previous command's
+// exit code (0 when unparseable) and the new cwd ("" when absent or
+// undecodable).
+func decodeMarker(m []string) (code int, dir string) {
+	if c, aerr := strconv.Atoi(m[1]); aerr == nil {
+		code = c
+	}
+	if b64 := m[2]; b64 != "" {
+		if p, derr := base64.StdEncoding.DecodeString(b64); derr == nil {
+			dir = string(p)
+		}
+	}
+	return code, dir
+}
+
+// cutAtRuneBoundary returns the largest cut ≤ n such that s[:cut] ends at a
+// UTF-8 rune boundary: when the cap lands mid-rune (s[n] is a continuation
+// byte) it backs off to that rune's start, so output truncated at
+// shellOutputCap never carries a dangling continuation byte.
+func cutAtRuneBoundary(s string, n int) int {
+	for n > 0 && s[n]&0xC0 == 0x80 {
+		n--
+	}
+	return n
 }
 
 // shellProc is one live shell process plus its output pump.
 type shellProc struct {
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
-	stdout *os.File // read end of the output pipe; child stdout+stderr both hit it
-	readr  *bufio.Reader
+	outR   *os.File // read end of the output pipe; child stdout+stderr both hit it
+	reader *bufio.Reader
 	lines  chan shellEvt
 	stop   chan struct{}
 }
@@ -183,13 +209,13 @@ type shellProc struct {
 // shellEvt is one pumped line. raw keeps the trailing newline for the
 // output buffer; line is the trimmed form for onLine/marker matching.
 type shellEvt struct {
-	raw  string
-	line string
-	last bool
+	raw    string
+	line   string
+	isLast bool
 }
 
 // spawnLocked starts the shell process and its output pump. Callers hold
-// s.mu and s.st is nil.
+// s.mu and s.proc is nil.
 func (s *Shell) spawnLocked() error {
 	exe := s.Executable
 	if exe == "" {
@@ -231,27 +257,27 @@ func (s *Shell) spawnLocked() error {
 	// Parent drops its copy of the write end so the reader observes EOF once
 	// the child (and its dups of the write end) are gone.
 	outW.Close()
-	st := &shellProc{
+	proc := &shellProc{
 		cmd:    cmd,
 		stdin:  stdin,
-		stdout: outR,
-		readr:  bufio.NewReaderSize(outR, 64*1024),
+		outR:   outR,
+		reader: bufio.NewReaderSize(outR, 64*1024),
 		lines:  make(chan shellEvt, 512),
 		stop:   make(chan struct{}),
 	}
-	s.st = st
-	go s.readLoop(st)
+	s.proc = proc
+	go s.readLoop(proc)
 	return nil
 }
 
-// readLoop pumps combined stdout+stderr into st.lines until the stream
-// closes (process death or the teardown closing st.stop). It outlives
+// readLoop pumps combined stdout+stderr into proc.lines until the stream
+// closes (process death or the teardown closing proc.stop). It outlives
 // individual Exec calls — the reader is per-process, the marker matching is
 // per-Exec in Shell.Exec.
-func (s *Shell) readLoop(st *shellProc) {
-	defer close(st.lines)
+func (s *Shell) readLoop(proc *shellProc) {
+	defer close(proc.lines)
 	for {
-		data, rerr := st.readr.ReadString('\n')
+		data, rerr := proc.reader.ReadString('\n')
 		if data != "" {
 			raw := data
 			if strings.HasSuffix(raw, "\n") {
@@ -261,15 +287,15 @@ func (s *Shell) readLoop(st *shellProc) {
 			}
 			ev := shellEvt{raw: raw, line: strings.TrimRight(raw, "\n")}
 			select {
-			case st.lines <- ev:
-			case <-st.stop:
+			case proc.lines <- ev:
+			case <-proc.stop:
 				return
 			}
 		}
 		if rerr != nil {
 			select {
-			case st.lines <- shellEvt{last: true}:
-			case <-st.stop:
+			case proc.lines <- shellEvt{isLast: true}:
+			case <-proc.stop:
 			}
 			return
 		}
@@ -279,8 +305,8 @@ func (s *Shell) readLoop(st *shellProc) {
 // killGroup SIGKILLs the shell's process group (Setpgid makes the shell the
 // group leader, so children share the group). Signals to an already-dead
 // process are ignored.
-func killGroup(st *shellProc) {
-	p := st.cmd.Process
+func killGroup(proc *shellProc) {
+	p := proc.cmd.Process
 	if p == nil {
 		return
 	}
@@ -293,22 +319,22 @@ func killGroup(st *shellProc) {
 }
 
 // reapProc detaches a proc: optionally SIGKILLs its group, releases the
-// output pump (st.stop has exactly one closer — the detaching side), and
+// output pump (proc.stop has exactly one closer — the detaching side), and
 // reaps the process, returning its exit code (-1 when the code is
 // undetermined, e.g. killed by signal).
-func reapProc(st *shellProc, kill bool) int {
+func reapProc(proc *shellProc, kill bool) int {
 	if kill {
-		killGroup(st)
+		killGroup(proc)
 	}
-	close(st.stop)
-	st.stdin.Close()
-	if st.stdout != nil {
+	close(proc.stop)
+	proc.stdin.Close()
+	if proc.outR != nil {
 		// Unblocks the reader (if still waiting) and releases the fd. Safe to
 		// close while the reader is blocked on it; the reader then exits via
-		// st.stop.
-		st.stdout.Close()
+		// proc.stop.
+		proc.outR.Close()
 	}
-	err := st.cmd.Wait()
+	err := proc.cmd.Wait()
 	if err == nil {
 		return 0
 	}

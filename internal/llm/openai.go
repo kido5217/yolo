@@ -18,7 +18,9 @@ func (o *OpenAI) Stream(ctx context.Context, req Request) (PartStream, error) {
 	if err != nil {
 		return PartStream{}, err
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", strings.TrimRight(req.BaseURL, "/")+"/chat/completions", bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(
+		ctx, "POST", strings.TrimRight(req.BaseURL, "/")+"/chat/completions", bytes.NewReader(body),
+	)
 	if err != nil {
 		return PartStream{}, err
 	}
@@ -30,16 +32,16 @@ func (o *OpenAI) Stream(ctx context.Context, req Request) (PartStream, error) {
 	}
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
-		return PartStream{}, oaUpstreamError(resp)
+		return PartStream{}, upstreamError(resp)
 	}
 	ch := make(chan Part, 64)
 	go o.oaReadSSE(ctx, resp.Body, ch)
 	return PartStream{Parts: ch}, nil
 }
 
-// oaUpstreamError builds an error from a non-2xx response (body ≤ 4KB drained;
+// upstreamError builds an error from a non-2xx response (body ≤ 4KB drained;
 // 429/5xx wrapped in *TransientError); the message prefers {"error":{...}}.
-func oaUpstreamError(resp *http.Response) error {
+func upstreamError(resp *http.Response) error {
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	var err error
 	var envelope struct {
@@ -56,7 +58,7 @@ func oaUpstreamError(resp *http.Response) error {
 			if json.Unmarshal(envelope.Error, &plain) == nil && plain != "" {
 				err = errors.New(plain)
 			} else {
-				err = fmt.Errorf("upstream error (HTTP %d): %s", resp.StatusCode, strings.TrimSpace(string(data)))
+				err = fmt.Errorf("upstream error (http %d): %s", resp.StatusCode, strings.TrimSpace(string(data)))
 			}
 		}
 	} else {
@@ -64,7 +66,7 @@ func oaUpstreamError(resp *http.Response) error {
 		if msg == "" {
 			msg = resp.Status
 		}
-		err = fmt.Errorf("upstream error (HTTP %d): %s", resp.StatusCode, msg)
+		err = fmt.Errorf("upstream error (http %d): %s", resp.StatusCode, msg)
 	}
 	if resp.StatusCode == 429 || resp.StatusCode >= 500 {
 		return &TransientError{Status: resp.StatusCode, Err: err}
@@ -147,10 +149,31 @@ func oaRequest(req Request) oaReq {
 
 // wire chunk types
 
+type oaDeltaFunc struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+type oaDeltaToolCall struct {
+	Index    float64     `json:"index"`
+	ID       string      `json:"id"`
+	Function oaDeltaFunc `json:"function"`
+}
+
+// oaDelta is the typed stream delta: only the fields the driver reads
+// (content, reasoning, tool_calls) exist, so a chunk decodes without per-
+// token map allocation and interface boxing.
+type oaDelta struct {
+	Content          string            `json:"content"`
+	ReasoningContent string            `json:"reasoning_content"`
+	Reasoning        string            `json:"reasoning"`
+	ToolCalls        []oaDeltaToolCall `json:"tool_calls"`
+}
+
 type oaChunkChoice struct {
-	Index        int            `json:"index"`
-	Delta        map[string]any `json:"delta"`
-	FinishReason *string        `json:"finish_reason"`
+	Index        int     `json:"index"`
+	Delta        oaDelta `json:"delta"`
+	FinishReason *string `json:"finish_reason"`
 }
 
 type oaChunk struct {
@@ -199,13 +222,13 @@ func (o *OpenAI) oaReadSSE(ctx context.Context, body io.ReadCloser, ch chan Part
 		}
 	}
 
-	process := func(payload string) {
-		if payload == "[DONE]" {
+	process := func(payload []byte) {
+		if bytes.Equal(payload, sseDone) {
 			finish()
 			return
 		}
 		var chunk oaChunk
-		if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
+		if err := json.Unmarshal(payload, &chunk); err != nil {
 			return // ignore malformed frame
 		}
 		if chunk.Usage != nil {
@@ -213,43 +236,33 @@ func (o *OpenAI) oaReadSSE(ctx context.Context, body io.ReadCloser, ch chan Part
 			return
 		}
 		for _, c := range chunk.Choices {
-			delta := c.Delta
-			if content, _ := delta["content"].(string); content != "" {
-				send(Part{Kind: "text", Text: content})
+			d := c.Delta
+			if d.Content != "" {
+				send(Part{Kind: "text", Text: d.Content})
 			}
-			rc, _ := delta["reasoning_content"].(string)
+			rc := d.ReasoningContent
 			if rc == "" {
-				rc, _ = delta["reasoning"].(string)
+				rc = d.Reasoning
 			}
 			if rc != "" {
 				send(Part{Kind: "reasoning", Text: rc})
 			}
-			if tcs, _ := delta["tool_calls"].([]any); tcs != nil {
-				for _, raw := range tcs {
-					tc, ok := raw.(map[string]any)
-					if !ok {
-						continue
-					}
-					idx := int(oaNum(tc["index"]))
-					a, ok := tools[idx]
-					if !ok {
-						a = &oaAccum{}
-						tools[idx] = a
-						tcOrder = append(tcOrder, idx)
-					}
-					if id, _ := tc["id"].(string); id != "" {
-						a.id = id
-					}
-					fn, _ := tc["function"].(map[string]any)
-					if fn == nil {
-						continue
-					}
-					if name, _ := fn["name"].(string); name != "" {
-						a.name = name
-					}
-					if args, _ := fn["arguments"].(string); args != "" {
-						a.args.WriteString(args)
-					}
+			for _, tc := range d.ToolCalls {
+				idx := int(tc.Index)
+				a, ok := tools[idx]
+				if !ok {
+					a = &oaAccum{}
+					tools[idx] = a
+					tcOrder = append(tcOrder, idx)
+				}
+				if tc.ID != "" {
+					a.id = tc.ID
+				}
+				if tc.Function.Name != "" {
+					a.name = tc.Function.Name
+				}
+				if tc.Function.Arguments != "" {
+					a.args.WriteString(tc.Function.Arguments)
 				}
 			}
 		}
@@ -260,20 +273,23 @@ func (o *OpenAI) oaReadSSE(ctx context.Context, body io.ReadCloser, ch chan Part
 		}
 	}
 
+	// Byte-based line reading: the payload is assembled as []byte and
+	// handed to json.Unmarshal directly, with the same parse semantics as
+	// the string join (per-value trim, multi-data join with '\n').
 	rd := bufio.NewReader(body)
-	var dataLines []string
+	var dataVals [][]byte
 	for {
-		line, err := rd.ReadString('\n')
+		line, err := rd.ReadBytes('\n')
 		if len(line) > 0 {
-			line = strings.TrimRight(line, "\r\n")
+			line = bytes.TrimRight(line, "\r\n")
 			switch {
-			case line == "":
-				if len(dataLines) > 0 {
-					process(strings.Join(dataLines, "\n"))
-					dataLines = nil
+			case len(line) == 0:
+				if len(dataVals) > 0 {
+					process(joinDataLines(dataVals))
+					dataVals = nil
 				}
-			case strings.HasPrefix(line, "data:"):
-				dataLines = append(dataLines, strings.TrimSpace(strings.TrimPrefix(line, "data:")))
+			case bytes.HasPrefix(line, sseDataPrefix):
+				dataVals = append(dataVals, bytes.TrimSpace(line[len(sseDataPrefix):]))
 			}
 		}
 		if err != nil {
@@ -282,11 +298,41 @@ func (o *OpenAI) oaReadSSE(ctx context.Context, body io.ReadCloser, ch chan Part
 			}
 			break
 		}
+		// [DONE] already ended the stream: stop reading so a body that
+		// never terminates does not hold the engine round hostage
+		// (anReadSSE parity).
+		if finished {
+			break
+		}
 	}
-	if len(dataLines) > 0 {
-		process(strings.Join(dataLines, "\n"))
+	if len(dataVals) > 0 && !finished {
+		process(joinDataLines(dataVals))
 	}
 	finish()
+}
+
+// sseDataPrefix is the SSE "data:" field marker; sseDone is the OpenAI
+// stream terminator.
+var (
+	sseDataPrefix = []byte("data:")
+	sseDone       = []byte("[DONE]")
+)
+
+// joinDataLines joins the trimmed "data:" values of one SSE frame with
+// '\n' (multi-line data fields are valid SSE).
+func joinDataLines(vals [][]byte) []byte {
+	n := len(vals) - 1
+	for _, v := range vals {
+		n += len(v)
+	}
+	out := make([]byte, 0, n)
+	for i, v := range vals {
+		if i > 0 {
+			out = append(out, '\n')
+		}
+		out = append(out, v...)
+	}
+	return out
 }
 
 func oaNum(v any) float64 {

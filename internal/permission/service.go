@@ -12,6 +12,7 @@ import (
 
 	"github.com/kido5217/yolo/internal/bus"
 	"github.com/kido5217/yolo/internal/glob"
+	"github.com/kido5217/yolo/internal/log"
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/storage"
 )
@@ -20,8 +21,8 @@ import (
 // parked.
 var ErrNoPending = errors.New("permission: no pending request")
 
-// Request is one permission ask. DecisionPre carries the engine's
-// pre-evaluation (Allow|Deny | AskAction); zero means "decide now". CallID and
+// Request is one permission ask. PreDecision carries the engine's
+// pre-evaluation (Allow|Deny|Ask); zero means "decide now". CallID and
 // MessageID identify the originating tool call (wire tool ref); they may be
 // empty for non-tool asks.
 type Request struct {
@@ -32,7 +33,7 @@ type Request struct {
 	Always                      []string // suggested always patterns
 	CallID, MessageID           string
 	Meta                        map[string]any
-	DecisionPre                 Decision
+	PreDecision                 Decision
 	CreatedAt                   int64
 }
 
@@ -42,19 +43,23 @@ type pendingEntry struct {
 }
 
 // Service enforces+blocks: the engine evaluates (EvaluateRules) and passes
-// the verdict via DecisionPre; the service persists, parks, and resolves.
+// the verdict via PreDecision; the service persists, parks, and resolves.
 type Service struct {
-	db  *storage.DB
-	bus *bus.Bus
+	db      *storage.DB
+	bus     *bus.Bus
+	lg      *log.Logger // nil = no-op, constructor-carried
+	dataDir string      // plan-matrix dir, process-constant (constructor)
 
 	mu       sync.Mutex
 	pending  map[string]*pendingEntry
 	cfgRules []protocol.Rule
-	dataDir  string
 }
 
-func New(db *storage.DB, b *bus.Bus) *Service {
-	return &Service{db: db, bus: b, pending: map[string]*pendingEntry{}}
+// New builds the service. lg may be nil (no-op logging). dataDir is the
+// process-constant data directory used for the plan matrix in DecisionFor.
+func New(db *storage.DB, b *bus.Bus, lg *log.Logger, dataDir string) *Service {
+	return &Service{db: db, bus: b, lg: lg, dataDir: dataDir,
+		pending: map[string]*pendingEntry{}}
 }
 
 // SetConfigRules stores the config permission rules used by DecisionFor
@@ -65,21 +70,12 @@ func (s *Service) SetConfigRules(rules []protocol.Rule) {
 	s.mu.Unlock()
 }
 
-// SetDataDir sets the data directory used for the plan matrix in
-// DecisionFor. The engine calls this at session start.
-func (s *Service) SetDataDir(dir string) {
-	s.mu.Lock()
-	s.dataDir = dir
-	s.mu.Unlock()
-}
-
 // EvaluateRules evaluates builtins + config rules for an action.
 // Session always rules are not included (they need a session; see DecisionFor).
-func (s *Service) EvaluateRules(agent, dataDir string, cfgRules []protocol.Rule, action string, resources []string) Decision {
-	rules, err := LoadBuiltins(agent, dataDir)
-	if err != nil {
-		rules = []protocol.Rule{}
-	}
+// Unknown (custom) agents fall back to the build matrix via BuiltinsFor.
+// The matrix dataDir is the service's process-constant constructor value.
+func (s *Service) EvaluateRules(agent string, cfgRules []protocol.Rule, action string, resources []string) Decision {
+	rules := BuiltinsFor(agent, s.dataDir)
 	all := make([]protocol.Rule, 0, len(rules)+len(cfgRules))
 	all = append(all, rules...)
 	all = append(all, cfgRules...)
@@ -93,18 +89,18 @@ func (s *Service) DecisionFor(req Request) Decision {
 }
 
 func (s *Service) decisionFor(req Request) Decision {
-	dataDir := s.dataDir
-	if v, ok := req.Meta["data_dir"].(string); ok {
-		dataDir = v
-	}
-	rules, err := LoadBuiltins(req.Agent, dataDir)
-	if err != nil {
-		rules = []protocol.Rule{}
-	}
+	// Unknown (custom) agents fall back to the build matrix via
+	// BuiltinsFor (mirrors the engine's ruleset path).
+	rules := BuiltinsFor(req.Agent, s.dataDir)
 	s.mu.Lock()
 	cfg := s.cfgRules
 	s.mu.Unlock()
-	always, _ := s.db.AlwaysRules(req.SessionID)
+	always, err := s.db.AlwaysRules(req.SessionID)
+	if err != nil {
+		// Fail-safe: degrade to no always rules (re-asks at worst).
+		s.lg.Errorf("permission: always rules (session=%s): %v", req.SessionID, err)
+		always = []protocol.Rule{}
+	}
 	all := make([]protocol.Rule, 0, len(rules)+len(cfg)+len(always))
 	all = append(all, rules...)
 	all = append(all, cfg...)
@@ -128,13 +124,13 @@ func (s *Service) decisionFor(req Request) Decision {
 		}
 	}
 	if anyAsk {
-		return AskAction
+		return Ask
 	}
 	return Allow
 }
 
 // Ask resolves a permission request. A decisive verdict persists the row and
-// returns immediately; AskAction parks the request until Reply (or ctx
+// returns immediately; an Ask verdict parks the request until Reply (or ctx
 // cancel, which stores response='aborted' and denies).
 func (s *Service) Ask(ctx context.Context, req Request) (Decision, error) {
 	if req.RequestID == "" {
@@ -143,11 +139,11 @@ func (s *Service) Ask(ctx context.Context, req Request) (Decision, error) {
 	if req.CreatedAt == 0 {
 		req.CreatedAt = now()
 	}
-	decision := req.DecisionPre
-	if decision == "" || decision == AskAction {
+	decision := req.PreDecision
+	if decision == "" || decision == Ask {
 		decision = s.decisionFor(req)
 	}
-	if decision != AskAction {
+	if decision != Ask {
 		if err := s.persist(req, storedResponse(decision)); err != nil {
 			return "", err
 		}
@@ -242,9 +238,9 @@ func (s *Service) autoAllow(req Request) {
 
 // cascade applies the verdict to every other parked request in the session
 // (used by "reject").
-func (s *Service) cascade(sessionID, skipID string, d Decision, stored, wire string) {
+func (s *Service) cascade(sessionID, skipID string, d Decision, dbResponse, wireReply string) {
 	for _, e := range s.sessionPending(sessionID, skipID) {
-		s.resolve(e.req.RequestID, d, stored, wire, true)
+		s.resolve(e.req.RequestID, d, dbResponse, wireReply, true)
 	}
 }
 
@@ -262,8 +258,10 @@ func (s *Service) sessionPending(sessionID, skipID string) []*pendingEntry {
 }
 
 // resolve records the response, emits permission.replied, and delivers the
-// decision to the waiting asker.
-func (s *Service) resolve(requestID string, d Decision, stored, wire string, auto bool) {
+// decision to the waiting asker. Reply persistence is best-effort here: the
+// decision is already in memory, so deliver and publish happen regardless of
+// the DB result — a failed write must not strand the blocked Ask.
+func (s *Service) resolve(requestID string, d Decision, dbResponse, wireReply string, auto bool) {
 	s.mu.Lock()
 	e, ok := s.pending[requestID]
 	delete(s.pending, requestID)
@@ -273,14 +271,18 @@ func (s *Service) resolve(requestID string, d Decision, stored, wire string, aut
 	}
 	s.mu.Unlock()
 
-	if err := s.db.ReplyPermission(requestID, stored); err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return
+	if err := s.db.ReplyPermission(requestID, dbResponse); err != nil {
+		if !errors.Is(err, storage.ErrNotFound) {
+			s.lg.Errorf("permission: persist reply %s: %v", requestID, err)
+		}
 	}
-	props := protocol.PermissionRepliedProps{RequestID: requestID, Reply: wire, Auto: auto}
+	props := protocol.PermissionRepliedProps{RequestID: requestID, Reply: wireReply, Auto: auto}
 	if sessionID != "" {
 		props.SessionID = sessionID
 	}
-	if ev, err := protocol.MakeEvent(protocol.EventTypePermissionReplied, props); err == nil {
+	if ev, err := protocol.MakeEvent(protocol.EventTypePermissionReplied, props); err != nil {
+		s.lg.Errorf("permission: marshal %s: %v", protocol.EventTypePermissionReplied, err)
+	} else {
 		s.bus.Publish(ev)
 	}
 	if ok {
@@ -340,7 +342,9 @@ func (s *Service) publishAsked(req Request) {
 			props.Tool = &protocol.PermissionToolRef{CallID: req.RequestID}
 		}
 	}
-	if ev, err := protocol.MakeEvent(protocol.EventTypePermissionAsked, props); err == nil {
+	if ev, err := protocol.MakeEvent(protocol.EventTypePermissionAsked, props); err != nil {
+		s.lg.Errorf("permission: marshal %s: %v", protocol.EventTypePermissionAsked, err)
+	} else {
 		s.bus.Publish(ev)
 	}
 }

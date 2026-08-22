@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/kido5217/yolo/internal/llm"
 	fakellm "github.com/kido5217/yolo/internal/llm/fake"
@@ -167,57 +166,46 @@ func mkSession(t *testing.T, s *testutil.TestServer, dir, title string) string {
 	return ses.ID
 }
 
-// waitIdle polls /session/status until the session reports idle.
-func waitIdle(t *testing.T, s *testutil.TestServer, dir, id string) {
-	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		_, b := testutil.Req(t, s, "GET", "/session/status", dir, "")
-		var st struct {
-			Sessions map[string]string `json:"sessions"`
-		}
-		_ = json.Unmarshal(b, &st)
-		if st.Sessions[id] == "idle" {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("session %s never went idle", id)
-}
-
 func TestGoldenResponses(t *testing.T) {
 	t.Run("health", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		golden(t, s, "health", "GET", "/global/health", "", "", 200)
 	})
 	t.Run("path", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		d := t.TempDir()
 		golden(t, s, "path", "GET", "/path", d, "", 200)
 	})
 	t.Run("project", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		d := t.TempDir()
 		golden(t, s, "project", "GET", "/project/current", d, "", 200)
 	})
 	t.Run("session_list", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		d := t.TempDir()
 		mkSession(t, s, d, "Golden")
 		golden(t, s, "session_list", "GET", "/session", d, "", 200)
 	})
 	t.Run("session_create", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		d := t.TempDir()
 		golden(t, s, "session_create", "POST", "/session", d, `{"title":"Golden"}`, 201)
 	})
 	t.Run("session_get", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		d := t.TempDir()
 		id := mkSession(t, s, d, "Golden")
 		golden(t, s, "session_get", "GET", "/session/"+id, d, "", 200)
 	})
 	t.Run("session_patch", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		d := t.TempDir()
 		id := mkSession(t, s, d, "Golden")
@@ -225,6 +213,7 @@ func TestGoldenResponses(t *testing.T) {
 			`{"title":"Patched","agent":"yolo","model":"opencode/gpt-5-nano"}`, 200)
 	})
 	t.Run("message_list", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		d := t.TempDir()
 		id := mkSession(t, s, d, "Golden")
@@ -232,34 +221,40 @@ func TestGoldenResponses(t *testing.T) {
 		if resp.StatusCode != 202 {
 			t.Fatalf("send: %d %s", resp.StatusCode, b)
 		}
-		waitIdle(t, s, d, id)
+		s.WaitIdle(t, d, id)
 		golden(t, s, "message_list", "GET", "/session/"+id+"/message", d, "", 200)
 	})
 	t.Run("provider", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		d := t.TempDir()
 		golden(t, s, "provider", "GET", "/provider", d, "", 200)
 	})
 	t.Run("config", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		d := t.TempDir()
 		testutil.WriteCfg(t, d, `{"model":"kido/q","permission":{"edit":"ask"}}`)
 		golden(t, s, "config", "GET", "/config", d, "", 200)
 	})
 	t.Run("agent", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		golden(t, s, "agent", "GET", "/agent", "", "", 200)
 	})
 	t.Run("command", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		golden(t, s, "command", "GET", "/command", "", "", 200)
 	})
 	t.Run("permission_empty", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		d := t.TempDir()
 		golden(t, s, "permission_empty", "GET", "/permission", d, "", 200)
 	})
 	t.Run("status", func(t *testing.T) {
+		t.Parallel()
 		s := testutil.Boot(t)
 		d := t.TempDir()
 		mkSession(t, s, d, "Golden")
@@ -298,6 +293,7 @@ func sseTypes(frames []testutil.SSEFrame) []string {
 // BEFORE the turn goroutine emits busy — matching upstream v1.18.18, and
 // deviating from the plan's pinned "busy first" order (see PROGRESS.md).
 func TestSSEOrdering(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	d := t.TempDir()
 	id := mkSession(t, s, d, "Sse") // explicit title: no title-generation side request
@@ -417,12 +413,8 @@ func osEnvMap() map[string]string {
 // same path as `yolo serve` with YOLO_LLM=fake.
 func newSrvFakeEnv(t *testing.T, script string) (*testutil.TestServer, *fakellm.Driver) {
 	t.Helper()
-	_ = os.Setenv("YOLO_LLM", "fake")
-	_ = os.Setenv("YOLO_FAKE_SCRIPT", script)
-	t.Cleanup(func() {
-		_ = os.Unsetenv("YOLO_LLM")
-		_ = os.Unsetenv("YOLO_FAKE_SCRIPT")
-	})
+	t.Setenv("YOLO_LLM", "fake")
+	t.Setenv("YOLO_FAKE_SCRIPT", script)
 	drv, err := server.FakeFromEnv(osEnvMap())
 	if err != nil {
 		t.Fatalf("FakeFromEnv: %v", err)
@@ -433,10 +425,12 @@ func newSrvFakeEnv(t *testing.T, script string) (*testutil.TestServer, *fakellm.
 	return testutil.BootWithDriver(t, drv), drv
 }
 
-// TestFakeEnvE2E drives a two-send conversation through the HTTP API with the
-// env-gated fake driver; verifies messages/parts persist and that a later model
-// request replays history including a tool result.
-func TestFakeEnvE2E(t *testing.T) {
+// TestFakeEnvConversation drives a two-send conversation through the HTTP API
+// with the env-gated fake driver; verifies messages/parts persist and that a
+// later model request replays history including a tool result. Fully offline —
+// the name deliberately avoids the "e2e" of scripts/e2e-live.sh (network,
+// user-run).
+func TestFakeEnvConversation(t *testing.T) {
 	script := `[
 		{"parts":[{"kind":"tool","name":"read","call_id":"call_1","args":{"filePath":"note.txt"},"finish":"tool_calls","usage":{"input":1,"output":1}}],"delay_ms":0},
 		{"parts":[{"kind":"text","text":"Done reading.","finish":"stop","usage":{"input":2,"output":2}}],"delay_ms":0}
@@ -458,12 +452,12 @@ func TestFakeEnvE2E(t *testing.T) {
 	if resp.StatusCode != 202 {
 		t.Fatalf("send 1: %d %s", resp.StatusCode, b)
 	}
-	waitIdle(t, s, s.Dir, id)
+	s.WaitIdle(t, s.Dir, id)
 	resp, b = testutil.Req(t, s, "POST", "/session/"+id+"/message", s.Dir, `{"text":"again"}`)
 	if resp.StatusCode != 202 {
 		t.Fatalf("send 2: %d %s", resp.StatusCode, b)
 	}
-	waitIdle(t, s, s.Dir, id)
+	s.WaitIdle(t, s.Dir, id)
 
 	// messages + parts persisted: user x2, an assistant with a completed
 	// `read` tool part (output = the note) and the closing text part.
@@ -545,6 +539,7 @@ func TestFakeEnvE2E(t *testing.T) {
 // server work dir, and every id-scoped route 404s for a session id belonging to
 // a different directory.
 func TestScopeMatrix(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	wd := s.Dir
 

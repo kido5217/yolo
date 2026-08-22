@@ -85,23 +85,25 @@ func TestFamilySelection(t *testing.T) {
 		{"muse-glimmer-9b", "openrouter", "meta.txt"},
 	}
 	for _, c := range cases {
-		name, text, err := FamilyPrompt(c.api, c.prov)
-		if err != nil {
-			t.Fatalf("%s/%s: %v", c.api, c.prov, err)
-		}
-		want := "prompt/" + c.want
-		if name != want {
-			t.Fatalf("%s/%s family = %s, want %s", c.api, c.prov, name, want)
-		}
-		if c.want == "meta.txt" {
-			if !strings.Contains(text, "Muse Glimmer") {
-				t.Fatalf("muse-glimmer substitution missing: %q", text)
+		t.Run(c.api+"/"+c.prov, func(t *testing.T) {
+			name, text, err := FamilyPrompt(c.api, c.prov)
+			if err != nil {
+				t.Fatalf("%s/%s: %v", c.api, c.prov, err)
 			}
-			continue
-		}
-		if !strings.Contains(text, firstLine(t, c.want)) {
-			t.Fatalf("%s/%s did not select %s", c.api, c.prov, c.want)
-		}
+			want := "prompt/" + c.want
+			if name != want {
+				t.Fatalf("%s/%s family = %s, want %s", c.api, c.prov, name, want)
+			}
+			if c.want == "meta.txt" {
+				if !strings.Contains(text, "Muse Glimmer") {
+					t.Fatalf("muse-glimmer substitution missing: %q", text)
+				}
+				return
+			}
+			if !strings.Contains(text, firstLine(t, c.want)) {
+				t.Fatalf("%s/%s did not select %s", c.api, c.prov, c.want)
+			}
+		})
 	}
 	// FamilyName is the name-only accessor.
 	if got := FamilyName("o3-mini", "opencode"); got != "prompt/beast.txt" {
@@ -126,6 +128,13 @@ func TestEnvBlock(t *testing.T) {
 	if !strings.HasSuffix(got, "</env>") {
 		t.Fatalf("env block missing closing </env>: %q", got)
 	}
+}
+
+// buildSystemPromptForTest is the test seam over buildCore: instructions are
+// given explicitly and no config is involved (the engine appends the config
+// instructions itself, see messagesFor).
+func buildSystemPromptForTest(dir string, model provider.Model, providerID string, instructionPaths []string) ([]string, error) {
+	return buildCore(dir, model.ID, providerID, instructionPaths)
 }
 
 func TestBuildSystemPromptInstructions(t *testing.T) {

@@ -7,11 +7,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 // Implements the plan's IMPLEMENTATION FIX (locked): one shell for the whole
 // test; cwd and env persistence are asserted across calls on it.
 func TestBashCwdPersistsAcrossCalls(t *testing.T) {
+	t.Parallel()
 	d := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(d, "sub"), 0o755); err != nil {
 		t.Fatal(err)
@@ -46,8 +48,14 @@ func TestBashCwdPersistsAcrossCalls(t *testing.T) {
 }
 
 func TestBashNonZeroExitIsSuccessWithMeta(t *testing.T) {
+	t.Parallel()
 	d := t.TempDir()
 	env := &Env{Dir: d, Limits: Limits{2000, 50 * 1024}, Shell: NewShell(d, Limits{2000, 50 * 1024})}
+	t.Cleanup(func() {
+		if err := env.Shell.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	raw, _ := json.Marshal(map[string]any{"command": "echo oops; exit 3"})
 	out, err := Registry()["bash"].Run(context.Background(), raw, env)
 	if err != nil {
@@ -62,8 +70,14 @@ func TestBashNonZeroExitIsSuccessWithMeta(t *testing.T) {
 }
 
 func TestBashStderrMerged(t *testing.T) {
+	t.Parallel()
 	d := t.TempDir()
 	env := &Env{Dir: d, Limits: Limits{2000, 50 * 1024}, Shell: NewShell(d, Limits{2000, 50 * 1024})}
+	t.Cleanup(func() {
+		if err := env.Shell.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	raw, _ := json.Marshal(map[string]any{"command": "echo err >&2"})
 	out, _ := Registry()["bash"].Run(context.Background(), raw, env)
 	if !strings.Contains(out.Text, "err") {
@@ -72,8 +86,14 @@ func TestBashStderrMerged(t *testing.T) {
 }
 
 func TestBashTimeoutKillsAndReports(t *testing.T) {
+	t.Parallel()
 	d := t.TempDir()
 	env := &Env{Dir: d, Limits: Limits{2000, 50 * 1024}, Shell: NewShell(d, Limits{2000, 50 * 1024})}
+	t.Cleanup(func() {
+		if err := env.Shell.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	raw, _ := json.Marshal(map[string]any{"command": "sleep 5", "timeout": 300})
 	_, err := Registry()["bash"].Run(context.Background(), raw, env)
 	if err == nil {
@@ -91,16 +111,57 @@ func TestBashTimeoutKillsAndReports(t *testing.T) {
 	}
 }
 
+func TestShellOutputCapCutsAtRuneBoundary(t *testing.T) {
+	t.Parallel()
+	d := t.TempDir()
+	s := NewShell(d, Limits{2000, 50 * 1024})
+	t.Cleanup(func() {
+		if err := s.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	// One line of 10MiB-1 'a' bytes followed by a two-byte rune: the
+	// 10MiB output cap lands between the rune's bytes, so the cut must
+	// back off to the rune boundary instead of leaving a dangling
+	// continuation byte (invalid UTF-8) in the model-visible output.
+	cmd := `head -c 10485759 /dev/zero | tr '\0' 'a'; printf '\303\251\n'`
+	_, out, err := s.Exec(context.Background(), cmd, 20000, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !utf8.ValidString(out) {
+		t.Fatal("output cap left invalid UTF-8 at the cut")
+	}
+	if len(out) != 10485759 {
+		t.Fatalf("len(out) = %d, want %d", len(out), 10485759)
+	}
+}
+
+func TestBashWhitespaceOnlyCommandRejected(t *testing.T) {
+	t.Parallel()
+	raw, _ := json.Marshal(map[string]any{"command": "   "})
+	if _, _, err := Registry()["bash"].Patterns(raw); err == nil {
+		t.Fatal("want error for whitespace-only command")
+	}
+}
+
 func TestBashPermissionPatterns(t *testing.T) {
+	t.Parallel()
 	raw, _ := json.Marshal(map[string]any{"command": "git commit -m x"})
 	res, always, err := Registry()["bash"].Patterns(raw)
-	if err != nil || res[0] != "git *" || always[0] != "git *" {
-		t.Fatalf("patterns %v %v %v", res, always, err)
+	if err != nil {
+		t.Fatalf("patterns err = %v", err)
+	}
+	if len(res) != 1 || res[0] != "git *" {
+		t.Fatalf("patterns = %v, want [git *]", res)
+	}
+	if len(always) != 1 || always[0] != "git *" {
+		t.Fatalf("always = %v, want [git *]", always)
 	}
 	raw2, _ := json.Marshal(map[string]any{"command": "ls"})
 	res2, _, _ := Registry()["bash"].Patterns(raw2)
-	if res2[0] != "ls" {
-		t.Fatalf("single-token = %v", res2)
+	if len(res2) != 1 || res2[0] != "ls" {
+		t.Fatalf("single-token = %v, want [ls]", res2)
 	}
 	if Registry()["bash"].Permission() != "bash" {
 		t.Fatal("perm action")

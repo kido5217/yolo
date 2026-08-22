@@ -55,13 +55,22 @@ type Server struct {
 	authMu    sync.Mutex
 	authPath  string
 	authStore auth.Store
+	// authErr is set when initAuth cannot resolve the auth file at all
+	// (zero Dirs plus an unresolvable XDG home); auth routes answer with 500.
+	authErr error
 }
 
-// New returns the core API as a plain http.Handler.
-func New(d Deps) http.Handler { return build(d) }
+// NewHandler returns the core API as a plain http.Handler.
+func NewHandler(d Deps) http.Handler { return NewServer(d).Handler() }
 
-// NewServer builds the handler and exposes the listener lifecycle.
-func NewServer(d Deps) *Server { return &Server{Deps: d, handler: build(d)} }
+// NewServer builds the handler on the returned instance (initAuth plus the
+// mux) and exposes the listener lifecycle. There is exactly one *Server per
+// Deps: handlers and the auth state always live on the same instance.
+func NewServer(d Deps) *Server {
+	s := &Server{Deps: d}
+	s.handler = s.build()
+	return s
+}
 
 // Handler returns the core API handler.
 func (s *Server) Handler() http.Handler { return s.handler }
@@ -71,9 +80,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.handler.ServeHTTP(w, r)
 }
 
-func build(d Deps) http.Handler {
-	s := &Server{Deps: d}
-	s.initAuth()
+func (s *Server) build() http.Handler {
+	if err := s.initAuth(); err != nil {
+		s.authErr = err
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /global/health", s.handleHealth)
 	mux.HandleFunc("GET /path", s.handlePath)
@@ -108,33 +118,45 @@ func build(d Deps) http.Handler {
 	mux.HandleFunc("PATCH /{tail...}", s.handleNotFound)
 	mux.HandleFunc("DELETE /{tail...}", s.handleNotFound)
 	mux.HandleFunc("PUT /{tail...}", s.handleNotFound)
-	return recoverMiddleware(d.Log, mux)
+	return recoverMiddleware(s.Log, mux)
 }
 
 // initAuth loads the boot-lifetime auth store from <Dirs.Data>/auth.json
-// (missing file = empty store).
-func (s *Server) initAuth() {
-	s.authPath = authPath(s.Dirs)
-	if st, err := auth.LoadFrom(s.authPath); err == nil {
-		s.authStore = st
-	} else {
-		s.authStore = auth.Store{}
+// (missing file = empty store). A corrupt or unreadable file also starts
+// empty but is logged — never silently; an unresolvable path at all (zero
+// Dirs, broken home) is the returned error.
+func (s *Server) initAuth() error {
+	p, err := authPath(s.Dirs)
+	if err != nil {
+		return err
 	}
+	s.authPath = p
+	st, err := auth.LoadFrom(s.authPath)
+	switch {
+	case err == nil:
+		s.authStore = st
+	case os.IsNotExist(err):
+		s.authStore = auth.Store{}
+	default:
+		s.authStore = auth.Store{}
+		s.Log.Errorf("auth load (%s): %v", s.authPath, err)
+	}
+	return nil
 }
 
-func authPath(d config.Dirs) string {
+func authPath(d config.Dirs) (string, error) {
 	if d.Data == "" {
 		return auth.Path()
 	}
-	return filepath.Join(d.Data, "auth.json")
+	return filepath.Join(d.Data, "auth.json"), nil
 }
 
 // globalDir is <Dirs.Home>/yolo; zero Home falls back to the real XDG home.
-func (s *Server) globalDir() string {
+func (s *Server) globalDir() (string, error) {
 	if s.Dirs.Home == "" {
 		return config.GlobalYoloDir()
 	}
-	return filepath.Join(s.Dirs.Home, "yolo")
+	return filepath.Join(s.Dirs.Home, "yolo"), nil
 }
 
 // Start listens on addr (":0" = ephemeral) and serves in a goroutine.
@@ -143,12 +165,19 @@ func (s *Server) Start(addr string) (net.Addr, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.srv = &http.Server{Handler: s.handler}
+	// ReadHeaderTimeout bounds slowloris-style header sends on
+	// user-overridable listen addresses; Read/Write/Idle stay off for the
+	// long-lived SSE endpoint.
+	srv := &http.Server{Handler: s.handler, ReadHeaderTimeout: 10 * time.Second}
+	s.mu.Lock()
+	s.srv = srv
 	s.addr = ln.Addr()
+	bound := s.addr
+	s.mu.Unlock()
 	go func() {
-		_ = s.srv.Serve(ln)
+		_ = srv.Serve(ln)
 	}()
-	return s.addr, nil
+	return bound, nil
 }
 
 // Addr returns the bound listener address (nil before Start).
@@ -161,10 +190,13 @@ func (s *Server) Addr() net.Addr {
 // Shutdown gracefully stops the listener within ctx's budget (in-flight
 // handlers get to finish); a no-op if Start was never called.
 func (s *Server) Shutdown(ctx context.Context) {
-	if s.srv == nil {
+	s.mu.Lock()
+	srv := s.srv
+	s.mu.Unlock()
+	if srv == nil {
 		return
 	}
-	_ = s.srv.Shutdown(ctx)
+	_ = srv.Shutdown(ctx)
 }
 
 // Close shuts the listener down (2s grace).

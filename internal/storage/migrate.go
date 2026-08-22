@@ -93,7 +93,9 @@ func (d *DB) migrate() error {
 			tx.Rollback()
 			return err
 		}
-		if _, err = tx.Exec(`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)`, strconv.Itoa(v)); err != nil {
+		_, err = tx.Exec(
+			`INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)`, strconv.Itoa(v))
+		if err != nil {
 			tx.Rollback()
 			return err
 		}

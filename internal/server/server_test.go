@@ -3,6 +3,7 @@ package server_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -11,12 +12,14 @@ import (
 	"time"
 
 	"github.com/kido5217/yolo/internal/llm"
+	fakellm "github.com/kido5217/yolo/internal/llm/fake"
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/server"
 	"github.com/kido5217/yolo/internal/server/testutil"
 )
 
 func TestHealthAndPathAndProject(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	resp, b := testutil.Req(t, s, "GET", "/global/health", "", "")
 	if resp.StatusCode != 200 || !strings.Contains(string(b), `"ok"`) {
@@ -47,6 +50,7 @@ func TestHealthAndPathAndProject(t *testing.T) {
 }
 
 func TestScopedHeaderURLDecoded(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	odd := filepath.Join(t.TempDir(), "odd dir")
 	if err := os.MkdirAll(odd, 0o755); err != nil {
@@ -67,6 +71,7 @@ func TestScopedHeaderURLDecoded(t *testing.T) {
 }
 
 func TestSessionLifecycleAndScoping(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	d := t.TempDir()
 	other := t.TempDir()
@@ -141,6 +146,7 @@ func TestSessionLifecycleAndScoping(t *testing.T) {
 }
 
 func TestMessagesEndpoint(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	d := t.TempDir()
 	_, b := testutil.Req(t, s, "POST", "/session", d, `{}`)
@@ -153,20 +159,7 @@ func TestMessagesEndpoint(t *testing.T) {
 		t.Fatalf("send: %d", resp.StatusCode)
 	}
 	// wait for the turn to settle
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		_, b = testutil.Req(t, s, "GET", "/session/status", d, "")
-		var st struct {
-			Sessions map[string]string `json:"sessions"`
-		}
-		if err := json.Unmarshal(b, &st); err != nil {
-			t.Fatalf("unmarshal: %v (%s)", err, b)
-		}
-		if st.Sessions[ses.ID] == "idle" {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	s.WaitIdle(t, d, ses.ID)
 	resp, b = testutil.Req(t, s, "GET", "/session/"+ses.ID+"/message", d, "")
 	if resp.StatusCode != 200 {
 		t.Fatalf("messages: %d %s", resp.StatusCode, b)
@@ -208,6 +201,7 @@ func TestMessagesEndpoint(t *testing.T) {
 }
 
 func TestSendMessage409AndEvents(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	d := t.TempDir()
 	_, b := testutil.Req(t, s, "POST", "/session", d, `{}`)
@@ -219,6 +213,7 @@ func TestSendMessage409AndEvents(t *testing.T) {
 
 	// subscribe SSE BEFORE sending (no pre-read: nothing is published yet)
 	res := testutil.SSEConnect(t, s, d)
+	s.WaitSubscribe(t, 1) // subscription live before we publish the turn
 	resp, b := testutil.Req(t, s, "POST", "/session/"+id+"/message", d, `{"text":"hello"}`)
 	if resp.StatusCode != 202 {
 		t.Fatalf("send: %d %s", resp.StatusCode, b)
@@ -246,7 +241,7 @@ func TestSendMessage409AndEvents(t *testing.T) {
 	if resp2.StatusCode != 202 {
 		t.Fatalf("second send: %d", resp2.StatusCode)
 	}
-	time.Sleep(50 * time.Millisecond)
+	s.WaitBusy(t, d, id)
 	resp3, b3 := testutil.Req(t, s, "POST", "/session/"+id+"/message", d, `{"text":"thrice"}`)
 	if resp3.StatusCode != 409 {
 		t.Fatalf("want 409 during busy, got %d %s", resp3.StatusCode, b3)
@@ -264,6 +259,7 @@ func TestSendMessage409AndEvents(t *testing.T) {
 }
 
 func TestAbortEndpoint(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	d := t.TempDir()
 	_, b := testutil.Req(t, s, "POST", "/session", d, `{}`)
@@ -306,7 +302,42 @@ func TestAbortEndpoint(t *testing.T) {
 	}
 }
 
+// TestMalformedBody400 pins the basic error path: a truncated/invalid JSON
+// body on POST/PATCH answers 400 with the error envelope (bad dir and bad
+// command values are covered elsewhere).
+func TestMalformedBody400(t *testing.T) {
+	t.Parallel()
+	s := testutil.Boot(t)
+	d := t.TempDir()
+	id := mkSession(t, s, d, "Bad")
+	cases := []struct {
+		name, method, path, body string
+	}{
+		{"session_create", "POST", "/session", `{"title":`},
+		{"message_send", "POST", "/session/" + id + "/message", `{"text":`},
+		{"config_patch", "PATCH", "/config", `{"model":`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			resp, b := testutil.Req(t, s, c.method, c.path, d, c.body)
+			if resp.StatusCode != 400 {
+				t.Fatalf("%s %s: status = %d, want 400: %s", c.method, c.path, resp.StatusCode, b)
+			}
+			var env struct {
+				Error struct{ Message string } `json:"error"`
+			}
+			if err := json.Unmarshal(b, &env); err != nil {
+				t.Fatalf("envelope decode: %v (%s)", err, b)
+			}
+			if env.Error.Message == "" {
+				t.Fatalf("empty error envelope: %s", b)
+			}
+		})
+	}
+}
+
 func TestCommandEndpoint(t *testing.T) {
+	t.Parallel()
 	s := testutil.Boot(t)
 	d := t.TempDir()
 	_, b := testutil.Req(t, s, "POST", "/session", d, `{}`)
@@ -358,6 +389,7 @@ func TestCommandEndpoint(t *testing.T) {
 }
 
 func TestFakeFromEnv(t *testing.T) {
+	t.Parallel()
 	t.Run("unset", func(t *testing.T) {
 		drv, err := server.FakeFromEnv(map[string]string{})
 		if err != nil || drv != nil {
@@ -394,4 +426,37 @@ func TestFakeFromEnv(t *testing.T) {
 			t.Fatalf("part=%+v err=%v", p1, err)
 		}
 	})
+}
+
+// TestSendLogsFailedTurn: a failed model turn must not vanish silently —
+// the send handler logs the turn's final error to yolo.log (upstream
+// promptAsync parity), so the "invisible failure" has a diagnostic home.
+func TestSendLogsFailedTurn(t *testing.T) {
+	t.Parallel()
+	logDir := t.TempDir()
+	drv := fakellm.New(fakellm.Turn{Err: errors.New("boom")})
+	s := testutil.BootWithDriverLog(t, drv, logDir)
+	d := t.TempDir()
+	resp, b := testutil.Req(t, s, "POST", "/session", d, `{}`)
+	if resp.StatusCode != 201 {
+		t.Fatalf("create session: %d %s", resp.StatusCode, b)
+	}
+	var ses struct {
+		ID string
+	}
+	if err := json.Unmarshal(b, &ses); err != nil {
+		t.Fatalf("unmarshal session: %v (%s)", err, b)
+	}
+	resp, b = testutil.Req(t, s, "POST", "/session/"+ses.ID+"/message", d, `{"text":"hi"}`)
+	if resp.StatusCode != 202 {
+		t.Fatalf("send: %d %s", resp.StatusCode, b)
+	}
+	s.WaitIdle(t, d, ses.ID)
+	data, err := os.ReadFile(filepath.Join(logDir, "log", "yolo.log"))
+	if err != nil {
+		t.Fatalf("read yolo.log: %v", err)
+	}
+	if !strings.Contains(string(data), "boom") {
+		t.Fatalf("failed turn not logged to yolo.log:\n%s", data)
+	}
 }

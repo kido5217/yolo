@@ -25,11 +25,10 @@ func refModel(p, m string) *protocol.ModelRef {
 	return &r
 }
 
-func testApp(sessions ...protocol.Session) *App {
-	a := NewApp(client.New("http://127.0.0.1:9", ""), &store.Store{}, "")
+func testApp(sessions ...protocol.Session) *recApp {
+	a := newRecApp(client.New("http://127.0.0.1:9", ""), store.Store{}, "")
 	a.store.Sessions = sessions
 	a.home.now = func() int64 { return testNow }
-	a.record = true
 	return a
 }
 
@@ -73,9 +72,24 @@ func TestRelTime(t *testing.T) {
 
 func TestHomeRenderLockedLayout(t *testing.T) {
 	a := testApp(
-		protocol.Session{ID: "ses_0", Title: "T1", Model: refModel("kido", "q"), Time: protocol.SessionTime{Updated: testNow - 120_000}},
-		protocol.Session{ID: "ses_1", Title: "T2", Model: refModel("opencode", "gpt-5-nano"), Time: protocol.SessionTime{Updated: testNow - 10_800_000}},
-		protocol.Session{ID: "ses_2", Title: "old", Model: refModel("kido", "q"), Time: protocol.SessionTime{Updated: testNow - 345_600_000}},
+		protocol.Session{
+			ID:    "ses_0",
+			Title: "T1",
+			Model: refModel("kido", "q"),
+			Time:  protocol.SessionTime{Updated: testNow - 120_000},
+		},
+		protocol.Session{
+			ID:    "ses_1",
+			Title: "T2",
+			Model: refModel("opencode", "gpt-5-nano"),
+			Time:  protocol.SessionTime{Updated: testNow - 10_800_000},
+		},
+		protocol.Session{
+			ID:    "ses_2",
+			Title: "old",
+			Model: refModel("kido", "q"),
+			Time:  protocol.SessionTime{Updated: testNow - 345_600_000},
+		},
 	)
 	div := strings.Repeat("─", 28)
 	want := "Yolo\n" +
@@ -126,8 +140,8 @@ func TestAppHandleKeyHome(t *testing.T) {
 		a := testApp(three()...)
 		a.home.cursor = 2 // T2
 		a.handleKey(press(tea.KeyEnter))
-		if a.route != routeSession || a.cur != "ses_1" {
-			t.Fatalf("route=%v cur=%s, want routeSession/ses_1", a.route, a.cur)
+		if a.route != routeSession || a.curSessionID != "ses_1" {
+			t.Fatalf("route=%v cur=%s, want routeSession/ses_1", a.route, a.curSessionID)
 		}
 		if len(a.Cmds) != 1 {
 			t.Fatalf("recorded %d cmds, want 1 hydrate cmd", len(a.Cmds))
@@ -159,7 +173,7 @@ func TestAppHandleKeyHome(t *testing.T) {
 	t.Run("ctrl+c opens quit dialog, y confirms, esc cancels", func(t *testing.T) {
 		a := testApp()
 		a.handleKey(ctrlCKey)
-		if !a.dlg.has() {
+		if a.dlg.empty() {
 			t.Fatal("quit dialog not opened")
 		}
 		a.handleKey(press('y'))
@@ -170,7 +184,7 @@ func TestAppHandleKeyHome(t *testing.T) {
 		b := testApp()
 		b.handleKey(ctrlCKey)
 		b.handleKey(press(tea.KeyEscape))
-		if b.dlg.has() {
+		if !b.dlg.empty() {
 			t.Fatal("dialog should be closed after esc")
 		}
 	})

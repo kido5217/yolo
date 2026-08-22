@@ -35,6 +35,17 @@ func (pm *promptModel) slashActive() bool {
 // are input forms only: the menu surfaces the canonical name.
 var commandAliases = map[string][]string{"/quit": {"/exit"}}
 
+// matchesAlias reports whether any of the command's accepted aliases starts
+// with the typed prefix (the canonical-name check stays in the caller).
+func matchesAlias(c protocol.Command, prefix string) bool {
+	for _, alias := range commandAliases[c.Name] {
+		if strings.HasPrefix(alias[1:], prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 // menuItems filters the known commands by the typed "/prefix", matching both
 // canonical names and their aliases. It returns nil when the menu is closed,
 // else the filtered (possibly empty) list in server order.
@@ -45,32 +56,14 @@ func (pm *promptModel) menuItems(cmds []protocol.Command) []protocol.Command {
 	prefix := pm.input.Value()[1:]
 	out := []protocol.Command{}
 	for _, c := range cmds {
-		match := strings.HasPrefix(c.Name[1:], prefix)
-		if !match {
-			for _, alias := range commandAliases[c.Name] {
-				if strings.HasPrefix(alias[1:], prefix) {
-					match = true
-					break
-				}
-			}
+		if len(c.Name) < 2 {
+			continue // wire input: skip malformed (empty) command names
 		}
-		if match {
+		if strings.HasPrefix(c.Name[1:], prefix) || matchesAlias(c, prefix) {
 			out = append(out, c)
 		}
 	}
 	return out
-}
-
-// menuLines is the menu block's height in lines (0 closed, 1 open-but-empty).
-func (pm *promptModel) menuLines(cmds []protocol.Command) int {
-	items := pm.menuItems(cmds)
-	if items == nil {
-		return 0
-	}
-	if len(items) == 0 {
-		return 1
-	}
-	return len(items)
 }
 
 func (pm *promptModel) menuView(cmds []protocol.Command) string {

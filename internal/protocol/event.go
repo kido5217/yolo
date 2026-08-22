@@ -1,6 +1,9 @@
 package protocol
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 // Event is the SSE frame payload: {"id","type","properties"}.
 type Event struct {
@@ -26,7 +29,7 @@ const (
 func MakeEvent(t string, props any) (Event, error) {
 	raw, err := json.Marshal(props)
 	if err != nil {
-		return Event{}, err
+		return Event{}, fmt.Errorf("event %s: %w", t, err)
 	}
 	return Event{ID: NewEventID(), Type: t, Properties: raw}, nil
 }

@@ -74,7 +74,7 @@ func bashArgs(raw json.RawMessage) (command string, timeoutMS int, err error) {
 		return
 	}
 	v, _ := m["command"].(string)
-	if v == "" {
+	if strings.TrimSpace(v) == "" {
 		err = errors.New("command is required")
 		return
 	}
@@ -106,13 +106,17 @@ func (bashTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 	switch {
 	case errors.Is(err, errShellTimeout):
 		// Pinned upstream v1.18.18 message (shell.ts).
-		return Output{}, fmt.Errorf("shell tool terminated command after exceeding timeout %d ms. If this command is expected to take longer and is not waiting for interactive input, retry with a larger timeout value in milliseconds", timeoutMS)
+		return Output{}, fmt.Errorf(
+			"shell tool terminated command after exceeding timeout %d ms. "+
+				"If this command is expected to take longer and is not waiting for "+
+				"interactive input, retry with a larger timeout value in milliseconds",
+			timeoutMS)
 	case errors.Is(err, errShellAborted):
 		return Output{}, errors.New("command aborted")
 	case err != nil:
 		return Output{}, err
 	}
-	text, cut := Truncate(out, env.Limits.def())
+	text, cut := Truncate(out, env.Limits.withDefaults())
 	if text == "" {
 		text = "(no output)"
 	}

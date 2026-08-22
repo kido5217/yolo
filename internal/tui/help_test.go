@@ -27,7 +27,7 @@ const wantHelp = "Help\n" +
 	"  | alt+e / alt+t | expand tool part / toggle reasoning |\n" +
 	"  pgup/pgdn scroll \u00B7 \\+enter newline"
 
-func openHelp(t *testing.T) *App {
+func openHelp(t *testing.T) *recApp {
 	t.Helper()
 	a := testApp()
 	a.dlg.push(dialog{kind: dlgHelp})
@@ -79,7 +79,7 @@ func TestQuitConfirmTextAndKeys(t *testing.T) {
 func TestQuitConfirmFromSessionRoute(t *testing.T) {
 	a := testApp(protocol.Session{ID: "ses_1"})
 	a.route = routeSession
-	a.cur = "ses_1"
+	a.curSessionID = "ses_1"
 	a.handleKey(ctrlCKey)
 	d, ok := a.dlg.top()
 	if !ok || d.kind != dlgQuit {

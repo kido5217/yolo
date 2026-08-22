@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -41,19 +40,18 @@ func sessionFixture() store.Store {
 	return s
 }
 
-func sessDivider() string { return strings.Repeat("─", 28) }
-
 func TestRenderMessages(t *testing.T) {
 	tests := []struct {
 		name     string
 		mutate   func(s *store.Store)
 		expanded map[string]bool
+		empty    bool // use the empty store instead of sessionFixture()
 		want     string
 	}{
 		{
 			name: "collapsed",
 			want: "User: hello\n" +
-				sessDivider() + "\n" +
+				dividerLine() + "\n" +
 				"\u25B8 think\n" +
 				"\u2713 read src/main.go\n" +
 				"\u25B6 bash ls -la\n" +
@@ -64,7 +62,7 @@ func TestRenderMessages(t *testing.T) {
 			name:     "completed tool expanded shows output block",
 			expanded: map[string]bool{"t1": true},
 			want: "User: hello\n" +
-				sessDivider() + "\n" +
+				dividerLine() + "\n" +
 				"\u25B8 think\n" +
 				"\u2713 read src/main.go\n" +
 				"  line1\n  line2\n  line3\n" +
@@ -76,7 +74,7 @@ func TestRenderMessages(t *testing.T) {
 			name:     "error tool expanded shows error block",
 			expanded: map[string]bool{"t3": true},
 			want: "User: hello\n" +
-				sessDivider() + "\n" +
+				dividerLine() + "\n" +
 				"\u25B8 think\n" +
 				"\u2713 read src/main.go\n" +
 				"\u25B6 bash ls -la\n" +
@@ -88,7 +86,7 @@ func TestRenderMessages(t *testing.T) {
 			name:     "reasoning expanded shows indented text",
 			expanded: map[string]bool{"r1": true},
 			want: "User: hello\n" +
-				sessDivider() + "\n" +
+				dividerLine() + "\n" +
 				"\u25BE think\n" +
 				"  because x\n  and y\n" +
 				"\u2713 read src/main.go\n" +
@@ -102,7 +100,7 @@ func TestRenderMessages(t *testing.T) {
 				s.Messages[1].Info.Error = &protocol.MessageError{Type: "unknown", Message: "something broke"}
 			},
 			want: "User: hello\n" +
-				sessDivider() + "\n" +
+				dividerLine() + "\n" +
 				"\u25B8 think\n" +
 				"\u2713 read src/main.go\n" +
 				"\u25B6 bash ls -la\n" +
@@ -111,14 +109,15 @@ func TestRenderMessages(t *testing.T) {
 				"! something broke",
 		},
 		{
-			name: "empty store renders nothing",
-			want: "",
+			name:  "empty store renders nothing",
+			empty: true,
+			want:  "",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := sessionFixture()
-			if tt.name == "empty store renders nothing" {
+			if tt.empty {
 				s = store.Store{Current: &protocol.Session{ID: "ses_0"}}
 			}
 			if tt.mutate != nil {
@@ -171,10 +170,8 @@ func TestRenderMessagesTitleFallbacks(t *testing.T) {
 	}
 }
 
-func testSessionApp(s store.Store) *App {
-	a := NewApp(client.New("http://127.0.0.1:9", ""), &s, "ses_0")
-	a.record = true
-	return a
+func testSessionApp(s store.Store) *recApp {
+	return newRecApp(client.New("http://127.0.0.1:9", ""), s, "ses_0")
 }
 
 func TestSessionKeys(t *testing.T) {
@@ -223,8 +220,8 @@ func TestSessionKeys(t *testing.T) {
 		a := testSessionApp(sessionFixture())
 		a.store.Status = protocol.SessionStatus{Type: protocol.StatusBusy}
 		a.handleKey(press(tea.KeyEscape))
-		if a.route != routeSession || a.cur != "ses_0" {
-			t.Fatalf("route=%v cur=%s, want routeSession/ses_0", a.route, a.cur)
+		if a.route != routeSession || a.curSessionID != "ses_0" {
+			t.Fatalf("route=%v cur=%s, want routeSession/ses_0", a.route, a.curSessionID)
 		}
 		if len(a.Cmds) != 1 {
 			t.Fatalf("recorded %d cmds, want 1 abort cmd", len(a.Cmds))
@@ -234,8 +231,8 @@ func TestSessionKeys(t *testing.T) {
 	t.Run("esc while idle returns to home", func(t *testing.T) {
 		a := testSessionApp(sessionFixture())
 		a.handleKey(press(tea.KeyEscape))
-		if a.route != routeHome || a.cur != "" {
-			t.Fatalf("route=%v cur=%s, want routeHome/empty", a.route, a.cur)
+		if a.route != routeHome || a.curSessionID != "" {
+			t.Fatalf("route=%v cur=%s, want routeHome/empty", a.route, a.curSessionID)
 		}
 		if len(a.Cmds) != 1 {
 			t.Fatalf("recorded %d cmds, want 1 hydrate cmd", len(a.Cmds))
@@ -244,16 +241,16 @@ func TestSessionKeys(t *testing.T) {
 
 	t.Run("pgup pauses follow, pgdn to bottom resumes it", func(t *testing.T) {
 		a := testSessionApp(sessionFixture())
-		if !a.sess.follow {
+		if !a.sess.following {
 			t.Fatal("follow must start true")
 		}
 		a.view()
 		a.handleKey(tea.KeyPressMsg{Code: tea.KeyPgUp})
-		if a.sess.follow {
+		if a.sess.following {
 			t.Fatal("follow must be false after pgup")
 		}
 		a.handleKey(tea.KeyPressMsg{Code: tea.KeyPgDown})
-		if !a.sess.follow {
+		if !a.sess.following {
 			t.Fatal("follow must resume at bottom after pgdn")
 		}
 	})

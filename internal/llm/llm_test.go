@@ -1,10 +1,14 @@
 package llm
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func openAIChecks(t *testing.T) func(*http.Request) {
@@ -19,6 +23,7 @@ func openAIChecks(t *testing.T) func(*http.Request) {
 }
 
 func TestOpenAIBasicStream(t *testing.T) {
+	t.Parallel()
 	srv := sseServer(t, "openai", "stream_basic.txt", openAIChecks(t))
 	defer srv.Close()
 	parts := collect(t, stream(t, NewOpenAI(srv.Client()), Request{
@@ -37,6 +42,7 @@ func TestOpenAIBasicStream(t *testing.T) {
 }
 
 func TestOpenAIMidFrameSplits(t *testing.T) {
+	t.Parallel()
 	srv := sseServerSplit(t, "openai", "stream_split_frames.txt", openAIChecks(t))
 	defer srv.Close()
 	parts := collect(t, stream(t, NewOpenAI(srv.Client()), Request{
@@ -55,6 +61,7 @@ func TestOpenAIMidFrameSplits(t *testing.T) {
 }
 
 func TestOpenAIReasoningAndToolCalls(t *testing.T) {
+	t.Parallel()
 	srv := sseServer(t, "openai", "stream_reasoning_tools.txt", openAIChecks(t))
 	defer srv.Close()
 	parts := collect(t, stream(t, NewOpenAI(srv.Client()), Request{
@@ -91,6 +98,7 @@ func TestOpenAIReasoningAndToolCalls(t *testing.T) {
 }
 
 func TestOpenAIUsageFinal(t *testing.T) {
+	t.Parallel()
 	srv := sseServer(t, "openai", "stream_usage_only_final.txt", openAIChecks(t))
 	defer srv.Close()
 	parts := collect(t, stream(t, NewOpenAI(srv.Client()), Request{
@@ -116,6 +124,7 @@ func TestOpenAIUsageFinal(t *testing.T) {
 }
 
 func TestOpenAIMidStreamError(t *testing.T) {
+	t.Parallel()
 	srv := sseServer(t, "openai", "midstream_error.txt", openAIChecks(t))
 	defer srv.Close()
 	s := stream(t, NewOpenAI(srv.Client()), Request{
@@ -127,8 +136,9 @@ func TestOpenAIMidStreamError(t *testing.T) {
 		t.Fatalf("first = %+v", first)
 	}
 	var final Part
+	drainCtx := ctx0(t) // one timeout bounds the whole drain
 	for {
-		p, err := s.Next(ctx0(t))
+		p, err := s.Next(drainCtx)
 		if p.Finish == "error" {
 			final = p
 			break
@@ -142,7 +152,60 @@ func TestOpenAIMidStreamError(t *testing.T) {
 	}
 }
 
+// TestOpenAIClosesStreamAtDone: a server that sends [DONE] but keeps the
+// connection open (no body EOF) must not stall the stream — consumers drain
+// to io.EOF (the engine's round loop), so the channel has to close at
+// [DONE], not at EOF (anReadSSE parity, anthropic.go:263).
+func TestOpenAIClosesStreamAtDone(t *testing.T) {
+	t.Parallel()
+	release := make(chan struct{})
+	defer close(release)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(200)
+		fl, _ := w.(http.Flusher)
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"}}]}\n\n"))
+		fl.Flush()
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n"))
+		fl.Flush()
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+		fl.Flush()
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	defer srv.Close()
+	s := stream(t, NewOpenAI(srv.Client()), Request{
+		Model: "m", APIKey: "test-key", BaseURL: srv.URL,
+		Messages: []Message{{Role: RoleUser, Content: "hi"}},
+	})
+	var parts []Part
+	drainCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	for {
+		p, err := s.Next(drainCtx)
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				t.Fatalf("drain ended with %v, want io.EOF (stream stuck past [DONE])", err)
+			}
+			break
+		}
+		parts = append(parts, p)
+	}
+	if len(parts) != 2 {
+		t.Fatalf("parts = %+v, want text+finish", parts)
+	}
+	if parts[0].Kind != "text" || parts[0].Text != "hi" {
+		t.Fatalf("first = %+v", parts[0])
+	}
+	if parts[1].Finish != "stop" {
+		t.Fatalf("finish = %+v", parts[1])
+	}
+}
+
 func TestOpenAIUpstream429IsTransient(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(429)
 		_, _ = w.Write([]byte(`{"error":{"message":"slow down"}}`))
@@ -158,6 +221,7 @@ func TestOpenAIUpstream429IsTransient(t *testing.T) {
 }
 
 func TestOpenAIRequestShape(t *testing.T) {
+	t.Parallel()
 	var got map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewDecoder(r.Body).Decode(&got)
@@ -173,6 +237,21 @@ func TestOpenAIRequestShape(t *testing.T) {
 	})
 	if got["stream"] != true {
 		t.Fatalf("stream = %v", got["stream"])
+	}
+	if got["max_tokens"] != float64(100) {
+		t.Fatalf("max_tokens = %v", got["max_tokens"])
+	}
+	msgs, _ := got["messages"].([]any)
+	if len(msgs) != 2 {
+		t.Fatalf("messages = %v", got["messages"])
+	}
+	m0 := msgs[0].(map[string]any)
+	if m0["role"] != "system" || m0["content"] != "sys" {
+		t.Fatalf("msg0 = %v", m0)
+	}
+	m1 := msgs[1].(map[string]any)
+	if m1["role"] != "user" || m1["content"] != "hi" {
+		t.Fatalf("msg1 = %v", m1)
 	}
 	tools, _ := got["tools"].([]any)
 	if len(tools) != 1 {

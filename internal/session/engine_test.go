@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -30,6 +31,10 @@ type harness struct {
 	drv *fakellm.Driver
 	svc *permission.Service
 
+	// dataDir is shared by the engine Deps and the permission service (the
+	// engine used to push it per turn; the service now carries it at build).
+	dataDir string
+
 	// cfgPermission feeds the Cfg seam (read per turn, so it may be set
 	// after build, before Send).
 	cfgPermission []protocol.Rule
@@ -40,11 +45,19 @@ type harness struct {
 	// slowTurn holds each scripted stream open for 500ms (fake driver
 	// Delay), so a concurrent Send hits the busy flag.
 	slowTurn bool
+	// overrideDriver, when set before build, replaces the driver wired for
+	// the test provider (bespoke stream behavior, e.g. stream-leak probes).
+	overrideDriver llm.Driver
 
 	sessions []string // created via startSession; shells closed on cleanup
 
 	eventsMu sync.Mutex
 	events   []protocol.Event
+
+	// slowCancel counts held slow-driver streams that observed ctx
+	// cancellation (asserted after Shutdown, so "abort, not wait" is
+	// deterministic instead of a wall-clock margin).
+	slowCancel atomic.Int32
 
 	replies chan string
 	done    chan struct{} // closed on cleanup; lets the watcher exit a pending wait
@@ -58,9 +71,11 @@ func newHarness(t *testing.T) *harness {
 	}
 	b := bus.New()
 	ch, unsub := b.Subscribe()
+	dataDir := t.TempDir()
 	h := &harness{
 		t: t, db: db, bus: b,
-		svc:     permission.New(db, b),
+		svc:     permission.New(db, b, nil, dataDir),
+		dataDir: dataDir,
 		replies: make(chan string, 32),
 		done:    make(chan struct{}),
 	}
@@ -131,19 +146,19 @@ func (h *harness) build(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.drv = drv
-	h.eng = session.New(session.Deps{
+	eng, err := session.New(session.Deps{
 		DB:      h.db,
 		Bus:     h.bus,
 		Prov:    reg,
 		Perm:    h.svc,
 		Tools:   tool.Registry(),
-		DataDir: t.TempDir(),
+		DataDir: h.dataDir,
 		Cfg:     h.cfgLoader(),
 		// slowDriver reads h.slowTurn per Stream call (the test sets it
 		// after build) and slows the call by sleeping in the wrapper before
 		// forwarding — not via a fake field, because the title side-call and
 		// the turn call Stream concurrently and a shared field would race.
-		Drivers: map[string]llm.Driver{"kido": slowDriver{h: h, inner: drv}},
+		Drivers: map[string]llm.Driver{"kido": h.wiredDriver(drv)},
 		Clock:   func() int64 { return time.Now().UnixMilli() },
 		Backoff: func(attempt int) time.Duration {
 			if h.fastBackoff {
@@ -152,6 +167,21 @@ func (h *harness) build(t *testing.T) {
 			return time.Second << uint(attempt-1)
 		},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.eng = eng
+}
+
+// wiredDriver picks the driver for the test provider: the slowDriver
+// wrapper, or h.overrideDriver when a test set it before build (bespoke
+// stream behavior). The title side-call shares the same driver, so
+// overrides must be concurrency-safe.
+func (h *harness) wiredDriver(drv *fakellm.Driver) llm.Driver {
+	if h.overrideDriver != nil {
+		return h.overrideDriver
+	}
+	return slowDriver{h: h, inner: drv}
 }
 
 // slowDriver slows each Stream call (ctx-aware sleep) while h.slowTurn is
@@ -168,10 +198,59 @@ func (s slowDriver) Stream(ctx context.Context, req llm.Request) (llm.PartStream
 		select {
 		case <-time.After(500 * time.Millisecond):
 		case <-ctx.Done():
+			s.h.slowCancel.Add(1)
 			return llm.PartStream{}, ctx.Err()
 		}
 	}
 	return s.h.drv.Stream(ctx, req)
+}
+
+// TestNewValidatesRequiredDeps: a miswired dep is a construction error, not
+// a nil panic deep in an un-recovered turn goroutine (single-binary crash).
+func TestNewValidatesRequiredDeps(t *testing.T) {
+	valid := func() session.Deps {
+		return session.Deps{
+			DB:    nil, // filled per case
+			Bus:   bus.New(),
+			Prov:  provider.NewStaticForTest(),
+			Perm:  nil, // filled per case
+			Tools: tool.Registry(),
+		}
+	}
+	db, err := storage.Open(filepath.Join(t.TempDir(), "yolo.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	perm := permission.New(db, bus.New(), nil, "")
+
+	cases := []struct {
+		name string
+		mut  func(d *session.Deps)
+	}{
+		{"nil DB", func(d *session.Deps) { d.DB = nil; d.Perm = perm }},
+		{"nil Bus", func(d *session.Deps) { d.DB = db; d.Bus = nil; d.Perm = perm }},
+		{"nil Prov", func(d *session.Deps) { d.DB = db; d.Prov = nil; d.Perm = perm }},
+		{"nil Perm", func(d *session.Deps) { d.DB = db; d.Perm = nil }},
+		{"nil Tools", func(d *session.Deps) { d.DB = db; d.Perm = perm; d.Tools = nil }},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			d := valid()
+			c.mut(&d)
+			if _, err := session.New(d); err == nil {
+				t.Fatal("New accepted a required dep as nil")
+			}
+		})
+	}
+	t.Run("valid deps construct", func(t *testing.T) {
+		d := valid()
+		d.DB = db
+		d.Perm = perm
+		if _, err := session.New(d); err != nil {
+			t.Fatalf("New(valid) = %v", err)
+		}
+	})
 }
 
 // cfgLoader mirrors h.cfgPermission into the config permission map. The
@@ -266,6 +345,19 @@ func waitIdle(t *testing.T, h *harness, ses string, fn func()) {
 			t.Fatal("engine did not go idle")
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// waitBusy polls Status until the session reports busy, so 409/abort tests
+// act inside a deterministic busy window instead of a fixed sleep.
+func waitBusy(t *testing.T, h *harness, ses string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for h.eng.Status(ses) != protocol.StatusBusy {
+		if time.Now().After(deadline) {
+			t.Fatal("turn did not become busy")
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 
@@ -547,13 +639,11 @@ func TestHistoryReplayIncludesToolResults(t *testing.T) {
 	}
 
 	// the read tool executed in the session's project dir
-	ump, err := h.db.ListParts(func() string {
-		msgs, err := h.db.ListMessages(ses)
-		if err != nil || len(msgs) < 3 {
-			t.Fatalf("messages: %v, %v", msgs, err)
-		}
-		return msgs[1].ID
-	}())
+	msgs, err := h.db.ListMessages(ses)
+	if err != nil || len(msgs) < 3 {
+		t.Fatalf("messages: %v, %v", msgs, err)
+	}
+	ump, err := h.db.ListParts(msgs[1].ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -575,8 +665,9 @@ func TestHistoryReplayIncludesToolResults(t *testing.T) {
 
 // TestShutdownAbortsActiveAndWaits: two sessions with active turns (the
 // slowTurn seam holds each stream open 500 ms); Shutdown aborts all of
-// them and returns once every turn has released — well under the 500 ms
-// hold, i.e. it aborts rather than waits.
+// them — each held stream observes its context cancelled, so "abort, not
+// wait" is asserted deterministically, not on a wall-clock margin — and
+// returns once every turn has released.
 func TestShutdownAbortsActiveAndWaits(t *testing.T) {
 	h := newHarness(t)
 	h.build(t)
@@ -596,9 +687,7 @@ func TestShutdownAbortsActiveAndWaits(t *testing.T) {
 		t.Fatalf("status(%s) = %s, want busy", sesB, got)
 	}
 
-	start := time.Now()
 	h.eng.Shutdown(context.Background())
-	elapsed := time.Since(start)
 
 	if got := h.eng.Status(sesA); got != protocol.StatusIdle {
 		t.Fatalf("status(%s) = %s, want idle", sesA, got)
@@ -606,7 +695,10 @@ func TestShutdownAbortsActiveAndWaits(t *testing.T) {
 	if got := h.eng.Status(sesB); got != protocol.StatusIdle {
 		t.Fatalf("status(%s) = %s, want idle", sesB, got)
 	}
-	if elapsed > 400*time.Millisecond {
-		t.Fatalf("Shutdown took %s; slowTurn holds each stream 500 ms, so it should abort, not wait", elapsed)
+	// a stream only takes the ctx.Done() branch when its context is
+	// cancelled; if Shutdown had waited out the 500 ms holds, no held
+	// stream would have observed a cancellation.
+	if got := h.slowCancel.Load(); got < 2 {
+		t.Fatalf("held streams observing ctx cancellation = %d, want >= 2 (one per session)", got)
 	}
 }

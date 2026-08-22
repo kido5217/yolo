@@ -2,6 +2,7 @@ package session_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -52,7 +53,7 @@ func TestTransientRetrySucceeds(t *testing.T) {
 	}
 }
 
-func TestTransientExgivesUpAfter4(t *testing.T) {
+func TestTransientGivesUpAfter4(t *testing.T) {
 	h := newHarness(t)
 	h.build(t)
 	d := t.TempDir()
@@ -188,6 +189,63 @@ func TestMaxToolStepsHalts(t *testing.T) {
 	}
 }
 
+// leakDriver mimics the real drivers' stream goroutine (openai.go /
+// anthropic.go): parts are pushed into a 64-slot channel and the feeder
+// blocks on a full channel until ctx is cancelled.
+type leakDriver struct {
+	feederDone chan struct{} // closed when the feeder goroutine exits
+}
+
+func (d *leakDriver) Stream(ctx context.Context, req llm.Request) (llm.PartStream, error) {
+	ch := make(chan llm.Part, 64)
+	go func() {
+		defer close(d.feederDone)
+		defer close(ch)
+		// 200 tool parts: the engine reads 51 (budget drop on the 51st),
+		// and 51 + the 64-slot buffer still leaves 85 sends with no room —
+		// the feeder blocks on send unless the ctx is cancelled.
+		for i := 0; i < 200; i++ {
+			select {
+			case ch <- llm.Part{
+				Kind:   "tool",
+				Name:   "glob",
+				CallID: "lk" + strconv.Itoa(i),
+				Args:   json.RawMessage(fmt.Sprintf(`{"pattern":"lk%d*"}`, i)),
+			}:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	return llm.PartStream{Parts: ch}, nil
+}
+
+// TestBudgetDropCancelsStreamContext pins the per-round context: when the
+// tool-step budget drop abandons a live stream, the round ctx must be
+// cancelled so the driver's feeder (blocked pushing undelivered parts)
+// unblocks instead of leaking a goroutine plus connection until shutdown.
+func TestBudgetDropCancelsStreamContext(t *testing.T) {
+	h := newHarness(t)
+	done := make(chan struct{})
+	h.overrideDriver = &leakDriver{feederDone: done}
+	h.build(t)
+	d := t.TempDir()
+	ses := h.startSession(t, d)
+	// Suppress the title side-call so exactly one Stream happens.
+	if err := h.db.UpdateSession(ses, storage.SessionRow{Title: "leak"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.eng.Send(context.Background(), ses, "spin", nil); err != nil {
+		t.Fatal(err)
+	}
+	waitIdle(t, h, ses, func() {})
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stream feeder still blocked after the budget drop: per-round context not cancelled")
+	}
+}
+
 func TestOverflowHardStop(t *testing.T) {
 	h := newHarness(t)
 	h.build(t)
@@ -233,7 +291,7 @@ func TestConcurrentSend409(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(50 * time.Millisecond)
+	waitBusy(t, h, ses)
 	_, err2 := h.eng.Send(context.Background(), ses, "two", nil)
 	if !errors.Is(err2, session.ErrSessionBusy) {
 		t.Fatalf("want ErrSessionBusy, got %v", err2)

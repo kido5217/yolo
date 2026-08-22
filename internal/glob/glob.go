@@ -5,7 +5,6 @@
 package glob
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
 )
@@ -28,39 +27,6 @@ func Match(pattern, name string) bool {
 		return segmentMatch(pattern, lastSegment(name))
 	}
 	return segmentsMatch(strings.Split(pattern, "/"), strings.Split(name, "/"))
-}
-
-// ToRegex compiles pattern into an anchored regexp. For slash-free patterns
-// the regexp is meant to be applied to the basename; for slash patterns it
-// matches the whole name. Match is the canonical entry point; this is
-// exported for callers that need the compiled form.
-func ToRegex(pattern, name string) (*regexp.Regexp, error) {
-	if pattern == "" {
-		return nil, fmt.Errorf("glob: empty pattern")
-	}
-	if pattern == "*" {
-		return regexp.MustCompile(`^.*$`), nil
-	}
-	if !strings.Contains(pattern, "/") {
-		return segmentRe(pattern)
-	}
-	var b strings.Builder
-	b.WriteString("^")
-	for i, seg := range strings.Split(pattern, "/") {
-		switch {
-		case seg == "**" && i == 0:
-			b.WriteString(`(?:[^/]+/)*`)
-		case seg == "**":
-			b.WriteString(`(?:/[^/]+)*`)
-		default:
-			if i > 0 {
-				b.WriteString("/")
-			}
-			b.WriteString(bare(seg))
-		}
-	}
-	b.WriteString("$")
-	return regexp.Compile(b.String())
 }
 
 // lastSegment returns the last non-empty path segment of name.
@@ -98,21 +64,12 @@ func segmentsMatch(ps, ns []string) bool {
 
 // segmentMatch reports whether a single segment glob matches a segment.
 func segmentMatch(pat, seg string) bool {
-	re := mustCompile(segmentRe(pat))
-	return re.MatchString(seg)
+	return segmentRe(pat).MatchString(seg)
 }
 
-// bare returns the unanchored regex for one segment glob.
-func bare(seg string) string {
-	re := mustCompile(segmentRe(seg))
-	s := re.String()
-	// strip the ^ and $ anchors added by segmentRe
-	return s[1 : len(s)-1]
-}
-
-// segmentRe converts one segment glob into an anchored regexp string.
+// segmentRe converts one segment glob into an anchored regexp.
 // Within a segment there is no "/" to cross, so "*" -> ".*" and "?" -> ".".
-func segmentRe(seg string) (*regexp.Regexp, error) {
+func segmentRe(seg string) *regexp.Regexp {
 	var b strings.Builder
 	b.WriteString("^")
 	for i := 0; i < len(seg); i++ {
@@ -149,10 +106,12 @@ func segmentRe(seg string) (*regexp.Regexp, error) {
 		}
 	}
 	b.WriteString("$")
-	return regexp.Compile(b.String())
-}
-
-func mustCompile(re *regexp.Regexp, err error) *regexp.Regexp {
-	_ = err
+	re, err := regexp.Compile(b.String())
+	if err != nil {
+		// Uncompilable class (e.g. the empty class "[]"): degrade to the
+		// literal segment, consistent with the unclosed-"[" literalization.
+		// A quoted literal always compiles.
+		return regexp.MustCompile("^" + regexp.QuoteMeta(seg) + "$")
+	}
 	return re
 }

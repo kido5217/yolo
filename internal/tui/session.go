@@ -17,10 +17,11 @@ import (
 // expanded part set (tool I/O blocks and reasoning text) and the auto-follow
 // flag.
 type sessionModel struct {
-	vm       viewport.Model
-	expanded map[string]bool
-	follow   bool
-	content  string
+	vm        viewport.Model
+	expanded  map[string]bool
+	following bool
+	isDirty   bool // transcript needs a re-render (store mutation, expand toggle)
+	content   string
 }
 
 var sessKeyMap = struct {
@@ -40,9 +41,10 @@ var sessKeyMap = struct {
 
 func newSessionModel(w, h int) sessionModel {
 	return sessionModel{
-		vm:       viewport.New(viewport.WithWidth(w), viewport.WithHeight(h)),
-		expanded: map[string]bool{},
-		follow:   true,
+		vm:        viewport.New(viewport.WithWidth(w), viewport.WithHeight(h)),
+		expanded:  map[string]bool{},
+		following: true,
+		isDirty:   true,
 	}
 }
 
@@ -60,17 +62,23 @@ const sessionHelp = "pgup/pgdn scroll \u00B7 alt+e expand \u00B7 alt+t think \u0
 // sync updates viewport size/content and applies auto-follow: while the
 // session is busy and follow is on, the viewport stays pinned to the bottom;
 // a user scroll-up (pgup) pauses follow until pgdn reaches the bottom again.
+// The transcript re-renders only when dirty (store mutation or expand
+// toggle); frames that only advance the footer spinner or report a status
+// tick reuse the existing viewport content instead of rebuilding it.
 func (sm *sessionModel) sync(st *store.Store, w, h int) {
 	if sm.vm.Width() != w || sm.vm.Height() != h {
 		sm.vm.SetWidth(w)
 		sm.vm.SetHeight(h)
 	}
-	content := renderMessages(st, sm.expanded, w)
-	if content != sm.content {
-		sm.content = content
-		sm.vm.SetContent(content)
+	if sm.isDirty {
+		sm.isDirty = false
+		content := renderMessages(st, sm.expanded, w)
+		if content != sm.content {
+			sm.content = content
+			sm.vm.SetContent(content)
+		}
 	}
-	if sm.follow && sessionBusy(st) {
+	if sm.following && sessionBusy(st) {
 		sm.vm.GotoBottom()
 	}
 }
@@ -82,7 +90,7 @@ func (sm *sessionModel) sync(st *store.Store, w, h int) {
 // expanded maps partID to the parts whose I/O block or reasoning text is
 // shown.
 func renderMessages(st *store.Store, expanded map[string]bool, w int) string {
-	var blocks []string
+	blocks := make([]string, 0, len(st.Messages))
 	for _, m := range st.Messages {
 		if m.Info.Role == "user" {
 			blocks = append(blocks, renderUser(m))
@@ -269,11 +277,11 @@ func (a *App) handleSessionKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 	switch {
 	case key.Matches(k, sessKeyMap.PageUp):
 		a.sess.vm.PageUp()
-		a.sess.follow = false
+		a.sess.following = false
 		return nil, true
 	case key.Matches(k, sessKeyMap.PageDown):
 		a.sess.vm.PageDown()
-		a.sess.follow = a.sess.vm.AtBottom()
+		a.sess.following = a.sess.vm.AtBottom()
 		return nil, true
 	case key.Matches(k, sessKeyMap.Expand):
 		id := lastToolPartID(&a.store)
@@ -285,6 +293,7 @@ func (a *App) handleSessionKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 		} else {
 			a.sess.expanded[id] = true
 		}
+		a.sess.isDirty = true
 		return nil, true
 	case key.Matches(k, sessKeyMap.Think):
 		expand := false
@@ -307,13 +316,16 @@ func (a *App) handleSessionKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 				delete(a.sess.expanded, id)
 			}
 		}
+		if expand {
+			a.sess.isDirty = true
+		}
 		return nil, true
 	case key.Matches(k, escBinding):
 		if sessionBusy(&a.store) {
 			return a.emit(a.abortCmd()), true
 		}
 		a.route = routeHome
-		a.cur = ""
+		a.curSessionID = ""
 		return a.emit(a.hydrateCmd()), true
 	}
 	return nil, false

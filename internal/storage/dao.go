@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -55,19 +56,21 @@ func nullStr(s string) any {
 	return s
 }
 
-// nullStrPtr renders nil as SQL NULL for nullable integer columns.
-func nullStrPtr(p *int64) any {
+// nullPtr renders nil as SQL NULL for nullable integer columns.
+func nullPtr(p *int64) any {
 	if p == nil {
 		return nil
 	}
 	return *p
 }
 
-// CreateSession inserts a session row.
+// CreateSession inserts a session row; an empty agent takes the column
+// default "build" (agentOrDefault), mirroring the message side.
 func (d *DB) CreateSession(r SessionRow) error {
 	_, err := d.Exec(
-		`INSERT INTO session (id, project_dir, title, model, agent, cost, time_created, time_updated) VALUES (?,?,?,?,?,?,?,?)`,
-		r.ID, r.ProjectDir, r.Title, r.Model, r.Agent, r.Cost, r.TimeCreated, r.TimeUpdated)
+		`INSERT INTO session (id, project_dir, title, model, agent, cost, `+
+			`time_created, time_updated) VALUES (?,?,?,?,?,?,?,?)`,
+		r.ID, r.ProjectDir, r.Title, r.Model, agentOrDefault(r.Agent), r.Cost, r.TimeCreated, r.TimeUpdated)
 	return err
 }
 
@@ -88,10 +91,12 @@ func (d *DB) GetSession(id string) (SessionRow, error) {
 
 // ListSessions lists a project directory's sessions, newest (time_updated) first.
 func (d *DB) ListSessions(projectDir string, limit int) ([]SessionRow, error) {
-	q := `SELECT id, project_dir, title, model, agent, cost, time_created, time_updated FROM session WHERE project_dir=? ORDER BY time_updated DESC`
+	q := `SELECT id, project_dir, title, model, agent, cost, time_created, ` +
+		`time_updated FROM session WHERE project_dir=? ORDER BY time_updated DESC`
 	args := []any{projectDir}
 	if limit > 0 {
-		q += ` LIMIT ` + strconv.Itoa(limit)
+		q += ` LIMIT ?`
+		args = append(args, limit)
 	}
 	rows, err := d.Query(q, args...)
 	if err != nil {
@@ -101,7 +106,10 @@ func (d *DB) ListSessions(projectDir string, limit int) ([]SessionRow, error) {
 	out := []SessionRow{}
 	for rows.Next() {
 		var r SessionRow
-		if err := rows.Scan(&r.ID, &r.ProjectDir, &r.Title, &r.Model, &r.Agent, &r.Cost, &r.TimeCreated, &r.TimeUpdated); err != nil {
+		if err := rows.Scan(
+			&r.ID, &r.ProjectDir, &r.Title, &r.Model, &r.Agent, &r.Cost,
+			&r.TimeCreated, &r.TimeUpdated,
+		); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -165,8 +173,9 @@ func (d *DB) CreateMessage(r MessageRow) error {
 		return err
 	}
 	_, err = d.Exec(
-		`INSERT INTO message (id, session_id, role, agent, cost, tokens, time_created, time_completed) VALUES (?,?,?,?,?,?,?,?)`,
-		r.ID, r.SessionID, r.Role, agentOrDefault(r.Agent), r.Cost, string(tok), r.TimeCreated, nullStrPtr(r.TimeCompleted))
+		`INSERT INTO message (id, session_id, role, agent, cost, tokens, `+
+			`time_created, time_completed) VALUES (?,?,?,?,?,?,?,?)`,
+		r.ID, r.SessionID, r.Role, agentOrDefault(r.Agent), r.Cost, string(tok), r.TimeCreated, nullPtr(r.TimeCompleted))
 	return err
 }
 
@@ -177,8 +186,9 @@ func (d *DB) UpdateMessage(r MessageRow) error {
 		return err
 	}
 	res, err := d.Exec(
-		`UPDATE message SET session_id=?, role=?, agent=?, cost=?, tokens=?, time_created=?, time_completed=? WHERE id=?`,
-		r.SessionID, r.Role, agentOrDefault(r.Agent), r.Cost, string(tok), r.TimeCreated, nullStrPtr(r.TimeCompleted), r.ID)
+		`UPDATE message SET session_id=?, role=?, agent=?, cost=?, `+
+			`tokens=?, time_created=?, time_completed=? WHERE id=?`,
+		r.SessionID, r.Role, agentOrDefault(r.Agent), r.Cost, string(tok), r.TimeCreated, nullPtr(r.TimeCompleted), r.ID)
 	if err != nil {
 		return err
 	}
@@ -197,7 +207,9 @@ func (d *DB) DeleteMessage(id string) error {
 // ListMessages lists a session's messages, earliest first.
 func (d *DB) ListMessages(sessionID string) ([]MessageRow, error) {
 	rows, err := d.Query(
-		`SELECT id, session_id, role, agent, cost, tokens, time_created, time_completed FROM message WHERE session_id=? ORDER BY time_created ASC`, sessionID)
+		`SELECT id, session_id, role, agent, cost, tokens, time_created, `+
+			`time_completed FROM message WHERE session_id=? `+
+			`ORDER BY time_created ASC`, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +230,7 @@ func (d *DB) ListMessages(sessionID string) ([]MessageRow, error) {
 			tok = "{}"
 		}
 		if err := json.Unmarshal([]byte(tok), &r.Tokens); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("message %s tokens: %w", r.ID, err)
 		}
 		out = append(out, r)
 	}
@@ -308,14 +320,23 @@ func ProtocolToPart(p protocol.Part) PartRow {
 		b, _ := json.Marshal(p.State)
 		r.StateJSON = string(b)
 	default:
-		m := map[string]any{"text": p.Text}
+		// Hot path (streamed deltas): build the fixed 3-key document
+		// directly. Must stay byte-identical to the map marshal: sorted
+		// keys (end, synthetic, text), compact separators.
+		t, _ := json.Marshal(p.Text)
+		b := make([]byte, 0, len(t)+16)
+		b = append(b, '{')
 		if p.Time.End != 0 {
-			m["end"] = p.Time.End
+			b = append(b, `"end":`...)
+			b = strconv.AppendInt(b, p.Time.End, 10)
+			b = append(b, ',')
 		}
 		if p.Synthetic != nil && *p.Synthetic {
-			m["synthetic"] = true
+			b = append(b, `"synthetic":true,`...)
 		}
-		b, _ := json.Marshal(m)
+		b = append(b, `"text":`...)
+		b = append(b, t...)
+		b = append(b, '}')
 		r.StateJSON = string(b)
 	}
 	return r
@@ -334,7 +355,7 @@ func PartToProtocol(r PartRow) (protocol.Part, error) {
 	case "tool":
 		st := &protocol.ToolState{}
 		if err := json.Unmarshal([]byte(r.StateJSON), st); err != nil {
-			return p, err
+			return p, fmt.Errorf("part %s state: %w", r.ID, err)
 		}
 		p.State = st
 	default:
@@ -344,7 +365,7 @@ func PartToProtocol(r PartRow) (protocol.Part, error) {
 			Synthetic *bool  `json:"synthetic"`
 		}
 		if err := json.Unmarshal([]byte(r.StateJSON), &st); err != nil {
-			return p, err
+			return p, fmt.Errorf("part %s state: %w", r.ID, err)
 		}
 		p.Text = st.Text
 		p.Time = protocol.PartTime{End: st.End}
@@ -386,7 +407,8 @@ func SessionFromRow(r SessionRow, msgs []MessageRow) protocol.Session {
 // SavePermission inserts or updates a permission request by request_id.
 func (d *DB) SavePermission(r PermissionRow) error {
 	_, err := d.Exec(
-		`INSERT INTO permission (request_id, session_id, action, resource, response, always_json, time_created) VALUES (?,?,?,?,?,?,?)
+		`INSERT INTO permission (request_id, session_id, action, resource, `+
+			`response, always_json, time_created) VALUES (?,?,?,?,?,?,?)
 		 ON CONFLICT(request_id) DO UPDATE SET response=excluded.response, always_json=excluded.always_json`,
 		r.RequestID, r.SessionID, r.Action, r.Resource, nullStr(r.Response), nullStr(r.AlwaysJSON), r.TimeCreated)
 	return err
@@ -395,7 +417,8 @@ func (d *DB) SavePermission(r PermissionRow) error {
 // ListPermissions lists a session's permission requests; pendingOnly filters
 // to rows with no response yet.
 func (d *DB) ListPermissions(sessionID string, pendingOnly bool) ([]PermissionRow, error) {
-	q := `SELECT request_id, session_id, action, resource, response, always_json, time_created FROM permission WHERE session_id=?`
+	q := `SELECT request_id, session_id, action, resource, response, ` +
+		`always_json, time_created FROM permission WHERE session_id=?`
 	if pendingOnly {
 		q += ` AND response IS NULL`
 	}
@@ -476,7 +499,8 @@ func (d *DB) GetTodos(sessionID string) ([]protocol.Todo, error) {
 // pattern in always_json, permission taken from the row's action.
 func (d *DB) AlwaysRules(sessionID string) ([]protocol.Rule, error) {
 	rows, err := d.Query(
-		`SELECT action, always_json FROM permission WHERE session_id=? AND response='always' ORDER BY time_created ASC`, sessionID)
+		`SELECT action, always_json FROM permission WHERE session_id=? `+
+			`AND response='always' ORDER BY time_created ASC`, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -491,7 +515,7 @@ func (d *DB) AlwaysRules(sessionID string) ([]protocol.Rule, error) {
 		var patterns []string
 		if always.Valid && always.String != "" {
 			if err := json.Unmarshal([]byte(always.String), &patterns); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("always rules (session=%s, action=%s): %w", sessionID, action, err)
 			}
 		}
 		for _, pat := range patterns {

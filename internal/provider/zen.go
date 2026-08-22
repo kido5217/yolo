@@ -77,7 +77,7 @@ type ZenMeta struct {
 	Env  []string
 }
 
-func zenMeta(raw []byte) ZenMeta {
+func parseZenMeta(raw []byte) ZenMeta {
 	var cat struct {
 		Opencode struct {
 			Name string   `json:"name"`
@@ -96,10 +96,14 @@ type CatalogPolicy struct {
 	cachePath string
 	ttl       time.Duration
 	liveURL   string
+	client    *http.Client
 }
 
-func NewCatalogPolicy(cachePath string, ttlMin int, liveURL string) *CatalogPolicy {
-	return &CatalogPolicy{cachePath: cachePath, ttl: time.Duration(ttlMin) * time.Minute, liveURL: liveURL}
+func NewCatalogPolicy(cachePath string, ttlMin int, liveURL string, client *http.Client) *CatalogPolicy {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	return &CatalogPolicy{cachePath: cachePath, ttl: time.Duration(ttlMin) * time.Minute, liveURL: liveURL, client: client}
 }
 
 func (p *CatalogPolicy) Load(ctx context.Context) ([]byte, error) {
@@ -144,13 +148,13 @@ func (p *CatalogPolicy) fetch(ctx context.Context) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) yolo")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := p.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("zen catalog: HTTP %d", resp.StatusCode)
+		return nil, fmt.Errorf("zen catalog: http %d", resp.StatusCode)
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if err != nil {
@@ -163,9 +167,23 @@ func (p *CatalogPolicy) writeAtomic(data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(p.cachePath), 0o755); err != nil {
 		return err
 	}
-	tmp := p.cachePath + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	f, err := os.CreateTemp(filepath.Dir(p.cachePath), "models.json.*")
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, p.cachePath)
+	tmp := f.Name()
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, p.cachePath); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }

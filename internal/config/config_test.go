@@ -72,7 +72,11 @@ func TestGlobalProjectYoloDiscoveryAndMerge(t *testing.T) {
 	if cfg.Theme == nil {
 		t.Fatal("theme lost")
 	}
-	if rules := protocol.ParsePerms(cfg.Permission); len(rules) != 1 || rules[0].Action != "ask" {
+	rules, err := protocol.ParsePerms(cfg.Permission)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rules) != 1 || rules[0].Action != "ask" {
 		t.Fatalf("perms: %+v", rules)
 	}
 }

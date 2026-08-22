@@ -11,11 +11,16 @@ import (
 
 // footerApp builds the root app with a fixed 80x24 window and a preloaded
 // store (footer unit table; the client is a dead endpoint, no requests are
-// made). The Current pointer is deep-copied so subtest mutations stay local.
-func footerApp(st store.Store) *App {
+// made). The Current session and its Model ref are copied (the only field
+// with a pointer) so subtest mutations stay local.
+func footerApp(st store.Store) *recApp {
 	a := testApp()
 	if st.Current != nil {
 		cp := *st.Current
+		if st.Current.Model != nil {
+			m := *st.Current.Model
+			cp.Model = &m
+		}
 		st.Current = &cp
 	}
 	a.store = st
@@ -25,8 +30,14 @@ func footerApp(st store.Store) *App {
 
 func TestFooterRender(t *testing.T) {
 	idle := store.Store{
-		Conn:    true,
-		Current: &protocol.Session{ID: "ses_1", Agent: "build", Model: refModel("kido", "q"), Cost: 0.0002, Tokens: protocol.Tokens{Input: 123, Output: 45}},
+		Live: true,
+		Current: &protocol.Session{
+			ID:     "ses_1",
+			Agent:  "build",
+			Model:  refModel("kido", "q"),
+			Cost:   0.0002,
+			Tokens: protocol.Tokens{Input: 123, Output: 45},
+		},
 	}
 	tests := []struct {
 		name   string
@@ -43,7 +54,7 @@ func TestFooterRender(t *testing.T) {
 		{
 			name:   "session sse off",
 			route:  routeSession,
-			mutate: func(s *store.Store) { s.Conn = false },
+			mutate: func(s *store.Store) { s.Live = false },
 			want:   "kido/q · build · ↑123 ↓45 · $0.0002 · ○ off",
 		},
 		{
@@ -89,7 +100,7 @@ func TestFooterRender(t *testing.T) {
 			a := footerApp(idle)
 			a.route = tt.route
 			if tt.route == routeSession {
-				a.cur = "ses_1"
+				a.curSessionID = "ses_1"
 			}
 			if tt.cfg != nil {
 				a.store.Config = tt.cfg

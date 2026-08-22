@@ -44,21 +44,21 @@ func main() {
 
 func run(args []string) int {
 	if len(args) == 0 {
-		return tuiMode(nil)
+		return tuiCmd(nil)
 	}
 	switch args[0] {
 	case "help", "-h", "--help":
 		usage(os.Stderr)
 		return 0
 	case "serve":
-		return serve(args[1:])
+		return serveCmd(args[1:])
 	case "auth":
 		return authCmd(args[1:])
 	case "version":
 		fmt.Println("yolo 0.0.0-dev")
 		return 0
 	default:
-		return tuiMode(args)
+		return tuiCmd(args)
 	}
 }
 
@@ -104,12 +104,23 @@ func workDir(flagDir string) (string, error) {
 // network; any other env runs the live registry.
 func buildDeps(workDir string) (*server.Deps, func(), error) {
 	loader := config.Loader{} // nil Env view = real process environment
-	dataDir := config.DataYoloDir()
-	lob := log.New(dataDir)
+	homeDir, err := config.Home()
+	if err != nil {
+		return nil, nil, err
+	}
+	dataDir, err := config.DataYoloDir()
+	if err != nil {
+		return nil, nil, err
+	}
+	cacheDir, err := config.CacheYoloDir()
+	if err != nil {
+		return nil, nil, err
+	}
+	logger := log.New(dataDir)
 
 	fail := func(err error) (*server.Deps, func(), error) {
-		lob.Errorf("startup failed: %v", err)
-		lob.Close()
+		logger.Errorf("startup failed: %v", err)
+		logger.Close()
 		return nil, nil, err
 	}
 
@@ -119,20 +130,27 @@ func buildDeps(workDir string) (*server.Deps, func(), error) {
 	}
 	closeDB := func() {
 		_ = db.Close()
-		lob.Close()
+		logger.Close()
 	}
 
 	b := bus.New()
 	deps := &server.Deps{
-		DB:      db,
-		Bus:     b,
-		Perm:    permission.New(db, b),
-		Config:  loader,
-		Log:     lob,
-		WorkDir: workDir, // zero Dirs = real XDG roots
+		DB:     db,
+		Bus:    b,
+		Perm:   permission.New(db, b, logger, dataDir),
+		Config: loader,
+		Log:    logger,
+		// Dirs are resolved above: the server never re-resolves XDG itself
+		// (a broken home is a buildDeps error, not a per-request 500).
+		Dirs:    config.Dirs{Home: homeDir, Data: dataDir, Cache: cacheDir},
+		WorkDir: workDir,
 	}
 
-	globalDir := config.GlobalYoloDir()
+	globalDir, err := config.GlobalYoloDir()
+	if err != nil {
+		closeDB()
+		return fail(err)
+	}
 	cfg, err := loader.LoadAt(globalDir, workDir)
 	if err != nil {
 		closeDB()
@@ -144,16 +162,10 @@ func buildDeps(workDir string) (*server.Deps, func(), error) {
 		closeDB()
 		return fail(err)
 	}
+	var drivers map[string]llm.Driver
 	if fake != nil {
 		deps.Prov = provider.NewStaticForTest()
-		deps.Engine = session.New(session.Deps{
-			DB: db, Bus: deps.Bus, Prov: deps.Prov, Perm: deps.Perm,
-			Tools: tool.Registry(), DataDir: dataDir, Log: lob,
-			Cfg: func(dir string) (*protocol.Config, error) {
-				return loader.LoadAt(globalDir, dir)
-			},
-			Drivers: map[string]llm.Driver{"kido": fake},
-		})
+		drivers = map[string]llm.Driver{"kido": fake}
 	} else {
 		prov, err := provider.New(context.Background(), cfg, nil, provider.Dirs{})
 		if err != nil {
@@ -161,14 +173,20 @@ func buildDeps(workDir string) (*server.Deps, func(), error) {
 			return fail(err)
 		}
 		deps.Prov = prov
-		deps.Engine = session.New(session.Deps{
-			DB: db, Bus: deps.Bus, Prov: deps.Prov, Perm: deps.Perm,
-			Tools: tool.Registry(), DataDir: dataDir, Log: lob,
-			Cfg: func(dir string) (*protocol.Config, error) {
-				return loader.LoadAt(globalDir, dir)
-			},
-		})
 	}
+	engine, err := session.New(session.Deps{
+		DB: db, Bus: deps.Bus, Prov: deps.Prov, Perm: deps.Perm,
+		Tools: tool.Registry(), DataDir: dataDir, Log: logger,
+		Cfg: func(dir string) (*protocol.Config, error) {
+			return loader.LoadAt(globalDir, dir)
+		},
+		Drivers: drivers,
+	})
+	if err != nil {
+		closeDB()
+		return fail(err)
+	}
+	deps.Engine = engine
 	return deps, closeDB, nil
 }
 
@@ -189,9 +207,9 @@ func envMap() map[string]string {
 	return env
 }
 
-// tuiMode runs `yolo [<sessionID>] [--dir DIR]`: in-process server on an
+// tuiCmd runs `yolo [<sessionID>] [--dir DIR]`: in-process server on an
 // ephemeral port + the TUI.
-func tuiMode(args []string) int {
+func tuiCmd(args []string) int {
 	fs := flag.NewFlagSet("yolo", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	dir := fs.String("dir", "", "project directory (default CWD)")
@@ -251,7 +269,7 @@ func tuiMode(args []string) int {
 		}
 	}
 
-	app := tui.NewApp(cl, &store.Store{}, sessionID)
+	app := tui.NewApp(cl, store.Store{}, sessionID)
 	_, runErr := tea.NewProgram(app).Run()
 	app.Close()
 	drain(deps, srv)
@@ -278,7 +296,7 @@ func drain(deps *server.Deps, srv *server.Server) {
 	deps.Log.Close()
 }
 
-func serve(args []string) int {
+func serveCmd(args []string) int {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	addr := fs.String("addr", "127.0.0.1:4096", "listen address")
 	// ExitOnError: Parse prints and os.Exit's on bad flags, never returns

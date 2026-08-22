@@ -7,7 +7,7 @@ import "strings"
 // Port of upstream shell.ts tail() (v1.18.18), including the UTF-8-boundary
 // cut of a single over-long line.
 func Truncate(text string, l Limits) (string, bool) {
-	l = l.def()
+	l = l.withDefaults()
 	lines := strings.Split(text, "\n")
 	if len(lines) <= l.MaxLines && len(text) <= l.MaxBytes {
 		return text, false

@@ -154,7 +154,10 @@ func (grepTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 		searchDir = filepath.Dir(requested)
 	}
 
-	matches, truncated := grepWalk(searchDir, re, include)
+	matches, truncated, werr := grepWalk(searchDir, re, include)
+	if werr != nil {
+		return Output{}, werr
+	}
 	if len(matches) == 0 {
 		return empty, nil
 	}
@@ -185,8 +188,8 @@ func (grepTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 // grepWalk walks searchDir depth-first, collecting up to grepLimit
 // matches. Skips hidden entries (ripgrep --hidden default false), files
 // over 10MB, and NUL-binary files (first 8000 bytes).
-func grepWalk(searchDir string, re *regexp.Regexp, include string) (matches []grepMatch, truncated bool) {
-	_ = filepath.WalkDir(searchDir, func(dpath string, d fs.DirEntry, err error) error {
+func grepWalk(searchDir string, re *regexp.Regexp, include string) (matches []grepMatch, truncated bool, werr error) {
+	werr = filepath.WalkDir(searchDir, func(dpath string, d fs.DirEntry, err error) error {
 		if len(matches) == grepLimit {
 			truncated = true
 			return fs.SkipAll
@@ -221,16 +224,39 @@ func grepWalk(searchDir string, re *regexp.Regexp, include string) (matches []gr
 		if bytes.IndexByte(b[:min(len(b), grepBinWindow)], 0) >= 0 {
 			return nil
 		}
-		for i, line := range strings.Split(string(b), "\n") {
-			if re.MatchString(line) {
-				matches = append(matches, grepMatch{Path: dpath, Line: i + 1, Text: line})
+		// Walk lines with IndexByte instead of Split(string(b), "\n"): no
+		// whole-file string copy and no per-line slice array; the segment
+		// split (including the trailing empty one after a final newline)
+		// matches strings.Split exactly, and only matched lines are kept.
+		off, lineNo := 0, 1
+		for {
+			p := bytes.IndexByte(b[off:], '\n')
+			end := len(b)
+			if p >= 0 {
+				end = off + p
+			}
+			if re.Match(b[off:end]) {
+				matches = append(matches, grepMatch{Path: dpath, Line: lineNo, Text: string(b[off:end])})
 				if len(matches) == grepLimit {
 					truncated = true
 					return fs.SkipAll
 				}
 			}
+			if p < 0 {
+				break
+			}
+			off = end + 1
+			lineNo++
+			if off > len(b) {
+				break
+			}
 		}
 		return nil
 	})
+	// Per-entry errors are swallowed above (skip unreadable entries); the
+	// root-level error is load-bearing: surface it when nothing matched.
+	if werr != nil && len(matches) == 0 {
+		return nil, false, werr
+	}
 	return
 }
