@@ -57,6 +57,7 @@ type App struct {
 	// tea plumbing
 	size     tea.WindowSizeMsg
 	eventCh  chan protocol.Event
+	resyncCh chan struct{} // SSE drop pings from the client
 	stop     context.CancelFunc
 	emitSink func(cmds ...tea.Cmd) // test seam, set from _test.go only
 }
@@ -66,15 +67,17 @@ type App struct {
 // static (non-blinking) cursor.
 func NewApp(c *client.Client, s store.Store, startSessionID string) *App {
 	ctx, cancel := context.WithCancel(context.Background())
+	eventCh, resyncCh := c.Events(ctx)
 	a := &App{
-		Client:  c,
-		store:   s,
-		route:   routeHome,
-		home:    homeModel{now: nowMillis},
-		sess:    newSessionModel(80, 21),
-		size:    tea.WindowSizeMsg{Width: 80, Height: 24},
-		eventCh: c.Events(ctx),
-		stop:    cancel,
+		Client:   c,
+		store:    s,
+		route:    routeHome,
+		home:     homeModel{now: nowMillis},
+		sess:     newSessionModel(80, 21),
+		size:     tea.WindowSizeMsg{Width: 80, Height: 24},
+		eventCh:  eventCh,
+		resyncCh: resyncCh,
+		stop:     cancel,
 	}
 	in := textinput.New()
 	in.SetWidth(78)
@@ -93,9 +96,13 @@ func NewApp(c *client.Client, s store.Store, startSessionID string) *App {
 // Close stops the SSE pump. Call it once the program exits.
 func (a *App) Close() { a.stop() }
 
-// Init hydrates the starting route and arms the SSE pump.
+// Init hydrates the starting route and arms the SSE + resync pumps.
 func (a *App) Init() tea.Cmd {
-	return tea.Batch(a.hydrateCmd(), a.eventPump())
+	cmds := []tea.Cmd{a.hydrateCmd(), a.eventPump()}
+	if c := a.resyncPump(); c != nil {
+		cmds = append(cmds, c)
+	}
+	return tea.Batch(cmds...)
 }
 
 // Update dispatches one message; every state change re-renders on return
@@ -133,6 +140,12 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 	case connLostMsg:
 		a.store.Live = false
 		return nil
+	case resyncMsg:
+		// The SSE stream dropped (the client is reconnecting): events
+		// published in the gap are unrecoverable — re-hydrate the current
+		// route over REST and re-arm the resync pump.
+		a.sess.isDirty = true
+		return tea.Batch(a.hydrateCmd(), a.resyncPump())
 	case spinMsg:
 		a.spinIdx++
 		if a.statusSeg() != "" {
@@ -177,6 +190,11 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 // handles reconnects with its internal backoff loop.
 type connLostMsg struct{}
 
+// resyncMsg signals one dropped /event connection (the client is
+// reconnecting with backoff); the app re-hydrates its current route to
+// recover the events published in the gap.
+type resyncMsg struct{}
+
 // afterApply arms the footer spinner when a just-applied event left the
 // session non-idle.
 func (a *App) afterApply(cmd tea.Cmd) tea.Cmd {
@@ -199,6 +217,23 @@ func (a *App) eventPump() tea.Cmd {
 			return connLostMsg{}
 		}
 		return EventMsg{Event: ev}
+	}
+}
+
+// resyncPump blocks on the resync channel and delivers resyncMsg per ping;
+// the resyncMsg case re-arms it. A closed channel (ctx done) ends the pump
+// quietly — connLostMsg arrives via the event channel at the same time.
+func (a *App) resyncPump() tea.Cmd {
+	ch := a.resyncCh
+	if ch == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		_, ok := <-ch
+		if !ok {
+			return nil
+		}
+		return resyncMsg{}
 	}
 }
 

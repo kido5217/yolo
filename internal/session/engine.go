@@ -65,18 +65,19 @@ type Deps struct {
 }
 
 type Engine struct {
-	db      *storage.DB
-	bus     *bus.Bus
-	prov    *provider.Registry
-	perm    *permission.Service
-	tools   map[string]tool.Tool
-	schemas map[string]json.RawMessage // marshalled tool Schema per id, built once in New
-	lg      *log.Logger
-	dataDir string
-	cfg     func(projectDir string) (*protocol.Config, error)
-	drivers map[string]llm.Driver
-	clock   func() int64
-	backoff func(attempt int) time.Duration
+	db        *storage.DB
+	bus       *bus.Bus
+	prov      *provider.Registry
+	perm      *permission.Service
+	tools     map[string]tool.Tool
+	schemas   map[string]json.RawMessage // marshalled tool Schema per id, built once in New
+	lg        *log.Logger
+	dataDir   string
+	outputDir string // dataDir/tool-output (upstream TRUNCATION_DIR); "" if unset
+	cfg       func(projectDir string) (*protocol.Config, error)
+	drivers   map[string]llm.Driver
+	clock     func() int64
+	backoff   func(attempt int) time.Duration
 
 	mu     sync.Mutex
 	busy   map[string]context.CancelFunc
@@ -118,20 +119,21 @@ func New(d Deps) (*Engine, error) {
 		backoff = defaultBackoff
 	}
 	return &Engine{
-		db:      d.DB,
-		bus:     d.Bus,
-		prov:    d.Prov,
-		perm:    d.Perm,
-		tools:   d.Tools,
-		schemas: schemas,
-		lg:      d.Log,
-		dataDir: d.DataDir,
-		cfg:     d.Cfg,
-		drivers: d.Drivers,
-		clock:   clock,
-		backoff: backoff,
-		busy:    map[string]context.CancelFunc{},
-		shells:  map[string]*tool.Shell{},
+		db:        d.DB,
+		bus:       d.Bus,
+		prov:      d.Prov,
+		perm:      d.Perm,
+		tools:     d.Tools,
+		schemas:   schemas,
+		lg:        d.Log,
+		dataDir:   d.DataDir,
+		outputDir: outputDirFor(d.DataDir),
+		cfg:       d.Cfg,
+		drivers:   d.Drivers,
+		clock:     clock,
+		backoff:   backoff,
+		busy:      map[string]context.CancelFunc{},
+		shells:    map[string]*tool.Shell{},
 	}, nil
 }
 
@@ -141,6 +143,15 @@ func defaultBackoff(attempt int) time.Duration {
 	base := time.Second << uint(attempt-1)
 	jitter := 0.8 + 0.4*rand.Float64()
 	return time.Duration(float64(base) * jitter)
+}
+
+// outputDirFor maps the data dir to the truncated-bash output dir (upstream
+// TRUNCATION_DIR = Global.Path.data + "tool-output"); unset data dir → "".
+func outputDirFor(dataDir string) string {
+	if dataDir == "" {
+		return ""
+	}
+	return filepath.Join(dataDir, "tool-output")
 }
 
 // SendResult identifies the persisted user message and its text part.
@@ -475,8 +486,11 @@ func (e *Engine) buildRequest(t *turn) (llm.Request, error) {
 //   - every tool part produces one RoleTool message right after its assistant
 //     (completed -> output, error -> error text);
 //   - empty assistant messages are skipped;
-//   - the request ends with the newest user message, re-appended when the
-//     history no longer ends with it (tool-call rounds).
+//   - the request mirrors the persisted history 1:1 (upstream
+//     message-v2.toModelMessagesEffect): a tool round ends with the TOOL
+//     result — the user message is NEVER re-appended (deviation 77: the
+//     plan's re-append made the model see its instruction re-issued every
+//     round, which looped weak models into re-running tools).
 func (e *Engine) messagesFor(t *turn) ([]llm.Message, error) {
 	sys, err := BuildSystemPrompt(t.row.ProjectDir, t.model, t.model.ID, t.info.ID)
 	if err != nil {
@@ -535,18 +549,14 @@ func (e *Engine) messagesFor(t *turn) ([]llm.Message, error) {
 	}
 
 	reminders := PlanReminders(hist, t.agent)
-	var lastUserContent string
-	var lastMappedRole llm.Role
 	for i, mw := range hist {
 		switch mw.Info.Role {
 		case "user":
 			content := joinTextParts(mw.Parts)
 			if i == lastUserIdx {
 				content = appendReminders(content, reminders)
-				lastUserContent = content
 			}
 			out = append(out, llm.Message{Role: llm.RoleUser, Content: content})
-			lastMappedRole = llm.RoleUser
 		case "assistant":
 			var texts []string
 			var calls []llm.ToolCall
@@ -573,15 +583,10 @@ func (e *Engine) messagesFor(t *turn) ([]llm.Message, error) {
 				continue
 			}
 			out = append(out, llm.Message{Role: llm.RoleAssistant, Content: strings.Join(texts, "\n"), ToolCalls: calls})
-			lastMappedRole = llm.RoleAssistant
 			if len(toolMsgs) > 0 {
 				out = append(out, toolMsgs...)
-				lastMappedRole = llm.RoleTool
 			}
 		}
-	}
-	if lastUserIdx >= 0 && lastMappedRole != llm.RoleUser {
-		out = append(out, llm.Message{Role: llm.RoleUser, Content: lastUserContent})
 	}
 	return out, nil
 }
@@ -1130,6 +1135,7 @@ func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part)
 		Dir:       t.row.ProjectDir,
 		Shell:     e.shellFor(t.sessionID, t.row.ProjectDir),
 		Limits:    e.limitsFor(t.cfg),
+		OutputDir: e.outputDir,
 		Storage:   e.db,
 		SessionID: t.sessionID,
 	}

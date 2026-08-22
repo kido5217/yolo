@@ -113,6 +113,76 @@ func TestRenderMessages(t *testing.T) {
 			empty: true,
 			want:  "",
 		},
+		{
+			// Upstream parity: a completed bash part shows its output
+			// inline (10-line head, "…" overflow hint) without alt+e.
+			name: "completed bash collapsed shows 10-line head preview",
+			mutate: func(s *store.Store) {
+				s.Messages[1].Parts[2].State = &protocol.ToolState{
+					Status: "completed", Title: "ls -la",
+					Output: "l1\nl2\nl3\nl4\nl5\nl6\nl7\nl8\nl9\nl10\nl11\nl12",
+				}
+			},
+			want: "User: hello\n" +
+				dividerLine() + "\n" +
+				"\u25B8 think\n" +
+				"\u2713 read src/main.go\n" +
+				"\u2713 bash ls -la\n" +
+				"  l1\n  l2\n  l3\n  l4\n  l5\n  l6\n  l7\n  l8\n  l9\n  l10\n  \u2026\n" +
+				"\u2717 grep pattern: no match\n" +
+				"ok-text",
+		},
+		{
+			name: "completed bash with short output shows it fully, no hint",
+			mutate: func(s *store.Store) {
+				s.Messages[1].Parts[2].State = &protocol.ToolState{
+					Status: "completed", Title: "ls -la", Output: "a\nb",
+				}
+			},
+			want: "User: hello\n" +
+				dividerLine() + "\n" +
+				"\u25B8 think\n" +
+				"\u2713 read src/main.go\n" +
+				"\u2713 bash ls -la\n" +
+				"  a\n  b\n" +
+				"\u2717 grep pattern: no match\n" +
+				"ok-text",
+		},
+		{
+			// Expanded: the existing tail block alone (no duplicated preview).
+			name: "completed bash expanded shows tail block without preview",
+			mutate: func(s *store.Store) {
+				s.Messages[1].Parts[2].State = &protocol.ToolState{
+					Status: "completed", Title: "ls -la",
+					Output: "l1\nl2\nl3\nl4\nl5\nl6\nl7\nl8\nl9\nl10\nl11\nl12",
+				}
+			},
+			expanded: map[string]bool{"t2": true},
+			want: "User: hello\n" +
+				dividerLine() + "\n" +
+				"\u25B8 think\n" +
+				"\u2713 read src/main.go\n" +
+				"\u2713 bash ls -la\n" +
+				"  l1\n  l2\n  l3\n  l4\n  l5\n  l6\n  l7\n  l8\n  l9\n  l10\n  l11\n  l12\n" +
+				"\u2717 grep pattern: no match\n" +
+				"ok-text",
+		},
+		{
+			// Regression: an expanded tool with empty output must not drop the
+			// parts rendered after it (the old `break` escaped the parts loop).
+			name: "expanded empty-output tool keeps later parts",
+			mutate: func(s *store.Store) {
+				s.Messages[1].Parts[1].State.Output = ""
+			},
+			expanded: map[string]bool{"t1": true},
+			want: "User: hello\n" +
+				dividerLine() + "\n" +
+				"\u25B8 think\n" +
+				"\u2713 read src/main.go\n" +
+				"\u25B6 bash ls -la\n" +
+				"\u2717 grep pattern: no match\n" +
+				"ok-text",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

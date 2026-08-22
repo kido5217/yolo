@@ -118,6 +118,11 @@ func buildDeps(workDir string) (*server.Deps, func(), error) {
 	}
 	logger := log.New(dataDir)
 
+	// Retention sweep for full outputs of truncated bash runs (upstream
+	// runs it hourly; v1 runs it once at startup). Best effort: the
+	// hygiene pass must not block boot.
+	_ = tool.CleanOutputDir(filepath.Join(dataDir, "tool-output"))
+
 	fail := func(err error) (*server.Deps, func(), error) {
 		logger.Errorf("startup failed: %v", err)
 		logger.Close()

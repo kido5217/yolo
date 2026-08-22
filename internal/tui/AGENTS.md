@@ -20,6 +20,15 @@ teatest suites.
   `internal/llm` / `internal/llm/fake` (scripted fake turns).
 - V1 behavior pins (PROGRESS.md "Key verified facts"): keymap is pgup/pgdn
   scroll + `\`+enter newline (noted in /help).
+- SSE drop contract (v0.1.3): `client.Events` returns `(events, resync)` —
+  every dropped `/event` connection pings resync (the bus has no replay, so
+  gap events are unrecoverable); the app re-hydrates the current route on
+  `resyncMsg` (app.go) and re-arms `resyncPump`. Never make reconnects
+  silent again (the pre-v0.1.3 silent reconnect left the footer stuck on
+  `busy` and the transcript stale).
+- Completed `bash` tool parts render an inline output preview (10-line head,
+  `…` overflow hint, `headPreview` in session.go) without alt+e — upstream
+  parity; other tools stay row-only until expanded.
 
 ## Work Guidance
 

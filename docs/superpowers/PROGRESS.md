@@ -1,7 +1,7 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-22 (**v0.1.2 released**: PR #4 merged, tag + release at `f14ed75`;
-0.2.0 seed ready)
+**Updated:** 2026-08-22 (**v0.1.3 output-fix branch complete**: 4 commits on
+`v0.1.3_output_fix`, gate green, PR pending user merge)
 
 Rolling checkpoint: active task + last-completed + verified facts + v0.1.2-era deviation log +
 open items. Keep it small — `git log --oneline` and the plan files are the archive (no
@@ -10,18 +10,18 @@ per-task history, no plan-slice copies). Pre-v0.1.2 deviations (items 1–66, fr
 
 ## Where we are
 
-**v0.1.0** and **v0.1.1** are complete — merged, tagged, released. **v0.1.2**
-(skill-driven review) released 2026-08-22: PR #4 merged (`f14ed75`), tag + GitHub
-release published. Out-of-scope features and the 90 deferred contract-risk findings →
-0.2.0.
+**v0.1.0**, **v0.1.1**, **v0.1.2** complete — merged, tagged, released. **v0.1.3**
+(user-reported output/hang bugfix) is implemented on branch `v0.1.3_output_fix`
+(4 commits, base `main` = `6046ed1`); awaiting **user PR merge**, then tag `v0.1.3`
+(semantic patch: fixes only). 0.2.0 still needs a design (brainstorm) + plan after.
 
 ## Resume instructions
 
-1. Repo: `/home/kido/network/projects/yolo`, on `main` (v0.1.2 released, `f14ed75`).
-   **No active plan** — the v0.1.2 plan/spec and the original port plan/spec are all
-   closed (archived under `plans/` + `specs/`). 0.2.0 needs a new design first
-   (`brainstorming`), then a plan (`writing-plans`) sourced from the 0.2.0 seed below —
-   before any implementation.
+1. Repo: `/home/kido/network/projects/yolo`. If resuming the v0.1.3 line: check out
+   `v0.1.3_output_fix` (up to date with origin after push). No active plan — the
+   v0.1.3 work was a user-reported bugfix (systematic-debugging + TDD per commit),
+   not a plan task. 0.2.0 needs a new design (`brainstorming`), then a plan
+   (`writing-plans`) sourced from the 0.2.0 seed below — before any implementation.
 2. Per task of any future plan: Step 1 failing test → Step 2 confirm FAIL → Step 3
    minimal impl → Step 4 `go vet ./... && go test ./...` (+ gofmt + golangci-lint) PASS
    → Step 5 commit with the plan's pinned message; then roll this file (active →
@@ -29,24 +29,46 @@ release published. Out-of-scope features and the 90 deferred contract-risk findi
 
 ## Active
 
-**v0.1.2 RELEASED** (2026-08-22): PR #4 merged to `main` (`f14ed75`), annotated tag
-`v0.1.2` + GitHub release published
-(https://github.com/kido5217/yolo/releases/tag/v0.1.2). Review scope is closed — all 15
-waves + roll-up done, gate green. **Awaiting user:** green-light the **0.2.0** design
-(brainstorm) + plan (writing-plans). 0.2.0 seed:
+**Awaiting user:** merge the v0.1.3 PR (`v0.1.3_output_fix` → `main`, PR #7) and tag
+`v0.1.3`. Commits: `85a227e` fix(tool) marker decode + cwd newline; `16a2e13` fix(tui)
+SSE-drop re-hydrate + SSE write-error return; `968b9ba` test(tui) resync-pump flake;
+`da25275` feat(tui) inline bash output preview; `18ea0b6` fix(tool) save full truncated
+bash output + verbatim marker (loop in `ses_EuCqnuD7PTQQxVu5xmFX` — the model re-ran
+`go test -v` ~14× because the 1036-of-1209-line tail arrival was silent; upstream
+shell.ts:579 pins the `Full output saved to:` marker the v1 plan omitted — Task 11
+pinned only `tail()`, so this is a port gap, deviation 76); `9d88357`
+fix(session) drop user-message re-append on tool rounds — history replay is
+1:1 with upstream (loop in `ses_Mt8jhDCdseSyZjcqVhED`: same prompt does NOT
+loop in upstream opencode, so the re-append was the diff; deviation 77).
+Root causes: (1) `16d0483` (v0.1.2 datastruct-2)
+re-wrote the shared end-marker regex without re-teaching `decodeMarker` — from the
+2nd bash command on the reported exit code was the marker counter and the cwd was never
+decoded (a latent extra bug: `pwd`'s trailing newline in the base64 made the respawn
+`os.Stat` fail → always respawned in the root dir); (2) the TUI never noticed its SSE
+stream dropping (silent reconnect, no re-hydrate) — a lost `session.status` left the
+footer stuck on `busy` forever ("hang") with a stale transcript ("nothing printed");
+(3) bash output was row-only until alt+e (upstream shows it inline);
+(4) truncated bash output reached the model silently — `tail()` was ported without
+upstream's full-output save + `Full output saved to:` marker (plan Task 11 pinned only
+`tail()`), so a 1036-of-1209-line CI-gate run arrived mid-stream and the model
+re-ran the gate ~14×;
+(5) plan Task 16's LOCKED mapping RE-APPENDED the newest user message at the tail of
+every tool-call round, so the model re-saw its own instruction each round and re-ran
+tools in a loop even with (4) fixed — upstream replays history 1:1 (round ends with
+the tool result). Decisive diff: the same prompt+model does NOT loop in upstream
+opencode. 0.2.0 seed:
 `docs/superpowers/reviews/v0.1.2/DEFERRED.md` + `08-refactoring-backlog.md` + the
 version-wiring open item below.
 
 ## Last completed
 
-v0.1.2 released (2026-08-22): PR #4 → `main` merge `f14ed75`; annotated tag `v0.1.2` +
-GitHub release (276 findings: 188 fixed, 90 deferred to 0.2.0; gate green at tag).
-Task 16 (roll-up): `DEFERRED.md` (0.2.0 seed) written by roll-up subagent (YOLO per
-deviation 69) — 15-row wave summary (276 findings: 188 fixed, 90 deferred, 0 false,
-0 wontfix) + per-skill details + verbatim wave-8 refactor backlog; committed 58dc459.
-Wave-13 (benchmark) Summary row does not sum (8 delivered + 2 candidate-deferred) —
-footnoted in DEFERRED.md + logged as deviation 72. Final gate green (vet+test, gofmt,
-golangci-lint, clean tree).
+v0.1.3 branch (2026-08-22): the reported loop + all five contributing causes fixed
+with failing tests first (shell marker exit/cwd; SSE-drop resync; inline bash preview +
+expanded-empty-output parts-loop escape; truncated-bash full-output save + marker;
+history replay 1:1 — dropped the plan's user-message re-append), full gate green
+(vet+test+gofmt+golangci-lint), branch pushed (PR #7). Evidence:
+hung session `ses_wNbfyVPnHLrEyJXM8nrr` (12 ok CI-gate runs with incrementing phantom
+`exit:5..16` metadata.
 
 ## Open items
 
@@ -99,6 +121,16 @@ ANSI256 SGR (derived from TERM alone, no terminfo; `charmbracelet/colorprofile` 
 indirect — never import directly, "no other deps" rule); (c) v2 `tea.Tick(d, f)` callback
 is `func(time.Time) tea.Msg` (v1: `func() tea.Msg`); v2 programs handle `tea.QuitMsg`
 internally.
+- Shell end-marker wire form (v0.1.3, verified against live markers):
+`__YOLO_END_{n}_{exit}_{b64(pwd incl. trailing \n)}` matched by the shared regex
+`^__YOLO_END_(\d+)_([^\s]*)$` with `m[1]==n`; `decodeMarker` splits `m[2]` at the first
+`_` (std base64 has no `_`) and trims `pwd`'s newline. The emitted marker has never
+carried a colon (one stale comment claimed `_{n}_:`, a doc typo since the protocol's
+first commit `ae0ff27`); the pre-v0.1.3 `decodeMarker` mis-parsed the GROUP positions,
+not a separator. The first command (n=0) masked the group bug because counter==0.
+- SSE drop contract (v0.1.3): `client.Events` returns `(events, resync)`; a ping per drop
+(buffered, non-blocking); app re-hydrates the current route on `resyncMsg` (the bus has
+no replay — gap events are unrecoverable, recovery is REST hydration from storage).
 
 ## Plan deviations logged (append-only; items 1–66 in `docs/superpowers/deviations-archive-v0.1.0.md` — pattern: tests define contract)
 
@@ -146,3 +178,66 @@ faithful representation (8 delivered + 2 candidate-deferred = seed info, not an 
 footnoted it directly under the DEFERRED.md Summary table, and recorded it here. The
 14 defect waves (1–12, 14, 15) all sum exactly: 268 findings = 188 fixed + 88 deferred
 + 0 false + 0 wontfix. No counts were altered.
+73. v0.1.3 marker-decode regression (bugfix, P0, 2026-08-22): the v0.1.2 review fix
+datastruct-2 (commit `16d0483`, "compile shell end-marker regex once per package")
+switched the per-n literal regex to the shared counter-carrying regex and updated the
+counter check, but left `decodeMarker` parsing the OLD group layout (group 1 = exit
+code). From the 2nd bash command on, the reported exit code was the incrementing marker
+counter and the cwd was never decoded (base64 of `"{exit}_{b64}"` fails). Proven in a
+user's production session (12 ok CI-gate runs, metadata `exit:5..16`). Also surfaced by
+the new test: a latent pre-existing bug — the marker encodes `$(pwd | base64 -w0)`, i.e.
+`pwd`'s trailing newline; the stored cwd therefore carried `\n`, the respawn `os.Stat`
+failed, and the shell always respawned in the root dir (no pre-v0.1.3 test ever killed
+the shell, so the documented "respawn from last cwd" never worked). Fixed in `85a227e`
+(split `m[2]` at first `_`, trim newline); `TestBashNonZeroExitIsSuccessWithMeta` kept
+masking the marker path because `exit 3` kills the shell (process-death path) —
+`TestBashMarkerExitCode` uses `(exit 4)` (shell survives) instead. The stale colon-marker
+comment in shell.go was corrected in the same commit.
+74. v0.1.3 SSE-drop re-hydrate (bugfix, P0, 2026-08-22): the TUI had no way to notice
+its `/event` stream dropping: the client reconnected silently and the app never
+re-hydrated, so events published in the gap were lost — a missed `session.status` kept
+the footer spinner on `busy` indefinitely (the user-visible "hang") and the transcript
+stayed stale (the user-visible "nothing printed"). Design gap rather than plan
+contradiction; fixed in `16a2e13`: `client.Events` now returns a resync ping channel,
+the app re-hydrates the current route on `resyncMsg` and re-arms `resyncPump`, and
+`server/sse.go` ends the response on a failed write (a dead stream) instead of holding
+the bus subscription until ctx cancel. Contract pinned in `internal/tui/AGENTS.md`.
+75. v0.1.3 inline bash output (bugfix/parity, P1, 2026-08-22): yolo rendered completed
+bash parts as row-only (output behind alt+e) while upstream opencode shows the output
+inline (10-line collapse + expand); a correct CI-gate run therefore looked like nothing
+was printed. Implemented `headPreview` (10-line head, `…` hint; upstream
+`collapseToolOutput` parity) in `da25275`. Same commit fixes a latent render bug found
+while adding the case: the expanded-tool empty-output branch used `break`, escaping the
+PARTS loop and silently dropping every part after an expanded empty-output tool; it now
+`continue`s. The two permission teatest suites needed a taller terminal (80x10 → 80x16)
+because the inline preview grows the end transcript to 9 lines beyond the 7-row
+viewport — test-only, documented in `permHarness`.
+76. Truncated-bash output port gap (bugfix, P0, 2026-08-22): the v1 plan (Task 11,
+line 3178) pinned only the `tail()` helper — upstream shell.ts's accompanying
+behavior (store the FULL output at `Global.Path.data/tool-output/tool_<id>` and
+prepend `...output truncated...\n\nFull output saved to: ${file}\n\n` +
+metadata.outputPath, 7-day retention) was never in scope, so truncated arrivals
+reached the model silently (tail only, no marker): in session
+`ses_EuCqnuD7PTQQxVu5xmFX` the model re-ran the CI gate ~14× ("truncated at the
+beginning", cat/tee workarounds). Fixed in `18ea0b6`: `tool.WriteFullOutput` +
+`tool.CleanOutputDir` (dataDir/tool-output; startup sweep, 7-day retention),
+bash.go verbatim marker + meta.outputPath, engine wires `Env.OutputDir`.
+Pinned by `TestBashTruncatedOutputTellsModelWhereFullOutputIs`, which asserts
+the marker in the SECOND MODEL ROUND's tool message (the model-visible
+contract), not just the stored part.
+77. History re-append made the model re-see its user instruction EVERY tool
+round (bugfix, P0, 2026-08-22): plan Task 16 LOCKED a "request ends with the
+newest user message, re-appended on tool-call rounds" mapping. Upstream
+(`message-v2.toModelMessagesEffect`) maps persisted history 1:1 — in a tool
+round the request ends with the TOOL result and the user message appears
+ONCE. With the re-append, each round re-issued the user prompt verbatim at
+the tail, which Qwen3.8-27B read as "the user is asking again" and it re-ran
+the CI gate ~14× without ever emitting a final text answer
+(session `ses_Mt8jhDCdseSyZjcqVhED`, turn aborted 17:53:32). The same prompt
+on the same model in upstream opencode does NOT loop — the decisive diff.
+Fix: drop the re-append (`engine.messagesFor`); the request mirrors history
+1:1. `TestHistoryReplayIncludesToolResults` now pins tail [user, assistant,
+tool] + exactly ONE user message. Residual minor divergences noted, not
+changed: yolo sends system entries as separate RoleSystem messages (upstream
+joins to one string) and omits reasoning parts on replay (upstream replays
+them) — neither is tool-round-specific; revisit if a loop recurs.

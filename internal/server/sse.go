@@ -36,15 +36,17 @@ func (s *Server) handleEvent(w http.ResponseWriter, r *http.Request) {
 			}
 			// Three writes instead of Fprintf: identical wire bytes,
 			// no fmt buffer growth for large frames. A failed write
-			// means the stream is dead (the loop exits on ctx done).
+			// means the stream is dead: end the response (the client
+			// reconnects) instead of holding the bus subscription for a
+			// gone client until ctx cancel.
 			if _, err := io.WriteString(w, "data: "); err != nil {
-				continue
+				return
 			}
 			if _, err := w.Write(b); err != nil {
-				continue
+				return
 			}
 			if _, err := io.WriteString(w, "\n\n"); err != nil {
-				continue
+				return
 			}
 			fl.Flush()
 		}

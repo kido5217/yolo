@@ -41,7 +41,7 @@ var endMarkerRe = regexp.MustCompile(`^__YOLO_END_(\d+)_([^\s]*)$`)
 // It keeps one `bash --norc --noprofile` process alive across Exec calls so
 // that `cd`, environment assignments, and other shell state carry over.
 // Each command is written as its lines followed by a marker line
-// `echo __YOLO_END_{n}_:$?_$(pwd | base64 -w0)`; output (stderr wired to the
+// `echo __YOLO_END_{n}_$?_$(pwd | base64 -w0)`; output (stderr wired to the
 // same pipe) is read until the emitted line matches the shared endMarkerRe
 // with counter n — the exit code and the new cwd come from the marker.
 // On timeout/abort the process group is SIGKILL'd and the shell is marked
@@ -172,14 +172,24 @@ func (s *Shell) Exec(ctx context.Context, command string, timeoutMS int, onLine 
 
 // decodeMarker decodes a matched end-marker into the previous command's
 // exit code (0 when unparseable) and the new cwd ("" when absent or
-// undecodable).
+// undecodable). The regex captures the marker counter (m[1]) and the rest
+// "{code}_{b64cwd}" (m[2]); the underscore separates code from cwd (the
+// standard base64 alphabet has no underscore).
 func decodeMarker(m []string) (code int, dir string) {
-	if c, aerr := strconv.Atoi(m[1]); aerr == nil {
+	rest := m[2]
+	i := strings.IndexByte(rest, '_')
+	if i < 0 {
+		return 0, ""
+	}
+	if c, aerr := strconv.Atoi(rest[:i]); aerr == nil {
 		code = c
 	}
-	if b64 := m[2]; b64 != "" {
+	if b64 := rest[i+1:]; b64 != "" {
 		if p, derr := base64.StdEncoding.DecodeString(b64); derr == nil {
-			dir = string(p)
+			// pwd prints a trailing newline into the pipe; drop it so the
+			// stored cwd is a real path (a raw "\n" suffix would make the
+			// respawn's os.Stat fail and silently land in the root dir).
+			dir = strings.TrimSuffix(string(p), "\n")
 		}
 	}
 	return code, dir

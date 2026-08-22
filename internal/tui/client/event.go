@@ -17,19 +17,30 @@ import (
 var sseDataPrefix = []byte("data: ")
 
 // Events streams server events (GET /event, SSE) until ctx is done. On a
-// dropped connection it backs off (c.backoff(attempt)) and reconnects; the
-// returned channel is closed by the reader when ctx is done and nothing is
-// emitted after that.
-func (c *Client) Events(ctx context.Context) chan protocol.Event {
+// dropped connection it backs off (c.backoff(attempt)) and reconnects; both
+// channels are closed by the reader when ctx is done and nothing is emitted
+// after that. The resync channel receives a ping on every drop: events
+// published while the stream was down are lost (the bus has no replay), so
+// the caller must re-hydrate its state over REST on each ping.
+func (c *Client) Events(ctx context.Context) (chan protocol.Event, chan struct{}) {
 	ch := make(chan protocol.Event, 4)
+	resync := make(chan struct{}, 4)
 	go func() {
 		defer close(ch)
+		defer close(resync)
 		n := 0
 		for {
 			if err := c.stream(ctx, ch); err == nil {
 				return // ctx done
 			}
 			n++
+			// The drop just happened: signal the caller to resync. A full
+			// buffer (slow consumer) drops the ping — a later ping or the
+			// next event's re-render converges the state.
+			select {
+			case resync <- struct{}{}:
+			default:
+			}
 			select {
 			case <-ctx.Done():
 				return
@@ -37,7 +48,7 @@ func (c *Client) Events(ctx context.Context) chan protocol.Event {
 			}
 		}
 	}()
-	return ch
+	return ch, resync
 }
 
 // stream reads one /event connection to exhaustion. It returns nil when ctx

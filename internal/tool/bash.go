@@ -121,6 +121,15 @@ func (bashTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 		text = "(no output)"
 	}
 	meta := map[string]any{"truncated": cut}
+	if cut {
+		// Upstream shell.ts: a truncated run stores the FULL output and
+		// tells the model the path — without the marker the model sees a
+		// silent mid-stream start and re-runs the command in a loop.
+		if file, werr := WriteFullOutput(env.OutputDir, out); werr == nil && file != "" {
+			text = "...output truncated...\n\nFull output saved to: " + file + "\n\n" + text
+			meta["outputPath"] = file
+		}
+	}
 	if code != 0 {
 		// Non-zero exit is NOT a tool error; the model sees the exit code
 		// only when present.
