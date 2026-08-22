@@ -1,5 +1,7 @@
-# v0.1.2 — Deferred & Wontfix (0.2.0 seed)
-Generated: 2026-08-22
+# Deferred backlog — 0.3.0 slice (from the v0.1.2 review)
+Source: v0.1.2 review waves (generated 2026-08-22). Living work list: each
+item gets its disposition recorded here when implemented (see spec
+`2026-08-22-v0.2.0-design.md` §5; beads epic `yolo-8vl`, 0.3.0 slice `yolo-k98`).
 ## Summary
 | skill | findings | fixed | false | deferred | wontfix |
 |---|---|---|---|---|---|

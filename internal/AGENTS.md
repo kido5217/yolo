@@ -62,7 +62,7 @@ contracts.
 
 - Root CI gate at module root: `go vet ./... && go test ./...` plus clean
   `gofmt -l .`; the v0.1.2 commit gate adds `golangci-lint run ./...`
-  (see PROGRESS.md "Active").
+  (root "Commands & verification").
 - Unit tests never hit the network (live paths env-gated; e2e user-run only).
 
 ## Child DOX Index

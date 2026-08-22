@@ -2,30 +2,31 @@
 
 ## Purpose
 
-The process tree: what the current session is doing, which plan + spec
-define the work, and where review findings land. `PROGRESS.md` is the
-single resume rail — read first by every new session (root "Key files").
+Process memory: durable verified facts, the deviation audit, the 0.3.0 work
+list, and the plans/specs/reviews layout. Task state lives in beads (release
+epic; `bd ready`) — the resume rail is beads → active spec/plan →
+`PROGRESS.md` (facts) → `DEVIATIONS.md` (audit) (root "Key documents").
 
 ## Ownership
 
-`PROGRESS.md`, `plans/`, `specs/`, `reviews/`,
-`deviations-archive-v0.1.0.md`.
+`PROGRESS.md`, `DEVIATIONS.md`, `DEFERRED.md`, `plans/`, `specs/`,
+`reviews/`, `deviations-archive-v0.1.0.md`.
 
 ## Local Contracts
 
-- `PROGRESS.md` is a rolling checkpoint, never a diary: active task (full
-  detail), one-line last-completed, open items, key verified facts,
-  append-only deviation log. Keep it small — `git log --oneline` and the
-  plan files are the archive. Roll it before moving on after any
-  checkpoint, plan/spec change, or deviation (root principle 6).
-- Deviation log: append-only, numbered, continuous across the archive
-  (items 1–66 frozen in `deviations-archive-v0.1.0.md`); plan
-  contradictions resolve per "tests define the contract" (root principle
-  5) and the resolution is logged with severity.
+- `PROGRESS.md` holds only key verified facts + the root-cause archive + a
+  one-line status pointer to beads — never task history. Task state is
+  beads; `git log --oneline` and the plan files are the archive (root
+  principle 6).
+- Deviation log (`DEVIATIONS.md`): append-only, numbered, continuous across
+  the archive (items 1–66 frozen in `deviations-archive-v0.1.0.md`); plan
+  contradictions resolve per "tests define the contract" (root principle 5)
+  and the resolution is logged with severity.
 - Layout: `plans/<date>-<topic>.md` = dated implementation plans (one
-  active, named in PROGRESS.md); `specs/<date>-<topic>-design.md` =
-  approved designs; `reviews/<version>/` = per-wave review findings
-  (e.g. `v0.1.2/`).
+  active, named in the beads epic); `specs/<date>-<topic>-design.md` =
+  approved designs; `DEFERRED.md` = living 0.3.0 work list (deferred
+  findings from the v0.1.2 review); `reviews/<version>/` = per-wave review
+  findings (e.g. `v0.1.2/`).
 - Subagents strictly one at a time (root principle 7).
 
 ## Work Guidance
