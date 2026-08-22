@@ -19,16 +19,52 @@ func benchStore(n int, expanded bool) *store.Store {
 	for i := 0; i < n; i++ {
 		mid := fmt.Sprintf("msg_bench_%03d", i)
 		parts := []protocol.Part{
-			{ID: mid + "_t0", MessageID: mid, SessionID: "ses_bench", Type: "text", Text: strings.Repeat("assistant answer line. ", 16)},
-			{ID: mid + "_t1", MessageID: mid, SessionID: "ses_bench", Type: "text", Text: strings.Repeat("another answer line. ", 16)},
-			{ID: mid + "_r", MessageID: mid, SessionID: "ses_bench", Type: "reasoning", Text: strings.Repeat("reasoning step. ", 16)},
 			{
-				ID: mid + "_tool", MessageID: mid, SessionID: "ses_bench", Type: "tool", Tool: "bash",
-				State: &protocol.ToolState{Status: "completed", Title: "ls -la /", Input: map[string]any{"command": "ls -la /"}, Output: strings.Repeat("file line output. ", 8)},
+				ID:        mid + "_t0",
+				MessageID: mid,
+				SessionID: "ses_bench",
+				Type:      "text",
+				Text:      strings.Repeat("assistant answer line. ", 16),
 			},
 			{
-				ID: mid + "_err", MessageID: mid, SessionID: "ses_bench", Type: "tool", Tool: "grep",
-				State: &protocol.ToolState{Status: "error", Title: "grep needle", Input: map[string]any{"pattern": "needle"}, Error: "grep: pattern error"},
+				ID:        mid + "_t1",
+				MessageID: mid,
+				SessionID: "ses_bench",
+				Type:      "text",
+				Text:      strings.Repeat("another answer line. ", 16),
+			},
+			{
+				ID:        mid + "_r",
+				MessageID: mid,
+				SessionID: "ses_bench",
+				Type:      "reasoning",
+				Text:      strings.Repeat("reasoning step. ", 16),
+			},
+			{
+				ID:        mid + "_tool",
+				MessageID: mid,
+				SessionID: "ses_bench",
+				Type:      "tool",
+				Tool:      "bash",
+				State: &protocol.ToolState{
+					Status: "completed",
+					Title:  "ls -la /",
+					Input:  map[string]any{"command": "ls -la /"},
+					Output: strings.Repeat("file line output. ", 8),
+				},
+			},
+			{
+				ID:        mid + "_err",
+				MessageID: mid,
+				SessionID: "ses_bench",
+				Type:      "tool",
+				Tool:      "grep",
+				State: &protocol.ToolState{
+					Status: "error",
+					Title:  "grep needle",
+					Input:  map[string]any{"pattern": "needle"},
+					Error:  "grep: pattern error",
+				},
 			},
 		}
 		st.Messages = append(st.Messages, protocol.MessageWithParts{

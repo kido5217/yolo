@@ -30,8 +30,14 @@ func footerApp(st store.Store) *recApp {
 
 func TestFooterRender(t *testing.T) {
 	idle := store.Store{
-		Live:    true,
-		Current: &protocol.Session{ID: "ses_1", Agent: "build", Model: refModel("kido", "q"), Cost: 0.0002, Tokens: protocol.Tokens{Input: 123, Output: 45}},
+		Live: true,
+		Current: &protocol.Session{
+			ID:     "ses_1",
+			Agent:  "build",
+			Model:  refModel("kido", "q"),
+			Cost:   0.0002,
+			Tokens: protocol.Tokens{Input: 123, Output: 45},
+		},
 	}
 	tests := []struct {
 		name   string

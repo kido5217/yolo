@@ -72,9 +72,24 @@ func TestRelTime(t *testing.T) {
 
 func TestHomeRenderLockedLayout(t *testing.T) {
 	a := testApp(
-		protocol.Session{ID: "ses_0", Title: "T1", Model: refModel("kido", "q"), Time: protocol.SessionTime{Updated: testNow - 120_000}},
-		protocol.Session{ID: "ses_1", Title: "T2", Model: refModel("opencode", "gpt-5-nano"), Time: protocol.SessionTime{Updated: testNow - 10_800_000}},
-		protocol.Session{ID: "ses_2", Title: "old", Model: refModel("kido", "q"), Time: protocol.SessionTime{Updated: testNow - 345_600_000}},
+		protocol.Session{
+			ID:    "ses_0",
+			Title: "T1",
+			Model: refModel("kido", "q"),
+			Time:  protocol.SessionTime{Updated: testNow - 120_000},
+		},
+		protocol.Session{
+			ID:    "ses_1",
+			Title: "T2",
+			Model: refModel("opencode", "gpt-5-nano"),
+			Time:  protocol.SessionTime{Updated: testNow - 10_800_000},
+		},
+		protocol.Session{
+			ID:    "ses_2",
+			Title: "old",
+			Model: refModel("kido", "q"),
+			Time:  protocol.SessionTime{Updated: testNow - 345_600_000},
+		},
 	)
 	div := strings.Repeat("─", 28)
 	want := "Yolo\n" +
