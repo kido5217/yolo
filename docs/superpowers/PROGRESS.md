@@ -1,7 +1,8 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-22 (logging coverage investigated — mechanism OK, 23 points
-thin by plan scope; rework deferred to 0.2.0 by user decision, seed in DEFERRED.md)
+**Updated:** 2026-08-22 (v0.2.0 spec approved section-by-section + committed —
+`docs/superpowers/specs/2026-08-22-v0.2.0-design.md`; user spec review pending,
+then `writing-plans`)
 
 Rolling checkpoint: active task + last-completed + verified facts + v0.1.2-era deviation log +
 open items. Keep it small — `git log --oneline` and the plan files are the archive (no
@@ -11,19 +12,19 @@ per-task history, no plan-slice copies). Pre-v0.1.2 deviations (items 1–66, fr
 ## Where we are
 
 **v0.1.0** – **v0.1.3** complete — merged, tagged, released (v0.1.3: PR #7 →
-`main` `1d3eca6` + tag + release cut). 0.2.0 still needs a design (brainstorm) +
-plan after a scope pick; the logging rework is one of its seeds
-(user-deferred 2026-08-22).
+`main` `1d3eca6` + tag + release cut). **v0.2.0 spec approved + committed**
+(2026-08-22, `docs/superpowers/specs/2026-08-22-v0.2.0-design.md`); user spec
+review pending, then `writing-plans`. Beads epic `yolo-8vl`.
 
 ## Resume instructions
 
 1. Repo: `/home/kido/network/projects/yolo`. v0.1.0–v0.1.3 are released on `main`;
-   the working branch for the (deferred) logging line is `v0.1.4_logging_fix`.
-   No active plan — 0.2.0 needs a new design (`brainstorming`), then a plan
-   (`writing-plans`), sourced from the 0.2.0 seeds in
-   `docs/superpowers/reviews/v0.1.2/DEFERRED.md` (incl. "logging rework (0.2.0)") +
-   `08-refactoring-backlog.md` — before any implementation. The logging rework is
-   user-deferred to 0.2.0 (2026-08-22): no v0.1.x logging code changes.
+   the working branch for 0.2.0 is `v0.2.0_docs`. No active plan — next: user
+   review of the approved spec `docs/superpowers/specs/2026-08-22-v0.2.0-design.md`,
+   then `writing-plans` (one plan from that spec). Scope: version wiring +
+   justfile, slog logging rework, 12 backlog fixes (all P0/P1 + 2 P2 perf);
+   0.3.0 slice = 66 remaining findings + 16 refactor entries (spec §5, bead
+   `yolo-k98`).
 2. Per task of any future plan: Step 1 failing test → Step 2 confirm FAIL → Step 3
    minimal impl → Step 4 `go vet ./... && go test ./...` (+ gofmt + golangci-lint) PASS
    → Step 5 commit with the plan's pinned message; then roll this file (active →
@@ -31,21 +32,32 @@ plan after a scope pick; the logging rework is one of its seeds
 
 ## Active
 
-**Logging rework → deferred to 0.2.0** (user decision 2026-08-22, on
-`v0.1.4_logging_fix`). Investigating "not enough data in yolo.log" found the
-`internal/log` **mechanism is healthy** (append + 5 MiB → `.1` rotation; tests
-green) but **coverage is thin by plan**: 23 log points, almost all fatal/error
-paths (engine 8 = persistence/marshal failures only; `serving on`/shutdown exist
-in `yolo serve` only, not the TUI path; nothing in LLM/tool/storage; no debug
-level). The v1 plan (Task 30) pinned exactly that minimal scope, so this is a
-scope decision, not a port gap. Full diagnosis + proposed 0.2.0 scope +
-constraints: `docs/superpowers/reviews/v0.1.2/DEFERRED.md` → "logging rework
-(0.2.0)". No v0.1.x logging code changes.
+**v0.2.0 spec — approved + committed, user review pending.** Spec:
+`docs/superpowers/specs/2026-08-22-v0.2.0-design.md`. Key decisions (approved
+section-by-section 2026-08-22):
+- Scope: version wiring + justfile, slog logging rework, 12 backlog fixes
+  (all P0/P1 + 2 P2 perf). 0.3.0 slice = remaining 66 deferred findings + 16
+  refactor entries (spec §5, bead `yolo-k98`, P4).
+- Version: `cmd/yolo` `version` var via ldflags `git describe`; VCS-stamped
+  `yolo version`; `-v`/`--version` (absorbs cli-4); `justfile` = single
+  scripts entry point (`just build`, `just e2e-live` passes through the bash
+  script).
+- Logging: slog-based `internal/log` (text handler, UTC, `run=` id),
+  `YOLO_LOG_LEVEL` (default INFO), `YOLO_PRINT_LOGS=1`, new points in
+  engine/LLM/tools/storage/config/auth/permission/cmd; absorbs `security-5`
+  (CWE-117, slog escaping) + `troubleshoot-2` (nil `Deps.Log` → `log.Noop()`).
+- Fix ⑦ parity RESOLVED: upstream's curated classifier
+  (`packages/llm/src/provider-error.ts`: 28 patterns + 3 exclusions +
+  `context_length_exceeded` + 413 + 400/413-no-body). Fix ⑫ parity RESOLVED:
+  upstream early-stops the walk at `limit+1` (`packages/core/src/ripgrep.ts`),
+  first 100 in walk order + truncation note.
+- Only open planning question: ⑩/⑪ snapshot ownership (spec §8).
+- Beads: epic `yolo-8vl` — `yolo-jv2` spec, `yolo-2bf` version+just,
+  `yolo-326` logging, `yolo-8vl.1`–`.12` fixes (`.7` depends on `.6`),
+  `yolo-k98` 0.3.0 slice.
 
-**Next (0.2.0):** the v1 port is feature-complete and released. 0.2.0 seeds live in
-`docs/superpowers/reviews/v0.1.2/DEFERRED.md` (+ the logging-rework section above) +
-`08-refactoring-backlog.md` (+ the version-wiring open item below). No active 0.2.0
-plan yet — start via `writing-plans` after user picks scope.
+**Next (0.2.0):** user reviews the spec → `writing-plans` (one plan from the
+spec; the plan-writer bead is created then).
 
 Root causes (archive, v0.1.3): (1) `16d0483` (v0.1.2 datastruct-2) re-wrote the shared
 end-marker regex without re-teaching `decodeMarker` — from the 2nd bash command on the
@@ -65,20 +77,19 @@ prompt+model does NOT loop in upstream opencode. Detail: deviations 73–77.
 
 ## Last completed
 
-Logging checkpoint (2026-08-22, `v0.1.4_logging_fix`): logger mechanism verified
-working (append + 5 MiB → `.1` rotation; `go test ./internal/log/...` green);
-coverage mapped — 23 points, thin by plan (engine = error paths only; TUI mode
-silent at start/stop; no LLM/tool/storage coverage; no levels); rework deferred
-to 0.2.0 by user decision with the full seed in DEFERRED.md → "logging rework
-(0.2.0)". (Prior: v0.1.3 released 2026-08-22 — PR #7 → `main` `1d3eca6` + tag +
-release; the five root causes are deviations 73–77.)
+v0.2.0 spec written + committed (2026-08-22, `v0.2.0_docs`): approved
+section-by-section; ⑦/⑫ upstream parity checks resolved against
+`/tmp/opencode-upstream` during brainstorming; beads epic `yolo-8vl` created
+(spec + 2 streams + 12 fixes + 0.3.0 slice). Also 2026-08-22: beads
+initialized (`a4c27f4`); claude/codex integrations removed — opencode-only
+(`1e4ddd2`); logging investigation (mechanism healthy, 23 points thin by plan;
+seed in DEFERRED.md). (Prior: v0.1.3 released — PR #7 → `main` `1d3eca6` + tag
++ release; the five root causes are deviations 73–77.)
 
 ## Open items
 
-- Version wiring (0.2.0, user decision 2026-08-21): `yolo version` prints hardcoded
-  `0.0.0-dev` (cmd/yolo/main.go:58, plan-derived placeholder; no ldflags/build-info
-  mechanism). Wire build-time version (e.g. ldflags `-X` from `git describe --tags`) in
-  0.2.0+ — not in v0.1.x.
+- [x] Version wiring — spec'd in v0.2.0 design §2 (ldflags + VCS stamping +
+  justfile); tracked as bead `yolo-2bf`.
 - [x] All 15 waves full-coverage (wave-1 skipped chunks backfilled — deviation 67; no
   residual `COVERAGE: skipped` notes)
 
