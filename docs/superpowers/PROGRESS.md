@@ -1,6 +1,7 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-22 (v0.1.2 in progress: wave 15/16 done, roll-up next)
+**Updated:** 2026-08-22 (**v0.1.2 review complete**: 15 waves, 276 findings — 188 fixed,
+90 deferred; pending PR review + tag go-ahead)
 
 Rolling checkpoint: active task + last-completed + verified facts + v0.1.2-era deviation log +
 open items. Keep it small — `git log --oneline` and the plan files are the archive (no
@@ -27,29 +28,27 @@ roll this file (active → one-line "Last completed", next task → "Active").
 
 ## Active
 
-v0.1.2 skill-driven review — **Task 16 roll-up next** (last of 16 tasks). Read plan
-Task 16 slice in full (lines ~908–985): Step 1 dispatch roll-up subagent (1 `task`
-call, YOLO per core principle 8 — deviation 69) to write `DEFERRED.md` (0.2.0 seed) —
-its verbatim prompt is in the plan; Step 2 commit roll-up `docs(review): v0.1.2 —
-roll-up: DEFERRED.md (0.2.0 seed)`; Step 3 orchestrator final gate
-(go vet+test, gofmt -l, golangci-lint; `git status --short` clean — on failure do NOT
-hand-edit code, dispatch one Template-F-shape fix subagent for the gate failures only);
-Step 4 reset PROGRESS.md "Active"/open items per plan (all-15-waves line); Step 5
-checkpoint `docs: checkpoint — v0.1.2 roll-up done; awaiting PR review + tag go-ahead`,
-then STOP and report: per-wave table (from DEFERRED.md Summary ONLY), gate result, PR
-head sha, and the three pending user decisions (PR review/open, merge, tag v0.1.2 — tag
-ONLY on explicit go-ahead).
+**v0.1.2 review COMPLETE** (all 16 tasks / 15 waves + roll-up done; Task 16 Step 3
+final gate green at `58dc459`: vet+test, gofmt, golangci-lint, clean tree). **Awaiting user:** (1) open PR
+`v0.1.2_skills_review` → `main` for review — orchestrator prepared the PR body (see
+plan Task 16 "PR body template"; fill the wave table from `DEFERRED.md` Summary ONLY);
+(2) merge (user-decided); (3) tag `v0.1.2` — **ONLY on explicit go-ahead** (AGENTS.md
+commit discipline + plan Global Constraints). 0.2.0 seed:
+`docs/superpowers/reviews/v0.1.2/DEFERRED.md` + `08-refactoring-backlog.md`. No further
+waves — the plan's execution phase is finished; this is the integration/decision gate.
 
 ## Last completed
 
+Task 16 (roll-up): `DEFERRED.md` (0.2.0 seed) written by roll-up subagent (YOLO per
+deviation 69) — 15-row wave summary (276 findings: 188 fixed, 90 deferred, 0 false,
+0 wontfix) + per-skill details + verbatim wave-8 refactor backlog; committed 58dc459.
+Wave-13 (benchmark) Summary row does not sum (8 delivered + 2 candidate-deferred) —
+footnoted in DEFERRED.md + logged as deviation 72. Final gate green (vet+test, gofmt,
+golangci-lint, clean tree).
 Wave 15 (code-style): 25 findings (P0:0 P1:0 P2:4 P3:21, commit 5665f01) — 24 FIXED
 (a38c6b9…cb56568, 9 commits; status cb56568), 1 pin-tag auto-defer (style-007, long
 schema line), 0 FALSE / 0 WONTFIX; stop-the-line n/a; teatest green (no rendered byte
 changed); gate green (vet+test, gofmt, golangci-lint).
-Wave 14 (naming): 50 findings (P0:0 P1:0 P2:1 P3:49, commit 7ec2196) — 42 FIXED
-(aa53daa…9fd780b, 9 commits; status 5da587d), 8 DEFERRED (6 contract auto-defers:
-wire JSON tags, behavior>5 files ×3, render error text; 1 0.2.0 additive enum
-sentinel; 1 test-name collision), 0 FALSE / 0 WONTFIX; stop-the-line n/a; gate green.
 
 ## Open items
 
@@ -57,7 +56,8 @@ sentinel; 1 test-name collision), 0 FALSE / 0 WONTFIX; stop-the-line n/a; gate g
   `0.0.0-dev` (cmd/yolo/main.go:58, plan-derived placeholder; no ldflags/build-info
   mechanism). Wire build-time version (e.g. ldflags `-X` from `git describe --tags`) in
   0.2.0+ — not in v0.1.x.
-- none from v0.1.2 waves (wave-1 skipped chunks backfilled to `COVERAGE: full` — deviation 67)
+- [x] All 15 waves full-coverage (wave-1 skipped chunks backfilled — deviation 67; no
+  residual `COVERAGE: skipped` notes)
 
 ## Key verified facts (so they don't get re-litigated)
 
@@ -139,3 +139,12 @@ User directive: "do not skip R14a, redo full step" — orchestrator removed the 
 and re-dispatched R14a fresh (full Template R, no resume of the placeholder); it returned
 `COVERAGE: full` (10 findings). This supersedes the plan fallback ("re-dispatch once,
 then mark skipped") for this chunk only, by explicit user override.
+72. Roll-up wave-13 Summary row (process, minor, 2026-08-22): the Task 16 roll-up
+subagent's wave-13 row reads `8 findings / 8 fixed / 2 deferred`, which does not sum
+(10 > 8). Cause: wave 13 (golang-benchmark) is assessment-only — its 8 Stats items are
+delivered benchmarks (all done), and its 2 "deferred" are benchmark *candidates* that
+were never findings. Per core principle 5 the orchestrator kept the row as the most
+faithful representation (8 delivered + 2 candidate-deferred = seed info, not an error),
+footnoted it directly under the DEFERRED.md Summary table, and recorded it here. The
+14 defect waves (1–12, 14, 15) all sum exactly: 268 findings = 188 fixed + 88 deferred
++ 0 false + 0 wontfix. No counts were altered.
