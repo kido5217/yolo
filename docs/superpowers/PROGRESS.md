@@ -1,6 +1,6 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-22 (v0.1.2 in progress: wave 14 in progress — step 1 done, next: fix subagent)
+**Updated:** 2026-08-22 (v0.1.2 in progress: wave 14/16 done, next wave 15 — code-style)
 
 Rolling checkpoint: active task + last-completed + verified facts + v0.1.2-era deviation log +
 open items. Keep it small — `git log --oneline` and the plan files are the archive (no
@@ -27,25 +27,26 @@ roll this file (active → one-line "Last completed", next task → "Active").
 
 ## Active
 
-v0.1.2 skill-driven review — wave 14 (golang-naming) step 1 done (dispatch R14a–R14d,
-commit 7ec2196). Next: Steps 2–6 (same shape as Task 1 of the plan): dispatch the fix
-subagent (Template F, <SKILL>=golang-naming — renames-only; ONLY `contract-risk: none`
-findings, and per the Task 14 scope note only where mechanical-rename risk is zero:
-single-file or fully grep-verified existing tests are the safety net; never touch
-pinned/golden/wire/render; >50% rejected → stop-the-line), then full gate, PROGRESS
-roll `wave 14/16 done, next wave 15 — code-style`, checkpoint commit `docs: checkpoint
-— v0.1.2 wave 14 (naming) done, next wave 15 (code-style)`. Fix subagent: one at a
-time, YOLO (core principle 8 — deviation 69). Commit gate:
+v0.1.2 skill-driven review — wave 15 (golang-code-style) next. Read plan Task 15
+slice (chunks R15a non-tui, R15b tui; class `script-driven` — run the scan command
+block from the plan line FIRST, read only hit files, max 12 per subagent, remainder →
+Deferred/Noted as style-scan-overflow). Steps: dispatch R15a → R15b one at a time
+(Template R, `<SKILL>`=`golang-code-style`, IDs `[style-<n>]`); verify COVERAGE (one
+split re-dispatch per partial; residual → `COVERAGE: skipped` note + open item);
+commit findings `docs(review): v0.1.2 — wave 15 (code-style): <N> findings (…)`, then
+Steps 2–6 same shape as Task 1: dispatch fix subagent (Template F,
+`<SKILL>`=`golang-code-style`) iff any `contract-risk: none` — this batch must NOT
+change any rendered byte (teatest suites are the tripwire; any teatest red → roll
+back that fix); full gate; PROGRESS roll. Fix subagent: one at a time, YOLO
+(core principle 8 — deviation 69). Commit gate:
 go vet ./... && go test ./... + gofmt -l . + golangci-lint run ./...
 
 ## Last completed
 
-Wave 14 step 1 (dispatch R14a → R14d, one at a time, YOLO): 4/4 chunks `COVERAGE: full`
-— 14-naming-core.md (P2:1 P3:9), 14-naming-server-tool.md (P3:12),
-14-naming-llm-cmd.md (P3:12), 14-naming-tui.md (P3:16) = 50 findings (P0:0 P1:0 P2:1
-P3:49), 44 tagged `contract-risk: none` (core 8, server+tool 11, llm+cmd 12, tui 13) →
-Template F fix subagent next (commit 7ec2196). R14a re-dispatched fresh per user
-directive — the failed placeholder was removed (deviation 71).
+Wave 14 (naming): 50 findings (P0:0 P1:0 P2:1 P3:49, commit 7ec2196) — 42 FIXED
+(aa53daa…9fd780b, 9 commits; status 5da587d), 8 DEFERRED (6 contract auto-defers:
+wire JSON tags, behavior>5 files ×3, render error text; 1 0.2.0 additive enum
+sentinel; 1 test-name collision), 0 FALSE / 0 WONTFIX; stop-the-line n/a; gate green.
 Wave 13 (benchmark): 8 hermetic benchmarks in 5 new bench files, 2 candidates deferred
 with reason; gate green (commits e2946cf, 5edac05 — detail in those commits +
 13-benchmark-hotpaths.md).
