@@ -73,8 +73,9 @@ func (s *Service) SetConfigRules(rules []protocol.Rule) {
 // EvaluateRules evaluates builtins + config rules for an action.
 // Session always rules are not included (they need a session; see DecisionFor).
 // Unknown (custom) agents fall back to the build matrix via BuiltinsFor.
-func (s *Service) EvaluateRules(agent, dataDir string, cfgRules []protocol.Rule, action string, resources []string) Decision {
-	rules := BuiltinsFor(agent, dataDir)
+// The matrix dataDir is the service's process-constant constructor value.
+func (s *Service) EvaluateRules(agent string, cfgRules []protocol.Rule, action string, resources []string) Decision {
+	rules := BuiltinsFor(agent, s.dataDir)
 	all := make([]protocol.Rule, 0, len(rules)+len(cfgRules))
 	all = append(all, rules...)
 	all = append(all, cfgRules...)

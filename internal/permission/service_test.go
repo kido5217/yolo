@@ -195,7 +195,7 @@ func TestCustomAgentFallsBackToBuildMatrix(t *testing.T) {
 	if d := e.svc.DecisionFor(req); d != Allow {
 		t.Fatalf("custom-agent DecisionFor = %v, want Allow (build matrix)", d)
 	}
-	if d := e.svc.EvaluateRules("custom", "/data", nil, "read", []string{"src/x.go"}); d != Allow {
+	if d := e.svc.EvaluateRules("custom", nil, "read", []string{"src/x.go"}); d != Allow {
 		t.Fatalf("custom-agent EvaluateRules = %v, want Allow (build matrix)", d)
 	}
 }

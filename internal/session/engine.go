@@ -194,9 +194,10 @@ func (e *Engine) Send(ctx context.Context, sessionID, text string, onDone func(e
 	e.publish(protocol.EventTypeMessageUpdated, protocol.MessageUpdatedProps{SessionID: sessionID, Info: userMsg})
 	e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{SessionID: sessionID, Part: userPart, Time: now})
 
-	e.maybeScheduleTitle(sessionID, row, text)
+	t := newTurn(sessionID, row, info, model)
+	e.maybeScheduleTitle(t, text)
 
-	go e.runTurn(turnCtx, sessionID, row, info, model, onDone)
+	go e.runTurn(turnCtx, t, onDone)
 	return SendResult{MessageID: msgID, PartID: partID}, nil
 }
 
@@ -340,58 +341,88 @@ func (e *Engine) shellFor(sessionID, dir string) *tool.Shell {
 	return s
 }
 
+// turn is the per-turn state threaded through the agent loop: the session
+// identity, the resolved provider/model, the turn config + permission rules,
+// and the per-turn doom history and tool-step budget (both reset each Send).
+type turn struct {
+	sessionID string
+	agent     string
+	row       storage.SessionRow
+	info      provider.Info
+	model     provider.Model
+	cfg       *protocol.Config
+	cfgRules  []protocol.Rule
+
+	doomHist  []permission.CallKey
+	toolCalls int
+}
+
+// round is one model round's assistant message state: the row id, its
+// creation time, and the message identity re-published on finalize.
+type round struct {
+	id  string
+	now int64
+	msg protocol.Message
+}
+
+// newTurn assembles the per-turn state; the agent defaults to "build".
+func newTurn(sessionID string, row storage.SessionRow, info provider.Info, model provider.Model) *turn {
+	agent := row.Agent
+	if agent == "" {
+		agent = "build"
+	}
+	return &turn{
+		sessionID: sessionID,
+		agent:     agent,
+		row:       row,
+		info:      info,
+		model:     model,
+		cfgRules:  []protocol.Rule{},
+	}
+}
+
 // runTurn drives the model/tool rounds until the model stops calling tools.
 // The session leaves "busy" on exit and onDone fires exactly once.
-func (e *Engine) runTurn(ctx context.Context, sessionID string, row storage.SessionRow, info provider.Info, model provider.Model, onDone func(error)) {
+func (e *Engine) runTurn(ctx context.Context, t *turn, onDone func(error)) {
 	var turnErr error
 	defer func() {
 		e.publish(protocol.EventTypeSessionStatus, protocol.SessionStatusProps{
-			SessionID: sessionID,
+			SessionID: t.sessionID,
 			Status:    protocol.SessionStatus{Type: protocol.StatusIdle},
 		})
 		e.mu.Lock()
-		delete(e.busy, sessionID)
+		delete(e.busy, t.sessionID)
 		e.mu.Unlock()
 		if onDone != nil {
 			onDone(turnErr)
 		}
 	}()
 	e.publish(protocol.EventTypeSessionStatus, protocol.SessionStatusProps{
-		SessionID: sessionID,
+		SessionID: t.sessionID,
 		Status:    protocol.SessionStatus{Type: protocol.StatusBusy},
 	})
 
-	cfg, cfgErr := e.loadCfg(row.ProjectDir)
-	cfgRules := []protocol.Rule{}
+	cfg, cfgErr := e.loadCfg(t.row.ProjectDir)
 	if cfgErr == nil && cfg != nil {
 		// Invalid permission entries degrade to no config rules (config
 		// load is non-fatal per turn).
 		if rules, perr := protocol.ParsePerms(cfg.Permission); perr == nil {
-			cfgRules = rules
+			t.cfgRules = rules
 		}
 	}
+	t.cfg = cfg
 	// Always publish this turn's rules (empty when the load failed): a
 	// broken config degrades to no config rules instead of silently
 	// inheriting the previous turn's ruleset.
-	e.perm.SetConfigRules(cfgRules)
-	agent := row.Agent
-	if agent == "" {
-		agent = "build"
-	}
-	// Per-turn doom history (resets each Send): every model-issued tool call
-	// appends one CallKey, identical runs detected on the last-3 window.
-	var doomHist []permission.CallKey
-	// Per-turn tool call budget (resets each Send; distinct from the
-	// model round-trip cap above).
-	toolCalls := 0
+	e.perm.SetConfigRules(t.cfgRules)
 
-	for round := 0; round < maxToolRounds; round++ {
-		req, err := e.buildRequest(sessionID, agent, row, info, model, cfg)
+	for i := 0; i < maxToolRounds; i++ {
+		req, err := e.buildRequest(t)
 		if err != nil {
 			turnErr = err
 			return
 		}
-		more, err := e.runRound(ctx, sessionID, agent, row, cfg, cfgRules, info, model, req, &doomHist, &toolCalls)
+		more, err := e.runRound(ctx, t, req)
 		if err != nil {
 			// Abort (context.Canceled) is user-initiated, not a failure.
 			// The TUI already got the part-level finalization; the send
@@ -414,19 +445,19 @@ func (e *Engine) runTurn(ctx context.Context, sessionID string, row storage.Sess
 // persisted history (LOCKED mapping, see messagesFor) and the tool schemas
 // visible under the session ruleset (re-read each round so "always" replies
 // and rule changes apply from the next round).
-func (e *Engine) buildRequest(sessionID, agent string, row storage.SessionRow, info provider.Info, model provider.Model, cfg *protocol.Config) (llm.Request, error) {
-	messages, err := e.messagesFor(sessionID, agent, row, info, model, cfg)
+func (e *Engine) buildRequest(t *turn) (llm.Request, error) {
+	messages, err := e.messagesFor(t)
 	if err != nil {
 		return llm.Request{}, err
 	}
-	tools, err := e.toolSchemaList(sessionID)
+	tools, err := e.toolSchemaList(t.sessionID)
 	if err != nil {
 		return llm.Request{}, err
 	}
 	return llm.Request{
-		Model:    model.ID,
-		APIKey:   e.apiKey(info.ID, cfg),
-		BaseURL:  info.BaseURL,
+		Model:    t.model.ID,
+		APIKey:   e.apiKey(t.info.ID, t.cfg),
+		BaseURL:  t.info.BaseURL,
 		Messages: messages,
 		Tools:    tools,
 	}, nil
@@ -446,16 +477,16 @@ func (e *Engine) buildRequest(sessionID, agent string, row storage.SessionRow, i
 //   - empty assistant messages are skipped;
 //   - the request ends with the newest user message, re-appended when the
 //     history no longer ends with it (tool-call rounds).
-func (e *Engine) messagesFor(sessionID, agent string, row storage.SessionRow, info provider.Info, model provider.Model, cfg *protocol.Config) ([]llm.Message, error) {
-	sys, err := BuildSystemPrompt(row.ProjectDir, model, model.ID, info.ID)
+func (e *Engine) messagesFor(t *turn) ([]llm.Message, error) {
+	sys, err := BuildSystemPrompt(t.row.ProjectDir, t.model, t.model.ID, t.info.ID)
 	if err != nil {
 		return nil, err
 	}
-	if cfg != nil {
-		for _, p := range cfg.Instructions {
+	if t.cfg != nil {
+		for _, p := range t.cfg.Instructions {
 			abs := p
 			if !filepath.IsAbs(abs) {
-				abs = filepath.Join(row.ProjectDir, abs)
+				abs = filepath.Join(t.row.ProjectDir, abs)
 			}
 			if b, err := os.ReadFile(abs); err == nil {
 				sys = append(sys, string(b))
@@ -467,7 +498,7 @@ func (e *Engine) messagesFor(sessionID, agent string, row storage.SessionRow, in
 		out = append(out, llm.Message{Role: llm.RoleSystem, Content: s})
 	}
 
-	rows, err := e.db.ListMessages(sessionID)
+	rows, err := e.db.ListMessages(t.sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -503,7 +534,7 @@ func (e *Engine) messagesFor(sessionID, agent string, row storage.SessionRow, in
 		})
 	}
 
-	reminders := PlanReminders(hist, agent)
+	reminders := PlanReminders(hist, t.agent)
 	var lastUserContent string
 	var lastMappedRole llm.Role
 	for i, mw := range hist {
@@ -591,81 +622,33 @@ func appendReminders(content string, reminders []string) string {
 // (no retry) keeping the partial text; context overflow (usage or API 400)
 // stops the turn with a synthetic note; the per-turn tool step budget ends
 // the turn idle before the next call beyond it is executed.
-func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row storage.SessionRow, cfg *protocol.Config, cfgRules []protocol.Rule, info provider.Info, model provider.Model, req llm.Request, doomHist *[]permission.CallKey, toolCalls *int) (bool, error) {
+func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, error) {
 	// Per-round context: the real drivers' stream goroutines block their
 	// send on this ctx, so cancelling it on every round exit unblocks any
 	// abandoned stream (e.g. the tool-step budget drop) instead of leaking
 	// its goroutine and connection until process shutdown.
 	roundCtx, roundCancel := context.WithCancel(ctx)
 	defer roundCancel()
-	drv := e.driverFor(info.ID, model)
 	// The assistant row exists before the first stream attempt so a failed
 	// round still finalizes a (possibly empty) assistant message.
-	now := e.clock()
-	asstID := protocol.NewID("msg")
+	r := &round{id: protocol.NewID("msg"), now: e.clock()}
 	if err := e.db.CreateMessage(storage.MessageRow{
-		ID: asstID, SessionID: sessionID, Role: "assistant", Agent: agent, TimeCreated: now,
+		ID: r.id, SessionID: t.sessionID, Role: "assistant", Agent: t.agent, TimeCreated: r.now,
 	}); err != nil {
 		return false, err
 	}
-	asstMsg := protocol.Message{
-		ID: asstID, SessionID: sessionID, Role: "assistant", Agent: agent,
-		Time:  protocol.MessageTime{Created: now},
-		Model: &protocol.MessageModel{ProviderID: info.ID, ModelID: model.ID},
+	r.msg = protocol.Message{
+		ID: r.id, SessionID: t.sessionID, Role: "assistant", Agent: t.agent,
+		Time:  protocol.MessageTime{Created: r.now},
+		Model: &protocol.MessageModel{ProviderID: t.info.ID, ModelID: t.model.ID},
 	}
-	e.publish(protocol.EventTypeMessageUpdated, protocol.MessageUpdatedProps{SessionID: sessionID, Info: asstMsg})
+	e.publish(protocol.EventTypeMessageUpdated, protocol.MessageUpdatedProps{
+		SessionID: t.sessionID, Info: r.msg,
+	})
 
-	// Pre-stream retry: transient failures (429/5xx/net) retry with
-	// backoff while nothing of the round is persisted; non-transient
-	// failures fail the round immediately (overflow 400s take the
-	// graceful path below).
-	var stream llm.PartStream
-	// One reusable timer for the pre-stream retry backoffs (no fresh
-	// allocation per attempt); the zero timer has already fired, so
-	// drain that tick before the first Reset re-arms it.
-	retry := time.NewTimer(0)
-	<-retry.C
-	defer retry.Stop()
-	for attempt := 1; ; attempt++ {
-		var sErr error
-		stream, sErr = drv.Stream(roundCtx, req)
-		if sErr == nil {
-			break
-		}
-		if ctx.Err() != nil {
-			e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, nil, "")
-			return false, ctx.Err()
-		}
-		if !llm.IsTransient(sErr) {
-			if isOverflowError(sErr) {
-				e.saveSynthetic(sessionID, asstID, overflowNote(model, 0, sErr))
-				e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, nil, "")
-				return false, nil
-			}
-			e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, nil, "")
-			return false, sErr
-		}
-		if attempt >= maxRetryAttempts {
-			e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, nil, "")
-			// Retry-exhaustion framing belongs in the boundary error: the
-			// send boundary logs the turn error exactly once.
-			return false, fmt.Errorf("transient retries exhausted after %d attempts (session=%s): %w", maxRetryAttempts, sessionID, sErr)
-		}
-		delay := e.backoff(attempt)
-		e.publish(protocol.EventTypeSessionStatus, protocol.SessionStatusProps{
-			SessionID: sessionID,
-			Status: protocol.SessionStatus{
-				Type: protocol.StatusRetry, Attempt: attempt,
-				Message: sErr.Error(), Next: delay.Milliseconds(),
-			},
-		})
-		retry.Reset(delay)
-		select {
-		case <-retry.C:
-		case <-ctx.Done():
-			e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, nil, "")
-			return false, ctx.Err()
-		}
+	stream, err := e.openStream(roundCtx, t, r, req)
+	if err != nil {
+		return false, err
 	}
 
 	type textState struct {
@@ -678,16 +661,16 @@ func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row stor
 	saveDelta := func(st *textState, kind, delta string) {
 		st.buf.WriteString(delta)
 		p := protocol.Part{
-			ID: st.id, SessionID: sessionID, MessageID: asstID,
+			ID: st.id, SessionID: t.sessionID, MessageID: r.id,
 			Type: kind, Text: st.buf.String(),
 			Time: protocol.PartTime{Start: st.start},
 		}
 		// Best-effort persistence: the delta still goes to the TUI.
 		if err := e.db.UpsertPart(storage.ProtocolToPart(p)); err != nil {
-			e.lg.Errorf("session: persist part %s (session=%s): %v", p.ID, sessionID, err)
+			e.lg.Errorf("session: persist part %s (session=%s): %v", p.ID, t.sessionID, err)
 		}
 		e.publish(protocol.EventTypeMessagePartDelta, protocol.MessagePartDeltaProps{
-			SessionID: sessionID, MessageID: asstID, PartID: st.id, Field: kind, Delta: delta,
+			SessionID: t.sessionID, MessageID: r.id, PartID: st.id, Field: kind, Delta: delta,
 		})
 	}
 	startPart := func(st *textState, kind, delta string) {
@@ -695,17 +678,19 @@ func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row stor
 		st.start = e.clock()
 		st.buf.WriteString(delta)
 		p := protocol.Part{
-			ID: st.id, SessionID: sessionID, MessageID: asstID,
+			ID: st.id, SessionID: t.sessionID, MessageID: r.id,
 			Type: kind, Text: st.buf.String(),
 			Time: protocol.PartTime{Start: st.start},
 		}
 		// Best-effort persistence: the part-created event still goes out.
 		if err := e.db.UpsertPart(storage.ProtocolToPart(p)); err != nil {
-			e.lg.Errorf("session: persist part %s (session=%s): %v", p.ID, sessionID, err)
+			e.lg.Errorf("session: persist part %s (session=%s): %v", p.ID, t.sessionID, err)
 		}
-		e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{SessionID: sessionID, Part: p, Time: e.clock()})
+		e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
+			SessionID: t.sessionID, Part: p, Time: e.clock(),
+		})
 		e.publish(protocol.EventTypeMessagePartDelta, protocol.MessagePartDeltaProps{
-			SessionID: sessionID, MessageID: asstID, PartID: st.id, Field: kind, Delta: delta,
+			SessionID: t.sessionID, MessageID: r.id, PartID: st.id, Field: kind, Delta: delta,
 		})
 	}
 	finalizePart := func(st *textState, kind string) {
@@ -713,14 +698,16 @@ func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row stor
 			return
 		}
 		p := protocol.Part{
-			ID: st.id, SessionID: sessionID, MessageID: asstID,
+			ID: st.id, SessionID: t.sessionID, MessageID: r.id,
 			Type: kind, Text: st.buf.String(),
 			Time: protocol.PartTime{Start: st.start, End: e.clock()},
 		}
 		if err := e.db.UpsertPart(storage.ProtocolToPart(p)); err != nil {
-			e.lg.Errorf("session: persist part %s (session=%s): %v", p.ID, sessionID, err)
+			e.lg.Errorf("session: persist part %s (session=%s): %v", p.ID, t.sessionID, err)
 		}
-		e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{SessionID: sessionID, Part: p, Time: e.clock()})
+		e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
+			SessionID: t.sessionID, Part: p, Time: e.clock(),
+		})
 	}
 
 	var (
@@ -738,7 +725,7 @@ func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row stor
 			// kept; the turn ends with the ctx error (log only, non-fatal).
 			finalizePart(&textSt, "text")
 			finalizePart(&reasonSt, "reasoning")
-			e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, usage, finish)
+			e.finishRound(t, r, usage, finish)
 			return false, err
 		}
 		if p.Usage != nil {
@@ -751,19 +738,19 @@ func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row stor
 			finalizePart(&textSt, "text")
 			finalizePart(&reasonSt, "reasoning")
 			if ctx.Err() != nil {
-				e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, usage, finish)
+				e.finishRound(t, r, usage, finish)
 				return false, ctx.Err()
 			}
 			if isOverflowError(p.Err) {
-				e.saveSynthetic(sessionID, asstID, overflowNote(model, 0, p.Err))
-				e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, usage, finish)
+				e.saveSynthetic(t, r, overflowNote(t.model, 0, p.Err))
+				e.finishRound(t, r, usage, finish)
 				return false, nil
 			}
 			// Mid-stream failure after content: keep the partial text, note
 			// the error on a synthetic part (excluded from history replay —
 			// the model never sees it) and fail the turn (no retry).
-			e.saveSynthetic(sessionID, asstID, p.Err.Error())
-			e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, usage, finish)
+			e.saveSynthetic(t, r, p.Err.Error())
+			e.finishRound(t, r, usage, finish)
 			return false, fmt.Errorf("llm stream error: %w", p.Err)
 		}
 		switch p.Kind {
@@ -789,16 +776,16 @@ func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row stor
 			sawToolPart = true
 			finalizePart(&textSt, "text")
 			finalizePart(&reasonSt, "reasoning")
-			if *toolCalls >= maxToolSteps {
+			if t.toolCalls >= maxToolSteps {
 				// Step budget exhausted: the remaining calls of this stream
 				// are dropped (not persisted, not executed); the turn ends
 				// idle and onDone(nil).
-				e.lg.Infof("session: max tool steps reached (session=%s, steps=%d)", sessionID, maxToolSteps)
-				e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, usage, finish)
+				e.lg.Infof("session: max tool steps reached (session=%s, steps=%d)", t.sessionID, maxToolSteps)
+				e.finishRound(t, r, usage, finish)
 				return false, nil
 			}
-			*toolCalls++
-			e.executeTool(roundCtx, sessionID, agent, row, cfg, cfgRules, asstID, doomHist, p)
+			t.toolCalls++
+			e.executeTool(roundCtx, t, r, p)
 		}
 	}
 	finalizePart(&textSt, "text")
@@ -808,23 +795,82 @@ func (e *Engine) runRound(ctx context.Context, sessionID, agent string, row stor
 	}
 	// Overflow: the round's input already exceeds the model context; the
 	// turn ends with a synthetic note (v1 has no compaction).
-	if usage != nil && model.Context > 0 && usage.Input > model.Context {
-		e.saveSynthetic(sessionID, asstID, overflowNote(model, usage.Input, nil))
-		e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, usage, finish)
+	if usage != nil && t.model.Context > 0 && usage.Input > t.model.Context {
+		e.saveSynthetic(t, r, overflowNote(t.model, usage.Input, nil))
+		e.finishRound(t, r, usage, finish)
 		return false, nil
 	}
-	e.finishRound(asstID, sessionID, agent, now, model, &asstMsg, usage, finish)
+	e.finishRound(t, r, usage, finish)
 
 	// A round continues when the model finished with tool_calls or emitted
 	// any tool part (scripted drivers set Finish inconsistently).
 	return finish == "tool_calls" || sawToolPart, nil
 }
 
+// openStream starts the model stream and retries pre-stream transient
+// failures (429/5xx/net) with backoff while nothing of the round is
+// persisted (emitting session.status retry). Every failure path finalizes
+// the assistant message first; overflow 400s end the round with a synthetic
+// note and no error (the turn ends idle).
+func (e *Engine) openStream(ctx context.Context, t *turn, r *round, req llm.Request) (llm.PartStream, error) {
+	drv := e.driverFor(t.info.ID, t.model)
+	// One reusable timer for the pre-stream retry backoffs (no fresh
+	// allocation per attempt); the zero timer has already fired, so
+	// drain that tick before the first Reset re-arms it.
+	retry := time.NewTimer(0)
+	<-retry.C
+	defer retry.Stop()
+	var stream llm.PartStream
+	for attempt := 1; ; attempt++ {
+		var sErr error
+		stream, sErr = drv.Stream(ctx, req)
+		if sErr == nil {
+			return stream, nil
+		}
+		if ctx.Err() != nil {
+			e.finishRound(t, r, nil, "")
+			return llm.PartStream{}, ctx.Err()
+		}
+		if !llm.IsTransient(sErr) {
+			if isOverflowError(sErr) {
+				e.saveSynthetic(t, r, overflowNote(t.model, 0, sErr))
+				e.finishRound(t, r, nil, "")
+				return llm.PartStream{}, nil
+			}
+			e.finishRound(t, r, nil, "")
+			return llm.PartStream{}, sErr
+		}
+		if attempt >= maxRetryAttempts {
+			e.finishRound(t, r, nil, "")
+			// Retry-exhaustion framing belongs in the boundary error: the
+			// send boundary logs the turn error exactly once.
+			return llm.PartStream{}, fmt.Errorf(
+				"transient retries exhausted after %d attempts (session=%s): %w",
+				maxRetryAttempts, t.sessionID, sErr)
+		}
+		delay := e.backoff(attempt)
+		e.publish(protocol.EventTypeSessionStatus, protocol.SessionStatusProps{
+			SessionID: t.sessionID,
+			Status: protocol.SessionStatus{
+				Type: protocol.StatusRetry, Attempt: attempt,
+				Message: sErr.Error(), Next: delay.Milliseconds(),
+			},
+		})
+		retry.Reset(delay)
+		select {
+		case <-retry.C:
+		case <-ctx.Done():
+			e.finishRound(t, r, nil, "")
+			return llm.PartStream{}, ctx.Err()
+		}
+	}
+}
+
 // finishRound completes the assistant message row and re-publishes
 // message.updated with the final state, deriving cost/tokens from the round's
 // usage (nil-safe). It is called on every round-exit path (success, failure,
 // abort, retry exhaustion, overflow, max-steps).
-func (e *Engine) finishRound(asstID, sessionID, agent string, now int64, model provider.Model, asstMsg *protocol.Message, usage *llm.Usage, finish string) {
+func (e *Engine) finishRound(t *turn, r *round, usage *llm.Usage, finish string) {
 	var tok protocol.Tokens
 	cost := 0.0
 	if usage != nil {
@@ -834,43 +880,47 @@ func (e *Engine) finishRound(asstID, sessionID, agent string, now int64, model p
 			Reasoning: int64(usage.Reasoning),
 			Cache:     protocol.CacheTokens{Read: int64(usage.CacheRead), Write: int64(usage.CacheWrite)},
 		}
-		cost = (float64(usage.Input)*model.CostIn + float64(usage.Output)*model.CostOut +
-			float64(usage.CacheRead)*model.CostCacheRead + float64(usage.CacheWrite)*model.CostCacheWrite) / 1e6
+		cost = (float64(usage.Input)*t.model.CostIn + float64(usage.Output)*t.model.CostOut +
+			float64(usage.CacheRead)*t.model.CostCacheRead + float64(usage.CacheWrite)*t.model.CostCacheWrite) / 1e6
 	}
 	end := e.clock()
 	if err := e.db.UpdateMessage(storage.MessageRow{
-		ID: asstID, SessionID: sessionID, Role: "assistant", Agent: agent,
-		Cost: cost, Tokens: tok, TimeCreated: now, TimeCompleted: &end,
+		ID: r.id, SessionID: t.sessionID, Role: "assistant", Agent: t.agent,
+		Cost: cost, Tokens: tok, TimeCreated: r.now, TimeCompleted: &end,
 	}); err != nil {
 		// Best-effort: a failed write must not strand the TUI in a
 		// cost-less/incomplete final state, so the final message.updated
 		// still goes out.
-		e.lg.Errorf("session: update message %s (session=%s): %v", asstID, sessionID, err)
+		e.lg.Errorf("session: update message %s (session=%s): %v", r.id, t.sessionID, err)
 	}
-	asstMsg.Cost = cost
-	asstMsg.Tokens = &tok
+	r.msg.Cost = cost
+	r.msg.Tokens = &tok
 	if finish != "" {
-		asstMsg.Finish = finish
+		r.msg.Finish = finish
 	}
-	asstMsg.Time.Completed = end
-	e.publish(protocol.EventTypeMessageUpdated, protocol.MessageUpdatedProps{SessionID: sessionID, Info: *asstMsg})
+	r.msg.Time.Completed = end
+	e.publish(protocol.EventTypeMessageUpdated, protocol.MessageUpdatedProps{
+		SessionID: t.sessionID, Info: r.msg,
+	})
 }
 
 // saveSynthetic persists an engine-generated text part (mid-stream error
 // note, overflow note) flagged Synthetic: it shows in the TUI but
 // messagesFor excludes it from history replay, so the model never sees it.
-func (e *Engine) saveSynthetic(sessionID, asstID, text string) {
+func (e *Engine) saveSynthetic(t *turn, r *round, text string) {
 	syn := true
 	start := e.clock()
 	p := protocol.Part{
-		ID: protocol.NewID("prt"), SessionID: sessionID, MessageID: asstID,
+		ID: protocol.NewID("prt"), SessionID: t.sessionID, MessageID: r.id,
 		Type: "text", Text: text, Synthetic: &syn,
 		Time: protocol.PartTime{Start: start, End: e.clock()},
 	}
 	if err := e.db.UpsertPart(storage.ProtocolToPart(p)); err != nil {
-		e.lg.Errorf("session: persist part %s (session=%s): %v", p.ID, sessionID, err)
+		e.lg.Errorf("session: persist part %s (session=%s): %v", p.ID, t.sessionID, err)
 	}
-	e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{SessionID: sessionID, Part: p, Time: e.clock()})
+	e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
+		SessionID: t.sessionID, Part: p, Time: e.clock(),
+	})
 }
 
 // isSyntheticPart reports whether a part is engine-generated and excluded
@@ -917,7 +967,7 @@ func overflowNote(model provider.Model, input int, apiErr error) string {
 //
 // Every path finalizes the part. Deny -> "permission rejected"; a ctx
 // cancel while parked (Abort) -> "aborted"; the model continues either way.
-func (e *Engine) executeTool(ctx context.Context, sessionID, agent string, row storage.SessionRow, cfg *protocol.Config, cfgRules []protocol.Rule, asstID string, doomHist *[]permission.CallKey, p llm.Part) {
+func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part) {
 	name := p.Name
 	callID := p.CallID
 	if callID == "" {
@@ -929,7 +979,16 @@ func (e *Engine) executeTool(ctx context.Context, sessionID, agent string, row s
 		raw = json.RawMessage(p.Text)
 	}
 	fail := func(stage int64, msg string) {
-		e.saveToolPart(sessionID, asstID, callID, name, map[string]any{}, "error", "", "", msg, nil, e.clock(), stage)
+		e.saveToolPart(t, r, toolPart{
+			callID: callID,
+			name:   name,
+			state: protocol.ToolState{
+				Status: "error",
+				Input:  map[string]any{},
+				Error:  msg,
+				Time:   protocol.PartTime{Start: e.clock(), End: stage},
+			},
+		})
 	}
 	// gateFail finalizes the part for a failed permission gate (service
 	// error, deny, or ctx cancel while parked).
@@ -948,13 +1007,13 @@ func (e *Engine) executeTool(ctx context.Context, sessionID, agent string, row s
 			return
 		}
 	}
-	t, ok := e.tools[name]
+	tl, ok := e.tools[name]
 	if !ok {
 		start := e.clock()
 		fail(start, "unknown tool "+name)
 		return
 	}
-	rules, err := e.rulesetForRow(row)
+	rules, err := e.rulesetForRow(t.row)
 	if err != nil {
 		fail(e.clock(), err.Error())
 		return
@@ -964,12 +1023,12 @@ func (e *Engine) executeTool(ctx context.Context, sessionID, agent string, row s
 		fail(start, "tool not available")
 		return
 	}
-	resources, always, err := t.Patterns(raw)
+	resources, always, err := tl.Patterns(raw)
 	if err != nil {
 		fail(e.clock(), err.Error())
 		return
 	}
-	external, err := t.External(raw)
+	external, err := tl.External(raw)
 	if err != nil {
 		fail(e.clock(), err.Error())
 		return
@@ -978,13 +1037,13 @@ func (e *Engine) executeTool(ctx context.Context, sessionID, agent string, row s
 	// (1) doom check: the third identical call of the turn asks before it
 	// runs (sliding window; a "once" reply does not extend the exemption).
 	key := permission.CallKey{Tool: name, Hash: callKeyHash(raw)}
-	if permission.DoomLoopDue(*doomHist, key) {
-		d := e.perm.EvaluateRules(agent, e.dataDir, cfgRules, "doom_loop", []string{name})
+	if permission.DoomLoopDue(t.doomHist, key) {
+		d := e.perm.EvaluateRules(t.agent, t.cfgRules, "doom_loop", []string{name})
 		doomReq := permission.Request{
-			RequestID: protocol.NewID("perm"), SessionID: sessionID, Agent: agent,
-			Permission: "doom_loop", Tool: t.ID(),
+			RequestID: protocol.NewID("perm"), SessionID: t.sessionID, Agent: t.agent,
+			Permission: "doom_loop", Tool: tl.ID(),
 			Resources: []string{name},
-			CallID:    callID, MessageID: asstID,
+			CallID:    callID, MessageID: r.id,
 			PreDecision: d, CreatedAt: e.clock(),
 		}
 		decision, err := e.perm.Ask(ctx, doomReq)
@@ -998,33 +1057,47 @@ func (e *Engine) executeTool(ctx context.Context, sessionID, agent string, row s
 				msg = "aborted"
 			}
 			now := e.clock()
-			e.saveToolPart(sessionID, asstID, callID, name, input, "error", "", "", msg, map[string]any{"reason": "doom_loop"}, now, now)
-			*doomHist = append(*doomHist, key)
+			e.saveToolPart(t, r, toolPart{
+				callID: callID,
+				name:   name,
+				state: protocol.ToolState{
+					Status:   "error",
+					Input:    input,
+					Error:    msg,
+					Metadata: map[string]any{"reason": "doom_loop"},
+					Time:     protocol.PartTime{Start: now, End: now},
+				},
+			})
+			t.doomHist = append(t.doomHist, key)
 			return
 		}
 	}
-	*doomHist = append(*doomHist, key)
+	t.doomHist = append(t.doomHist, key)
 
 	start := e.clock()
-	e.saveToolPart(sessionID, asstID, callID, name, input, "running", "", "", "", nil, start, 0)
+	e.saveToolPart(t, r, toolPart{
+		callID: callID,
+		name:   name,
+		state:  protocol.ToolState{Status: "running", Input: input, Time: protocol.PartTime{Start: start}},
+	})
 
 	// (3) external-directory gate.
 	for _, ext := range external {
 		abs := ext
 		if !filepath.IsAbs(abs) {
-			abs = filepath.Join(row.ProjectDir, abs)
+			abs = filepath.Join(t.row.ProjectDir, abs)
 		}
 		abs = filepath.Clean(abs)
-		if inside, _ := withinDir(row.ProjectDir, abs); inside {
+		if inside, _ := withinDir(t.row.ProjectDir, abs); inside {
 			continue
 		}
 		pattern := filepath.Dir(abs) + "/*"
-		d := e.perm.EvaluateRules(agent, e.dataDir, cfgRules, "external_directory", []string{pattern})
+		d := e.perm.EvaluateRules(t.agent, t.cfgRules, "external_directory", []string{pattern})
 		extReq := permission.Request{
-			RequestID: protocol.NewID("perm"), SessionID: sessionID, Agent: agent,
-			Permission: "external_directory", Tool: t.ID(),
+			RequestID: protocol.NewID("perm"), SessionID: t.sessionID, Agent: t.agent,
+			Permission: "external_directory", Tool: tl.ID(),
 			Resources: []string{pattern},
-			CallID:    callID, MessageID: asstID,
+			CallID:    callID, MessageID: r.id,
 			PreDecision: d, CreatedAt: e.clock(),
 		}
 		decision, aerr := e.perm.Ask(ctx, extReq)
@@ -1035,12 +1108,12 @@ func (e *Engine) executeTool(ctx context.Context, sessionID, agent string, row s
 	}
 
 	// (4) core permission.
-	d := e.perm.EvaluateRules(agent, e.dataDir, cfgRules, t.Permission(), resources)
+	d := e.perm.EvaluateRules(t.agent, t.cfgRules, tl.Permission(), resources)
 	preq := permission.Request{
-		RequestID: protocol.NewID("perm"), SessionID: sessionID, Agent: agent,
-		Permission: t.Permission(), Tool: t.ID(),
+		RequestID: protocol.NewID("perm"), SessionID: t.sessionID, Agent: t.agent,
+		Permission: tl.Permission(), Tool: tl.ID(),
 		Resources: resources, Always: always,
-		CallID: callID, MessageID: asstID,
+		CallID: callID, MessageID: r.id,
 		PreDecision: d, CreatedAt: e.clock(),
 	}
 	decision, err := e.perm.Ask(ctx, preq)
@@ -1054,13 +1127,13 @@ func (e *Engine) executeTool(ctx context.Context, sessionID, agent string, row s
 	}
 
 	env := &tool.Env{
-		Dir:       row.ProjectDir,
-		Shell:     e.shellFor(sessionID, row.ProjectDir),
-		Limits:    e.limitsFor(cfg),
+		Dir:       t.row.ProjectDir,
+		Shell:     e.shellFor(t.sessionID, t.row.ProjectDir),
+		Limits:    e.limitsFor(t.cfg),
 		Storage:   e.db,
-		SessionID: sessionID,
+		SessionID: t.sessionID,
 	}
-	out, runErr := t.Run(ctx, raw, env)
+	out, runErr := tl.Run(ctx, raw, env)
 	if runErr != nil {
 		msg := runErr.Error()
 		if ctx.Err() != nil {
@@ -1068,39 +1141,63 @@ func (e *Engine) executeTool(ctx context.Context, sessionID, agent string, row s
 			// already force-killed via ctx.
 			msg = "aborted"
 		}
-		e.saveToolPart(sessionID, asstID, callID, name, input, "error", out.Title, out.Text, msg, out.Meta, start, e.clock())
+		e.saveToolPart(t, r, toolPart{
+			callID: callID,
+			name:   name,
+			state: protocol.ToolState{
+				Status:   "error",
+				Input:    input,
+				Title:    out.Title,
+				Output:   out.Text,
+				Error:    msg,
+				Metadata: out.Meta,
+				Time:     protocol.PartTime{Start: start, End: e.clock()},
+			},
+		})
 		return
 	}
-	e.saveToolPart(sessionID, asstID, callID, name, input, "completed", out.Title, out.Text, "", out.Meta, start, e.clock())
+	e.saveToolPart(t, r, toolPart{
+		callID: callID,
+		name:   name,
+		state: protocol.ToolState{
+			Status:   "completed",
+			Input:    input,
+			Title:    out.Title,
+			Output:   out.Text,
+			Metadata: out.Meta,
+			Time:     protocol.PartTime{Start: start, End: e.clock()},
+		},
+	})
 }
 
-func (e *Engine) saveToolPart(sessionID, asstID, callID, name string, input map[string]any, status, title, output, toolErr string, meta map[string]any, start, end int64) {
-	st := &protocol.ToolState{
-		Status:   status,
-		Input:    input,
-		Title:    title,
-		Output:   output,
-		Error:    toolErr,
-		Metadata: meta,
-		Time:     protocol.PartTime{Start: start, End: end},
-	}
+// toolPart is one tool part save: the call identity plus the persisted tool
+// state (the start/end times live in state.Time).
+type toolPart struct {
+	callID string
+	name   string
+	state  protocol.ToolState
+}
+
+func (e *Engine) saveToolPart(t *turn, r *round, tp toolPart) {
 	p := protocol.Part{
-		ID: callID, SessionID: sessionID, MessageID: asstID,
-		Type: "tool", Tool: name, CallID: callID, State: st,
+		ID: tp.callID, SessionID: t.sessionID, MessageID: r.id,
+		Type: "tool", Tool: tp.name, CallID: tp.callID, State: &tp.state,
 	}
 	if err := e.db.UpsertPart(storage.ProtocolToPart(p)); err != nil {
-		e.lg.Errorf("session: persist part %s (session=%s): %v", p.ID, sessionID, err)
+		e.lg.Errorf("session: persist part %s (session=%s): %v", p.ID, t.sessionID, err)
 	}
-	e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{SessionID: sessionID, Part: p, Time: e.clock()})
+	e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
+		SessionID: t.sessionID, Part: p, Time: e.clock(),
+	})
 }
 
 // maybeScheduleTitle fires the one-shot title generation for the session's
 // first user message when the title is still the default.
-func (e *Engine) maybeScheduleTitle(sessionID string, row storage.SessionRow, userText string) {
-	if row.Title != "" && row.Title != "New session" {
+func (e *Engine) maybeScheduleTitle(t *turn, userText string) {
+	if t.row.Title != "" && t.row.Title != "New session" {
 		return
 	}
-	msgs, err := e.db.ListMessages(sessionID)
+	msgs, err := e.db.ListMessages(t.sessionID)
 	if err != nil {
 		return
 	}
@@ -1110,27 +1207,23 @@ func (e *Engine) maybeScheduleTitle(sessionID string, row storage.SessionRow, us
 		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	go e.generateTitle(ctx, cancel, sessionID, row, userText)
+	go e.generateTitle(ctx, cancel, t, userText)
 }
 
 // generateTitle best-effort: errors are dropped (title stays the default).
-func (e *Engine) generateTitle(ctx context.Context, cancel context.CancelFunc, sessionID string, row storage.SessionRow, userText string) {
+func (e *Engine) generateTitle(ctx context.Context, cancel context.CancelFunc, t *turn, userText string) {
 	defer cancel()
-	info, model, err := e.prov.Resolve(row.Model)
-	if err != nil {
-		return
-	}
-	cfg, _ := e.loadCfg(row.ProjectDir)
+	cfg, _ := e.loadCfg(t.row.ProjectDir)
 	req := llm.Request{
-		Model:   model.ID,
-		APIKey:  e.apiKey(info.ID, cfg),
-		BaseURL: info.BaseURL,
+		Model:   t.model.ID,
+		APIKey:  e.apiKey(t.info.ID, cfg),
+		BaseURL: t.info.BaseURL,
 		Messages: []llm.Message{
 			{Role: llm.RoleSystem, Content: TitlePrompt()},
 			{Role: llm.RoleUser, Content: userText},
 		},
 	}
-	stream, err := e.driverFor(info.ID, model).Stream(ctx, req)
+	stream, err := e.driverFor(t.info.ID, t.model).Stream(ctx, req)
 	if err != nil {
 		return
 	}
@@ -1155,19 +1248,19 @@ func (e *Engine) generateTitle(ctx context.Context, cancel context.CancelFunc, s
 	if title == "" {
 		return
 	}
-	if err := e.db.UpdateSession(sessionID, storage.SessionRow{Title: title, TimeUpdated: e.clock()}); err != nil {
+	if err := e.db.UpdateSession(t.sessionID, storage.SessionRow{Title: title, TimeUpdated: e.clock()}); err != nil {
 		return
 	}
-	updated, err := e.db.GetSession(sessionID)
+	updated, err := e.db.GetSession(t.sessionID)
 	if err != nil {
 		return
 	}
-	msgs, err := e.db.ListMessages(sessionID)
+	msgs, err := e.db.ListMessages(t.sessionID)
 	if err != nil {
 		return
 	}
 	e.publish(protocol.EventTypeSessionUpdated, protocol.SessionUpdatedProps{
-		SessionID: sessionID,
+		SessionID: t.sessionID,
 		Info:      storage.SessionFromRow(updated, msgs),
 	})
 }

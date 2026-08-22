@@ -141,12 +141,13 @@ func BenchmarkMessagesFor(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	if _, err := eng.messagesFor(sessionID, "build", row, info, model, nil); err != nil {
+	t := newTurn(sessionID, row, info, model)
+	if _, err := eng.messagesFor(t); err != nil {
 		b.Fatal(err)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, err := eng.messagesFor(sessionID, "build", row, info, model, nil); err != nil {
+		if _, err := eng.messagesFor(t); err != nil {
 			b.Fatal(err)
 		}
 	}
