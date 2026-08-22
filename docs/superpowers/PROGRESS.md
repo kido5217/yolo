@@ -1,7 +1,7 @@
 # Yolo — Progress & Status (session checkpoint)
 
 **Updated:** 2026-08-22 (**v0.1.2 review complete**: 15 waves, 276 findings — 188 fixed,
-90 deferred; pending PR review + tag go-ahead)
+90 deferred; PR #4 opened — pending review/merge + tag go-ahead)
 
 Rolling checkpoint: active task + last-completed + verified facts + v0.1.2-era deviation log +
 open items. Keep it small — `git log --oneline` and the plan files are the archive (no
@@ -29,11 +29,11 @@ roll this file (active → one-line "Last completed", next task → "Active").
 ## Active
 
 **v0.1.2 review COMPLETE** (all 16 tasks / 15 waves + roll-up done; Task 16 Step 3
-final gate green at `58dc459`: vet+test, gofmt, golangci-lint, clean tree). **Awaiting user:** (1) open PR
-`v0.1.2_skills_review` → `main` for review — orchestrator prepared the PR body (see
-plan Task 16 "PR body template"; fill the wave table from `DEFERRED.md` Summary ONLY);
-(2) merge (user-decided); (3) tag `v0.1.2` — **ONLY on explicit go-ahead** (AGENTS.md
-commit discipline + plan Global Constraints). 0.2.0 seed:
+final gate green at `58dc459`: vet+test, gofmt, golangci-lint, clean tree). **Awaiting
+user:** (1) ~~open PR~~ → **PR #4 opened** (2026-08-22, `v0.1.2_skills_review` @
+`00ca6cd` → `main`: https://github.com/kido5217/yolo/pull/4) — review/merge is
+user-decided; (2) tag `v0.1.2` — **ONLY on explicit go-ahead** (AGENTS.md commit
+discipline + plan Global Constraints). 0.2.0 seed:
 `docs/superpowers/reviews/v0.1.2/DEFERRED.md` + `08-refactoring-backlog.md`. No further
 waves — the plan's execution phase is finished; this is the integration/decision gate.
 
