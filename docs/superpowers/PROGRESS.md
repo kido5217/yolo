@@ -1,7 +1,7 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-22 (**v0.1.2 review complete**: 15 waves, 276 findings — 188 fixed,
-90 deferred; PR #4 opened — pending review/merge + tag go-ahead)
+**Updated:** 2026-08-22 (**v0.1.2 released**: PR #4 merged, tag + release at `f14ed75`;
+0.2.0 seed ready)
 
 Rolling checkpoint: active task + last-completed + verified facts + v0.1.2-era deviation log +
 open items. Keep it small — `git log --oneline` and the plan files are the archive (no
@@ -10,45 +10,43 @@ per-task history, no plan-slice copies). Pre-v0.1.2 deviations (items 1–66, fr
 
 ## Where we are
 
-**v0.1.0** (Tasks 1–30, M0–M8) and **v0.1.1** (post-release follow-ups) are complete —
-merged to `main`, tagged, released. Current focus: the **v0.1.2 skill-driven review**
-(16 waves; details in "Active"). Out-of-scope features → 0.2.0+.
+**v0.1.0** and **v0.1.1** are complete — merged, tagged, released. **v0.1.2**
+(skill-driven review) released 2026-08-22: PR #4 merged (`f14ed75`), tag + GitHub
+release published. Out-of-scope features and the 90 deferred contract-risk findings →
+0.2.0.
 
 ## Resume instructions
 
-1. Repo: `/home/kido/network/projects/yolo`, branch `v0.1.2_skills_review` (off the v0.1.1
-main merge `1784ac0`). Active plan:
-`docs/superpowers/plans/2026-08-19-v0.1.2-skill-review.md` — read its Resume Protocol +
-Task 0 first, then ONLY the active task slice. Active spec:
-`docs/superpowers/specs/2026-08-19-v0.1.2-skill-review-design.md`. (The original port
-plan/spec `2026-08-17-yolo-go-port*.md` are closed.)
-2. Per task: Step 1 failing test → Step 2 confirm FAIL → Step 3 minimal impl → Step 4
-`go vet ./... && go test ./...` PASS → Step 5 commit with the plan's pinned message; then
-roll this file (active → one-line "Last completed", next task → "Active").
+1. Repo: `/home/kido/network/projects/yolo`, on `main` (v0.1.2 released, `f14ed75`).
+   **No active plan** — the v0.1.2 plan/spec and the original port plan/spec are all
+   closed (archived under `plans/` + `specs/`). 0.2.0 needs a new design first
+   (`brainstorming`), then a plan (`writing-plans`) sourced from the 0.2.0 seed below —
+   before any implementation.
+2. Per task of any future plan: Step 1 failing test → Step 2 confirm FAIL → Step 3
+   minimal impl → Step 4 `go vet ./... && go test ./...` (+ gofmt + golangci-lint) PASS
+   → Step 5 commit with the plan's pinned message; then roll this file (active →
+   one-line "Last completed", next task → "Active").
 
 ## Active
 
-**v0.1.2 review COMPLETE** (all 16 tasks / 15 waves + roll-up done; Task 16 Step 3
-final gate green at `58dc459`: vet+test, gofmt, golangci-lint, clean tree). **Awaiting
-user:** (1) ~~open PR~~ → **PR #4 opened** (2026-08-22, `v0.1.2_skills_review` @
-`00ca6cd` → `main`: https://github.com/kido5217/yolo/pull/4) — review/merge is
-user-decided; (2) tag `v0.1.2` — **ONLY on explicit go-ahead** (AGENTS.md commit
-discipline + plan Global Constraints). 0.2.0 seed:
-`docs/superpowers/reviews/v0.1.2/DEFERRED.md` + `08-refactoring-backlog.md`. No further
-waves — the plan's execution phase is finished; this is the integration/decision gate.
+**v0.1.2 RELEASED** (2026-08-22): PR #4 merged to `main` (`f14ed75`), annotated tag
+`v0.1.2` + GitHub release published
+(https://github.com/kido5217/yolo/releases/tag/v0.1.2). Review scope is closed — all 15
+waves + roll-up done, gate green. **Awaiting user:** green-light the **0.2.0** design
+(brainstorm) + plan (writing-plans). 0.2.0 seed:
+`docs/superpowers/reviews/v0.1.2/DEFERRED.md` + `08-refactoring-backlog.md` + the
+version-wiring open item below.
 
 ## Last completed
 
+v0.1.2 released (2026-08-22): PR #4 → `main` merge `f14ed75`; annotated tag `v0.1.2` +
+GitHub release (276 findings: 188 fixed, 90 deferred to 0.2.0; gate green at tag).
 Task 16 (roll-up): `DEFERRED.md` (0.2.0 seed) written by roll-up subagent (YOLO per
 deviation 69) — 15-row wave summary (276 findings: 188 fixed, 90 deferred, 0 false,
 0 wontfix) + per-skill details + verbatim wave-8 refactor backlog; committed 58dc459.
 Wave-13 (benchmark) Summary row does not sum (8 delivered + 2 candidate-deferred) —
 footnoted in DEFERRED.md + logged as deviation 72. Final gate green (vet+test, gofmt,
 golangci-lint, clean tree).
-Wave 15 (code-style): 25 findings (P0:0 P1:0 P2:4 P3:21, commit 5665f01) — 24 FIXED
-(a38c6b9…cb56568, 9 commits; status cb56568), 1 pin-tag auto-defer (style-007, long
-schema line), 0 FALSE / 0 WONTFIX; stop-the-line n/a; teatest green (no rendered byte
-changed); gate green (vet+test, gofmt, golangci-lint).
 
 ## Open items
 
