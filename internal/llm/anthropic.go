@@ -23,7 +23,9 @@ func (a *Anthropic) Stream(ctx context.Context, req Request) (PartStream, error)
 	if err != nil {
 		return PartStream{}, err
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", strings.TrimRight(req.BaseURL, "/")+"/messages", bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(
+		ctx, "POST", strings.TrimRight(req.BaseURL, "/")+"/messages", bytes.NewReader(body),
+	)
 	if err != nil {
 		return PartStream{}, err
 	}

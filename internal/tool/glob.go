@@ -151,7 +151,9 @@ func (globTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 	if len(files) > 0 {
 		text = strings.Join(files, "\n")
 		if truncated {
-			text += "\n\n(Results are truncated: showing first " + fmt.Sprint(globLimit) + " results. Consider using a more specific path or pattern.)"
+			text += "\n\n(Results are truncated: showing first " +
+				fmt.Sprint(globLimit) +
+				" results. Consider using a more specific path or pattern.)"
 		}
 	}
 	rel, rerr := filepath.Rel(env.Dir, search)

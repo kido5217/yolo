@@ -68,7 +68,8 @@ func nullPtr(p *int64) any {
 // default "build" (agentOrDefault), mirroring the message side.
 func (d *DB) CreateSession(r SessionRow) error {
 	_, err := d.Exec(
-		`INSERT INTO session (id, project_dir, title, model, agent, cost, time_created, time_updated) VALUES (?,?,?,?,?,?,?,?)`,
+		`INSERT INTO session (id, project_dir, title, model, agent, cost, `+
+			`time_created, time_updated) VALUES (?,?,?,?,?,?,?,?)`,
 		r.ID, r.ProjectDir, r.Title, r.Model, agentOrDefault(r.Agent), r.Cost, r.TimeCreated, r.TimeUpdated)
 	return err
 }
@@ -90,7 +91,8 @@ func (d *DB) GetSession(id string) (SessionRow, error) {
 
 // ListSessions lists a project directory's sessions, newest (time_updated) first.
 func (d *DB) ListSessions(projectDir string, limit int) ([]SessionRow, error) {
-	q := `SELECT id, project_dir, title, model, agent, cost, time_created, time_updated FROM session WHERE project_dir=? ORDER BY time_updated DESC`
+	q := `SELECT id, project_dir, title, model, agent, cost, time_created, ` +
+		`time_updated FROM session WHERE project_dir=? ORDER BY time_updated DESC`
 	args := []any{projectDir}
 	if limit > 0 {
 		q += ` LIMIT ?`
@@ -104,7 +106,10 @@ func (d *DB) ListSessions(projectDir string, limit int) ([]SessionRow, error) {
 	out := []SessionRow{}
 	for rows.Next() {
 		var r SessionRow
-		if err := rows.Scan(&r.ID, &r.ProjectDir, &r.Title, &r.Model, &r.Agent, &r.Cost, &r.TimeCreated, &r.TimeUpdated); err != nil {
+		if err := rows.Scan(
+			&r.ID, &r.ProjectDir, &r.Title, &r.Model, &r.Agent, &r.Cost,
+			&r.TimeCreated, &r.TimeUpdated,
+		); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -168,7 +173,8 @@ func (d *DB) CreateMessage(r MessageRow) error {
 		return err
 	}
 	_, err = d.Exec(
-		`INSERT INTO message (id, session_id, role, agent, cost, tokens, time_created, time_completed) VALUES (?,?,?,?,?,?,?,?)`,
+		`INSERT INTO message (id, session_id, role, agent, cost, tokens, `+
+			`time_created, time_completed) VALUES (?,?,?,?,?,?,?,?)`,
 		r.ID, r.SessionID, r.Role, agentOrDefault(r.Agent), r.Cost, string(tok), r.TimeCreated, nullPtr(r.TimeCompleted))
 	return err
 }
@@ -180,7 +186,8 @@ func (d *DB) UpdateMessage(r MessageRow) error {
 		return err
 	}
 	res, err := d.Exec(
-		`UPDATE message SET session_id=?, role=?, agent=?, cost=?, tokens=?, time_created=?, time_completed=? WHERE id=?`,
+		`UPDATE message SET session_id=?, role=?, agent=?, cost=?, `+
+			`tokens=?, time_created=?, time_completed=? WHERE id=?`,
 		r.SessionID, r.Role, agentOrDefault(r.Agent), r.Cost, string(tok), r.TimeCreated, nullPtr(r.TimeCompleted), r.ID)
 	if err != nil {
 		return err
@@ -200,7 +207,9 @@ func (d *DB) DeleteMessage(id string) error {
 // ListMessages lists a session's messages, earliest first.
 func (d *DB) ListMessages(sessionID string) ([]MessageRow, error) {
 	rows, err := d.Query(
-		`SELECT id, session_id, role, agent, cost, tokens, time_created, time_completed FROM message WHERE session_id=? ORDER BY time_created ASC`, sessionID)
+		`SELECT id, session_id, role, agent, cost, tokens, time_created, `+
+			`time_completed FROM message WHERE session_id=? `+
+			`ORDER BY time_created ASC`, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -398,7 +407,8 @@ func SessionFromRow(r SessionRow, msgs []MessageRow) protocol.Session {
 // SavePermission inserts or updates a permission request by request_id.
 func (d *DB) SavePermission(r PermissionRow) error {
 	_, err := d.Exec(
-		`INSERT INTO permission (request_id, session_id, action, resource, response, always_json, time_created) VALUES (?,?,?,?,?,?,?)
+		`INSERT INTO permission (request_id, session_id, action, resource, `+
+			`response, always_json, time_created) VALUES (?,?,?,?,?,?,?)
 		 ON CONFLICT(request_id) DO UPDATE SET response=excluded.response, always_json=excluded.always_json`,
 		r.RequestID, r.SessionID, r.Action, r.Resource, nullStr(r.Response), nullStr(r.AlwaysJSON), r.TimeCreated)
 	return err
@@ -407,7 +417,8 @@ func (d *DB) SavePermission(r PermissionRow) error {
 // ListPermissions lists a session's permission requests; pendingOnly filters
 // to rows with no response yet.
 func (d *DB) ListPermissions(sessionID string, pendingOnly bool) ([]PermissionRow, error) {
-	q := `SELECT request_id, session_id, action, resource, response, always_json, time_created FROM permission WHERE session_id=?`
+	q := `SELECT request_id, session_id, action, resource, response, ` +
+		`always_json, time_created FROM permission WHERE session_id=?`
 	if pendingOnly {
 		q += ` AND response IS NULL`
 	}
@@ -488,7 +499,8 @@ func (d *DB) GetTodos(sessionID string) ([]protocol.Todo, error) {
 // pattern in always_json, permission taken from the row's action.
 func (d *DB) AlwaysRules(sessionID string) ([]protocol.Rule, error) {
 	rows, err := d.Query(
-		`SELECT action, always_json FROM permission WHERE session_id=? AND response='always' ORDER BY time_created ASC`, sessionID)
+		`SELECT action, always_json FROM permission WHERE session_id=? `+
+			`AND response='always' ORDER BY time_created ASC`, sessionID)
 	if err != nil {
 		return nil, err
 	}

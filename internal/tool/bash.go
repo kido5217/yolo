@@ -106,7 +106,11 @@ func (bashTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 	switch {
 	case errors.Is(err, errShellTimeout):
 		// Pinned upstream v1.18.18 message (shell.ts).
-		return Output{}, fmt.Errorf("shell tool terminated command after exceeding timeout %d ms. If this command is expected to take longer and is not waiting for interactive input, retry with a larger timeout value in milliseconds", timeoutMS)
+		return Output{}, fmt.Errorf(
+			"shell tool terminated command after exceeding timeout %d ms. "+
+				"If this command is expected to take longer and is not waiting for "+
+				"interactive input, retry with a larger timeout value in milliseconds",
+			timeoutMS)
 	case errors.Is(err, errShellAborted):
 		return Output{}, errors.New("command aborted")
 	case err != nil:

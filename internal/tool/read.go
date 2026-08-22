@@ -315,7 +315,10 @@ func readDirListing(base, fp string, offset, limit int) (Output, error) {
 		strings.Join(sliced, "\n"),
 	}
 	if truncated {
-		out = append(out, fmt.Sprintf("\n(Showing %d of %d entries. Use 'offset' parameter to read beyond entry %d)", len(sliced), len(names), offset+len(sliced)))
+		out = append(out, fmt.Sprintf(
+			"\n(Showing %d of %d entries. Use 'offset' parameter "+
+				"to read beyond entry %d)",
+			len(sliced), len(names), offset+len(sliced)))
 	} else {
 		out = append(out, fmt.Sprintf("\n(%d entries)", len(names)))
 	}
