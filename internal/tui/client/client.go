@@ -27,7 +27,7 @@ var (
 // Client talks to one core server. Dir is the scope directory (abs); ""
 // falls back to the server work dir (header omitted).
 type Client struct {
-	Base    string
+	BaseURL string
 	Dir     string
 	HC      *http.Client
 	Backoff func(int) time.Duration // SSE reconnect backoff (tests override)
@@ -35,7 +35,7 @@ type Client struct {
 
 // New returns a client for base with scope dir.
 func New(base, dir string) *Client {
-	return &Client{Base: base, Dir: dir, HC: &http.Client{}}
+	return &Client{BaseURL: base, Dir: dir, HC: &http.Client{}}
 }
 
 func (c *Client) backoff(n int) time.Duration {
@@ -67,7 +67,7 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) error
 		}
 		rd = bytes.NewReader(b)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, c.Base+path, rd)
+	req, err := http.NewRequestWithContext(ctx, method, c.BaseURL+path, rd)
 	if err != nil {
 		return err
 	}

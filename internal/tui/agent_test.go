@@ -24,7 +24,7 @@ func agentFixture() *recApp {
 	a.store.Agents = tuiAgentFixture()
 	a.store.Config = map[string]any{"agent": "build"}
 	a.route = routeSession
-	a.cur = "ses_1"
+	a.curSessionID = "ses_1"
 	return a
 }
 
@@ -95,11 +95,11 @@ func TestAgentDialogKeys(t *testing.T) {
 
 	t.Run("enter opens the subchoice", func(t *testing.T) {
 		a := openAgentAt()
-		if a.agentDlg.subChoice {
+		if a.agentDlg.hasSubChoice {
 			t.Fatal("subchoice must start closed")
 		}
 		a.handleKey(press(tea.KeyEnter))
-		if !a.agentDlg.subChoice {
+		if !a.agentDlg.hasSubChoice {
 			t.Fatal("enter must open the subchoice")
 		}
 	})
@@ -120,7 +120,7 @@ func TestAgentDialogKeys(t *testing.T) {
 		if len(a.Cmds) != 1 {
 			t.Fatalf("key b emitted %d cmds, want 1", len(a.Cmds))
 		}
-		if !a.dlg.has() {
+		if a.dlg.empty() {
 			t.Fatal("dialog must stay open before the patch msg lands")
 		}
 	})
@@ -129,11 +129,11 @@ func TestAgentDialogKeys(t *testing.T) {
 		a := openAgentAt()
 		a.handleKey(press(tea.KeyEnter))
 		a.handleKey(press(tea.KeyEscape))
-		if a.agentDlg.subChoice || !a.dlg.has() {
-			t.Fatalf("after esc: subChoice=%v dlg=%v, want subchoice closed and dialog open", a.agentDlg.subChoice, a.dlg.has())
+		if a.agentDlg.hasSubChoice || a.dlg.empty() {
+			t.Fatalf("after esc: subChoice=%v dlg=%v, want subchoice closed and dialog open", a.agentDlg.hasSubChoice, a.dlg.empty())
 		}
 		a.handleKey(press(tea.KeyEscape))
-		if a.dlg.has() || a.agentDlg != nil {
+		if !a.dlg.empty() || a.agentDlg != nil {
 			t.Fatal("after second esc the dialog must be gone")
 		}
 	})
@@ -162,7 +162,7 @@ func TestAgentDialogApply(t *testing.T) {
 		}
 		a.applyDlgPatch(dlgPatchMsg{field: "agent", value: "yolo",
 			sess: &protocol.Session{ID: "ses_1", Agent: "yolo", Model: refModel("kido", "q")}})
-		if a.dlg.has() || a.agentDlg != nil {
+		if !a.dlg.empty() || a.agentDlg != nil {
 			t.Fatal("dialog must close after a successful session patch")
 		}
 		if !hasToast(a, "agent set: yolo") {
@@ -182,7 +182,7 @@ func TestAgentDialogApply(t *testing.T) {
 		}
 		a.applyDlgPatch(dlgPatchMsg{field: "agent", value: "build",
 			cfg: map[string]any{"agent": "build"}})
-		if a.dlg.has() {
+		if !a.dlg.empty() {
 			t.Fatal("dialog must close after a successful default patch")
 		}
 		if !hasToast(a, "agent set: build") {
@@ -200,7 +200,7 @@ func TestAgentDialogApply(t *testing.T) {
 		if !hasToast(a, "boom") {
 			t.Fatalf("toasts = %+v, want boom", a.toasts)
 		}
-		if !a.dlg.has() {
+		if a.dlg.empty() {
 			t.Fatal("dialog must stay open after a failed patch")
 		}
 	})
@@ -208,7 +208,7 @@ func TestAgentDialogApply(t *testing.T) {
 	t.Run("'a' with no session toasts no-session", func(t *testing.T) {
 		a := agentFixture()
 		a.route = routeHome
-		a.cur = ""
+		a.curSessionID = ""
 		a.store.Current = nil
 		a.openAgentDialog()
 		a.Cmds = nil

@@ -26,10 +26,10 @@ const (
 // cost. Enter on a model opens the locked [a] this session / [b] set default
 // overlay.
 type modelDlg struct {
-	pane      modelPane
-	selProv   int
-	selModel  int
-	subChoice bool
+	pane         modelPane
+	selProv      int
+	selModel     int
+	hasSubChoice bool
 }
 
 var (
@@ -150,17 +150,17 @@ func splitModelRef(s string) (pid, mid string, ok bool) {
 // enter opens the subchoice on the models pane, a/b apply (LOCKED overlay).
 func (m *modelDlg) handleKey(a *App, k tea.KeyPressMsg) []tea.Cmd {
 	if key.Matches(k, escBinding) {
-		if m.subChoice {
-			m.subChoice = false
+		if m.hasSubChoice {
+			m.hasSubChoice = false
 		} else {
 			a.closeModelDialog()
 		}
 		return nil
 	}
-	if m.subChoice {
+	if m.hasSubChoice {
 		switch {
 		case key.Matches(k, choiceThis):
-			if a.cur == "" {
+			if a.curSessionID == "" {
 				a.toast("no session")
 				return nil
 			}
@@ -183,7 +183,7 @@ func (m *modelDlg) handleKey(a *App, k tea.KeyPressMsg) []tea.Cmd {
 		m.move(&a.store, 1)
 	case key.Matches(k, homeKeyMap.Enter):
 		if m.pane == paneModels && m.modelCount(&a.store) > 0 {
-			m.subChoice = true
+			m.hasSubChoice = true
 		}
 	}
 	return nil
@@ -271,7 +271,7 @@ func (m *modelDlg) view(st *store.Store) string {
 		}
 	}
 	b.WriteString(strings.Join(rows, "\n"))
-	if m.subChoice {
+	if m.hasSubChoice {
 		b.WriteString("\n" + dim.Render("  [a] this session  [b] set default"))
 	}
 	b.WriteString("\n" + dim.Render("  \u2191/\u2193 move \u00B7 tab pane \u00B7 enter set \u00B7 esc close"))

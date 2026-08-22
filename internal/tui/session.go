@@ -17,11 +17,11 @@ import (
 // expanded part set (tool I/O blocks and reasoning text) and the auto-follow
 // flag.
 type sessionModel struct {
-	vm       viewport.Model
-	expanded map[string]bool
-	follow   bool
-	dirty    bool // transcript needs a re-render (store mutation, expand toggle)
-	content  string
+	vm        viewport.Model
+	expanded  map[string]bool
+	following bool
+	isDirty   bool // transcript needs a re-render (store mutation, expand toggle)
+	content   string
 }
 
 var sessKeyMap = struct {
@@ -41,10 +41,10 @@ var sessKeyMap = struct {
 
 func newSessionModel(w, h int) sessionModel {
 	return sessionModel{
-		vm:       viewport.New(viewport.WithWidth(w), viewport.WithHeight(h)),
-		expanded: map[string]bool{},
-		follow:   true,
-		dirty:    true,
+		vm:        viewport.New(viewport.WithWidth(w), viewport.WithHeight(h)),
+		expanded:  map[string]bool{},
+		following: true,
+		isDirty:   true,
 	}
 }
 
@@ -70,15 +70,15 @@ func (sm *sessionModel) sync(st *store.Store, w, h int) {
 		sm.vm.SetWidth(w)
 		sm.vm.SetHeight(h)
 	}
-	if sm.dirty {
-		sm.dirty = false
+	if sm.isDirty {
+		sm.isDirty = false
 		content := renderMessages(st, sm.expanded, w)
 		if content != sm.content {
 			sm.content = content
 			sm.vm.SetContent(content)
 		}
 	}
-	if sm.follow && sessionBusy(st) {
+	if sm.following && sessionBusy(st) {
 		sm.vm.GotoBottom()
 	}
 }
@@ -277,11 +277,11 @@ func (a *App) handleSessionKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 	switch {
 	case key.Matches(k, sessKeyMap.PageUp):
 		a.sess.vm.PageUp()
-		a.sess.follow = false
+		a.sess.following = false
 		return nil, true
 	case key.Matches(k, sessKeyMap.PageDown):
 		a.sess.vm.PageDown()
-		a.sess.follow = a.sess.vm.AtBottom()
+		a.sess.following = a.sess.vm.AtBottom()
 		return nil, true
 	case key.Matches(k, sessKeyMap.Expand):
 		id := lastToolPartID(&a.store)
@@ -293,7 +293,7 @@ func (a *App) handleSessionKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 		} else {
 			a.sess.expanded[id] = true
 		}
-		a.sess.dirty = true
+		a.sess.isDirty = true
 		return nil, true
 	case key.Matches(k, sessKeyMap.Think):
 		expand := false
@@ -317,7 +317,7 @@ func (a *App) handleSessionKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 			}
 		}
 		if expand {
-			a.sess.dirty = true
+			a.sess.isDirty = true
 		}
 		return nil, true
 	case key.Matches(k, escBinding):
@@ -325,7 +325,7 @@ func (a *App) handleSessionKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 			return a.emit(a.abortCmd()), true
 		}
 		a.route = routeHome
-		a.cur = ""
+		a.curSessionID = ""
 		return a.emit(a.hydrateCmd()), true
 	}
 	return nil, false

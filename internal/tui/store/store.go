@@ -22,7 +22,7 @@ type Store struct {
 	Config      map[string]any
 	Status      protocol.SessionStatus // zero value = idle
 	Pending     []protocol.PermissionAskedProps
-	Conn        bool // SSE live (set by the app loop, not Apply)
+	Live        bool // SSE live (set by the app loop, not Apply)
 	LastHydrate int64
 
 	// parts holds the streamed-part state: the part's location in Messages

@@ -217,8 +217,8 @@ func TestPromptNewCommand(t *testing.T) {
 	t.Run("command response with session_id switches and hydrates", func(t *testing.T) {
 		a := testSessionApp(sessionFixture())
 		a.Update(commandExecMsg{resp: protocol.CommandResponse{SessionID: "ses_9"}})
-		if a.route != routeSession || a.cur != "ses_9" {
-			t.Fatalf("route=%v cur=%s, want routeSession/ses_9", a.route, a.cur)
+		if a.route != routeSession || a.curSessionID != "ses_9" {
+			t.Fatalf("route=%v cur=%s, want routeSession/ses_9", a.route, a.curSessionID)
 		}
 		if len(a.Cmds) != 1 {
 			t.Fatalf("recorded %d cmds, want 1 hydrate cmd", len(a.Cmds))
@@ -231,8 +231,8 @@ func TestPromptNewCommand(t *testing.T) {
 		if !hasToast(a, "nope") {
 			t.Fatalf("toasts = %v, want nope", a.toasts)
 		}
-		if a.cur != "ses_0" {
-			t.Fatalf("cur = %s, want unchanged", a.cur)
+		if a.curSessionID != "ses_0" {
+			t.Fatalf("cur = %s, want unchanged", a.curSessionID)
 		}
 	})
 }
@@ -375,7 +375,7 @@ func TestPromptKeyRouting(t *testing.T) {
 		a := testSessionApp(sessionFixture())
 		a.view()
 		a.handleKey(tea.KeyPressMsg{Code: tea.KeyPgUp})
-		if a.sess.follow {
+		if a.sess.following {
 			t.Fatal("follow must pause on pgup")
 		}
 	})

@@ -65,7 +65,7 @@ func modelFixture() *recApp {
 	a.store.Agents = tuiAgentFixture()
 	a.store.Config = map[string]any{"model": "kido/q"}
 	a.route = routeSession
-	a.cur = "ses_1"
+	a.curSessionID = "ses_1"
 	return a
 }
 
@@ -186,12 +186,12 @@ func TestModelDialogKeys(t *testing.T) {
 	t.Run("enter opens the subchoice only on the models pane", func(t *testing.T) {
 		a := openModelAt()
 		a.handleKey(press(tea.KeyEnter)) // providers pane: no subchoice
-		if a.modelDlg.subChoice {
+		if a.modelDlg.hasSubChoice {
 			t.Fatal("enter on the providers pane must not open the subchoice")
 		}
 		a.handleKey(pressTab())
 		a.handleKey(press(tea.KeyEnter))
-		if !a.modelDlg.subChoice {
+		if !a.modelDlg.hasSubChoice {
 			t.Fatal("enter on the models pane must open the subchoice")
 		}
 	})
@@ -214,7 +214,7 @@ func TestModelDialogKeys(t *testing.T) {
 			t.Fatalf("key b emitted %d cmds, want 1", len(a.Cmds))
 		}
 		// The dialog stays open until the patch msg is applied.
-		if !a.dlg.has() {
+		if a.dlg.empty() {
 			t.Fatal("dialog must stay open before the patch msg lands")
 		}
 	})
@@ -224,11 +224,11 @@ func TestModelDialogKeys(t *testing.T) {
 		a.handleKey(pressTab())
 		a.handleKey(press(tea.KeyEnter))
 		a.handleKey(press(tea.KeyEscape))
-		if a.modelDlg.subChoice || !a.dlg.has() {
-			t.Fatalf("after esc: subChoice=%v dlg=%v, want subchoice closed and dialog open", a.modelDlg.subChoice, a.dlg.has())
+		if a.modelDlg.hasSubChoice || a.dlg.empty() {
+			t.Fatalf("after esc: subChoice=%v dlg=%v, want subchoice closed and dialog open", a.modelDlg.hasSubChoice, a.dlg.empty())
 		}
 		a.handleKey(press(tea.KeyEscape))
-		if a.dlg.has() || a.modelDlg != nil {
+		if !a.dlg.empty() || a.modelDlg != nil {
 			t.Fatal("after second esc the dialog must be gone")
 		}
 	})
@@ -258,7 +258,7 @@ func TestModelDialogApply(t *testing.T) {
 		}
 		a.applyDlgPatch(dlgPatchMsg{field: "model", value: "opencode/gpt-5-nano",
 			sess: &protocol.Session{ID: "ses_1", Agent: "build", Model: refModel("opencode", "gpt-5-nano")}})
-		if a.dlg.has() || a.modelDlg != nil {
+		if !a.dlg.empty() || a.modelDlg != nil {
 			t.Fatal("dialog must close after a successful session patch")
 		}
 		if !hasToast(a, "model set: opencode/gpt-5-nano") {
@@ -281,7 +281,7 @@ func TestModelDialogApply(t *testing.T) {
 		}
 		a.applyDlgPatch(dlgPatchMsg{field: "model", value: "opencode/gpt-5-nano",
 			cfg: map[string]any{"model": "opencode/gpt-5-nano"}})
-		if a.dlg.has() {
+		if !a.dlg.empty() {
 			t.Fatal("dialog must close after a successful default patch")
 		}
 		if !hasToast(a, "model set: opencode/gpt-5-nano") {
@@ -300,7 +300,7 @@ func TestModelDialogApply(t *testing.T) {
 		if !hasToast(a, "boom") {
 			t.Fatalf("toasts = %+v, want boom", a.toasts)
 		}
-		if !a.dlg.has() {
+		if a.dlg.empty() {
 			t.Fatal("dialog must stay open after a failed patch")
 		}
 	})
@@ -308,7 +308,7 @@ func TestModelDialogApply(t *testing.T) {
 	t.Run("'a' with no session toasts no-session", func(t *testing.T) {
 		a := modelFixture()
 		a.route = routeHome
-		a.cur = ""
+		a.curSessionID = ""
 		a.store.Current = nil
 		a.openModelDialog()
 		a.Cmds = nil

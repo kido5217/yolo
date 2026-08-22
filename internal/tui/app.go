@@ -23,7 +23,7 @@ import (
 
 // EventMsg carries one server SSE event. It is exported so the test harness
 // can drive the app with it.
-type EventMsg struct{ Ev protocol.Event }
+type EventMsg struct{ Event protocol.Event }
 
 // HydrateMsg asks the app to re-hydrate its current route over REST. It is
 // exported so the test harness can drive the app with it.
@@ -40,20 +40,20 @@ const (
 // event pump.
 type App struct {
 	*client.Client
-	store     store.Store
-	route     route
-	cur       string
-	home      homeModel
-	sess      sessionModel
-	prompt    promptModel
-	dlg       dialogStack
-	modelDlg  *modelDlg
-	agentDlg  *agentDlg
-	toasts    []toast
-	toastSeq  int
-	toastCmds []tea.Cmd
-	lastErr   string
-	spinIdx   int // footer spinner frame
+	store        store.Store
+	route        route
+	curSessionID string
+	home         homeModel
+	sess         sessionModel
+	prompt       promptModel
+	dlg          dialogStack
+	modelDlg     *modelDlg
+	agentDlg     *agentDlg
+	toasts       []toast
+	toastSeq     int
+	toastCmds    []tea.Cmd
+	lastErr      string
+	spinIdx      int // footer spinner frame
 	// tea plumbing
 	size     tea.WindowSizeMsg
 	eventCh  chan protocol.Event
@@ -85,7 +85,7 @@ func NewApp(c *client.Client, s store.Store, startSessionID string) *App {
 	a.prompt.input = in
 	if startSessionID != "" {
 		a.route = routeSession
-		a.cur = startSessionID
+		a.curSessionID = startSessionID
 	}
 	return a
 }
@@ -124,14 +124,14 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 		}
 		return nil
 	case EventMsg:
-		a.store.Conn = true
-		a.store.Apply(m.Ev)
+		a.store.Live = true
+		a.store.Apply(m.Event)
 		// Any applied event may have changed the transcript (message/part
 		// family); re-render once instead of on every frame.
-		a.sess.dirty = true
+		a.sess.isDirty = true
 		return a.afterApply(a.eventPump())
 	case connLostMsg:
-		a.store.Conn = false
+		a.store.Live = false
 		return nil
 	case spinMsg:
 		a.spinIdx++
@@ -198,7 +198,7 @@ func (a *App) eventPump() tea.Cmd {
 		if !ok {
 			return connLostMsg{}
 		}
-		return EventMsg{Ev: ev}
+		return EventMsg{Event: ev}
 	}
 }
 
@@ -206,7 +206,7 @@ func (a *App) eventPump() tea.Cmd {
 // details, or the resume not-found case. Fetch failures that don't invalidate
 // the payload (ListMessages, ListCommands) degrade the corresponding slice.
 type hydratedMsg struct {
-	id       string
+	sessID   string
 	list     []protocol.Session
 	sess     *protocol.Session
 	msgs     []protocol.MessageWithParts
@@ -217,24 +217,24 @@ type hydratedMsg struct {
 }
 
 func (a *App) hydrateCmd() tea.Cmd {
-	if a.route == routeSession && a.cur != "" {
-		id := a.cur
+	if a.route == routeSession && a.curSessionID != "" {
+		id := a.curSessionID
 		return func() tea.Msg {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			ses, err := a.GetSession(ctx, id)
 			if errors.Is(err, client.ErrNotFound) {
-				return hydratedMsg{id: id, notFound: true}
+				return hydratedMsg{sessID: id, notFound: true}
 			}
 			if err != nil {
-				return hydratedMsg{id: id, err: err}
+				return hydratedMsg{sessID: id, err: err}
 			}
 			cmds, _ := a.ListCommands(ctx)
 			msgs, merr := a.ListMessages(ctx, id)
 			if merr != nil {
-				return hydratedMsg{id: id, sess: &ses, cmds: cmds, err: merr}
+				return hydratedMsg{sessID: id, sess: &ses, cmds: cmds, err: merr}
 			}
-			return hydratedMsg{id: id, sess: &ses, msgs: msgs, cmds: cmds}
+			return hydratedMsg{sessID: id, sess: &ses, msgs: msgs, cmds: cmds}
 		}
 	}
 	return func() tea.Msg {
@@ -258,9 +258,9 @@ func (a *App) applyHydrate(m hydratedMsg) tea.Cmd {
 	case m.notFound:
 		// Resume hit a missing session: visible error line, exit to the
 		// cmd layer, which maps this Quit to exit code 2 (T30).
-		a.lastErr = "session not found: " + m.id
+		a.lastErr = "session not found: " + m.sessID
 		a.route = routeHome
-		a.cur = ""
+		a.curSessionID = ""
 		return quitCmd()
 	case m.err != nil:
 		a.lastErr = m.err.Error()
@@ -272,7 +272,7 @@ func (a *App) applyHydrate(m hydratedMsg) tea.Cmd {
 		}
 		a.store.Messages = m.msgs
 		a.store.ForgetParts()
-		a.sess.dirty = true
+		a.sess.isDirty = true
 		a.store.LastHydrate = time.Now().UnixMilli()
 		return nil
 	default:
@@ -322,7 +322,7 @@ func (a *App) putSessionFirst(s protocol.Session) {
 
 func (a *App) openSession(id string) {
 	a.route = routeSession
-	a.cur = id
+	a.curSessionID = id
 }
 
 var (
@@ -440,7 +440,7 @@ func (a *App) promptEnter() []tea.Cmd {
 // sendMessageCmd posts the composed line as a user message for the current
 // session.
 func (a *App) sendMessageCmd(text string) tea.Cmd {
-	id := a.cur
+	id := a.curSessionID
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -482,7 +482,7 @@ func (a *App) runCommand(name string) []tea.Cmd {
 	case "/agents":
 		return a.openAgentDialog()
 	case "/new":
-		if a.cur == "" {
+		if a.curSessionID == "" {
 			return a.emit(a.createSessionCmd())
 		}
 		return a.emit(a.commandCmd("/new"))
@@ -492,7 +492,7 @@ func (a *App) runCommand(name string) []tea.Cmd {
 
 // commandCmd posts a slash command to the server for the current session.
 func (a *App) commandCmd(cmd string) tea.Cmd {
-	id := a.cur
+	id := a.curSessionID
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -533,23 +533,23 @@ type dialog struct{ kind dialogKind }
 
 type dialogStack struct{ items []dialog }
 
-func (s *dialogStack) push(d dialog) { s.items = append(s.items, d) }
+func (d *dialogStack) push(item dialog) { d.items = append(d.items, item) }
 
-func (s *dialogStack) pop() {
-	if n := len(s.items); n > 0 {
-		s.items = s.items[:n-1]
+func (d *dialogStack) pop() {
+	if n := len(d.items); n > 0 {
+		d.items = d.items[:n-1]
 	}
 }
 
-func (s *dialogStack) top() (dialog, bool) {
-	n := len(s.items)
+func (d *dialogStack) top() (dialog, bool) {
+	n := len(d.items)
 	if n == 0 {
 		return dialog{}, false
 	}
-	return s.items[n-1], true
+	return d.items[n-1], true
 }
 
-func (s dialogStack) has() bool { return len(s.items) > 0 }
+func (d dialogStack) empty() bool { return len(d.items) == 0 }
 
 // Static frame parts render once at package init instead of on every frame:
 // the styles involved (title, dim, divider) set no width, border, padding,
@@ -576,12 +576,12 @@ var (
 		"\n" + dim.Render("  pgup/pgdn scroll \u00B7 \\+enter newline")
 )
 
-func (s dialogStack) view() string {
-	d, ok := s.top()
+func (d dialogStack) view() string {
+	top, ok := d.top()
 	if !ok {
 		return ""
 	}
-	switch d.kind {
+	switch top.kind {
 	case dlgQuit:
 		return quitDialogRendered
 	case dlgHelp:
@@ -686,7 +686,7 @@ type dlgPatchMsg struct {
 // patchDlgCmd patches the session or config with the chosen value.
 func (a *App) patchDlgCmd(field, value string, thisSession bool) tea.Cmd {
 	if thisSession {
-		id := a.cur
+		id := a.curSessionID
 		return func() tea.Msg {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
@@ -738,7 +738,7 @@ type abortedMsg struct{ err error }
 
 // abortCmd posts the server abort for the current session.
 func (a *App) abortCmd() tea.Cmd {
-	id := a.cur
+	id := a.curSessionID
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

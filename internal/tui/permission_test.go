@@ -35,7 +35,7 @@ func permApp() *recApp {
 	a := testApp()
 	a.store.Pending = []protocol.PermissionAskedProps{permProps()}
 	a.route = routeSession
-	a.cur = "ses_1"
+	a.curSessionID = "ses_1"
 	return a
 }
 

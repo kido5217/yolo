@@ -13,8 +13,8 @@ import (
 // description + current marker). Enter opens the locked [a] this session /
 // [b] set default overlay.
 type agentDlg struct {
-	sel       int
-	subChoice bool
+	sel          int
+	hasSubChoice bool
 }
 
 // openAgentDialog pushes the agent dialog, seeds its selection from the
@@ -72,17 +72,17 @@ func (m *agentDlg) selectedName(st *store.Store) string {
 // apply (LOCKED overlay).
 func (m *agentDlg) handleKey(a *App, k tea.KeyPressMsg) []tea.Cmd {
 	if key.Matches(k, escBinding) {
-		if m.subChoice {
-			m.subChoice = false
+		if m.hasSubChoice {
+			m.hasSubChoice = false
 		} else {
 			a.closeAgentDialog()
 		}
 		return nil
 	}
-	if m.subChoice {
+	if m.hasSubChoice {
 		switch {
 		case key.Matches(k, choiceThis):
-			if a.cur == "" {
+			if a.curSessionID == "" {
 				a.toast("no session")
 				return nil
 			}
@@ -104,7 +104,7 @@ func (m *agentDlg) handleKey(a *App, k tea.KeyPressMsg) []tea.Cmd {
 		}
 	case key.Matches(k, homeKeyMap.Enter):
 		if n > 0 {
-			m.subChoice = true
+			m.hasSubChoice = true
 		}
 	}
 	return nil
@@ -139,7 +139,7 @@ func (m *agentDlg) view(st *store.Store) string {
 		}
 	}
 	b.WriteString(strings.Join(rows, "\n"))
-	if m.subChoice {
+	if m.hasSubChoice {
 		b.WriteString("\n" + dim.Render("  [a] this session  [b] set default"))
 	}
 	b.WriteString("\n" + dim.Render("  \u2191/\u2193 move \u00B7 enter set \u00B7 esc close"))

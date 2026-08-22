@@ -44,7 +44,7 @@ func (c *Client) Events(ctx context.Context) chan protocol.Event {
 // is done (the caller stops; the channel closes) and an error otherwise (the
 // caller backs off and reconnects).
 func (c *Client) stream(ctx context.Context, ch chan<- protocol.Event) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.Base+"/event", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+"/event", nil)
 	if err != nil {
 		return err
 	}

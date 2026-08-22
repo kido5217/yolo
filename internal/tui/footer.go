@@ -79,7 +79,7 @@ func (a *App) footerView() string {
 		"↑" + strconv.FormatInt(tokens.Input, 10) + " ↓" + strconv.FormatInt(tokens.Output, 10),
 		fmt.Sprintf("$%.4f", cost),
 	}
-	if a.store.Conn {
+	if a.store.Live {
 		segs = append(segs, okGreen.Render("● live"))
 	} else {
 		segs = append(segs, errRed.Render("○ off"))

@@ -79,7 +79,7 @@ func TestQuitConfirmTextAndKeys(t *testing.T) {
 func TestQuitConfirmFromSessionRoute(t *testing.T) {
 	a := testApp(protocol.Session{ID: "ses_1"})
 	a.route = routeSession
-	a.cur = "ses_1"
+	a.curSessionID = "ses_1"
 	a.handleKey(ctrlCKey)
 	d, ok := a.dlg.top()
 	if !ok || d.kind != dlgQuit {
