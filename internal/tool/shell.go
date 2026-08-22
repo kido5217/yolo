@@ -142,16 +142,9 @@ func (s *Shell) Exec(ctx context.Context, command string, timeoutMS int, onLine 
 				return code, buf.String(), nil
 			}
 			if m := endMarkerRe.FindStringSubmatch(ev.line); m != nil && m[1] == markerN {
-				code := 0
-				if c, aerr := strconv.Atoi(m[1]); aerr == nil {
-					code = c
-				}
-				if b64 := m[2]; b64 != "" {
-					if p, derr := base64.StdEncoding.DecodeString(b64); derr == nil {
-						if dir := string(p); dir != "" {
-							s.cwd = dir
-						}
-					}
+				code, dir := decodeMarker(m)
+				if dir != "" {
+					s.cwd = dir
 				}
 				return code, buf.String(), nil
 			}
@@ -175,6 +168,21 @@ func (s *Shell) Exec(ctx context.Context, command string, timeoutMS int, onLine 
 			return 0, buf.String(), errShellAborted
 		}
 	}
+}
+
+// decodeMarker decodes a matched end-marker into the previous command's
+// exit code (0 when unparseable) and the new cwd ("" when absent or
+// undecodable).
+func decodeMarker(m []string) (code int, dir string) {
+	if c, aerr := strconv.Atoi(m[1]); aerr == nil {
+		code = c
+	}
+	if b64 := m[2]; b64 != "" {
+		if p, derr := base64.StdEncoding.DecodeString(b64); derr == nil {
+			dir = string(p)
+		}
+	}
+	return code, dir
 }
 
 // cutAtRuneBoundary returns the largest cut ≤ n such that s[:cut] ends at a

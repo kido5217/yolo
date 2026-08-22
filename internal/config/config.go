@@ -274,25 +274,37 @@ func Merge(dst, src map[string]any) map[string]any {
 	}
 	for k, v := range src {
 		dv, ok := out[k]
-		if ok {
-			if dm, dok := dv.(map[string]any); dok {
-				if sm, sok := v.(map[string]any); sok {
-					out[k] = Merge(dm, sm)
-					continue
-				}
-			}
-			if k == "instructions" {
-				if da, dok := dv.([]any); dok {
-					if sa, sok := v.([]any); sok {
-						out[k] = concatDedupe(da, sa)
-						continue
-					}
-				}
-			}
+		if !ok {
+			out[k] = v
+			continue
 		}
-		out[k] = v
+		if merged, mergedOK := mergePair(k, dv, v); mergedOK {
+			out[k] = merged
+		} else {
+			out[k] = v
+		}
 	}
 	return out
+}
+
+// mergePair applies Merge's per-key rule to a dst/src value pair: map over
+// map recurses, "instructions" slice over slice concatenates; ok is false
+// when no merge applies (src wins as-is).
+func mergePair(key string, dst, src any) (any, bool) {
+	if dm, ok := dst.(map[string]any); ok {
+		if sm, ok := src.(map[string]any); ok {
+			return Merge(dm, sm), true
+		}
+		return nil, false
+	}
+	if key == "instructions" {
+		if da, ok := dst.([]any); ok {
+			if sa, ok := src.([]any); ok {
+				return concatDedupe(da, sa), true
+			}
+		}
+	}
+	return nil, false
 }
 
 func concatDedupe(dst, src []any) []any {
