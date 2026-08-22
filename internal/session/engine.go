@@ -486,8 +486,11 @@ func (e *Engine) buildRequest(t *turn) (llm.Request, error) {
 //   - every tool part produces one RoleTool message right after its assistant
 //     (completed -> output, error -> error text);
 //   - empty assistant messages are skipped;
-//   - the request ends with the newest user message, re-appended when the
-//     history no longer ends with it (tool-call rounds).
+//   - the request mirrors the persisted history 1:1 (upstream
+//     message-v2.toModelMessagesEffect): a tool round ends with the TOOL
+//     result — the user message is NEVER re-appended (deviation 77: the
+//     plan's re-append made the model see its instruction re-issued every
+//     round, which looped weak models into re-running tools).
 func (e *Engine) messagesFor(t *turn) ([]llm.Message, error) {
 	sys, err := BuildSystemPrompt(t.row.ProjectDir, t.model, t.model.ID, t.info.ID)
 	if err != nil {
@@ -546,18 +549,14 @@ func (e *Engine) messagesFor(t *turn) ([]llm.Message, error) {
 	}
 
 	reminders := PlanReminders(hist, t.agent)
-	var lastUserContent string
-	var lastMappedRole llm.Role
 	for i, mw := range hist {
 		switch mw.Info.Role {
 		case "user":
 			content := joinTextParts(mw.Parts)
 			if i == lastUserIdx {
 				content = appendReminders(content, reminders)
-				lastUserContent = content
 			}
 			out = append(out, llm.Message{Role: llm.RoleUser, Content: content})
-			lastMappedRole = llm.RoleUser
 		case "assistant":
 			var texts []string
 			var calls []llm.ToolCall
@@ -584,15 +583,10 @@ func (e *Engine) messagesFor(t *turn) ([]llm.Message, error) {
 				continue
 			}
 			out = append(out, llm.Message{Role: llm.RoleAssistant, Content: strings.Join(texts, "\n"), ToolCalls: calls})
-			lastMappedRole = llm.RoleAssistant
 			if len(toolMsgs) > 0 {
 				out = append(out, toolMsgs...)
-				lastMappedRole = llm.RoleTool
 			}
 		}
-	}
-	if lastUserIdx >= 0 && lastMappedRole != llm.RoleUser {
-		out = append(out, llm.Message{Role: llm.RoleUser, Content: lastUserContent})
 	}
 	return out, nil
 }

@@ -215,3 +215,19 @@ bash.go verbatim marker + meta.outputPath, engine wires `Env.OutputDir`.
 Pinned by `TestBashTruncatedOutputTellsModelWhereFullOutputIs`, which asserts
 the marker in the SECOND MODEL ROUND's tool message (the model-visible
 contract), not just the stored part.
+77. History re-append made the model re-see its user instruction EVERY tool
+round (bugfix, P0, 2026-08-22): plan Task 16 LOCKED a "request ends with the
+newest user message, re-appended on tool-call rounds" mapping. Upstream
+(`message-v2.toModelMessagesEffect`) maps persisted history 1:1 — in a tool
+round the request ends with the TOOL result and the user message appears
+ONCE. With the re-append, each round re-issued the user prompt verbatim at
+the tail, which Qwen3.8-27B read as "the user is asking again" and it re-ran
+the CI gate ~14× without ever emitting a final text answer
+(session `ses_Mt8jhDCdseSyZjcqVhED`, turn aborted 17:53:32). The same prompt
+on the same model in upstream opencode does NOT loop — the decisive diff.
+Fix: drop the re-append (`engine.messagesFor`); the request mirrors history
+1:1. `TestHistoryReplayIncludesToolResults` now pins tail [user, assistant,
+tool] + exactly ONE user message. Residual minor divergences noted, not
+changed: yolo sends system entries as separate RoleSystem messages (upstream
+joins to one string) and omits reasoning parts on replay (upstream replays
+them) — neither is tool-round-specific; revisit if a loop recurs.

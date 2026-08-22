@@ -418,6 +418,16 @@ func nonTitle(log []llm.Request) []llm.Request {
 	return out
 }
 
+func countRole(msgs []llm.Message, role llm.Role) int {
+	n := 0
+	for _, m := range msgs {
+		if m.Role == role {
+			n++
+		}
+	}
+	return n
+}
+
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -598,15 +608,23 @@ func TestHistoryReplayIncludesToolResults(t *testing.T) {
 	for _, m := range req.Messages {
 		roles = append(roles, string(m.Role))
 	}
-	if len(roles) < 4 {
+	if len(roles) < 3 {
 		t.Fatalf("roles = %v", roles)
 	}
-	tail := roles[len(roles)-4:]
-	want := []string{string(llm.RoleUser), string(llm.RoleAssistant), string(llm.RoleTool), string(llm.RoleUser)}
+	// Upstream-faithful (message-v2.toModelMessagesEffect): the request
+	// mirrors the persisted history 1:1 — in a tool round it ends with the
+	// TOOL result, never with a re-appended copy of the user message
+	// (deviation 77: the re-append made the model see its instruction
+	// re-issued every round and re-run tools in a loop).
+	tail := roles[len(roles)-3:]
+	want := []string{string(llm.RoleUser), string(llm.RoleAssistant), string(llm.RoleTool)}
 	for i := range want {
 		if tail[i] != want[i] {
 			t.Fatalf("role tail = %v, want %v", tail, want)
 		}
+	}
+	if n := countRole(req.Messages, llm.RoleUser); n != 1 {
+		t.Fatalf("user messages in round-2 request = %d, want 1 (no re-append)", n)
 	}
 
 	var asst *llm.Message
