@@ -29,18 +29,26 @@ per-task history, no plan-slice copies). Pre-v0.1.2 deviations (items 1–66, fr
 
 ## Active
 
-**Awaiting user:** merge the v0.1.3 PR (`v0.1.3_output_fix` → `main`, PR #7) and tag
-`v0.1.3`. Commits: `85a227e` fix(tool) marker decode + cwd newline; `16a2e13` fix(tui)
-SSE-drop re-hydrate + SSE write-error return; `968b9ba` test(tui) resync-pump flake;
-`da25275` feat(tui) inline bash output preview; `18ea0b6` fix(tool) save full truncated
-bash output + verbatim marker (loop in `ses_EuCqnuD7PTQQxVu5xmFX` — the model re-ran
-`go test -v` ~14× because the 1036-of-1209-line tail arrival was silent; upstream
-shell.ts:579 pins the `Full output saved to:` marker the v1 plan omitted — Task 11
-pinned only `tail()`, so this is a port gap, deviation 76); `9d88357`
-fix(session) drop user-message re-append on tool rounds — history replay is
-1:1 with upstream (loop in `ses_Mt8jhDCdseSyZjcqVhED`: same prompt does NOT
-loop in upstream opencode, so the re-append was the diff; deviation 77).
-Root causes: (1) `16d0483` (v0.1.2 datastruct-2)
+**v0.1.3 RELEASED** (2026-08-22): PR #7 merged to `main` (`1d3eca6`) + tag
+`v0.1.3` + GitHub release cut. Five root-cause fixes behind the "run CI gate and print
+full output" failure (apparent hang, then an infinite tool loop that did NOT occur on the
+same prompt+model in upstream opencode). Commits: `85a227e` fix(tool) marker decode + cwd
+newline; `16a2e13` fix(tui) SSE-drop re-hydrate + SSE write-error return; `968b9ba`
+test(tui) resync-pump flake; `da25275` feat(tui) inline bash output preview; `18ea0b6`
+fix(tool) save full truncated bash output + verbatim marker (loop in
+`ses_EuCqnuD7PTQQxVu5xmFX` — the model re-ran `go test -v` ~14× because the 1036-of-1209-line
+tail arrival was silent; upstream shell.ts:579 pins the `Full output saved to:` marker the
+v1 plan omitted — Task 11 pinned only `tail()`, so this is a port gap, deviation 76);
+`9d88357` fix(session) drop user-message re-append on tool rounds — history replay is
+1:1 with upstream (loop in `ses_Mt8jhDCdseSyZjcqVhED`: same prompt does NOT loop in
+upstream opencode, so the re-append was the diff; deviation 77).
+
+**Next (0.2.0):** the v1 port is feature-complete and released. 0.2.0 seeds live in
+`docs/superpowers/reviews/v0.1.2/DEFERRED.md` + `08-refactoring-backlog.md` (+ the
+version-wiring open item below). No active 0.2.0 plan yet — start via `writing-plans`
+after user picks scope.
+
+Root causes (archive): (1) `16d0483` (v0.1.2 datastruct-2)
 re-wrote the shared end-marker regex without re-teaching `decodeMarker` — from the
 2nd bash command on the reported exit code was the marker counter and the cwd was never
 decoded (a latent extra bug: `pwd`'s trailing newline in the base64 made the respawn
@@ -56,17 +64,16 @@ re-ran the gate ~14×;
 every tool-call round, so the model re-saw its own instruction each round and re-ran
 tools in a loop even with (4) fixed — upstream replays history 1:1 (round ends with
 the tool result). Decisive diff: the same prompt+model does NOT loop in upstream
-opencode. 0.2.0 seed:
-`docs/superpowers/reviews/v0.1.2/DEFERRED.md` + `08-refactoring-backlog.md` + the
-version-wiring open item below.
+opencode.
 
 ## Last completed
 
-v0.1.3 branch (2026-08-22): the reported loop + all five contributing causes fixed
-with failing tests first (shell marker exit/cwd; SSE-drop resync; inline bash preview +
-expanded-empty-output parts-loop escape; truncated-bash full-output save + marker;
-history replay 1:1 — dropped the plan's user-message re-append), full gate green
-(vet+test+gofmt+golangci-lint), branch pushed (PR #7). Evidence:
+v0.1.3 RELEASED (2026-08-22, tag `v0.1.3`, PR #7 → `main` `1d3eca6`): the reported
+loop + all five contributing causes fixed with failing tests first (shell marker
+exit/cwd; SSE-drop resync; inline bash preview + expanded-empty-output parts-loop
+escape; truncated-bash full-output save + marker; history replay 1:1 — dropped the
+plan's user-message re-append), full gate green (vet+test+gofmt+golangci-lint).
+Evidence:
 hung session `ses_wNbfyVPnHLrEyJXM8nrr` (12 ok CI-gate runs with incrementing phantom
 `exit:5..16` metadata.
 
