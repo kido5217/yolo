@@ -1,0 +1,1 @@
+{"id":"int-b735a57c20c6eb5ea660f7e5ff74c984","kind":"field_change","created_at":"2026-08-22T16:53:41.561146019Z","actor":"Fedor Suchkov","issue_id":"yolo-jv2","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Spec written, self-reviewed, committed"}}
