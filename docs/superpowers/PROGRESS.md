@@ -1,6 +1,6 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-22 (v0.1.2 in progress: wave 14/16 done, next wave 15 — code-style)
+**Updated:** 2026-08-22 (v0.1.2 in progress: wave 15/16 done, roll-up next)
 
 Rolling checkpoint: active task + last-completed + verified facts + v0.1.2-era deviation log +
 open items. Keep it small — `git log --oneline` and the plan files are the archive (no
@@ -27,29 +27,29 @@ roll this file (active → one-line "Last completed", next task → "Active").
 
 ## Active
 
-v0.1.2 skill-driven review — wave 15 (golang-code-style) next. Read plan Task 15
-slice (chunks R15a non-tui, R15b tui; class `script-driven` — run the scan command
-block from the plan line FIRST, read only hit files, max 12 per subagent, remainder →
-Deferred/Noted as style-scan-overflow). Steps: dispatch R15a → R15b one at a time
-(Template R, `<SKILL>`=`golang-code-style`, IDs `[style-<n>]`); verify COVERAGE (one
-split re-dispatch per partial; residual → `COVERAGE: skipped` note + open item);
-commit findings `docs(review): v0.1.2 — wave 15 (code-style): <N> findings (…)`, then
-Steps 2–6 same shape as Task 1: dispatch fix subagent (Template F,
-`<SKILL>`=`golang-code-style`) iff any `contract-risk: none` — this batch must NOT
-change any rendered byte (teatest suites are the tripwire; any teatest red → roll
-back that fix); full gate; PROGRESS roll. Fix subagent: one at a time, YOLO
-(core principle 8 — deviation 69). Commit gate:
-go vet ./... && go test ./... + gofmt -l . + golangci-lint run ./...
+v0.1.2 skill-driven review — **Task 16 roll-up next** (last of 16 tasks). Read plan
+Task 16 slice in full (lines ~908–985): Step 1 dispatch roll-up subagent (1 `task`
+call, YOLO per core principle 8 — deviation 69) to write `DEFERRED.md` (0.2.0 seed) —
+its verbatim prompt is in the plan; Step 2 commit roll-up `docs(review): v0.1.2 —
+roll-up: DEFERRED.md (0.2.0 seed)`; Step 3 orchestrator final gate
+(go vet+test, gofmt -l, golangci-lint; `git status --short` clean — on failure do NOT
+hand-edit code, dispatch one Template-F-shape fix subagent for the gate failures only);
+Step 4 reset PROGRESS.md "Active"/open items per plan (all-15-waves line); Step 5
+checkpoint `docs: checkpoint — v0.1.2 roll-up done; awaiting PR review + tag go-ahead`,
+then STOP and report: per-wave table (from DEFERRED.md Summary ONLY), gate result, PR
+head sha, and the three pending user decisions (PR review/open, merge, tag v0.1.2 — tag
+ONLY on explicit go-ahead).
 
 ## Last completed
 
+Wave 15 (code-style): 25 findings (P0:0 P1:0 P2:4 P3:21, commit 5665f01) — 24 FIXED
+(a38c6b9…cb56568, 9 commits; status cb56568), 1 pin-tag auto-defer (style-007, long
+schema line), 0 FALSE / 0 WONTFIX; stop-the-line n/a; teatest green (no rendered byte
+changed); gate green (vet+test, gofmt, golangci-lint).
 Wave 14 (naming): 50 findings (P0:0 P1:0 P2:1 P3:49, commit 7ec2196) — 42 FIXED
 (aa53daa…9fd780b, 9 commits; status 5da587d), 8 DEFERRED (6 contract auto-defers:
 wire JSON tags, behavior>5 files ×3, render error text; 1 0.2.0 additive enum
 sentinel; 1 test-name collision), 0 FALSE / 0 WONTFIX; stop-the-line n/a; gate green.
-Wave 13 (benchmark): 8 hermetic benchmarks in 5 new bench files, 2 candidates deferred
-with reason; gate green (commits e2946cf, 5edac05 — detail in those commits +
-13-benchmark-hotpaths.md).
 
 ## Open items
 
