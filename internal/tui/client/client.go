@@ -58,6 +58,8 @@ func (c *Client) dirHeader(req *http.Request) {
 }
 
 // do performs one request: dir header, JSON body, JSON decode, error mapping.
+// The (method, path, in, out) 5-parameter form is an accepted wire-helper
+// exception to the ≤4-parameter guideline: every wrapper routes through it.
 func (c *Client) do(ctx context.Context, method, path string, in, out any) error {
 	var rd io.Reader
 	if in != nil {
@@ -176,7 +178,11 @@ func (c *Client) SendMessage(ctx context.Context, id, text string) (string, erro
 	var out struct {
 		MessageID string `json:"message_id"`
 	}
-	if err := c.do(ctx, http.MethodPost, "/session/"+PathEscapeID(id)+"/message", map[string]string{"text": text}, &out); err != nil {
+	err := c.do(
+		ctx, http.MethodPost, "/session/"+PathEscapeID(id)+"/message",
+		map[string]string{"text": text}, &out,
+	)
+	if err != nil {
 		return "", err
 	}
 	return out.MessageID, nil
@@ -285,5 +291,8 @@ func (c *Client) ListPermissions(ctx context.Context) ([]protocol.PermissionAske
 
 // ReplyPermission is POST /permission/{requestID}/reply (204).
 func (c *Client) ReplyPermission(ctx context.Context, requestID, reply string) error {
-	return c.do(ctx, http.MethodPost, "/permission/"+PathEscapeID(requestID)+"/reply", map[string]string{"response": reply}, nil)
+	return c.do(
+		ctx, http.MethodPost, "/permission/"+PathEscapeID(requestID)+"/reply",
+		map[string]string{"response": reply}, nil,
+	)
 }
