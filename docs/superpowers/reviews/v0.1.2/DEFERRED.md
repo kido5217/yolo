@@ -128,3 +128,47 @@ Notes: wave 8 is the assessment-only 0.2.0 refactor backlog (16 entries, copied 
 - [refactor-14] P3 internal/storage/dao.go (504) — too-large — one file holds ~21 DAO methods across four entity kinds plus the row↔protocol mappers — split into: `session_dao.go` (session CRUD — one responsibility: session rows), `message_dao.go` (message CRUD — one responsibility: message rows), `part_dao.go` (part upsert/list + listPartsBy — one responsibility: part rows; hot paths UpsertPart/ProtocolToPart/PartToProtocol move with it), `permission_dao.go` (permission save/list/reply + AlwaysRules — one responsibility: permission rows), `todos_dao.go` (SaveTodos/GetTodos — one responsibility: todo rows), `part_convert.go` (ProtocolToPart/PartToProtocol/SessionFromRow + nullStr/nullStrPtr/agentOrDefault helpers — one responsibility: row↔protocol mapping) — effort: S — contract-risk: none (same-package moves; storage_test.go green = verified; hot-path DAOs move without code change)
 - [refactor-15] P3 internal/tui/app.go:49-51,527-545 (also model.go:45-60, agent.go) — entangled-boundary — the dialog stack stores only a kind (`dialog{kind}`) while the dialogs' live state (modelDlg/agentDlg pointers) is carried on the App root and reconciled by dlgView/handleDialogKey popping the stack on nil pointers — state is owned by the wrong unit: the stack is not self-describing, and a nil-pointer check is used as a dialog-lifecycle signal — end state: dialog items own their payload (`dialog{kind, model *modelDlg, agent *agentDlg}`, created on push in openModelDialog/openAgentDialog, discarded on pop) so `dialogStack` + App need no modelDlg/agentDlg fields and handleDialogKey/dlgView read state from the item directly — effort: M — contract-risk: behavior (dialog open/close/patch flow is teatest-pinned; app_test.go/model_test/agent_test green = verified)
 - [refactor-16] P3 internal/llm/anthropic.go:63 — complex-function — `anRequest` (97 lines) builds the Anthropic wire request as one nested map literal (messages, tool_calls, tool schemas, usage/turn options) — extract `anMsg(m llm.Message) map[string]any` and `anTool(td llm.ToolDef) map[string]any` builders (one responsibility each: map one message / one tool definition onto the Anthropic wire shape) so anRequest is the ~30-line envelope assembly — effort: XS — contract-risk: behavior (wire JSON is golden- and test-pinned — anthropic_test.go byte-comparisons must stay green)
+
+## logging rework (0.2.0 — user-deferred 2026-08-22)
+Not a wave finding: user-reported "not enough data in yolo.log" (the TUI runs that
+reproduced the v0.1.3 loops each left exactly ONE line — "turn aborted").
+Investigated on `v0.1.4_logging_fix` (branch at `main`, tree clean); deferred to
+0.2.0 by user decision 2026-08-22. Design via brainstorming when 0.2.0 scope is
+picked (no spec/plan yet by design).
+
+**Diagnosis (verified 2026-08-22):**
+- Mechanism is healthy: `internal/log` appends `<RFC3339Z> <info|error> <text>` to
+  `<dataDir>/log/yolo.log`, rotates at 5 MiB → `yolo.log.1` (1 generation,
+  overwrite); `go test ./internal/log/...` green.
+- Coverage is thin (23 non-test log points), almost all on fatal/error
+  paths — engine 8 (7 persistence/marshal-failure Errorf + "max tool steps
+  reached" Infof; NOTHING on turn/model/tool lifecycle), server 6 (turn aborted
+  = info, turn failed, SSE emit, auth load, handler panic, generic server
+  error), main 5 (startup/listen failures; `serving on` + `received <sig>,
+  shutting down` exist in **serve mode only** — `tuiCmd`, the real-user mode,
+  logs nothing at start/stop), permission 4 (all error paths).
+- The v1 plan (Task 30, line 5998) pinned exactly this scope — "server
+  handlers + engine errors + cli startup use it (no print)" — so the thinness
+  is by-plan, not a port gap; lifecycle/observability logging was never in
+  v1 scope.
+- No logging at all in LLM drivers, tool execution, storage, config or auth
+  resolution; no levels (Infof/Errorf only).
+- Upstream parity reference: `packages/core/src/observability/logging.ts` — leveled
+  file logger to `Global.Path.log/opencode.log`, `OPENCODE_LOG_LEVEL`
+  (DEBUG/INFO/WARN/ERROR, default Info) + stderr logger. OTEL spans on LLM calls stay
+  excluded (zero telemetry, root principle 1 / spec §1).
+
+**Proposed 0.2.0 scope (TBD in brainstorming; constraints are fixed):**
+- Levels on the existing line format via `YOLO_LOG_LEVEL` env
+  (DEBUG/INFO/WARN/ERROR, default INFO), mirroring upstream semantics.
+- New sinks: agent loop (turn lifecycle, model rounds, tool start/end + exit,
+  aborts), LLM drivers (request start/end + status/latency + errors — local file
+  only), tool execution (bash command + result/truncation), storage open/migrate,
+  config load, auth resolution source (keys NEVER logged — golang-security).
+- `tuiCmd` lifecycle lines (serving on / shutdown) for parity with serve mode.
+- Absorb related deferred findings: [security-5] log.go:62 CWE-117 newline forge;
+  [troubleshoot-2] engine.go `Deps.Log` nil=no-op (re-verify when picked up —
+  `Logger.write` has a nil-receiver guard, so a nil `Deps.Log` may already be a
+  safe no-op and the finding may be stale).
+- Constraints: zero telemetry (local file only, nothing remote); no new deps
+  (stdlib logger stays); unit tests never hit the network (fake driver for engine e2e).
