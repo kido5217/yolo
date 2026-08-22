@@ -45,26 +45,22 @@ func TestAppResyncRehydrates(t *testing.T) {
 	delivered := make(chan tea.Msg, 1)
 	go func() { delivered <- pump() }()
 	ra.resyncCh <- struct{}{}
-	select {
-	case m := <-delivered:
-		if _, ok := m.(resyncMsg); !ok {
-			t.Fatalf("resync pump delivered %T, want resyncMsg", m)
-		}
-		// (2) resyncMsg re-triggers the re-hydrate.
-		if _, cmd := ra.Update(m); cmd == nil {
-			t.Fatal("resyncMsg must return a re-hydrate/re-arm cmd")
-		}
-		// Run the re-hydrate the same way the program loop would and apply
-		// its payload; the store must hold both persisted messages.
-		hm := ra.hydrateCmd()()
-		if _, ok := hm.(hydratedMsg); !ok {
-			t.Fatalf("hydrateCmd delivered %T, want hydratedMsg", hm)
-		}
-		ra.Update(hm)
-		if got := len(ra.store.Messages); got != 2 {
-			t.Fatalf("store after resync re-hydrate has %d messages, want 2", got)
-		}
-	case <-delivered:
-		t.Fatal("resync pump returned without a ping")
+	m := <-delivered
+	if _, ok := m.(resyncMsg); !ok {
+		t.Fatalf("resync pump delivered %v (%T), want resyncMsg", m, m)
+	}
+	// (2) resyncMsg re-triggers the re-hydrate.
+	if _, cmd := ra.Update(m); cmd == nil {
+		t.Fatal("resyncMsg must return a re-hydrate/re-arm cmd")
+	}
+	// Run the re-hydrate the same way the program loop would and apply its
+	// payload; the store must hold both persisted messages.
+	hm := ra.hydrateCmd()()
+	if _, ok := hm.(hydratedMsg); !ok {
+		t.Fatalf("hydrateCmd delivered %T, want hydratedMsg", hm)
+	}
+	ra.Update(hm)
+	if got := len(ra.store.Messages); got != 2 {
+		t.Fatalf("store after resync re-hydrate has %d messages, want 2", got)
 	}
 }
