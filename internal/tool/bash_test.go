@@ -69,6 +69,58 @@ func TestBashNonZeroExitIsSuccessWithMeta(t *testing.T) {
 	}
 }
 
+// TestBashTruncatedOutputSavedWithMarker pins the upstream shell.ts
+// contract: a truncated run stores the FULL output under
+// Env.OutputDir/tool_... and the model-visible text starts with the
+// verbatim marker pointing at the file — without it the model sees a
+// silent mid-stream start and re-runs the command in a loop.
+func TestBashTruncatedOutputSavedWithMarker(t *testing.T) {
+	t.Parallel()
+	d := t.TempDir()
+	env := &Env{
+		Dir:       d,
+		Limits:    Limits{5, 1024}, // tiny: force truncation of 50 lines
+		Shell:     NewShell(d, Limits{2000, 50 * 1024}),
+		OutputDir: filepath.Join(d, "tool-output"),
+	}
+	t.Cleanup(func() {
+		if err := env.Shell.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	raw, _ := json.Marshal(map[string]any{"command": "seq 1 50"})
+	out, err := Registry()["bash"].Run(context.Background(), raw, env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cut, _ := out.Meta["truncated"].(bool); !cut {
+		t.Fatalf("truncated = %v, want true", out.Meta["truncated"])
+	}
+	const marker = "...output truncated...\n\nFull output saved to: "
+	if !strings.HasPrefix(out.Text, marker) {
+		t.Fatalf("text does not start with the truncation marker:\n%q", out.Text[:min(120, len(out.Text))])
+	}
+	rest := strings.TrimPrefix(out.Text, marker)
+	path, tail, _ := strings.Cut(rest, "\n")
+	if path == "" || !filepath.IsAbs(path) {
+		t.Fatalf("marker path = %q", path)
+	}
+	if p, ok := out.Meta["outputPath"].(string); !ok || p != path {
+		t.Fatalf("outputPath = %v, want %q", out.Meta["outputPath"], path)
+	}
+	full, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("full output file missing: %v", err)
+	}
+	lines := strings.Split(strings.TrimSuffix(string(full), "\n"), "\n")
+	if len(lines) != 50 || lines[0] != "1" || lines[49] != "50" {
+		t.Fatalf("file has %d lines (first=%q last=%q), want 1..50", len(lines), lines[0], lines[len(lines)-1])
+	}
+	if !strings.Contains(tail, "50") {
+		t.Fatalf("visible tail lost its end: %q", tail)
+	}
+}
+
 // TestBashMarkerExitCode pins the marker-path exit decoding: the second
 // command (marker counter n=1) must report the REAL exit 4 from the marker,
 // not the counter. Regression guard for decodeMarker mis-group decoding.

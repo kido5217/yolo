@@ -5,11 +5,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"math"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func tmpFile(t *testing.T, name, content string) string {
@@ -256,4 +258,38 @@ func sha256Ok(t *testing.T, label string, content []byte, want string) bool {
 		return false
 	}
 	return true
+}
+
+// TestCleanOutputDir pins the retention sweep: only tool_* files older than
+// the 7-day window are removed; fresh outputs and non-tool files survive.
+func TestCleanOutputDir(t *testing.T) {
+	t.Parallel()
+	d := t.TempDir()
+	oldF := filepath.Join(d, "tool_old")
+	recent := filepath.Join(d, "tool_recent")
+	other := filepath.Join(d, "notes.txt")
+	for _, f := range []string{oldF, recent, other} {
+		if err := os.WriteFile(f, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	past := time.Now().Add(-8 * 24 * time.Hour)
+	if err := os.Chtimes(oldF, past, past); err != nil {
+		t.Fatal(err)
+	}
+	if err := CleanOutputDir(d); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(oldF); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("old output not removed (stat err=%v)", err)
+	}
+	for _, f := range []string{recent, other} {
+		if _, err := os.Stat(f); err != nil {
+			t.Fatalf("%s should survive cleanup: %v", filepath.Base(f), err)
+		}
+	}
+	// A missing dir is a no-op (first run before any truncation).
+	if err := CleanOutputDir(filepath.Join(d, "does-not-exist")); err != nil {
+		t.Fatalf("missing dir: %v", err)
+	}
 }

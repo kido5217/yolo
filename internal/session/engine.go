@@ -65,18 +65,19 @@ type Deps struct {
 }
 
 type Engine struct {
-	db      *storage.DB
-	bus     *bus.Bus
-	prov    *provider.Registry
-	perm    *permission.Service
-	tools   map[string]tool.Tool
-	schemas map[string]json.RawMessage // marshalled tool Schema per id, built once in New
-	lg      *log.Logger
-	dataDir string
-	cfg     func(projectDir string) (*protocol.Config, error)
-	drivers map[string]llm.Driver
-	clock   func() int64
-	backoff func(attempt int) time.Duration
+	db        *storage.DB
+	bus       *bus.Bus
+	prov      *provider.Registry
+	perm      *permission.Service
+	tools     map[string]tool.Tool
+	schemas   map[string]json.RawMessage // marshalled tool Schema per id, built once in New
+	lg        *log.Logger
+	dataDir   string
+	outputDir string // dataDir/tool-output (upstream TRUNCATION_DIR); "" if unset
+	cfg       func(projectDir string) (*protocol.Config, error)
+	drivers   map[string]llm.Driver
+	clock     func() int64
+	backoff   func(attempt int) time.Duration
 
 	mu     sync.Mutex
 	busy   map[string]context.CancelFunc
@@ -118,20 +119,21 @@ func New(d Deps) (*Engine, error) {
 		backoff = defaultBackoff
 	}
 	return &Engine{
-		db:      d.DB,
-		bus:     d.Bus,
-		prov:    d.Prov,
-		perm:    d.Perm,
-		tools:   d.Tools,
-		schemas: schemas,
-		lg:      d.Log,
-		dataDir: d.DataDir,
-		cfg:     d.Cfg,
-		drivers: d.Drivers,
-		clock:   clock,
-		backoff: backoff,
-		busy:    map[string]context.CancelFunc{},
-		shells:  map[string]*tool.Shell{},
+		db:        d.DB,
+		bus:       d.Bus,
+		prov:      d.Prov,
+		perm:      d.Perm,
+		tools:     d.Tools,
+		schemas:   schemas,
+		lg:        d.Log,
+		dataDir:   d.DataDir,
+		outputDir: outputDirFor(d.DataDir),
+		cfg:       d.Cfg,
+		drivers:   d.Drivers,
+		clock:     clock,
+		backoff:   backoff,
+		busy:      map[string]context.CancelFunc{},
+		shells:    map[string]*tool.Shell{},
 	}, nil
 }
 
@@ -141,6 +143,15 @@ func defaultBackoff(attempt int) time.Duration {
 	base := time.Second << uint(attempt-1)
 	jitter := 0.8 + 0.4*rand.Float64()
 	return time.Duration(float64(base) * jitter)
+}
+
+// outputDirFor maps the data dir to the truncated-bash output dir (upstream
+// TRUNCATION_DIR = Global.Path.data + "tool-output"); unset data dir → "".
+func outputDirFor(dataDir string) string {
+	if dataDir == "" {
+		return ""
+	}
+	return filepath.Join(dataDir, "tool-output")
 }
 
 // SendResult identifies the persisted user message and its text part.
@@ -1130,6 +1141,7 @@ func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part)
 		Dir:       t.row.ProjectDir,
 		Shell:     e.shellFor(t.sessionID, t.row.ProjectDir),
 		Limits:    e.limitsFor(t.cfg),
+		OutputDir: e.outputDir,
 		Storage:   e.db,
 		SessionID: t.sessionID,
 	}

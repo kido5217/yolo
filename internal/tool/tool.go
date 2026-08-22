@@ -37,14 +37,17 @@ func (l Limits) withDefaults() Limits {
 // Close). Tools that don't run commands must tolerate a nil Env.Shell.
 
 // Env is what Run receives: the session project dir (permission anchor and
-// base for relative paths), the session shell, output limits, and — for
-// tools that persist (todowrite) — the session storage. Dir/Shell/Limits
-// are the engine's concern to populate; Storage/SessionID may be nil/empty
-// for tools that ignore them.
+// base for relative paths), the session shell, output limits, — for tools
+// that persist (todowrite) — the session storage, and OutputDir (the data
+// dir's tool-output/), where bash stores the FULL output of a truncated run
+// (upstream shell.ts). Dir/Shell/Limits are the engine's concern to
+// populate; OutputDir/Storage/SessionID may be empty/nil for tools that
+// ignore them.
 type Env struct {
 	Dir       string
 	Shell     *Shell
 	Limits    Limits
+	OutputDir string
 	Storage   *storage.DB
 	SessionID string
 }
