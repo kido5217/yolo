@@ -191,8 +191,10 @@ func permKey(r rune) tea.KeyPressMsg {
 
 // permHarness boots the full stack with a scripted driver (turn 1: text + a
 // bash tool call, turn 2: final text) and a config that asks for bash, then
-// drives the app on the new session at 80x10 (the viewport holds the whole
-// 4-line transcript so the completed tool row is visible at the end).
+// drives the app on the new session at 80x16 (the 13-row viewport holds the
+// whole 9-line end transcript — user, divider, listing text, the completed
+// tool row, its 3-line inline output preview and "done" — so the completed
+// tool row is visible at the end).
 func permHarness(t *testing.T) (*testutil.TestServer, *client.Client, *teatest.TestModel, string) {
 	t.Helper()
 	drv := fakellm.New(
@@ -212,7 +214,7 @@ func permHarness(t *testing.T) (*testutil.TestServer, *client.Client, *teatest.T
 	}
 	a := newRecApp(c, store.Store{}, ses.ID)
 	t.Cleanup(a.Close)
-	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 10))
+	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 16))
 	return ts, c, tm, ses.ID
 }
 

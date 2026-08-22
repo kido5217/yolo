@@ -164,16 +164,25 @@ func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool) stri
 				continue
 			}
 			writeLine(row)
-			if expanded[p.ID] && p.State != nil {
+			switch {
+			case expanded[p.ID] && p.State != nil:
 				block := tailLines(p.State.Output, 40)
 				if p.State.Status == "error" {
 					block = p.State.Error
 				}
 				if block == "" {
-					break
+					continue
 				}
 				for _, l := range strings.Split(block, "\n") {
 					writeLine("  " + l)
+				}
+			case p.Tool == "bash" && p.State != nil && p.State.Status == "completed":
+				// Inline preview (upstream parity): a completed bash part
+				// shows the 10-line head of its output without alt+e.
+				if block := headPreview(p.State.Output, 10); block != "" {
+					for _, l := range strings.Split(block, "\n") {
+						writeLine("  " + l)
+					}
 				}
 			}
 		}
@@ -242,6 +251,22 @@ func toolTitleFallback(p protocol.Part) string {
 		return p.CallID[:8]
 	}
 	return p.CallID
+}
+
+// headPreview returns the first n lines of s for the inline output preview:
+// unchanged when it fits, first n lines plus a "…" line when it overflows
+// (upstream collapseToolOutput parity), "" for empty output.
+func headPreview(s string, n int) string {
+	if s == "" || n <= 0 {
+		return ""
+	}
+	lines := strings.Split(strings.TrimSuffix(s, "\n"), "\n")
+	if len(lines) <= n {
+		return strings.Join(lines, "\n")
+	}
+	head := lines[:n]
+	head = append(head, "\u2026")
+	return strings.Join(head, "\n")
 }
 
 func tailLines(s string, n int) string {
