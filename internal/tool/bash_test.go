@@ -69,6 +69,69 @@ func TestBashNonZeroExitIsSuccessWithMeta(t *testing.T) {
 	}
 }
 
+// TestBashMarkerExitCode pins the marker-path exit decoding: the second
+// command (marker counter n=1) must report the REAL exit 4 from the marker,
+// not the counter. Regression guard for decodeMarker mis-group decoding.
+func TestBashMarkerExitCode(t *testing.T) {
+	t.Parallel()
+	d := t.TempDir()
+	env := &Env{Dir: d, Limits: Limits{2000, 50 * 1024}, Shell: NewShell(d, Limits{2000, 50 * 1024})}
+	t.Cleanup(func() {
+		if err := env.Shell.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	raw, _ := json.Marshal(map[string]any{"command": "true"})
+	if _, err := Registry()["bash"].Run(context.Background(), raw, env); err != nil {
+		t.Fatal(err)
+	}
+	// Subshell exit: the persistent shell survives, so the exit comes from
+	// the end-marker (not the process-death path).
+	raw2, _ := json.Marshal(map[string]any{"command": "(exit 4)"})
+	out, err := Registry()["bash"].Run(context.Background(), raw2, env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := out.Meta["exit"]; got != 4 {
+		t.Fatalf("exit = %v, want 4", got)
+	}
+}
+
+// TestShellCwdSurvivesKillRespawn pins cwd tracking through the end-marker:
+// after a timeout kill, the respawned shell must start in the last cd'd
+// directory, not the original root.
+func TestShellCwdSurvivesKillRespawn(t *testing.T) {
+	t.Parallel()
+	d := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(d, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	env := &Env{Dir: d, Limits: Limits{2000, 50 * 1024}, Shell: NewShell(d, Limits{2000, 50 * 1024})}
+	t.Cleanup(func() {
+		if err := env.Shell.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	run := func(cmd string, timeout int) (Output, error) {
+		raw, _ := json.Marshal(map[string]any{"command": cmd, "timeout": timeout})
+		return Registry()["bash"].Run(context.Background(), raw, env)
+	}
+	if _, err := run("cd sub", 10000); err != nil {
+		t.Fatal(err)
+	}
+	// Timeout kill: the shell dies mid-command.
+	if _, err := run("sleep 5", 300); err == nil {
+		t.Fatal("want timeout error")
+	}
+	out, err := run("pwd", 10000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := strings.TrimSpace(out.Text), filepath.Join(d, "sub"); got != want {
+		t.Fatalf("pwd after respawn = %q, want %q", got, want)
+	}
+}
+
 func TestBashStderrMerged(t *testing.T) {
 	t.Parallel()
 	d := t.TempDir()
