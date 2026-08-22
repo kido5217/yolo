@@ -32,7 +32,10 @@ contracts.
     `testdata/`
   - `provider` — provider catalog: `zen.go`, `kido.go`, `seams.go`
   - `tool` — bash/edit/glob/grep/read/write/todowrite; `desc/*.txt`
-    byte-verbatim pinned descriptions
+    byte-verbatim pinned descriptions. Truncated bash runs store the FULL
+    output at `<data>/tool-output/tool_<id>` and the model-visible text
+    carries the upstream marker (bash.go `WriteFullOutput`); startup
+    sweeps it (`CleanOutputDir`, 7-day retention)
   - `permission` — engine (upstream port) + `builtins.go` + `service.go`
   - `config` — `yolo.jsonc` load/PATCH (JSONC)
   - `auth` — key resolution: env → auth.json → config

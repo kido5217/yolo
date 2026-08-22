@@ -29,27 +29,35 @@ per-task history, no plan-slice copies). Pre-v0.1.2 deviations (items 1–66, fr
 
 ## Active
 
-**Awaiting user:** merge the v0.1.3 PR (`v0.1.3_output_fix` → `main`) and tag `v0.1.3`.
-Commits: `85a227e` fix(tool) marker decode + cwd newline; `16a2e13` fix(tui) SSE-drop
-re-hydrate + SSE write-error return; `968b9ba` test(tui) resync-pump flake; `da25275`
-feat(tui) inline bash output preview. Root causes: (1) `16d0483` (v0.1.2 datastruct-2)
+**Awaiting user:** merge the v0.1.3 PR (`v0.1.3_output_fix` → `main`, PR #7) and tag
+`v0.1.3`. Commits: `85a227e` fix(tool) marker decode + cwd newline; `16a2e13` fix(tui)
+SSE-drop re-hydrate + SSE write-error return; `968b9ba` test(tui) resync-pump flake;
+`da25275` feat(tui) inline bash output preview; `18ea0b6` fix(tool) save full truncated
+bash output + verbatim marker (loop in `ses_EuCqnuD7PTQQxVu5xmFX` — the model re-ran
+`go test -v` ~14× because the 1036-of-1209-line tail arrival was silent; upstream
+shell.ts:579 pins the `Full output saved to:` marker the v1 plan omitted — Task 11
+pinned only `tail()`, so this is a port gap, deviation 76). Root causes: (1) `16d0483` (v0.1.2 datastruct-2)
 re-wrote the shared end-marker regex without re-teaching `decodeMarker` — from the
 2nd bash command on the reported exit code was the marker counter and the cwd was never
 decoded (a latent extra bug: `pwd`'s trailing newline in the base64 made the respawn
 `os.Stat` fail → always respawned in the root dir); (2) the TUI never noticed its SSE
 stream dropping (silent reconnect, no re-hydrate) — a lost `session.status` left the
 footer stuck on `busy` forever ("hang") with a stale transcript ("nothing printed");
-(3) bash output was row-only until alt+e (upstream shows it inline). 0.2.0 seed:
+(3) bash output was row-only until alt+e (upstream shows it inline);
+(4) truncated bash output reached the model silently — `tail()` was ported without
+upstream's full-output save + `Full output saved to:` marker (plan Task 11 pinned only
+`tail()`), so a 1036-of-1209-line CI-gate run arrived mid-stream and the model
+re-ran the gate ~14×. 0.2.0 seed:
 `docs/superpowers/reviews/v0.1.2/DEFERRED.md` + `08-refactoring-backlog.md` + the
 version-wiring open item below.
 
 ## Last completed
 
-v0.1.3 branch (2026-08-22): all three root causes fixed with failing tests first
-(shell marker exit/cwd, SSE-drop resync, inline bash preview + expanded-empty-output
-parts-loop escape bug), full gate green (vet+test+gofmt+golangci-lint), 4 commits,
-branch pushed. Evidence: user's hung session `ses_wNbfyVPnHLrEyJXM8nrr` in
-`~/.local/share/yolo/storage/yolo.db` — 12 ok CI-gate runs with incrementing phantom
+v0.1.3 branch (2026-08-22): the reported loop + its two downstream causes fixed with
+failing tests first (shell marker exit/cwd; SSE-drop resync; inline bash preview +
+expanded-empty-output parts-loop escape; truncated-bash full-output save + marker),
+full gate green (vet+test+gofmt+golangci-lint), branch pushed (PR #7). Evidence:
+hung session `ses_wNbfyVPnHLrEyJXM8nrr` (12 ok CI-gate runs with incrementing phantom
 `exit:5..16` metadata.
 
 ## Open items
@@ -194,3 +202,16 @@ PARTS loop and silently dropping every part after an expanded empty-output tool;
 `continue`s. The two permission teatest suites needed a taller terminal (80x10 → 80x16)
 because the inline preview grows the end transcript to 9 lines beyond the 7-row
 viewport — test-only, documented in `permHarness`.
+76. Truncated-bash output port gap (bugfix, P0, 2026-08-22): the v1 plan (Task 11,
+line 3178) pinned only the `tail()` helper — upstream shell.ts's accompanying
+behavior (store the FULL output at `Global.Path.data/tool-output/tool_<id>` and
+prepend `...output truncated...\n\nFull output saved to: ${file}\n\n` +
+metadata.outputPath, 7-day retention) was never in scope, so truncated arrivals
+reached the model silently (tail only, no marker): in session
+`ses_EuCqnuD7PTQQxVu5xmFX` the model re-ran the CI gate ~14× ("truncated at the
+beginning", cat/tee workarounds). Fixed in `18ea0b6`: `tool.WriteFullOutput` +
+`tool.CleanOutputDir` (dataDir/tool-output; startup sweep, 7-day retention),
+bash.go verbatim marker + meta.outputPath, engine wires `Env.OutputDir`.
+Pinned by `TestBashTruncatedOutputTellsModelWhereFullOutputIs`, which asserts
+the marker in the SECOND MODEL ROUND's tool message (the model-visible
+contract), not just the stored part.
