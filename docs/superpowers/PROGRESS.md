@@ -1,7 +1,7 @@
 # Yolo — Progress & Status (session checkpoint)
 
-**Updated:** 2026-08-22 (**v0.1.3 output-fix branch complete**: 4 commits on
-`v0.1.3_output_fix`, gate green, PR pending user merge)
+**Updated:** 2026-08-22 (logging coverage investigated — mechanism OK, 23 points
+thin by plan scope; rework deferred to 0.2.0 by user decision, seed in DEFERRED.md)
 
 Rolling checkpoint: active task + last-completed + verified facts + v0.1.2-era deviation log +
 open items. Keep it small — `git log --oneline` and the plan files are the archive (no
@@ -10,18 +10,20 @@ per-task history, no plan-slice copies). Pre-v0.1.2 deviations (items 1–66, fr
 
 ## Where we are
 
-**v0.1.0**, **v0.1.1**, **v0.1.2** complete — merged, tagged, released. **v0.1.3**
-(user-reported output/hang bugfix) is implemented on branch `v0.1.3_output_fix`
-(4 commits, base `main` = `6046ed1`); awaiting **user PR merge**, then tag `v0.1.3`
-(semantic patch: fixes only). 0.2.0 still needs a design (brainstorm) + plan after.
+**v0.1.0** – **v0.1.3** complete — merged, tagged, released (v0.1.3: PR #7 →
+`main` `1d3eca6` + tag + release cut). 0.2.0 still needs a design (brainstorm) +
+plan after a scope pick; the logging rework is one of its seeds
+(user-deferred 2026-08-22).
 
 ## Resume instructions
 
-1. Repo: `/home/kido/network/projects/yolo`. If resuming the v0.1.3 line: check out
-   `v0.1.3_output_fix` (up to date with origin after push). No active plan — the
-   v0.1.3 work was a user-reported bugfix (systematic-debugging + TDD per commit),
-   not a plan task. 0.2.0 needs a new design (`brainstorming`), then a plan
-   (`writing-plans`) sourced from the 0.2.0 seed below — before any implementation.
+1. Repo: `/home/kido/network/projects/yolo`. v0.1.0–v0.1.3 are released on `main`;
+   the working branch for the (deferred) logging line is `v0.1.4_logging_fix`.
+   No active plan — 0.2.0 needs a new design (`brainstorming`), then a plan
+   (`writing-plans`), sourced from the 0.2.0 seeds in
+   `docs/superpowers/reviews/v0.1.2/DEFERRED.md` (incl. "logging rework (0.2.0)") +
+   `08-refactoring-backlog.md` — before any implementation. The logging rework is
+   user-deferred to 0.2.0 (2026-08-22): no v0.1.x logging code changes.
 2. Per task of any future plan: Step 1 failing test → Step 2 confirm FAIL → Step 3
    minimal impl → Step 4 `go vet ./... && go test ./...` (+ gofmt + golangci-lint) PASS
    → Step 5 commit with the plan's pinned message; then roll this file (active →
@@ -29,53 +31,47 @@ per-task history, no plan-slice copies). Pre-v0.1.2 deviations (items 1–66, fr
 
 ## Active
 
-**v0.1.3 RELEASED** (2026-08-22): PR #7 merged to `main` (`1d3eca6`) + tag
-`v0.1.3` + GitHub release cut. Five root-cause fixes behind the "run CI gate and print
-full output" failure (apparent hang, then an infinite tool loop that did NOT occur on the
-same prompt+model in upstream opencode). Commits: `85a227e` fix(tool) marker decode + cwd
-newline; `16a2e13` fix(tui) SSE-drop re-hydrate + SSE write-error return; `968b9ba`
-test(tui) resync-pump flake; `da25275` feat(tui) inline bash output preview; `18ea0b6`
-fix(tool) save full truncated bash output + verbatim marker (loop in
-`ses_EuCqnuD7PTQQxVu5xmFX` — the model re-ran `go test -v` ~14× because the 1036-of-1209-line
-tail arrival was silent; upstream shell.ts:579 pins the `Full output saved to:` marker the
-v1 plan omitted — Task 11 pinned only `tail()`, so this is a port gap, deviation 76);
-`9d88357` fix(session) drop user-message re-append on tool rounds — history replay is
-1:1 with upstream (loop in `ses_Mt8jhDCdseSyZjcqVhED`: same prompt does NOT loop in
-upstream opencode, so the re-append was the diff; deviation 77).
+**Logging rework → deferred to 0.2.0** (user decision 2026-08-22, on
+`v0.1.4_logging_fix`). Investigating "not enough data in yolo.log" found the
+`internal/log` **mechanism is healthy** (append + 5 MiB → `.1` rotation; tests
+green) but **coverage is thin by plan**: 23 log points, almost all fatal/error
+paths (engine 8 = persistence/marshal failures only; `serving on`/shutdown exist
+in `yolo serve` only, not the TUI path; nothing in LLM/tool/storage; no debug
+level). The v1 plan (Task 30) pinned exactly that minimal scope, so this is a
+scope decision, not a port gap. Full diagnosis + proposed 0.2.0 scope +
+constraints: `docs/superpowers/reviews/v0.1.2/DEFERRED.md` → "logging rework
+(0.2.0)". No v0.1.x logging code changes.
 
 **Next (0.2.0):** the v1 port is feature-complete and released. 0.2.0 seeds live in
-`docs/superpowers/reviews/v0.1.2/DEFERRED.md` + `08-refactoring-backlog.md` (+ the
-version-wiring open item below). No active 0.2.0 plan yet — start via `writing-plans`
-after user picks scope.
+`docs/superpowers/reviews/v0.1.2/DEFERRED.md` (+ the logging-rework section above) +
+`08-refactoring-backlog.md` (+ the version-wiring open item below). No active 0.2.0
+plan yet — start via `writing-plans` after user picks scope.
 
-Root causes (archive): (1) `16d0483` (v0.1.2 datastruct-2)
-re-wrote the shared end-marker regex without re-teaching `decodeMarker` — from the
-2nd bash command on the reported exit code was the marker counter and the cwd was never
-decoded (a latent extra bug: `pwd`'s trailing newline in the base64 made the respawn
-`os.Stat` fail → always respawned in the root dir); (2) the TUI never noticed its SSE
-stream dropping (silent reconnect, no re-hydrate) — a lost `session.status` left the
-footer stuck on `busy` forever ("hang") with a stale transcript ("nothing printed");
-(3) bash output was row-only until alt+e (upstream shows it inline);
-(4) truncated bash output reached the model silently — `tail()` was ported without
-upstream's full-output save + `Full output saved to:` marker (plan Task 11 pinned only
-`tail()`), so a 1036-of-1209-line CI-gate run arrived mid-stream and the model
-re-ran the gate ~14×;
-(5) plan Task 16's LOCKED mapping RE-APPENDED the newest user message at the tail of
-every tool-call round, so the model re-saw its own instruction each round and re-ran
-tools in a loop even with (4) fixed — upstream replays history 1:1 (round ends with
-the tool result). Decisive diff: the same prompt+model does NOT loop in upstream
-opencode.
+Root causes (archive, v0.1.3): (1) `16d0483` (v0.1.2 datastruct-2) re-wrote the shared
+end-marker regex without re-teaching `decodeMarker` — from the 2nd bash command on the
+reported exit code was the marker counter and the cwd was never decoded (a latent extra
+bug: `pwd`'s trailing newline in the base64 made the respawn `os.Stat` fail → always
+respawned in the root dir); (2) the TUI never noticed its SSE stream dropping (silent
+reconnect, no re-hydrate) — a lost `session.status` left the footer stuck on `busy`
+forever ("hang") with a stale transcript ("nothing printed"); (3) bash output was
+row-only until alt+e (upstream shows it inline); (4) truncated bash output reached the
+model silently — `tail()` was ported without upstream's full-output save + `Full output
+saved to:` marker (plan Task 11 pinned only `tail()`), so a 1036-of-1209-line CI-gate run
+arrived mid-stream and the model re-ran the gate ~14×; (5) plan Task 16's LOCKED mapping
+RE-APPENDED the newest user message at the tail of every tool-call round, so the model
+re-saw its own instruction each round and re-ran tools in a loop even with (4) fixed —
+upstream replays history 1:1 (round ends with the tool result). Decisive diff: the same
+prompt+model does NOT loop in upstream opencode. Detail: deviations 73–77.
 
 ## Last completed
 
-v0.1.3 RELEASED (2026-08-22, tag `v0.1.3`, PR #7 → `main` `1d3eca6`): the reported
-loop + all five contributing causes fixed with failing tests first (shell marker
-exit/cwd; SSE-drop resync; inline bash preview + expanded-empty-output parts-loop
-escape; truncated-bash full-output save + marker; history replay 1:1 — dropped the
-plan's user-message re-append), full gate green (vet+test+gofmt+golangci-lint).
-Evidence:
-hung session `ses_wNbfyVPnHLrEyJXM8nrr` (12 ok CI-gate runs with incrementing phantom
-`exit:5..16` metadata.
+Logging checkpoint (2026-08-22, `v0.1.4_logging_fix`): logger mechanism verified
+working (append + 5 MiB → `.1` rotation; `go test ./internal/log/...` green);
+coverage mapped — 23 points, thin by plan (engine = error paths only; TUI mode
+silent at start/stop; no LLM/tool/storage coverage; no levels); rework deferred
+to 0.2.0 by user decision with the full seed in DEFERRED.md → "logging rework
+(0.2.0)". (Prior: v0.1.3 released 2026-08-22 — PR #7 → `main` `1d3eca6` + tag +
+release; the five root causes are deviations 73–77.)
 
 ## Open items
 
