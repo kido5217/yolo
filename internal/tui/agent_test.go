@@ -130,7 +130,9 @@ func TestAgentDialogKeys(t *testing.T) {
 		a.handleKey(press(tea.KeyEnter))
 		a.handleKey(press(tea.KeyEscape))
 		if a.agentDlg.hasSubChoice || a.dlg.empty() {
-			t.Fatalf("after esc: subChoice=%v dlg=%v, want subchoice closed and dialog open", a.agentDlg.hasSubChoice, a.dlg.empty())
+			t.Fatalf(
+				"after esc: subChoice=%v dlg=%v, want subchoice closed and dialog open",
+				a.agentDlg.hasSubChoice, a.dlg.empty())
 		}
 		a.handleKey(press(tea.KeyEscape))
 		if !a.dlg.empty() || a.agentDlg != nil {

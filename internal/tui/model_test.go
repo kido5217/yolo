@@ -40,8 +40,18 @@ func tuiProviderFixture() []protocol.Provider {
 		{
 			ID: "opencode", Name: "OpenCode Zen",
 			Models: map[string]protocol.Model{
-				"claude-opus-4-7": {ID: "claude-opus-4-7", ProviderID: "opencode", Name: "Claude Opus 4.7", Limit: protocol.ModelLimit{Context: 200000}},
-				"gpt-5-nano":      {ID: "gpt-5-nano", ProviderID: "opencode", Name: "GPT-5 Nano", Limit: protocol.ModelLimit{Context: 400000}},
+				"claude-opus-4-7": {
+					ID:         "claude-opus-4-7",
+					ProviderID: "opencode",
+					Name:       "Claude Opus 4.7",
+					Limit:      protocol.ModelLimit{Context: 200000},
+				},
+				"gpt-5-nano": {
+					ID:         "gpt-5-nano",
+					ProviderID: "opencode",
+					Name:       "GPT-5 Nano",
+					Limit:      protocol.ModelLimit{Context: 400000},
+				},
 			},
 			Auth: &protocol.ProviderAuth{Type: "api", Status: "missing", KeyRequired: true},
 		},
@@ -225,7 +235,9 @@ func TestModelDialogKeys(t *testing.T) {
 		a.handleKey(press(tea.KeyEnter))
 		a.handleKey(press(tea.KeyEscape))
 		if a.modelDlg.hasSubChoice || a.dlg.empty() {
-			t.Fatalf("after esc: subChoice=%v dlg=%v, want subchoice closed and dialog open", a.modelDlg.hasSubChoice, a.dlg.empty())
+			t.Fatalf(
+				"after esc: subChoice=%v dlg=%v, want subchoice closed and dialog open",
+				a.modelDlg.hasSubChoice, a.dlg.empty())
 		}
 		a.handleKey(press(tea.KeyEscape))
 		if !a.dlg.empty() || a.modelDlg != nil {
