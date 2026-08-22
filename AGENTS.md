@@ -43,6 +43,9 @@ Read it before acting. For session state, read `docs/superpowers/PROGRESS.md` se
 
 ## Commit & branch discipline
 
+- **NEVER commit directly onto `main`** (user directive, 2026-08-22). Every change —
+  code, docs, checkpoints, release bookkeeping — is committed on a task branch and
+  reaches `main` only via a merged PR (branch → commit → push → PR → user merge).
 - Work happens inline on the current task branch (named with the active plan — see `PROGRESS.md` → Resume instructions), **one task at a time**.
 - Conventional commits (`feat:`/`fix:`/`docs:`/`test:`/…, imperative, ≤ 72-char subject). Task commits use **the commit message pinned in the plan**. Between tasks: `docs: checkpoint — Task N (...) done, next is Task N+1`.
 - Update `PROGRESS.md` at each checkpoint. It is a **rolling checkpoint** — keep it small: active task (full detail), one-line last-completed, key verified facts, append-only deviation log (current era inline; 2026-08-20 archived pre-v0.1.2 items 1–66 to `docs/superpowers/deviations-archive-v0.1.0.md`), open items. No per-task history, no plan-slice copies: `git log --oneline` and the plan file are the archive.
