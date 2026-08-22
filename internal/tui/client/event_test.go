@@ -14,6 +14,13 @@ import (
 )
 
 func TestEventsDecodeAndReconnect(t *testing.T) {
+	// Frame payloads hoisted so the handler lines stay short.
+	const (
+		idleFrame = `data: {"id":"evt_1","type":"session.status","properties":` +
+			`{"sessionID":"ses_1","status":{"type":"idle"}}}` + "\n\n"
+		busyFrame = `data: {"id":"evt_2","type":"session.status","properties":` +
+			`{"sessionID":"ses_1","status":{"type":"busy"}}}` + "\n\n"
+	)
 	var conns int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		n := atomic.AddInt32(&conns, 1)
@@ -21,11 +28,11 @@ func TestEventsDecodeAndReconnect(t *testing.T) {
 		if n == 1 {
 			// first connection: one frame, then the handler returns and the
 			// server closes the connection (the client must reconnect)
-			_, _ = fmt.Fprint(w, `data: {"id":"evt_1","type":"session.status","properties":{"sessionID":"ses_1","status":{"type":"idle"}}}`+"\n\n")
+			_, _ = fmt.Fprint(w, idleFrame)
 			fl.Flush()
 			return
 		}
-		_, _ = fmt.Fprint(w, `data: {"id":"evt_2","type":"session.status","properties":{"sessionID":"ses_1","status":{"type":"busy"}}}`+"\n\n")
+		_, _ = fmt.Fprint(w, busyFrame)
 		fl.Flush()
 		<-r.Context().Done()
 	}))

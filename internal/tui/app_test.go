@@ -87,7 +87,13 @@ func TestSessionStreamingViewport(t *testing.T) {
 	drv := fakellm.New(
 		fakellm.Turn{Parts: []llm.Part{
 			{Kind: "text", Text: "thinking"},
-			{Kind: "tool", Name: "read", CallID: "call_1", Args: json.RawMessage(`{"filePath":"hello.txt"}`), Finish: "tool_calls"},
+			{
+				Kind:   "tool",
+				Name:   "read",
+				CallID: "call_1",
+				Args:   json.RawMessage(`{"filePath":"hello.txt"}`),
+				Finish: "tool_calls",
+			},
 		}},
 		fakellm.Turn{Parts: []llm.Part{
 			{Kind: "text", Text: "done", Finish: "stop"},

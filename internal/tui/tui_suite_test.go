@@ -39,7 +39,13 @@ func TestTUIFullTurn(t *testing.T) {
 		fakellm.Turn{Parts: []llm.Part{
 			{Kind: "reasoning", Text: "let me think"},
 			{Kind: "text", Text: "thinking now"},
-			{Kind: "tool", Name: "read", CallID: "call_1", Args: json.RawMessage(`{"filePath":"hello.txt"}`), Finish: "tool_calls"},
+			{
+				Kind:   "tool",
+				Name:   "read",
+				CallID: "call_1",
+				Args:   json.RawMessage(`{"filePath":"hello.txt"}`),
+				Finish: "tool_calls",
+			},
 		}},
 		fakellm.Turn{Parts: []llm.Part{{Kind: "text", Text: "all done"}}},
 	)
