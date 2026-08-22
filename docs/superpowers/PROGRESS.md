@@ -36,7 +36,11 @@ SSE-drop re-hydrate + SSE write-error return; `968b9ba` test(tui) resync-pump fl
 bash output + verbatim marker (loop in `ses_EuCqnuD7PTQQxVu5xmFX` — the model re-ran
 `go test -v` ~14× because the 1036-of-1209-line tail arrival was silent; upstream
 shell.ts:579 pins the `Full output saved to:` marker the v1 plan omitted — Task 11
-pinned only `tail()`, so this is a port gap, deviation 76). Root causes: (1) `16d0483` (v0.1.2 datastruct-2)
+pinned only `tail()`, so this is a port gap, deviation 76); `9d88357`
+fix(session) drop user-message re-append on tool rounds — history replay is
+1:1 with upstream (loop in `ses_Mt8jhDCdseSyZjcqVhED`: same prompt does NOT
+loop in upstream opencode, so the re-append was the diff; deviation 77).
+Root causes: (1) `16d0483` (v0.1.2 datastruct-2)
 re-wrote the shared end-marker regex without re-teaching `decodeMarker` — from the
 2nd bash command on the reported exit code was the marker counter and the cwd was never
 decoded (a latent extra bug: `pwd`'s trailing newline in the base64 made the respawn
@@ -47,16 +51,22 @@ footer stuck on `busy` forever ("hang") with a stale transcript ("nothing printe
 (4) truncated bash output reached the model silently — `tail()` was ported without
 upstream's full-output save + `Full output saved to:` marker (plan Task 11 pinned only
 `tail()`), so a 1036-of-1209-line CI-gate run arrived mid-stream and the model
-re-ran the gate ~14×. 0.2.0 seed:
+re-ran the gate ~14×;
+(5) plan Task 16's LOCKED mapping RE-APPENDED the newest user message at the tail of
+every tool-call round, so the model re-saw its own instruction each round and re-ran
+tools in a loop even with (4) fixed — upstream replays history 1:1 (round ends with
+the tool result). Decisive diff: the same prompt+model does NOT loop in upstream
+opencode. 0.2.0 seed:
 `docs/superpowers/reviews/v0.1.2/DEFERRED.md` + `08-refactoring-backlog.md` + the
 version-wiring open item below.
 
 ## Last completed
 
-v0.1.3 branch (2026-08-22): the reported loop + its two downstream causes fixed with
-failing tests first (shell marker exit/cwd; SSE-drop resync; inline bash preview +
-expanded-empty-output parts-loop escape; truncated-bash full-output save + marker),
-full gate green (vet+test+gofmt+golangci-lint), branch pushed (PR #7). Evidence:
+v0.1.3 branch (2026-08-22): the reported loop + all five contributing causes fixed
+with failing tests first (shell marker exit/cwd; SSE-drop resync; inline bash preview +
+expanded-empty-output parts-loop escape; truncated-bash full-output save + marker;
+history replay 1:1 — dropped the plan's user-message re-append), full gate green
+(vet+test+gofmt+golangci-lint), branch pushed (PR #7). Evidence:
 hung session `ses_wNbfyVPnHLrEyJXM8nrr` (12 ok CI-gate runs with incrementing phantom
 `exit:5..16` metadata.
 
