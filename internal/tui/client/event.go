@@ -69,7 +69,11 @@ func (c *Client) stream(ctx context.Context, ch chan<- protocol.Event) error {
 		return fmt.Errorf("event stream: status %d", resp.StatusCode)
 	}
 	sc := bufio.NewScanner(resp.Body)
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	// 4 MiB max token: a single data: line carries one whole event JSON;
+	// escaped tool output (~700 KB+ raw, ≥2× when escaped) exceeded the
+	// former 1 MiB cap (safety-2). Overflow still aborts the stream and
+	// fires the resync ping — bounded by the re-hydrate.
+	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for sc.Scan() {
 		// sc.Bytes() is valid until the next Scan; unmarshalling copies the
 		// payload out, so no per-line []byte conversion is needed.

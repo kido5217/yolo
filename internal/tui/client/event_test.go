@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -123,5 +124,34 @@ func TestEventsResyncPingsOnDrop(t *testing.T) {
 	// The reconnect must deliver the second connection's frame.
 	if ev := waitFor("evt_2"); ev.Type != "session.status" {
 		t.Fatalf("reconnected event = %+v", ev)
+	}
+}
+
+// TestEventsLargeDataLineSurvives: a single data: line above the former
+// 1 MiB scanner cap — escaped tool output (~700 KB+ raw is ≥2× when
+// JSON-escaped) — is delivered instead of dropped (safety-2). The 2 MiB
+// payload sits under the new 4 MiB cap.
+func TestEventsLargeDataLineSurvives(t *testing.T) {
+	frame := `data: {"id":"evt_big","type":"message.part.updated","properties":{"part":{"text":"` +
+		strings.Repeat("x", 2*1024*1024) + `"}}}` + "\n\n"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, frame)
+		fl, _ := w.(http.Flusher)
+		fl.Flush()
+		<-r.Context().Done()
+	}))
+	t.Cleanup(srv.Close)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := client.New(srv.URL, "")
+	ch, _ := c.Events(ctx)
+	select {
+	case ev := <-ch:
+		if ev.ID != "evt_big" {
+			t.Fatalf("event = %+v, want evt_big (the >1 MiB line was dropped)", ev)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out: the >1 MiB data line was not delivered")
 	}
 }
