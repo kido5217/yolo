@@ -816,3 +816,54 @@ func TestHelpToStdout(t *testing.T) {
 		})
 	}
 }
+
+// TestRejectUnexpectedPositionals pins AA (cli-7): serve and auth reject
+// unexpected positional args with usage + exit 2, matching tuiCmd.
+// Assertions are on exit codes (the usage text is covered by TestAuthCmd).
+func TestRejectUnexpectedPositionals(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
+
+	if code := run([]string{"auth", "list", "x"}); code != 2 {
+		t.Fatalf("auth list x exit = %d, want 2", code)
+	}
+	if code := run([]string{"auth", "remove", "a", "b"}); code != 2 {
+		t.Fatalf("auth remove a b exit = %d, want 2", code)
+	}
+	if code := run([]string{"auth", "add", "a", "b", "c"}); code != 2 {
+		t.Fatalf("auth add a b c exit = %d, want 2", code)
+	}
+	if code := run([]string{"auth", "list"}); code != 0 {
+		t.Fatalf("auth list (valid) exit = %d, want 0", code)
+	}
+
+	// serve: subprocess — pre-fix it would start serving and block on the
+	// signal channel, so the 10 s watchdog proves the rejection path.
+	bin := buildBinary(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	srv := exec.CommandContext(ctx, bin, "serve", "junk")
+	env := make([]string, 0, len(os.Environ())+5)
+	for _, kv := range os.Environ() {
+		if strings.HasPrefix(kv, "XDG_") {
+			continue
+		}
+		env = append(env, kv)
+	}
+	script := filepath.Join(root, "script.json")
+	_ = os.WriteFile(script, []byte(`[{"parts":[{"kind":"text","text":"ok","finish":"stop","usage":{"input":1,"output":1}}]}`), 0o644)
+	env = append(env,
+		"YOLO_LLM=fake", "YOLO_FAKE_SCRIPT="+script,
+		"XDG_CONFIG_HOME="+filepath.Join(root, "config"),
+		"XDG_DATA_HOME="+filepath.Join(root, "data"),
+		"XDG_CACHE_HOME="+filepath.Join(root, "cache"),
+	)
+	srv.Env = env
+	err := srv.Run()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 2 {
+		t.Fatalf("serve junk exit = %v, want exit code 2 (pre-fix: it starts serving and is killed by the watchdog)", err)
+	}
+}

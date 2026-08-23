@@ -375,6 +375,11 @@ func serveCmd(args []string) int {
 	// ExitOnError: Parse prints and os.Exit's on bad flags, never returns
 	// a non-nil error.
 	_ = fs.Parse(args)
+	if fs.NArg() > 0 {
+		fmt.Fprintf(os.Stderr, "yolo serve: unexpected argument %q\n", fs.Arg(0))
+		usage(os.Stderr)
+		return 2
+	}
 	if *showVer || *showVerLong {
 		printVersion()
 		return 0
@@ -429,6 +434,10 @@ func authCmd(args []string) int {
 
 	switch sub {
 	case "list":
+		if len(rest) != 0 {
+			fmt.Fprintf(os.Stderr, "yolo auth list: unexpected argument %q\n", rest[0])
+			return authUsage()
+		}
 		s, err := loadStore()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "auth list:", err)
@@ -448,7 +457,10 @@ func authCmd(args []string) int {
 		}
 		return 0
 	case "add":
-		if len(rest) < 1 {
+		if len(rest) < 1 || len(rest) > 2 {
+			if len(rest) > 2 {
+				fmt.Fprintf(os.Stderr, "yolo auth add: unexpected argument %q\n", rest[2])
+			}
 			return authUsage()
 		}
 		provider := rest[0]
@@ -481,7 +493,10 @@ func authCmd(args []string) int {
 		}
 		return 0
 	case "remove":
-		if len(rest) < 1 {
+		if len(rest) < 1 || len(rest) > 1 {
+			if len(rest) > 1 {
+				fmt.Fprintf(os.Stderr, "yolo auth remove: unexpected argument %q\n", rest[1])
+			}
 			return authUsage()
 		}
 		s, err := loadStore()
