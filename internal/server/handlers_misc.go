@@ -49,8 +49,8 @@ func (s *Server) providerEntries(dir string) ([]protocol.Provider, error) {
 	out := make([]protocol.Provider, 0, len(cfg.Provider)+2)
 	for _, p := range s.Prov.List() {
 		seen[p.ID] = true
-		st, _ := s.authState(p.ID, p.Auth.KeyRequired, store, cfg)
-		p.Auth = &protocol.ProviderAuth{Type: "api", Status: st, KeyRequired: p.Auth.KeyRequired}
+		st, _ := s.authState(p.ID, p.Auth.RequiresKey, store, cfg)
+		p.Auth = &protocol.ProviderAuth{Type: "api", Status: st, RequiresKey: p.Auth.RequiresKey}
 		if len(p.Env) == 0 {
 			p.Env = []string{auth.EnvName(p.ID)}
 		}
@@ -65,8 +65,8 @@ func (s *Server) providerEntries(dir string) ([]protocol.Provider, error) {
 	sort.Strings(ids)
 	for _, id := range ids {
 		p := provider.FromConfig(id, cfg.Provider[id])
-		st, _ := s.authState(id, p.Auth.KeyRequired, store, cfg)
-		p.Auth = &protocol.ProviderAuth{Type: "api", Status: st, KeyRequired: p.Auth.KeyRequired}
+		st, _ := s.authState(id, p.Auth.RequiresKey, store, cfg)
+		p.Auth = &protocol.ProviderAuth{Type: "api", Status: st, RequiresKey: p.Auth.RequiresKey}
 		if len(p.Env) == 0 {
 			p.Env = []string{auth.EnvName(id)}
 		}
@@ -155,9 +155,9 @@ func (s *Server) handleProviderAuth(w http.ResponseWriter, r *http.Request) {
 	store := s.authSnapshot()
 	out := make(map[string]map[string]any, len(entries))
 	for _, p := range entries {
-		st, src := s.authState(p.ID, p.Auth.KeyRequired, store, cfg)
+		st, src := s.authState(p.ID, p.Auth.RequiresKey, store, cfg)
 		out[p.ID] = map[string]any{
-			"key_required": p.Auth.KeyRequired,
+			"key_required": p.Auth.RequiresKey,
 			"env":          p.Env,
 			"status":       st,
 			"source":       src,

@@ -3,7 +3,7 @@ package protocol
 type ProviderAuth struct {
 	Type        string `json:"type"`   // "api" | "none"
 	Status      string `json:"status"` // "loaded" | "missing" | "not-required"
-	KeyRequired bool   `json:"keyRequired"`
+	RequiresKey bool   `json:"requiresKey"`
 }
 
 type ModelLimit struct {
@@ -19,16 +19,16 @@ type ModelCost struct {
 }
 
 type Model struct {
-	ID         string     `json:"id"`
-	ProviderID string     `json:"providerID"`
-	Name       string     `json:"name"`
-	Family     string     `json:"family,omitempty"`
-	ToolCall   bool       `json:"toolcall"`
-	Reasoning  bool       `json:"reasoning"`
-	Attachment bool       `json:"attachment"`
-	Limit      ModelLimit `json:"limit"`
-	Cost       ModelCost  `json:"cost"`
-	Adapter    string     `json:"adapter"` // "openai" | "anthropic" (driver selection)
+	ID                 string     `json:"id"`
+	ProviderID         string     `json:"providerID"`
+	Name               string     `json:"name"`
+	Family             string     `json:"family,omitempty"`
+	SupportsToolCall   bool       `json:"supportsToolCall"`
+	SupportsReasoning  bool       `json:"supportsReasoning"`
+	SupportsAttachment bool       `json:"supportsAttachment"`
+	Limit              ModelLimit `json:"limit"`
+	Cost               ModelCost  `json:"cost"`
+	Adapter            string     `json:"adapter"` // "openai" | "anthropic" (driver selection)
 }
 
 type Provider struct {

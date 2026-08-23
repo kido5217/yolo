@@ -297,7 +297,7 @@ func providerStatus(auth *protocol.ProviderAuth) (plain, styled string) {
 	switch {
 	case auth != nil && auth.Status == "loaded":
 		return "● loaded", okGreen.Render("● loaded")
-	case auth != nil && auth.KeyRequired && auth.Status == "missing":
+	case auth != nil && auth.RequiresKey && auth.Status == "missing":
 		return "○ missing", errRed.Render("○ missing")
 	default:
 		return "· not-required", dim.Render("· not-required")

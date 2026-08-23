@@ -427,3 +427,29 @@ tea.Batch(cmds...)`. The synthetic key is the locked `ctrlCKey` shape
 `{Code:'c', Mod: tea.ModCtrl}` (home_test.go:44) and the precedence
 behavior (pending perm ask / open dialog still owns the keys) is exactly
 as the brief specifies. Resolves per principle 5.
+108. wire-DTO bool JSON tags renamed to predicate form (wire/medium,
+2026-08-23; the plan assigned this entry the number 95, already in use —
+next free is 108): finding [naming-9] — the protocol bool fields lacked
+is/has predicate form. Renamed: ProviderAuth.KeyRequired→RequiresKey
+(`keyRequired`→`requiresKey`), Model.ToolCall→SupportsToolCall
+(`toolcall`→`supportsToolCall`), Model.Reasoning→SupportsReasoning
+(`reasoning`→`supportsReasoning`), Model.Attachment→SupportsAttachment
+(`attachment`→`supportsAttachment`), Agent.Hidden→IsHidden
+(`hidden`→`isHidden`), Part.Synthetic→IsSynthetic
+(`synthetic`→`isSynthetic`), Part.Ignored→IsIgnored (`ignored`→`isIgnored`),
+PermissionRepliedProps.Auto→IsAuto (`auto`→`isAuto`). Server and TUI are
+one module: every encoder and decoder moved in the same commit, so the
+in-process wire is consistent; the deviation is against the
+upstream-mirrored JSON shapes (principle 2), accepted by spec §3.5 V / §5.
+Pinned by protocol.TestWireBoolTags; server golden provider.json
+regenerated (four key renames only, values unchanged). Resolves per
+principle 5 (spec-directed wire change).
+109. Plan Task V1 tag-pin test would not compile (test-only/low,
+2026-08-23): the brief's case rows were parenthesized tuples
+(`(protocol.Part{}, "IsSynthetic")`) — not a composite value in Go — and
+`f := reflect.TypeOf(c.typ).FieldByName(c.name)` ignored the method's
+second return value. Fixed to positional composite rows
+(`{protocol.Part{}, "IsSynthetic"}`) and
+`f, found := …; if !found { … }`. The eight predicate renames, JSON tags,
+and the lowerCamel prefix assertion are as the brief specifies. Resolves
+per principle 5.

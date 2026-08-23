@@ -53,7 +53,7 @@ func tuiProviderFixture() []protocol.Provider {
 					Limit:      protocol.ModelLimit{Context: 400000},
 				},
 			},
-			Auth: &protocol.ProviderAuth{Type: "api", Status: "missing", KeyRequired: true},
+			Auth: &protocol.ProviderAuth{Type: "api", Status: "missing", RequiresKey: true},
 		},
 	}
 }

@@ -1112,7 +1112,7 @@ func (e *Engine) saveSynthetic(ctx context.Context, t *turn, r *round, text stri
 	start := e.clock()
 	p := protocol.Part{
 		ID: protocol.NewID("prt"), SessionID: t.sessionID, MessageID: r.id,
-		Type: "text", Text: text, Synthetic: &syn,
+		Type: "text", Text: text, IsSynthetic: &syn,
 		Time: protocol.PartTime{Start: start, End: e.clock()},
 	}
 	row, perr := storage.ProtocolToPart(p)
@@ -1131,7 +1131,7 @@ func (e *Engine) saveSynthetic(ctx context.Context, t *turn, r *round, text stri
 // isSyntheticPart reports whether a part is engine-generated and excluded
 // from history replay.
 func isSyntheticPart(p protocol.Part) bool {
-	return p.Synthetic != nil && *p.Synthetic
+	return p.IsSynthetic != nil && *p.IsSynthetic
 }
 
 // overflowPatterns ports opencode v1.18.18's curated context-overflow

@@ -1,7 +1,7 @@
 [
   {
     "auth": {
-      "keyRequired": false,
+      "requiresKey": false,
       "status": "not-required",
       "type": "api"
     },
@@ -12,7 +12,6 @@
     "models": {
       "q": {
         "adapter": "openai",
-        "attachment": false,
         "cost": {
           "cacheRead": 0,
           "cacheWrite": 0,
@@ -27,8 +26,9 @@
         },
         "name": "Qwen",
         "providerID": "kido",
-        "reasoning": true,
-        "toolcall": true
+        "supportsAttachment": false,
+        "supportsReasoning": true,
+        "supportsToolCall": true
       }
     },
     "name": "Kido",
@@ -37,7 +37,7 @@
   },
   {
     "auth": {
-      "keyRequired": true,
+      "requiresKey": true,
       "status": "missing",
       "type": "api"
     },
@@ -48,7 +48,6 @@
     "models": {
       "claude-opus-4-7": {
         "adapter": "anthropic",
-        "attachment": false,
         "cost": {
           "cacheRead": 0,
           "cacheWrite": 0,
@@ -63,12 +62,12 @@
         },
         "name": "Claude Opus 4.7",
         "providerID": "opencode",
-        "reasoning": true,
-        "toolcall": true
+        "supportsAttachment": false,
+        "supportsReasoning": true,
+        "supportsToolCall": true
       },
       "gpt-5-nano": {
         "adapter": "openai",
-        "attachment": false,
         "cost": {
           "cacheRead": 0,
           "cacheWrite": 0,
@@ -83,8 +82,9 @@
         },
         "name": "GPT-5 Nano",
         "providerID": "opencode",
-        "reasoning": true,
-        "toolcall": true
+        "supportsAttachment": false,
+        "supportsReasoning": true,
+        "supportsToolCall": true
       }
     },
     "name": "OpenCode Zen",

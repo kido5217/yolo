@@ -55,7 +55,7 @@ func BenchmarkProtocolToPart(b *testing.B) {
 		{"text/1KB", protocol.Part{Type: "text", Text: benchText(1 << 10)}},
 		{"text/64KB", protocol.Part{Type: "text", Text: benchText(64 << 10)}},
 		{"text/128KB", protocol.Part{Type: "text", Text: text128}},
-		{"text/128KB_final", protocol.Part{Type: "text", Text: text128, Time: protocol.PartTime{Start: 1, End: 2}, Synthetic: &syn}},
+		{"text/128KB_final", protocol.Part{Type: "text", Text: text128, Time: protocol.PartTime{Start: 1, End: 2}, IsSynthetic: &syn}},
 		{"tool/input64KB", protocol.Part{Type: "tool", Tool: "bash", State: &protocol.ToolState{Status: "completed", Input: map[string]any{"command": benchText(64 << 10)}, Output: "ok"}}},
 	}
 	for _, c := range cases {

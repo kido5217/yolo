@@ -274,7 +274,7 @@ func (s *Service) resolve(ctx context.Context, requestID string, d Decision, dbR
 			s.lg.Error("persist reply failed", "request_id", requestID, "error", err)
 		}
 	}
-	props := protocol.PermissionRepliedProps{RequestID: requestID, Reply: wireReply, Auto: auto}
+	props := protocol.PermissionRepliedProps{RequestID: requestID, Reply: wireReply, IsAuto: auto}
 	if sid := e.req.SessionID; sid != "" {
 		props.SessionID = sid
 	}

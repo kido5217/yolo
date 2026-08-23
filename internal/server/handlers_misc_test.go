@@ -35,7 +35,7 @@ func TestProviderListAndAuth(t *testing.T) {
 	if z.ID == "" || len(z.Models) == 0 {
 		t.Fatalf("zen = %+v (server test fixture: seed a minimal zen catalog via Dirs seam)", z)
 	}
-	if z.Auth.KeyRequired != true {
+	if z.Auth.RequiresKey != true {
 		t.Fatalf("zen auth = %+v", z.Auth)
 	}
 	// config-defined provider appears

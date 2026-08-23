@@ -347,7 +347,7 @@ func ProtocolToPart(p protocol.Part) (PartRow, error) {
 			b = strconv.AppendInt(b, p.Time.End, 10)
 			b = append(b, ',')
 		}
-		if p.Synthetic != nil && *p.Synthetic {
+		if p.IsSynthetic != nil && *p.IsSynthetic {
 			b = append(b, `"synthetic":true,`...)
 		}
 		b = append(b, `"text":`...)
@@ -385,7 +385,7 @@ func PartToProtocol(r PartRow) (protocol.Part, error) {
 		}
 		p.Text = st.Text
 		p.Time = protocol.PartTime{Start: r.TimeCreated, End: st.End}
-		p.Synthetic = st.Synthetic
+		p.IsSynthetic = st.Synthetic
 	}
 	return p, nil
 }

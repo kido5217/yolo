@@ -261,9 +261,9 @@ func TestProtocolToPartTextStateJSONBytes(t *testing.T) {
 	}{
 		{"text only", protocol.Part{Type: "text", Text: "hi"}, `{"text":"hi"}`},
 		{"end", protocol.Part{Type: "text", Text: "hi", Time: protocol.PartTime{End: 9}}, `{"end":9,"text":"hi"}`},
-		{"synthetic", protocol.Part{Type: "text", Text: "hi", Synthetic: &syn}, `{"synthetic":true,"text":"hi"}`},
-		{"end and synthetic", protocol.Part{Type: "text", Text: "hi", Time: protocol.PartTime{End: 9}, Synthetic: &syn}, `{"end":9,"synthetic":true,"text":"hi"}`},
-		{"synthetic false omitted", protocol.Part{Type: "text", Text: "hi", Synthetic: &noSyn}, `{"text":"hi"}`},
+		{"synthetic", protocol.Part{Type: "text", Text: "hi", IsSynthetic: &syn}, `{"synthetic":true,"text":"hi"}`},
+		{"end and synthetic", protocol.Part{Type: "text", Text: "hi", Time: protocol.PartTime{End: 9}, IsSynthetic: &syn}, `{"end":9,"synthetic":true,"text":"hi"}`},
+		{"synthetic false omitted", protocol.Part{Type: "text", Text: "hi", IsSynthetic: &noSyn}, `{"text":"hi"}`},
 		{"html escaping", protocol.Part{Type: "text", Text: `<a>&"q"`}, `{"text":"\u003ca\u003e\u0026\"q\""}`},
 		{"empty text", protocol.Part{Type: "text"}, `{"text":""}`},
 	}

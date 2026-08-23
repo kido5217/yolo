@@ -2,6 +2,7 @@ package protocol_test
 
 import (
 	"encoding/json"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -188,5 +189,39 @@ func TestSessionStatusWire(t *testing.T) {
 	}
 	if string(bi) != `{"type":"idle"}` {
 		t.Fatalf("idle shape: %s", bi)
+	}
+}
+
+// TestWireBoolTags pins the predicate-form JSON keys of the wire DTO bools
+// (naming-9, deviation 108): the tags are part of the wire contract, so a
+// drift between field name and tag is a test failure.
+func TestWireBoolTags(t *testing.T) {
+	cases := []struct {
+		typ  any
+		name string
+	}{
+		{protocol.ProviderAuth{}, "RequiresKey"},
+		{protocol.Model{}, "SupportsToolCall"},
+		{protocol.Model{}, "SupportsReasoning"},
+		{protocol.Model{}, "SupportsAttachment"},
+		{protocol.Agent{}, "IsHidden"},
+		{protocol.Part{}, "IsSynthetic"},
+		{protocol.Part{}, "IsIgnored"},
+		{protocol.PermissionRepliedProps{}, "IsAuto"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f, found := reflect.TypeOf(c.typ).FieldByName(c.name)
+			if !found {
+				t.Fatalf("field %s missing", c.name)
+			}
+			tag := f.Tag.Get("json")
+			// expected = lowerCamel of the field name; HasPrefix tolerates an
+			// omitempty suffix.
+			expected := strings.ToLower(c.name[:1]) + c.name[1:]
+			if !strings.HasPrefix(tag, expected) {
+				t.Fatalf("field %s json tag = %q, want prefix %q", c.name, tag, expected)
+			}
+		})
 	}
 }

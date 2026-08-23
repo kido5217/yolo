@@ -19,7 +19,7 @@ type Agent struct {
 	Model       *ModelRef      `json:"model,omitempty"`
 	Permission  []Rule         `json:"permission"`
 	Options     map[string]any `json:"options"`
-	Hidden      bool           `json:"hidden,omitempty"`
+	IsHidden    bool           `json:"isHidden,omitempty"`
 }
 
 type Command struct {
