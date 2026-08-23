@@ -19,8 +19,17 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kido5217/yolo/internal/auth"
+	"github.com/kido5217/yolo/internal/bus"
+	"github.com/kido5217/yolo/internal/config"
+	"github.com/kido5217/yolo/internal/llm"
+	"github.com/kido5217/yolo/internal/log"
+	"github.com/kido5217/yolo/internal/permission"
 	"github.com/kido5217/yolo/internal/protocol"
+	"github.com/kido5217/yolo/internal/provider"
 	"github.com/kido5217/yolo/internal/server"
+	"github.com/kido5217/yolo/internal/session"
+	"github.com/kido5217/yolo/internal/storage"
+	"github.com/kido5217/yolo/internal/tool"
 	"github.com/kido5217/yolo/internal/tui/client"
 )
 
@@ -590,4 +599,102 @@ func TestTuiRunErrorPrintsToStderr(t *testing.T) {
 	if !found {
 		t.Fatalf("stderr has no one-line TUI failure:\n%s", stderr.String())
 	}
+}
+
+// TestServeDrainForceKill pins X (concurrency-5): a turn hung on a
+// provider call that ignores cancellation outlasts the drain budget, so
+// only the second signal's force-kill (immediate ctx cancel) ends the
+// drain — measured against the real drainCtx + armForceKill wiring.
+func TestServeDrainForceKill(t *testing.T) {
+	root := t.TempDir()
+	wd := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
+
+	db, err := openDB(filepath.Join(root, "yolo.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	logger := log.New(root) // closed by drainCtx; not cleaned up separately
+	b := bus.New()
+	perm := permission.New(db, b, logger, root)
+	prov := provider.NewStaticForTest()
+
+	gate := make(chan struct{}) // never closed: the hang lives past cancellation
+	engine, err := session.New(session.Deps{
+		DB: db, Bus: b, Prov: prov, Perm: perm,
+		Tools: tool.Registry(), DataDir: root, Log: logger,
+		Cfg:     func(string) (*protocol.Config, error) { return &protocol.Config{}, nil },
+		Drivers: map[string]llm.Driver{"kido": hangDriver{gate: gate}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deps := &server.Deps{
+		DB: db, Bus: b, Perm: perm, Log: logger, Prov: prov,
+		Dirs:    config.Dirs{Home: root, Data: root, Cache: root},
+		WorkDir: wd, Engine: engine,
+	}
+	srv := server.NewServer(*deps)
+	if _, err := srv.Start("127.0.0.1:0"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	now := time.Now().UnixMilli()
+	sid := protocol.NewID("ses")
+	if err := db.CreateSession(context.Background(), storage.SessionRow{
+		ID: sid, ProjectDir: wd, Title: "t", Model: "kido/q",
+		TimeCreated: now, TimeUpdated: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := engine.Send(ctx, sid, "hang", func(error) {}); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for engine.Status(sid) != "busy" && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if engine.Status(sid) != "busy" {
+		t.Fatal("turn never went busy")
+	}
+
+	// First signal: serveCmd's main body reads it, the drain starts with
+	// its 5 s budget, and the force-kill arm blocks on the next signal.
+	stop := make(chan os.Signal, 2)
+	dctx, dcancel := context.WithTimeout(context.Background(), 5*time.Second)
+	armForceKill(logger, stop, dcancel)
+	stop <- syscall.SIGTERM
+	<-stop // the first-signal read
+	done := make(chan struct{})
+	go func() {
+		drainCtx(deps, srv, dctx)
+		close(done)
+	}()
+	time.Sleep(300 * time.Millisecond) // the drain is now waiting on the hung turn
+
+	// Second signal: force-kill cancels the drain ctx immediately.
+	stop <- syscall.SIGTERM
+	at := time.Now()
+	select {
+	case <-done:
+		if el := time.Since(at); el > 2*time.Second {
+			t.Fatalf("drain took %v after the force-kill, want < 2s (pre-fix: full 5s budget)", el)
+		}
+	case <-time.After(7 * time.Second):
+		t.Fatal("drain did not end after the force-kill cancel")
+	}
+}
+
+// hangDriver parks a turn in Stream without honoring ctx: a provider call
+// that hangs past cancellation (the live scenario force-kill protects).
+type hangDriver struct{ gate chan struct{} }
+
+func (h hangDriver) Stream(ctx context.Context, req llm.Request) (llm.PartStream, error) {
+	<-h.gate
+	return llm.PartStream{}, nil
 }

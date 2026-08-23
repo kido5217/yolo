@@ -340,14 +340,31 @@ func tuiExit(err error) int {
 	return 1
 }
 
+// drainCtx stops active turns and the listener within the caller's ctx
+// budget, then closes the logger.
+func drainCtx(deps *server.Deps, srv *server.Server, ctx context.Context) {
+	deps.Engine.Shutdown(ctx)
+	srv.Shutdown(ctx)
+	deps.Log.Close()
+}
+
 // drain stops active turns and the listener within one 5 s budget, then
 // closes the logger (process-exit path for serve and TUI mode).
 func drain(deps *server.Deps, srv *server.Server) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	deps.Engine.Shutdown(ctx)
-	srv.Shutdown(ctx)
-	deps.Log.Close()
+	drainCtx(deps, srv, ctx)
+}
+
+// armForceKill blocks on the next signal and cancels the drain ctx
+// immediately (a second signal force-kills instead of waiting out the
+// 5 s budget, concurrency-5).
+func armForceKill(lg *log.Logger, stop <-chan os.Signal, cancel context.CancelFunc) {
+	go func() {
+		sig2 := <-stop
+		lg.Info("second signal, force-killing", "signal", sig2.String())
+		cancel()
+	}()
 }
 
 func serveCmd(args []string) int {
@@ -390,7 +407,10 @@ func serveCmd(args []string) int {
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-stop
 	deps.Log.Info("received signal, shutting down", "signal", sig.String())
-	drain(deps, srv)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	armForceKill(deps.Log, stop, cancel)
+	drainCtx(deps, srv, ctx)
 	return 0
 }
 
