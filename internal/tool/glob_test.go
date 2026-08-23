@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -65,4 +66,48 @@ func TestGlobTool(t *testing.T) {
 			t.Fatalf("empty = %q", out.Text)
 		}
 	})
+}
+
+// TestGlobBoundedWalkEarlyStop pins ⑫: with more than the cap of matches,
+// the walk stops at the (cap+1)th match (walk order, no global sort).
+// Fixture: 99 root files f000..f098, a zz/ dir with 100 files, and a root
+// zz.txt. Walk order visits zz/* BEFORE zz.txt (the entry "zz" sorts before
+// "zz.txt"), so the 100th walk-order match is zz/000.txt and the walk stops
+// at zz/001.txt. The old full-walk+sort output kept zz.txt ("." < "/" so
+// zz.txt sorts before zz/*) and dropped zz/000.txt — the inverse.
+func TestGlobBoundedWalkEarlyStop(t *testing.T) {
+	t.Parallel()
+	d := t.TempDir()
+	for i := 0; i < 99; i++ {
+		if err := os.WriteFile(filepath.Join(d, fmt.Sprintf("f%03d.txt", i)), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(d, "zz.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(d, "zz"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 100; i++ {
+		if err := os.WriteFile(filepath.Join(d, "zz", fmt.Sprintf("%03d.txt", i)), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, err := runTool(t, "glob", &Env{Dir: d}, map[string]any{"pattern": "*.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.Text, "zz/000.txt") {
+		t.Fatalf("zz/000.txt (100th walk-order match) missing: %q", out.Text)
+	}
+	if strings.Contains(out.Text, "zz.txt") {
+		t.Fatalf("zz.txt (sorts first, walk-order last) must be dropped by the capped walk, but was returned:\n%s", out.Text)
+	}
+	if out.Meta["truncated"] != true {
+		t.Fatalf("truncated = %v, want true", out.Meta["truncated"])
+	}
+	if out.Meta["count"] != 100 {
+		t.Fatalf("count = %v, want 100", out.Meta["count"])
+	}
 }

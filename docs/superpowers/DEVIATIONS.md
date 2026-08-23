@@ -197,3 +197,19 @@ estimate to 1000 bytes/line (`(5*miB)/1000 + 2`), which guarantees the
 threshold is crossed. Test bug in the plan's own test; resolved per
 principle 5 (tests define the contract — the contract being "a write that
 would push the active file past 5MiB rotates").
+88. ⑫ glob output order changed from global-sorted to walk-order (low,
+2026-08-22): spec §4 ⑫ directs porting upstream's early stop, whose output
+is "first 100 in walk order." yolo previously did a full walk +
+`sort.Strings` + truncate, so results were globally sorted. The capped walk
+(`filepath.SkipAll` at the cap+1th match) returns walk-order (lex
+depth-first). This is model-visible (the tool result the model reads). The
+existing `TestGlobTool` pins presence only (not order), so no pin breaks.
+Also fixed the plan's own test fixture (bug in the plan's test, principle 5):
+the pinned `zz_deep/000_first.txt` fixture could not distinguish
+full-walk+sort from walk-order (the full path sorts AFTER the `f*.txt`
+files, so the old code dropped it too — the pinned test PASSED against the
+unfixed code). Replaced with a `zz/` dir (100 files) + root `zz.txt`
+fixture, where walk order visits `zz/*` before `zz.txt` (entry "zz" <
+"zz.txt") but sort order keeps `zz.txt` first ("." < "/") — the old
+implementation fails the corrected test. Resolves per principle 5 (tests
+define the contract; the spec's order is authoritative).

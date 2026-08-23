@@ -8,7 +8,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/kido5217/yolo/internal/glob"
@@ -116,6 +115,7 @@ func (globTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 	}
 
 	var files []string
+	truncated := false
 	werr := filepath.WalkDir(search, func(dpath string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -137,7 +137,14 @@ func (globTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 			return nil
 		}
 		if glob.Match(pattern, filepath.ToSlash(rel)) {
-			files = append(files, dpath)
+			if len(files) < globLimit {
+				files = append(files, dpath)
+				return nil
+			}
+			// ⑫: more than the cap were observed — stop the whole walk
+			// (upstream ripgrep.ts takes limit+1 from the stream).
+			truncated = true
+			return filepath.SkipAll
 		}
 		return nil
 	})
@@ -146,11 +153,6 @@ func (globTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 	}
 	if env.Log != nil {
 		env.Log.Info("glob results", "pattern", pattern, "count", len(files))
-	}
-	sort.Strings(files)
-	truncated := len(files) > globLimit
-	if truncated {
-		files = files[:globLimit]
 	}
 
 	text := "No files found"
