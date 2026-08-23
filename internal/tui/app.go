@@ -574,7 +574,8 @@ func (a *App) applyCommandExec(m commandExecMsg) tea.Cmd {
 type dialogKind int
 
 const (
-	dlgQuit dialogKind = iota
+	dlgNone dialogKind = iota // zero value: not a real dialog
+	dlgQuit
 	dlgHelp
 	dlgModel
 	dlgAgents
@@ -663,6 +664,10 @@ func (a *App) handleDialogKey(d dialog, k tea.KeyPressMsg) []tea.Cmd {
 		if key.Matches(k, dlgNo) {
 			a.dlg.pop()
 		}
+		return nil
+	}
+	if d.kind == dlgNone {
+		a.dlg.pop() // defensive: the zero dialog is not a real dialog
 		return nil
 	}
 	switch d.kind {

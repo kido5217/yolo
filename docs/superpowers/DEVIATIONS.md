@@ -464,3 +464,13 @@ errors.Is matching is value-based and unchanged. The visible
 status-line/toast text changes (e.g. "client: session busy: <server
 message>"). Pinned by client.TestSentinelPrefixes. Resolves per principle
 5 (spec-directed render change).
+111. Plan Task V7 test pinned in the external test package (test-only/low,
+2026-08-23): the plan slice pinned TestZeroDialogIsNotQuit in
+internal/tui/app_test.go, which is `package tui_test` (external, since
+creation) — the white-box test cannot compile there (undefined: newRecApp,
+dialog, dlgQuit, press; all unexported internals). The test moved
+unchanged to internal/tui/rec_test.go (`package tui`, home of newRecApp);
+its `store.Store{}` is Task V5 drift, corrected to `store.State{}`.
+Everything else (dlgNone zero value, explicit handleDialogKey guard,
+DEFERRED.md disposition, pinned commit message) lands as planned. Resolves
+per principle 5.
