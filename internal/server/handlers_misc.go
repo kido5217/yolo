@@ -362,14 +362,14 @@ func (s *Server) handlePermissionList(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rows, err := s.DB.ListSessions(dir, 0)
+	rows, err := s.DB.ListSessions(r.Context(), dir, 0)
 	if err != nil {
 		s.fail(w, http.StatusInternalServerError, "list sessions", err)
 		return
 	}
 	out := make([]protocol.PermissionAskedProps, 0)
 	for _, row := range rows {
-		reqs, err := s.Perm.Pending(row.ID)
+		reqs, err := s.Perm.Pending(r.Context(), row.ID)
 		if err != nil {
 			s.fail(w, http.StatusInternalServerError, "list permissions", err)
 			return
@@ -419,7 +419,7 @@ func (s *Server) handlePermissionReply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("requestID")
-	if err := s.Perm.Reply(id, body.Response); err != nil {
+	if err := s.Perm.Reply(r.Context(), id, body.Response); err != nil {
 		if errors.Is(err, permission.ErrNoPending) {
 			envelope(w, http.StatusNotFound, "no pending permission request", nil)
 			return

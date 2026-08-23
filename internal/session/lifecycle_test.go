@@ -44,7 +44,7 @@ func TestTransientRetrySucceeds(t *testing.T) {
 	if retries != 2 {
 		t.Fatalf("retry events = %d", retries)
 	}
-	msgs, _ := h.db.ListMessages(ses)
+	msgs, _ := h.db.ListMessages(t.Context(), ses)
 	if len(msgs) != 2 || msgs[1].Role != "assistant" {
 		t.Fatalf("turn lost data: %d", len(msgs))
 	}
@@ -80,7 +80,7 @@ func TestTransientGivesUpAfter4(t *testing.T) {
 		t.Fatalf("attempts = %d, want 4", got)
 	}
 	// turn ended idle; assistant message exists (may be empty)
-	msgs, _ := h.db.ListMessages(ses)
+	msgs, _ := h.db.ListMessages(t.Context(), ses)
 	if len(msgs) < 2 {
 		t.Fatalf("messages = %d", len(msgs))
 	}
@@ -144,10 +144,10 @@ func TestAbortMidTurn(t *testing.T) {
 		t.Fatal("abort rejected")
 	}
 	waitIdle(t, h, ses, func() {})
-	msgs, _ := h.db.ListMessages(ses)
+	msgs, _ := h.db.ListMessages(t.Context(), ses)
 	var state *protocol.ToolState
 	for _, m := range msgs {
-		parts, _ := h.db.ListToolParts(m.ID)
+		parts, _ := h.db.ListToolParts(t.Context(), m.ID)
 		for _, p := range parts {
 			pt, _ := storage.PartToProtocol(p)
 			if pt.Tool != "" {
@@ -179,9 +179,9 @@ func TestMaxToolStepsHalts(t *testing.T) {
 	}
 	waitIdle(t, h, ses, func() {})
 	var toolParts int
-	msgs, _ := h.db.ListMessages(ses)
+	msgs, _ := h.db.ListMessages(t.Context(), ses)
 	for _, m := range msgs {
-		partsDB, _ := h.db.ListToolParts(m.ID)
+		partsDB, _ := h.db.ListToolParts(t.Context(), m.ID)
 		toolParts += len(partsDB)
 	}
 	if toolParts != 50 {
@@ -232,7 +232,7 @@ func TestBudgetDropCancelsStreamContext(t *testing.T) {
 	d := t.TempDir()
 	ses := h.startSession(t, d)
 	// Suppress the title side-call so exactly one Stream happens.
-	if err := h.db.UpdateSession(ses, storage.SessionRow{Title: "leak"}); err != nil {
+	if err := h.db.UpdateSession(t.Context(), ses, storage.SessionRow{Title: "leak"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := h.eng.Send(context.Background(), ses, "spin", nil); err != nil {
@@ -259,7 +259,7 @@ func TestOverflowHardStop(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitIdle(t, h, ses, func() {})
-	msgs, _ := h.db.ListMessages(ses)
+	msgs, _ := h.db.ListMessages(t.Context(), ses)
 	// second turn attempt is NOT made (only 1 request logged)
 	if got := len(nonTitle(h.drv.Requests())); got != 1 {
 		t.Fatalf("requests = %d", got)
@@ -267,7 +267,7 @@ func TestOverflowHardStop(t *testing.T) {
 	// synthetic overflow part present on the assistant message
 	var found bool
 	for _, m := range msgs {
-		parts, _ := h.db.ListParts(m.ID)
+		parts, _ := h.db.ListParts(t.Context(), m.ID)
 		for _, p := range parts {
 			pt, _ := storage.PartToProtocol(p)
 			if pt.Text != "" && strings.Contains(pt.Text, "context overflow") {
@@ -314,7 +314,7 @@ func TestOverflow400FromDriverEndsIdleWithNote(t *testing.T) {
 	h.build(t)
 	d := t.TempDir()
 	ses := h.startSession(t, d)
-	if err := h.db.UpdateSession(ses, storage.SessionRow{Title: "no-title"}); err != nil {
+	if err := h.db.UpdateSession(t.Context(), ses, storage.SessionRow{Title: "no-title"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := h.eng.Send(context.Background(), ses, "big", nil); err != nil {
@@ -322,9 +322,9 @@ func TestOverflow400FromDriverEndsIdleWithNote(t *testing.T) {
 	}
 	waitIdle(t, h, ses, func() {})
 	var found bool
-	msgs, _ := h.db.ListMessages(ses)
+	msgs, _ := h.db.ListMessages(t.Context(), ses)
 	for _, m := range msgs {
-		parts, _ := h.db.ListParts(m.ID)
+		parts, _ := h.db.ListParts(t.Context(), m.ID)
 		for _, p := range parts {
 			pt, _ := storage.PartToProtocol(p)
 			if strings.Contains(pt.Text, "context overflow") {
@@ -348,7 +348,7 @@ func TestNonOverflowAPIErrorFailsTurn(t *testing.T) {
 	h.build(t)
 	d := t.TempDir()
 	ses := h.startSession(t, d)
-	if err := h.db.UpdateSession(ses, storage.SessionRow{Title: "no-title"}); err != nil {
+	if err := h.db.UpdateSession(t.Context(), ses, storage.SessionRow{Title: "no-title"}); err != nil {
 		t.Fatal(err)
 	}
 	done := make(chan struct{})
@@ -368,10 +368,10 @@ func TestNonOverflowAPIErrorFailsTurn(t *testing.T) {
 	if turnErr == nil {
 		t.Fatal("turn ended without error")
 	}
-	msgs, _ := h.db.ListMessages(ses)
+	msgs, _ := h.db.ListMessages(t.Context(), ses)
 	overflow, realNote := false, false
 	for _, m := range msgs {
-		parts, _ := h.db.ListParts(m.ID)
+		parts, _ := h.db.ListParts(t.Context(), m.ID)
 		for _, p := range parts {
 			pt, _ := storage.PartToProtocol(p)
 			if strings.Contains(pt.Text, "context overflow") {

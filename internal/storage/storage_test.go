@@ -1,6 +1,7 @@
 package storage_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -91,7 +92,7 @@ func TestSessionCRUDAndListOrder(t *testing.T) {
 		r.ID = id
 		r.TimeCreated = int64(100 + i)
 		r.TimeUpdated = int64(100 + i)
-		if err := db.CreateSession(r); err != nil {
+		if err := db.CreateSession(t.Context(), r); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -99,10 +100,10 @@ func TestSessionCRUDAndListOrder(t *testing.T) {
 	other := mk
 	other.ID, other.ProjectDir = "ses_other", "/other"
 	other.TimeCreated, other.TimeUpdated = 999, 999
-	if err := db.CreateSession(other); err != nil {
+	if err := db.CreateSession(t.Context(), other); err != nil {
 		t.Fatal(err)
 	}
-	got, err := db.ListSessions("/w", 50)
+	got, err := db.ListSessions(t.Context(), "/w", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +117,7 @@ func TestSessionCRUDAndListOrder(t *testing.T) {
 	if want := []string{"ses_ccc", "ses_bbb", "ses_aaa"}; !slices.Equal(ids, want) {
 		t.Fatalf("order = %v, want %v (newest-first)", ids, want)
 	}
-	if _, err := db.GetSession("ses_missing"); !errors.Is(err, storage.ErrNotFound) {
+	if _, err := db.GetSession(t.Context(), "ses_missing"); !errors.Is(err, storage.ErrNotFound) {
 		t.Fatalf("want ErrNotFound, got %v", err)
 	}
 }
@@ -124,26 +125,26 @@ func TestSessionCRUDAndListOrder(t *testing.T) {
 func TestCascadeDelete(t *testing.T) {
 	t.Parallel()
 	db := openDB(t)
-	if err := db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err != nil {
+	if err := db.CreateSession(t.Context(), storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.CreateMessage(storage.MessageRow{ID: "msg_1", SessionID: "ses_1", Role: "user", TimeCreated: 2}); err != nil {
+	if err := db.CreateMessage(t.Context(), storage.MessageRow{ID: "msg_1", SessionID: "ses_1", Role: "user", TimeCreated: 2}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.UpsertPart(storage.PartRow{ID: "prt_1", MessageID: "msg_1", SessionID: "ses_1", Type: "text", StateJSON: `{"text":"hi"}`, TimeCreated: 3}); err != nil {
+	if err := db.UpsertPart(t.Context(), storage.PartRow{ID: "prt_1", MessageID: "msg_1", SessionID: "ses_1", Type: "text", StateJSON: `{"text":"hi"}`, TimeCreated: 3}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.DeleteSession("ses_1"); err != nil {
+	if err := db.DeleteSession(t.Context(), "ses_1"); err != nil {
 		t.Fatal(err)
 	}
-	msgs, err := db.ListMessages("ses_1")
+	msgs, err := db.ListMessages(t.Context(), "ses_1")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(msgs) != 0 {
 		t.Fatalf("cascade failed: %d messages", len(msgs))
 	}
-	if _, err := db.GetPart("prt_1"); !errors.Is(err, storage.ErrNotFound) {
+	if _, err := db.GetPart(t.Context(), "prt_1"); !errors.Is(err, storage.ErrNotFound) {
 		t.Fatalf("part not cascaded: %v", err)
 	}
 }
@@ -151,16 +152,16 @@ func TestCascadeDelete(t *testing.T) {
 func TestMessageAgentRoundTrip(t *testing.T) {
 	t.Parallel()
 	db := openDB(t)
-	if err := db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err != nil {
+	if err := db.CreateSession(t.Context(), storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.CreateMessage(storage.MessageRow{ID: "msg_1", SessionID: "ses_1", Role: "user", Agent: "plan", TimeCreated: 2}); err != nil {
+	if err := db.CreateMessage(t.Context(), storage.MessageRow{ID: "msg_1", SessionID: "ses_1", Role: "user", Agent: "plan", TimeCreated: 2}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.CreateMessage(storage.MessageRow{ID: "msg_2", SessionID: "ses_1", Role: "assistant", TimeCreated: 3}); err != nil {
+	if err := db.CreateMessage(t.Context(), storage.MessageRow{ID: "msg_2", SessionID: "ses_1", Role: "assistant", TimeCreated: 3}); err != nil {
 		t.Fatal(err)
 	}
-	msgs, err := db.ListMessages("ses_1")
+	msgs, err := db.ListMessages(t.Context(), "ses_1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,10 +179,10 @@ func TestMessageAgentRoundTrip(t *testing.T) {
 func TestTextAndToolPartRoundTrip(t *testing.T) {
 	t.Parallel()
 	db := openDB(t)
-	if err := db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err != nil {
+	if err := db.CreateSession(t.Context(), storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.CreateMessage(storage.MessageRow{ID: "msg_1", SessionID: "ses_1", Role: "assistant", TimeCreated: 2}); err != nil {
+	if err := db.CreateMessage(t.Context(), storage.MessageRow{ID: "msg_1", SessionID: "ses_1", Role: "assistant", TimeCreated: 2}); err != nil {
 		t.Fatal(err)
 	}
 	text := protocol.Part{ID: "prt_txt", MessageID: "msg_1", SessionID: "ses_1", Type: "text", Text: "hello", Time: protocol.PartTime{Start: 5, End: 9}}
@@ -189,10 +190,10 @@ func TestTextAndToolPartRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.UpsertPart(textRow); err != nil {
+	if err := db.UpsertPart(t.Context(), textRow); err != nil {
 		t.Fatal(err)
 	}
-	row, err := db.GetPart("prt_txt")
+	row, err := db.GetPart(t.Context(), "prt_txt")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,10 +209,10 @@ func TestTextAndToolPartRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.UpsertPart(toolRow); err != nil {
+	if err := db.UpsertPart(t.Context(), toolRow); err != nil {
 		t.Fatal(err)
 	}
-	prow, err := db.GetPart("prt_tool")
+	prow, err := db.GetPart(t.Context(), "prt_tool")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +234,7 @@ func TestClosedDBReturnsErrors(t *testing.T) {
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.GetPart("prt_x"); err == nil {
+	if _, err := db.GetPart(t.Context(), "prt_x"); err == nil {
 		t.Error("GetPart on closed DB: want error, got nil")
 	}
 	if _, err := db.Exec(`SELECT 1`); err == nil {
@@ -242,7 +243,7 @@ func TestClosedDBReturnsErrors(t *testing.T) {
 	if _, err := db.Query(`SELECT 1`); err == nil {
 		t.Error("Query on closed DB: want error, got nil")
 	}
-	if err := db.CreateSession(storage.SessionRow{ID: "s", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err == nil {
+	if err := db.CreateSession(t.Context(), storage.SessionRow{ID: "s", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err == nil {
 		t.Error("CreateSession on closed DB: want error, got nil")
 	}
 }
@@ -282,30 +283,30 @@ func TestProtocolToPartTextStateJSONBytes(t *testing.T) {
 func TestNullColumnRoundTrips(t *testing.T) {
 	t.Parallel()
 	db := openDB(t)
-	if err := db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err != nil {
+	if err := db.CreateSession(t.Context(), storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err != nil {
 		t.Fatal(err)
 	}
 	tc := int64(99)
-	if err := db.CreateMessage(storage.MessageRow{ID: "msg_done", SessionID: "ses_1", Role: "assistant", TimeCreated: 1, TimeCompleted: &tc}); err != nil {
+	if err := db.CreateMessage(t.Context(), storage.MessageRow{ID: "msg_done", SessionID: "ses_1", Role: "assistant", TimeCreated: 1, TimeCompleted: &tc}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.CreateMessage(storage.MessageRow{ID: "msg_open", SessionID: "ses_1", Role: "assistant", TimeCreated: 2}); err != nil {
+	if err := db.CreateMessage(t.Context(), storage.MessageRow{ID: "msg_open", SessionID: "ses_1", Role: "assistant", TimeCreated: 2}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.UpsertPart(storage.PartRow{ID: "prt_notool", MessageID: "msg_open", SessionID: "ses_1", Type: "text", StateJSON: `{"text":"x"}`, TimeCreated: 1}); err != nil {
+	if err := db.UpsertPart(t.Context(), storage.PartRow{ID: "prt_notool", MessageID: "msg_open", SessionID: "ses_1", Type: "text", StateJSON: `{"text":"x"}`, TimeCreated: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.UpsertPart(storage.PartRow{ID: "prt_tool", MessageID: "msg_open", SessionID: "ses_1", Type: "tool", Tool: "bash", StateJSON: `{"status":"completed"}`, TimeCreated: 2}); err != nil {
+	if err := db.UpsertPart(t.Context(), storage.PartRow{ID: "prt_tool", MessageID: "msg_open", SessionID: "ses_1", Type: "tool", Tool: "bash", StateJSON: `{"status":"completed"}`, TimeCreated: 2}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.SavePermission(storage.PermissionRow{RequestID: "per_new", SessionID: "ses_1", Action: "bash", Resource: "*", TimeCreated: 1}); err != nil {
+	if err := db.SavePermission(t.Context(), storage.PermissionRow{RequestID: "per_new", SessionID: "ses_1", Action: "bash", Resource: "*", TimeCreated: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.SavePermission(storage.PermissionRow{RequestID: "per_done", SessionID: "ses_1", Action: "bash", Resource: "*", Response: "once", TimeCreated: 2}); err != nil {
+	if err := db.SavePermission(t.Context(), storage.PermissionRow{RequestID: "per_done", SessionID: "ses_1", Action: "bash", Resource: "*", Response: "once", TimeCreated: 2}); err != nil {
 		t.Fatal(err)
 	}
 	t.Run("message time_completed", func(t *testing.T) {
-		msgs, err := db.ListMessages("ses_1")
+		msgs, err := db.ListMessages(t.Context(), "ses_1")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -320,14 +321,14 @@ func TestNullColumnRoundTrips(t *testing.T) {
 		}
 	})
 	t.Run("part tool", func(t *testing.T) {
-		row, err := db.GetPart("prt_notool")
+		row, err := db.GetPart(t.Context(), "prt_notool")
 		if err != nil {
 			t.Fatal(err)
 		}
 		if row.Tool != "" {
 			t.Fatalf("prt_notool Tool = %q, want \"\" (NULL round trip)", row.Tool)
 		}
-		row, err = db.GetPart("prt_tool")
+		row, err = db.GetPart(t.Context(), "prt_tool")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -336,7 +337,7 @@ func TestNullColumnRoundTrips(t *testing.T) {
 		}
 	})
 	t.Run("permission response", func(t *testing.T) {
-		pending, err := db.ListPermissions("ses_1", true)
+		pending, err := db.ListPermissions(t.Context(), "ses_1", true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -346,7 +347,7 @@ func TestNullColumnRoundTrips(t *testing.T) {
 		if pending[0].Response != "" || pending[0].AlwaysJSON != "" {
 			t.Fatalf("per_new (Response, AlwaysJSON) = (%q, %q), want both empty", pending[0].Response, pending[0].AlwaysJSON)
 		}
-		all, err := db.ListPermissions("ses_1", false)
+		all, err := db.ListPermissions(t.Context(), "ses_1", false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -360,22 +361,22 @@ func TestErrNotFoundForMissingRows(t *testing.T) {
 	t.Parallel()
 	db := openDB(t)
 	t.Run("missing part", func(t *testing.T) {
-		if _, err := db.GetPart("prt_missing"); !errors.Is(err, storage.ErrNotFound) {
+		if _, err := db.GetPart(t.Context(), "prt_missing"); !errors.Is(err, storage.ErrNotFound) {
 			t.Fatalf("want ErrNotFound, got %v", err)
 		}
 	})
 	t.Run("missing session", func(t *testing.T) {
-		if err := db.UpdateSession("ses_missing", storage.SessionRow{Title: "t"}); !errors.Is(err, storage.ErrNotFound) {
+		if err := db.UpdateSession(t.Context(), "ses_missing", storage.SessionRow{Title: "t"}); !errors.Is(err, storage.ErrNotFound) {
 			t.Fatalf("want ErrNotFound, got %v", err)
 		}
 	})
 	t.Run("missing message", func(t *testing.T) {
-		if err := db.UpdateMessage(storage.MessageRow{ID: "msg_missing"}); !errors.Is(err, storage.ErrNotFound) {
+		if err := db.UpdateMessage(t.Context(), storage.MessageRow{ID: "msg_missing"}); !errors.Is(err, storage.ErrNotFound) {
 			t.Fatalf("want ErrNotFound, got %v", err)
 		}
 	})
 	t.Run("missing permission request", func(t *testing.T) {
-		if err := db.ReplyPermission("per_missing", "once"); !errors.Is(err, storage.ErrNotFound) {
+		if err := db.ReplyPermission(t.Context(), "per_missing", "once"); !errors.Is(err, storage.ErrNotFound) {
 			t.Fatalf("want ErrNotFound, got %v", err)
 		}
 	})
@@ -384,17 +385,17 @@ func TestErrNotFoundForMissingRows(t *testing.T) {
 func TestSessionAggregateCostTokens(t *testing.T) {
 	t.Parallel()
 	db := openDB(t)
-	if err := db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Title: "x", Model: "kido/m", Agent: "build", TimeCreated: 1, TimeUpdated: 1}); err != nil {
+	if err := db.CreateSession(t.Context(), storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Title: "x", Model: "kido/m", Agent: "build", TimeCreated: 1, TimeUpdated: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.CreateMessage(storage.MessageRow{ID: "msg_u", SessionID: "ses_1", Role: "user", TimeCreated: 2}); err != nil {
+	if err := db.CreateMessage(t.Context(), storage.MessageRow{ID: "msg_u", SessionID: "ses_1", Role: "user", TimeCreated: 2}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.CreateMessage(storage.MessageRow{ID: "msg_a", SessionID: "ses_1", Role: "assistant", Cost: 0.25,
+	if err := db.CreateMessage(t.Context(), storage.MessageRow{ID: "msg_a", SessionID: "ses_1", Role: "assistant", Cost: 0.25,
 		Tokens: protocol.Tokens{Input: 100, Output: 50, Reasoning: 5, Cache: protocol.CacheTokens{Read: 7, Write: 1}}, TimeCreated: 3}); err != nil {
 		t.Fatal(err)
 	}
-	sess, err := db.Session("ses_1")
+	sess, err := db.Session(t.Context(), "ses_1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -409,16 +410,16 @@ func TestSessionAggregateCostTokens(t *testing.T) {
 func TestAlwaysRules(t *testing.T) {
 	t.Parallel()
 	db := openDB(t)
-	if err := db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err != nil {
+	if err := db.CreateSession(t.Context(), storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.SavePermission(storage.PermissionRow{RequestID: "per_1", SessionID: "ses_1", Action: "bash", Resource: "*", Response: "always", AlwaysJSON: `["ls","whoami"]`, TimeCreated: 1}); err != nil {
+	if err := db.SavePermission(t.Context(), storage.PermissionRow{RequestID: "per_1", SessionID: "ses_1", Action: "bash", Resource: "*", Response: "always", AlwaysJSON: `["ls","whoami"]`, TimeCreated: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.SavePermission(storage.PermissionRow{RequestID: "per_2", SessionID: "ses_1", Action: "bash", Resource: "*", Response: "once", TimeCreated: 2}); err != nil {
+	if err := db.SavePermission(t.Context(), storage.PermissionRow{RequestID: "per_2", SessionID: "ses_1", Action: "bash", Resource: "*", Response: "once", TimeCreated: 2}); err != nil {
 		t.Fatal(err)
 	}
-	rules, err := db.AlwaysRules("ses_1")
+	rules, err := db.AlwaysRules(t.Context(), "ses_1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -451,7 +452,7 @@ func TestReopenAlreadyMigratedDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Title: "t", TimeCreated: 1, TimeUpdated: 1}); err != nil {
+	if err := db.CreateSession(t.Context(), storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Title: "t", TimeCreated: 1, TimeUpdated: 1}); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Close(); err != nil {
@@ -469,7 +470,7 @@ func TestReopenAlreadyMigratedDatabase(t *testing.T) {
 	if v != 2 {
 		t.Fatalf("schema version = %d, want 2", v)
 	}
-	row, err := db.GetSession("ses_1")
+	row, err := db.GetSession(t.Context(), "ses_1")
 	if err != nil {
 		t.Fatalf("data lost on reopen: %v", err)
 	}
@@ -498,27 +499,27 @@ func TestProtocolToPartSurfacesMarshalError(t *testing.T) {
 func TestSameMillisecondTiebreakRowid(t *testing.T) {
 	db := openDB(t)
 	const ses, msg = "ses_t", "msg_a"
-	if err := db.CreateSession(storage.SessionRow{ID: ses, ProjectDir: "/p", Model: "kido/q", TimeCreated: 1, TimeUpdated: 1}); err != nil {
+	if err := db.CreateSession(t.Context(), storage.SessionRow{ID: ses, ProjectDir: "/p", Model: "kido/q", TimeCreated: 1, TimeUpdated: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.CreateMessage(storage.MessageRow{ID: "msg_a", SessionID: ses, Role: "user", TimeCreated: 7}); err != nil {
+	if err := db.CreateMessage(t.Context(), storage.MessageRow{ID: "msg_a", SessionID: ses, Role: "user", TimeCreated: 7}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.CreateMessage(storage.MessageRow{ID: "msg_b", SessionID: ses, Role: "assistant", TimeCreated: 7}); err != nil {
+	if err := db.CreateMessage(t.Context(), storage.MessageRow{ID: "msg_b", SessionID: ses, Role: "assistant", TimeCreated: 7}); err != nil {
 		t.Fatal(err)
 	}
 	must := func(id, text string) {
 		t.Helper()
-		if err := db.UpsertPart(storage.PartRow{ID: id, MessageID: msg, SessionID: ses, Type: "text", StateJSON: `{"text":"` + text + `"}`, TimeCreated: 9}); err != nil {
+		if err := db.UpsertPart(t.Context(), storage.PartRow{ID: id, MessageID: msg, SessionID: ses, Type: "text", StateJSON: `{"text":"` + text + `"}`, TimeCreated: 9}); err != nil {
 			t.Fatal(err)
 		}
 	}
 	must("prt_a", "a")
 	must("prt_b", "b")
-	if err := db.SavePermission(storage.PermissionRow{RequestID: "perm_a", SessionID: ses, Action: "bash", TimeCreated: 11}); err != nil {
+	if err := db.SavePermission(t.Context(), storage.PermissionRow{RequestID: "perm_a", SessionID: ses, Action: "bash", TimeCreated: 11}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.SavePermission(storage.PermissionRow{RequestID: "perm_b", SessionID: ses, Action: "bash", TimeCreated: 11}); err != nil {
+	if err := db.SavePermission(t.Context(), storage.PermissionRow{RequestID: "perm_b", SessionID: ses, Action: "bash", TimeCreated: 11}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -529,21 +530,21 @@ func TestSameMillisecondTiebreakRowid(t *testing.T) {
 		}
 		return out
 	}
-	partRows, err := db.ListParts(msg)
+	partRows, err := db.ListParts(t.Context(), msg)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got, want := ids(partRows), []string{"prt_a", "prt_b"}; !slices.Equal(got, want) {
 		t.Fatalf("ListParts = %v, want %v (rowid tiebreak)", got, want)
 	}
-	msgRows, err := db.ListMessages(ses)
+	msgRows, err := db.ListMessages(t.Context(), ses)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got, want := ids2(msgRows), []string{"msg_a", "msg_b"}; !slices.Equal(got, want) {
 		t.Fatalf("ListMessages = %v, want %v (rowid tiebreak)", got, want)
 	}
-	permRows, err := db.ListPermissions(ses, false)
+	permRows, err := db.ListPermissions(t.Context(), ses, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -573,13 +574,24 @@ func ids3(rows []storage.PermissionRow) []string {
 // as-is instead of masking them as not-found).
 func TestUpdateNotFoundPaths(t *testing.T) {
 	db := openDB(t)
-	if err := db.UpdateSession("ses_nope", storage.SessionRow{Title: "x"}); !errors.Is(err, storage.ErrNotFound) {
+	if err := db.UpdateSession(t.Context(), "ses_nope", storage.SessionRow{Title: "x"}); !errors.Is(err, storage.ErrNotFound) {
 		t.Fatalf("UpdateSession missing id: err = %v, want ErrNotFound", err)
 	}
-	if err := db.UpdateMessage(storage.MessageRow{ID: "msg_nope"}); !errors.Is(err, storage.ErrNotFound) {
+	if err := db.UpdateMessage(t.Context(), storage.MessageRow{ID: "msg_nope"}); !errors.Is(err, storage.ErrNotFound) {
 		t.Fatalf("UpdateMessage missing id: err = %v, want ErrNotFound", err)
 	}
-	if err := db.ReplyPermission("perm_nope", "once"); !errors.Is(err, storage.ErrNotFound) {
+	if err := db.ReplyPermission(t.Context(), "perm_nope", "once"); !errors.Is(err, storage.ErrNotFound) {
 		t.Fatalf("ReplyPermission missing id: err = %v, want ErrNotFound", err)
+	}
+}
+
+// TestCancelledCtxReachesDriver: a cancelled ctx fails the DAO call with the
+// ctx error (context propagation — database-3).
+func TestCancelledCtxReachesDriver(t *testing.T) {
+	db := openDB(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := db.GetSession(ctx, "ses_nope"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("GetSession(cancelled) err = %v, want context.Canceled", err)
 	}
 }

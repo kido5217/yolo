@@ -76,16 +76,16 @@ func (s *Service) EvaluateRules(agent string, cfgRules []protocol.Rule, action s
 
 // DecisionFor re-evaluates a request against builtins + config rules + the
 // session's persisted always rules.
-func (s *Service) DecisionFor(req Request) Decision {
-	return s.decisionFor(req)
+func (s *Service) DecisionFor(ctx context.Context, req Request) Decision {
+	return s.decisionFor(ctx, req)
 }
 
-func (s *Service) decisionFor(req Request) Decision {
+func (s *Service) decisionFor(ctx context.Context, req Request) Decision {
 	// Unknown (custom) agents fall back to the build matrix via
 	// BuiltinsFor (mirrors the engine's ruleset path).
 	rules := BuiltinsFor(req.Agent, s.dataDir)
 	cfg := req.CfgRules
-	always, err := s.db.AlwaysRules(req.SessionID)
+	always, err := s.db.AlwaysRules(ctx, req.SessionID)
 	if err != nil {
 		// Fail-safe: degrade to no always rules (re-asks at worst).
 		s.lg.Error("always rules load failed", "session_id", req.SessionID, "error", err)
@@ -137,10 +137,10 @@ func (s *Service) Ask(ctx context.Context, req Request) (Decision, error) {
 	}
 	decision := req.PreDecision
 	if decision == "" || decision == Ask {
-		decision = s.decisionFor(req)
+		decision = s.decisionFor(ctx, req)
 	}
 	if decision != Ask {
-		if err := s.persist(req, storedResponse(decision)); err != nil {
+		if err := s.persist(ctx, req, storedResponse(decision)); err != nil {
 			return "", err
 		}
 		return decision, nil
@@ -154,7 +154,7 @@ func (s *Service) Ask(ctx context.Context, req Request) (Decision, error) {
 	s.pending[req.RequestID] = entry
 	s.mu.Unlock()
 
-	if err := s.persist(req, ""); err != nil {
+	if err := s.persist(ctx, req, ""); err != nil {
 		s.mu.Lock()
 		if s.pending[req.RequestID] == entry {
 			delete(s.pending, req.RequestID)
@@ -169,13 +169,13 @@ func (s *Service) Ask(ctx context.Context, req Request) (Decision, error) {
 	case d := <-entry.ch:
 		return d, nil
 	case <-ctx.Done():
-		s.resolve(req.RequestID, Deny, "aborted", "reject", false)
+		s.resolve(ctx, req.RequestID, Deny, "aborted", "reject", false)
 		return Deny, nil
 	}
 }
 
 // Reply answers a parked request: "once" | "always" | "reject".
-func (s *Service) Reply(requestID, response string) error {
+func (s *Service) Reply(ctx context.Context, requestID, response string) error {
 	switch response {
 	case "once", "always", "reject":
 	default:
@@ -190,19 +190,19 @@ func (s *Service) Reply(requestID, response string) error {
 	req := e.req
 	switch response {
 	case "once":
-		s.resolve(requestID, Allow, "once", "once", false)
+		s.resolve(ctx, requestID, Allow, "once", "once", false)
 	case "reject":
-		s.resolve(requestID, Deny, "rejected", "reject", false)
-		s.cascade(req.SessionID, requestID, Deny, "rejected", "reject")
+		s.resolve(ctx, requestID, Deny, "rejected", "reject", false)
+		s.cascade(ctx, req.SessionID, requestID, Deny, "rejected", "reject")
 	case "always":
-		s.resolve(requestID, Allow, "always", "always", false)
-		s.autoAllow(req)
+		s.resolve(ctx, requestID, Allow, "always", "always", false)
+		s.autoAllow(ctx, req)
 	}
 	return nil
 }
 
 // Pending lists this session's parked requests.
-func (s *Service) Pending(sessionID string) ([]Request, error) {
+func (s *Service) Pending(ctx context.Context, sessionID string) ([]Request, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := []Request{}
@@ -217,7 +217,7 @@ func (s *Service) Pending(sessionID string) ([]Request, error) {
 
 // autoAllow resolves same-session pendings whose permission matches and
 // whose resources are all covered by the just-persisted always patterns.
-func (s *Service) autoAllow(req Request) {
+func (s *Service) autoAllow(ctx context.Context, req Request) {
 	others := s.sessionPending(req.SessionID, req.RequestID)
 	for _, e := range others {
 		r := e.req
@@ -228,15 +228,15 @@ func (s *Service) autoAllow(req Request) {
 			continue
 		}
 		// stored as "once": only explicit "always" replies mint always rules
-		s.resolve(r.RequestID, Allow, "once", "always", true)
+		s.resolve(ctx, r.RequestID, Allow, "once", "always", true)
 	}
 }
 
 // cascade applies the verdict to every other parked request in the session
 // (used by "reject").
-func (s *Service) cascade(sessionID, skipID string, d Decision, dbResponse, wireReply string) {
+func (s *Service) cascade(ctx context.Context, sessionID, skipID string, d Decision, dbResponse, wireReply string) {
 	for _, e := range s.sessionPending(sessionID, skipID) {
-		s.resolve(e.req.RequestID, d, dbResponse, wireReply, true)
+		s.resolve(ctx, e.req.RequestID, d, dbResponse, wireReply, true)
 	}
 }
 
@@ -257,7 +257,7 @@ func (s *Service) sessionPending(sessionID, skipID string) []*pendingEntry {
 // decision to the waiting asker. Reply persistence is best-effort here: the
 // decision is already in memory, so deliver and publish happen regardless of
 // the DB result — a failed write must not strand the blocked Ask.
-func (s *Service) resolve(requestID string, d Decision, dbResponse, wireReply string, auto bool) {
+func (s *Service) resolve(ctx context.Context, requestID string, d Decision, dbResponse, wireReply string, auto bool) {
 	s.mu.Lock()
 	e, ok := s.pending[requestID]
 	delete(s.pending, requestID)
@@ -269,7 +269,7 @@ func (s *Service) resolve(requestID string, d Decision, dbResponse, wireReply st
 	if !ok {
 		return
 	}
-	if err := s.db.ReplyPermission(requestID, dbResponse); err != nil {
+	if err := s.db.ReplyPermission(ctx, requestID, dbResponse); err != nil {
 		if !errors.Is(err, storage.ErrNotFound) {
 			s.lg.Error("persist reply failed", "request_id", requestID, "error", err)
 		}
@@ -294,14 +294,14 @@ func (s *Service) deliver(e *pendingEntry, d Decision) {
 }
 
 // persist stores (or re-stores) the request row. response "" -> NULL (pending).
-func (s *Service) persist(req Request, response string) error {
+func (s *Service) persist(ctx context.Context, req Request, response string) error {
 	var alwaysJSON string
 	if len(req.Always) > 0 {
 		if b, err := json.Marshal(req.Always); err == nil {
 			alwaysJSON = string(b)
 		}
 	}
-	return s.db.SavePermission(storage.PermissionRow{
+	return s.db.SavePermission(ctx, storage.PermissionRow{
 		RequestID:   req.RequestID,
 		SessionID:   req.SessionID,
 		Action:      req.Permission,

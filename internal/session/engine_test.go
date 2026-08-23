@@ -117,7 +117,7 @@ func (h *harness) replyWatcher(ch <-chan protocol.Event) {
 		}
 		select {
 		case resp := <-h.replies:
-			if err := h.svc.Reply(p.ID, resp); err != nil {
+			if err := h.svc.Reply(h.t.Context(), p.ID, resp); err != nil {
 				h.t.Errorf("reply %q to %s: %v", resp, p.ID, err)
 			}
 		case <-h.done:
@@ -278,7 +278,7 @@ func (h *harness) startSession(t *testing.T, dir string) string {
 	t.Helper()
 	id := protocol.NewID("ses")
 	now := time.Now().UnixMilli()
-	err := h.db.CreateSession(storage.SessionRow{
+	err := h.db.CreateSession(t.Context(), storage.SessionRow{
 		ID: id, ProjectDir: dir, Model: "kido/q", Agent: "build",
 		Title: "New session", TimeCreated: now, TimeUpdated: now,
 	})
@@ -368,14 +368,14 @@ func waitPart(t *testing.T, h *harness, ses, kind, status string, timeout time.D
 	deadline := time.Now().Add(timeout)
 	for {
 		found := false
-		msgs, err := h.db.ListMessages(ses)
+		msgs, err := h.db.ListMessages(t.Context(), ses)
 		if err == nil {
 			for _, m := range msgs {
 				var rows []storage.PartRow
 				if kind == "tool" {
-					rows, _ = h.db.ListToolParts(m.ID)
+					rows, _ = h.db.ListToolParts(t.Context(), m.ID)
 				} else {
-					rows, _ = h.db.ListParts(m.ID)
+					rows, _ = h.db.ListParts(t.Context(), m.ID)
 				}
 				for _, r := range rows {
 					p, err := storage.PartToProtocol(r)
@@ -472,7 +472,7 @@ func TestSingleTextTurnEndToEnd(t *testing.T) {
 		t.Fatalf("turn error: %v", errMsg)
 	}
 
-	msgs, err := h.db.ListMessages(ses)
+	msgs, err := h.db.ListMessages(t.Context(), ses)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -483,7 +483,7 @@ func TestSingleTextTurnEndToEnd(t *testing.T) {
 		t.Fatalf("roles %q %q", msgs[0].Role, msgs[1].Role)
 	}
 
-	ump, err := h.db.ListParts(msgs[0].ID)
+	ump, err := h.db.ListParts(t.Context(), msgs[0].ID)
 	if err != nil || len(ump) != 1 {
 		t.Fatalf("user parts: %v, err %v", ump, err)
 	}
@@ -495,7 +495,7 @@ func TestSingleTextTurnEndToEnd(t *testing.T) {
 		t.Fatalf("user part = %+v", up)
 	}
 
-	amp, err := h.db.ListParts(msgs[1].ID)
+	amp, err := h.db.ListParts(t.Context(), msgs[1].ID)
 	if err != nil || len(amp) != 1 {
 		t.Fatalf("assistant parts: %v, err %v", amp, err)
 	}
@@ -657,11 +657,11 @@ func TestHistoryReplayIncludesToolResults(t *testing.T) {
 	}
 
 	// the read tool executed in the session's project dir
-	msgs, err := h.db.ListMessages(ses)
+	msgs, err := h.db.ListMessages(t.Context(), ses)
 	if err != nil || len(msgs) < 3 {
 		t.Fatalf("messages: %v, %v", msgs, err)
 	}
-	ump, err := h.db.ListParts(msgs[1].ID)
+	ump, err := h.db.ListParts(t.Context(), msgs[1].ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -743,9 +743,9 @@ func TestTextDeltasEmitSSEAndPersistAtFinalize(t *testing.T) {
 		t.Fatalf("message.part.delta events = %d, want 3", n)
 	}
 	found := false
-	msgs, _ := h.db.ListMessages(ses)
+	msgs, _ := h.db.ListMessages(t.Context(), ses)
 	for _, m := range msgs {
-		parts, _ := h.db.ListParts(m.ID)
+		parts, _ := h.db.ListParts(t.Context(), m.ID)
 		for _, pr := range parts {
 			p, _ := storage.PartToProtocol(pr)
 			if p.Type == "text" && p.Text == "Hello world" {
@@ -826,7 +826,7 @@ func TestRunTurnRecoversPanic(t *testing.T) {
 	h.overrideDriver = &pd
 	h.build(t)
 	ses := h.startSession(t, t.TempDir())
-	if err := h.db.UpdateSession(ses, storage.SessionRow{Title: "titled", TimeUpdated: time.Now().UnixMilli()}); err != nil {
+	if err := h.db.UpdateSession(t.Context(), ses, storage.SessionRow{Title: "titled", TimeUpdated: time.Now().UnixMilli()}); err != nil {
 		t.Fatal(err)
 	}
 	var doneErr error
@@ -879,7 +879,7 @@ func TestSendEarlyFailPublishesNoStatus(t *testing.T) {
 	h := newHarness(t)
 	h.build(t)
 	ses := h.startSession(t, t.TempDir())
-	if err := h.db.DeleteSession(ses); err != nil {
+	if err := h.db.DeleteSession(t.Context(), ses); err != nil {
 		t.Fatal(err)
 	}
 	onDone := make(chan struct{})
@@ -1027,13 +1027,13 @@ func TestSupersededTitleDropKeepsNewerCancel(t *testing.T) {
 	// assistant message (the round's row is deleted), the title is still
 	// the default — so maybeScheduleTitle fires a SECOND title (T2) whose
 	// cancel replaces T1's in the tracked map.
-	msgs, err := h.db.ListMessages(ses)
+	msgs, err := h.db.ListMessages(t.Context(), ses)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, m := range msgs {
 		if m.Role == "assistant" {
-			if err := h.db.DeleteMessage(m.ID); err != nil {
+			if err := h.db.DeleteMessage(t.Context(), m.ID); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1216,7 +1216,7 @@ func TestToolRoundMintsFreshTextPart(t *testing.T) {
 		if m.Role != "assistant" {
 			continue
 		}
-		rows, err := h.db.ListParts(m.ID)
+		rows, err := h.db.ListParts(t.Context(), m.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1264,7 +1264,7 @@ func TestToolRoundMintsFreshTextPart(t *testing.T) {
 // mustListMessages is the test-local ListMessages wrapper (fatal on error).
 func mustListMessages(t *testing.T, db *storage.DB, ses string) []storage.MessageRow {
 	t.Helper()
-	rows, err := db.ListMessages(ses)
+	rows, err := db.ListMessages(t.Context(), ses)
 	if err != nil {
 		t.Fatal(err)
 	}

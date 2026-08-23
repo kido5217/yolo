@@ -18,7 +18,7 @@ func todoEnv(t *testing.T) (*storage.DB, *Env) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	if err := db.CreateSession(storage.SessionRow{ID: "ses_t", ProjectDir: "/w", Agent: "build", Model: "k"}); err != nil {
+	if err := db.CreateSession(t.Context(), storage.SessionRow{ID: "ses_t", ProjectDir: "/w", Agent: "build", Model: "k"}); err != nil {
 		t.Fatal(err)
 	}
 	d := t.TempDir()
@@ -54,7 +54,7 @@ func TestTodoWritePersistsAndTitles(t *testing.T) {
 		if len(rt) != 3 || rt[0].Status != "completed" || rt[0].Priority != "high" || rt[1].Priority != "medium" || rt[2].Priority != "medium" {
 			t.Fatalf("round trip = %+v", rt)
 		}
-		back, err := db.GetTodos("ses_t")
+		back, err := db.GetTodos(t.Context(), "ses_t")
 		if err != nil || len(back) != 3 {
 			t.Fatalf("get = %v %v", back, err)
 		}
@@ -69,7 +69,7 @@ func TestTodoWritePersistsAndTitles(t *testing.T) {
 		if _, err := Registry()["todowrite"].Run(context.Background(), raw, env); err != nil {
 			t.Fatal(err)
 		}
-		back, err := db.GetTodos("ses_t")
+		back, err := db.GetTodos(t.Context(), "ses_t")
 		if err != nil || len(back) != 1 || back[0].Content != "z" {
 			t.Fatalf("replace failed: %v %v", back, err)
 		}

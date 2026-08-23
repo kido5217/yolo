@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"sort"
 
 	"github.com/kido5217/yolo/internal/llm"
@@ -17,16 +18,16 @@ import (
 // "always" replies apply from the very next evaluation. A config load error
 // degrades to no config rules (the turn continues; config load is
 // non-fatal, as in history replay).
-func (e *Engine) RulesetFor(sessionID string) ([]protocol.Rule, error) {
-	row, err := e.db.GetSession(sessionID)
+func (e *Engine) RulesetFor(ctx context.Context, sessionID string) ([]protocol.Rule, error) {
+	row, err := e.db.GetSession(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
-	return e.rulesetForRow(row)
+	return e.rulesetForRow(ctx, row)
 }
 
 // rulesetForRow is RulesetFor for an already-loaded session row.
-func (e *Engine) rulesetForRow(row storage.SessionRow) ([]protocol.Rule, error) {
+func (e *Engine) rulesetForRow(ctx context.Context, row storage.SessionRow) ([]protocol.Rule, error) {
 	agent := row.Agent
 	if agent == "" {
 		agent = "build"
@@ -44,7 +45,7 @@ func (e *Engine) rulesetForRow(row storage.SessionRow) ([]protocol.Rule, error) 
 			ruleset = append(ruleset, perms...)
 		}
 	}
-	always, err := e.db.AlwaysRules(row.ID)
+	always, err := e.db.AlwaysRules(ctx, row.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -54,8 +55,8 @@ func (e *Engine) rulesetForRow(row storage.SessionRow) ([]protocol.Rule, error) 
 // VisibleToolsFor returns the tools visible to the session's model under
 // its ruleset (upstream disabled() semantics: a wildcard deny on "edit"
 // hides both edit and write).
-func (e *Engine) VisibleToolsFor(sessionID string) (map[string]tool.Tool, error) {
-	rules, err := e.RulesetFor(sessionID)
+func (e *Engine) VisibleToolsFor(ctx context.Context, sessionID string) (map[string]tool.Tool, error) {
+	rules, err := e.RulesetFor(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -66,8 +67,8 @@ func (e *Engine) VisibleToolsFor(sessionID string) (map[string]tool.Tool, error)
 // stable (sorted) id order. Parameter bytes come from the schemas
 // marshalled once at engine construction (encoding is deterministic, so
 // wire bytes are identical to per-round marshalling).
-func (e *Engine) toolSchemaList(sessionID string) ([]llm.ToolDef, error) {
-	visible, err := e.VisibleToolsFor(sessionID)
+func (e *Engine) toolSchemaList(ctx context.Context, sessionID string) ([]llm.ToolDef, error) {
+	visible, err := e.VisibleToolsFor(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}

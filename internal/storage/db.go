@@ -2,6 +2,7 @@
 package storage
 
 import (
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -17,9 +18,10 @@ import (
 // ErrNotFound is returned when a row does not exist.
 var ErrNotFound = errors.New("storage: not found")
 
-// DB wraps a SQL database. Exec/Query/QueryRow route through a cache of
-// prepared statements, so repeated calls reuse the driver's prepared
-// statement instead of re-parsing the SQL on every call.
+// DB wraps a SQL database. Exec/Query/QueryRow and their *Context
+// variants route through a cache of prepared statements, so repeated
+// calls reuse the driver's prepared statement instead of re-parsing the
+// SQL on every call.
 type DB struct {
 	*sql.DB
 	mu    sync.Mutex
@@ -95,6 +97,37 @@ func (d *DB) QueryRow(query string, args ...any) *sql.Row {
 	return st.QueryRow(args...)
 }
 
+// ExecContext executes query through the cached prepared statement,
+// propagating ctx to the driver.
+func (d *DB) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	st, err := d.prepare(query)
+	if err != nil {
+		return nil, err
+	}
+	return st.ExecContext(ctx, args...)
+}
+
+// QueryContext executes query through the cached prepared statement,
+// propagating ctx to the driver.
+func (d *DB) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	st, err := d.prepare(query)
+	if err != nil {
+		return nil, err
+	}
+	return st.QueryContext(ctx, args...)
+}
+
+// QueryRowContext executes query through the cached prepared statement,
+// propagating ctx to the driver. A failed prepare (e.g. after Close) falls
+// through to the underlying *sql.DB, mirroring QueryRow.
+func (d *DB) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
+	st, err := d.prepare(query)
+	if err != nil {
+		return d.DB.QueryRowContext(ctx, query, args...)
+	}
+	return st.QueryRowContext(ctx, args...)
+}
+
 // prepare returns the cached prepared statement for query, preparing and
 // caching it on first use. Mutex held only across the map update;
 // Exec/Query never run under it (a blocking Exec must not serialize the
@@ -118,12 +151,12 @@ func (d *DB) SchemaVersion() (int, error) { return d.currentSchemaVersion() }
 
 // Session returns the wire session with cost/tokens aggregated over its
 // assistant messages.
-func (d *DB) Session(id string) (protocol.Session, error) {
-	row, err := d.GetSession(id)
+func (d *DB) Session(ctx context.Context, id string) (protocol.Session, error) {
+	row, err := d.GetSession(ctx, id)
 	if err != nil {
 		return protocol.Session{}, err
 	}
-	msgs, err := d.ListMessages(id)
+	msgs, err := d.ListMessages(ctx, id)
 	if err != nil {
 		return protocol.Session{}, err
 	}

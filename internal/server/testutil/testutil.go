@@ -44,6 +44,9 @@ type TestServer struct {
 	// LogDir, when set (BootWithDriverLog), is the server's log directory
 	// (yolo.log at LogDir/log/yolo.log).
 	LogDir string
+	// ctx is the harness's test context (t.Context() at Boot); harness-side
+	// storage calls use it instead of minting their own.
+	ctx context.Context
 }
 
 // Boot boots the full stack with the auto-text fake driver and registers
@@ -128,7 +131,7 @@ func bootLog(t *testing.T, drv *fakellm.Driver, cfg *protocol.Config, logDir str
 	})
 	ts := httptest.NewServer(h)
 	t.Cleanup(ts.Close)
-	return &TestServer{Server: ts, DB: db, Bus: b, Eng: eng, Fake: drv, PermSvc: permSvc, Dir: dir, Home: home, LogDir: logDir}
+	return &TestServer{Server: ts, DB: db, Bus: b, Eng: eng, Fake: drv, PermSvc: permSvc, Dir: dir, Home: home, LogDir: logDir, ctx: t.Context()}
 }
 
 // WaitSubscribe blocks until the bus has at least n live subscribers (an SSE
@@ -221,7 +224,7 @@ func (ts *TestServer) ParkAsk(t *testing.T, sessionID, action, resource string) 
 	go func() {
 		_, _ = ts.PermSvc.Ask(ctx, req)
 	}()
-	row, err := ts.DB.GetSession(sessionID)
+	row, err := ts.DB.GetSession(ts.ctx, sessionID)
 	if err != nil {
 		t.Fatalf("park ask: get session %s: %v", sessionID, err)
 	}

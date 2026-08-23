@@ -35,7 +35,7 @@ func (e *env) awaitPending(t *testing.T, want int) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if pend, _ := e.svc.Pending("ses_1"); len(pend) == want {
+		if pend, _ := e.svc.Pending(t.Context(), "ses_1"); len(pend) == want {
 			return
 		}
 		time.Sleep(2 * time.Millisecond)
@@ -51,7 +51,7 @@ func (e *env) req(id string) Request {
 
 func TestAskPreAllowNoBlock(t *testing.T) {
 	e := newEnv(t)
-	if err := e.db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Agent: "build", Model: "k"}); err != nil {
+	if err := e.db.CreateSession(t.Context(), storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Agent: "build", Model: "k"}); err != nil {
 		t.Fatal(err)
 	}
 	req := e.req("per_1")
@@ -75,7 +75,7 @@ func TestAskPreAllowNoBlock(t *testing.T) {
 
 func TestAskAskBlocksThenOnce(t *testing.T) {
 	e := newEnv(t)
-	if err := e.db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Agent: "build", Model: "k"}); err != nil {
+	if err := e.db.CreateSession(t.Context(), storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Agent: "build", Model: "k"}); err != nil {
 		t.Fatal(err)
 	}
 	// force an ask: read src/x.go is allow by build base → use a deny-then pattern: use agent yolo? no.
@@ -90,10 +90,10 @@ func TestAskAskBlocksThenOnce(t *testing.T) {
 		}
 	}()
 	e.awaitPending(t, 1)
-	if pend, _ := e.svc.Pending("ses_1"); len(pend) != 1 {
+	if pend, _ := e.svc.Pending(t.Context(), "ses_1"); len(pend) != 1 {
 		t.Fatalf("pending = %d", len(pend))
 	}
-	if err := e.svc.Reply("per_2", "once"); err != nil {
+	if err := e.svc.Reply(t.Context(), "per_2", "once"); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -108,7 +108,7 @@ func TestAskAskBlocksThenOnce(t *testing.T) {
 
 func TestAlwaysPersistsRuleAndCoveredAutoAnswer(t *testing.T) {
 	e := newEnv(t)
-	_ = e.db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Agent: "build", Model: "k"})
+	_ = e.db.CreateSession(t.Context(), storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Agent: "build", Model: "k"})
 	// two parked asks, same permission, second fully covered by first's always pattern
 	r1 := e.req("per_3")
 	r1.Permission = "custom"
@@ -120,22 +120,22 @@ func TestAlwaysPersistsRuleAndCoveredAutoAnswer(t *testing.T) {
 	go func() { _, _ = e.svc.Ask(context.Background(), r1) }()
 	go func() { _, _ = e.svc.Ask(context.Background(), r2) }()
 	e.awaitPending(t, 2)
-	if err := e.svc.Reply("per_3", "always"); err != nil {
+	if err := e.svc.Reply(t.Context(), "per_3", "always"); err != nil {
 		t.Fatal(err)
 	}
-	rules, err := e.db.AlwaysRules("ses_1")
+	rules, err := e.db.AlwaysRules(t.Context(), "ses_1")
 	if err != nil || len(rules) != 1 || rules[0].Pattern != "a/*" {
 		t.Fatalf("always rules = %+v err=%v", rules, err)
 	}
 	// r2 auto-answered: no longer pending
-	if pend, _ := e.svc.Pending("ses_1"); len(pend) != 0 {
+	if pend, _ := e.svc.Pending(t.Context(), "ses_1"); len(pend) != 0 {
 		t.Fatalf("pending after always = %d", len(pend))
 	}
 }
 
 func TestReplyUnblocksAndPublishesWhenPersistFails(t *testing.T) {
 	e := newEnv(t)
-	if err := e.db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Agent: "build", Model: "k"}); err != nil {
+	if err := e.db.CreateSession(t.Context(), storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Agent: "build", Model: "k"}); err != nil {
 		t.Fatal(err)
 	}
 	sub, cancel := e.bus.Subscribe()
@@ -155,7 +155,7 @@ func TestReplyUnblocksAndPublishesWhenPersistFails(t *testing.T) {
 	if err := e.db.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.svc.Reply("per_9", "once"); err != nil {
+	if err := e.svc.Reply(t.Context(), "per_9", "once"); err != nil {
 		t.Fatal(err)
 	}
 	// The decision must still reach the blocked asker (a DB write failure
@@ -183,7 +183,7 @@ func TestReplyUnblocksAndPublishesWhenPersistFails(t *testing.T) {
 
 func TestCustomAgentFallsBackToBuildMatrix(t *testing.T) {
 	e := newEnv(t)
-	if err := e.db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Agent: "build", Model: "k"}); err != nil {
+	if err := e.db.CreateSession(t.Context(), storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Agent: "build", Model: "k"}); err != nil {
 		t.Fatal(err)
 	}
 	// A config-defined custom agent evaluates against the build matrix
@@ -193,7 +193,7 @@ func TestCustomAgentFallsBackToBuildMatrix(t *testing.T) {
 	req.Permission = "read"
 	req.Resources = []string{"src/x.go"}
 	req.Agent = "custom"
-	if d := e.svc.DecisionFor(req); d != Allow {
+	if d := e.svc.DecisionFor(t.Context(), req); d != Allow {
 		t.Fatalf("custom-agent DecisionFor = %v, want Allow (build matrix)", d)
 	}
 	if d := e.svc.EvaluateRules("custom", nil, "read", []string{"src/x.go"}); d != Allow {
@@ -203,7 +203,7 @@ func TestCustomAgentFallsBackToBuildMatrix(t *testing.T) {
 
 func TestRejectCascade(t *testing.T) {
 	e := newEnv(t)
-	_ = e.db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Agent: "build", Model: "k"})
+	_ = e.db.CreateSession(t.Context(), storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Agent: "build", Model: "k"})
 	r1 := e.req("per_5")
 	r1.Permission = "custom"
 	r2 := e.req("per_6")
@@ -213,7 +213,7 @@ func TestRejectCascade(t *testing.T) {
 	go func() { d, _ := e.svc.Ask(context.Background(), r1); res1 <- d }()
 	go func() { d, _ := e.svc.Ask(context.Background(), r2); res2 <- d }()
 	e.awaitPending(t, 2)
-	if err := e.svc.Reply("per_5", "reject"); err != nil {
+	if err := e.svc.Reply(t.Context(), "per_5", "reject"); err != nil {
 		t.Fatal(err)
 	}
 	for i, ch := range []chan Decision{res1, res2} {
@@ -243,10 +243,10 @@ func TestDecisionForUsesRequestCfgRules(t *testing.T) {
 		Resources: []string{"/a/x.txt"}, CfgRules: denyRead}
 	reqB := Request{SessionID: "s2", Agent: "build", Permission: "bash",
 		Resources: []string{"git *"}, CfgRules: allowBash}
-	if d := e.svc.decisionFor(reqA); d != Deny {
+	if d := e.svc.decisionFor(t.Context(), reqA); d != Deny {
 		t.Fatalf("reqA = %v, want Deny (its own cfg rules)", d)
 	}
-	if d := e.svc.decisionFor(reqB); d != Allow {
+	if d := e.svc.decisionFor(t.Context(), reqB); d != Allow {
 		t.Fatalf("reqB = %v, want Allow (its own cfg rules)", d)
 	}
 
@@ -260,13 +260,13 @@ func TestDecisionForUsesRequestCfgRules(t *testing.T) {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			if d := e.svc.decisionFor(reqA); d != Deny {
+			if d := e.svc.decisionFor(t.Context(), reqA); d != Deny {
 				t.Errorf("concurrent reqA = %v, want Deny", d)
 			}
 		}()
 		go func() {
 			defer wg.Done()
-			if d := e.svc.decisionFor(reqB); d != Allow {
+			if d := e.svc.decisionFor(t.Context(), reqB); d != Allow {
 				t.Errorf("concurrent reqB = %v, want Allow", d)
 			}
 		}()
@@ -281,7 +281,7 @@ func TestDecisionForUsesRequestCfgRules(t *testing.T) {
 // settles; the lost claim is a no-op.
 func TestResolveSettlesExactlyOnce(t *testing.T) {
 	e := newEnv(t)
-	if err := e.db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Agent: "build", Model: "k"}); err != nil {
+	if err := e.db.CreateSession(t.Context(), storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Agent: "build", Model: "k"}); err != nil {
 		t.Fatal(err)
 	}
 	sub, cancel := e.bus.Subscribe()
@@ -299,8 +299,8 @@ func TestResolveSettlesExactlyOnce(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Add(2)
-	go func() { defer wg.Done(); e.svc.resolve("per_ds", Allow, "once", "once", false) }()
-	go func() { defer wg.Done(); e.svc.resolve("per_ds", Deny, "aborted", "reject", false) }()
+	go func() { defer wg.Done(); e.svc.resolve(t.Context(), "per_ds", Allow, "once", "once", false) }()
+	go func() { defer wg.Done(); e.svc.resolve(t.Context(), "per_ds", Deny, "aborted", "reject", false) }()
 	wg.Wait()
 
 	replied := 0

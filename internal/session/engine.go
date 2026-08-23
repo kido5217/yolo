@@ -182,7 +182,7 @@ type SendResult struct {
 // Send persists the user message and spawns the turn goroutine. It returns
 // ErrSessionBusy when a turn is already active for the session.
 func (e *Engine) Send(ctx context.Context, sessionID, text string, onDone func(error)) (SendResult, error) {
-	row, err := e.db.GetSession(sessionID)
+	row, err := e.db.GetSession(ctx, sessionID)
 	if err != nil {
 		return SendResult{}, err
 	}
@@ -203,7 +203,7 @@ func (e *Engine) Send(ctx context.Context, sessionID, text string, onDone func(e
 	now := e.clock()
 	msgID := protocol.NewID("msg")
 	partID := protocol.NewID("prt")
-	if err := e.db.CreateMessage(storage.MessageRow{
+	if err := e.db.CreateMessage(ctx, storage.MessageRow{
 		ID: msgID, SessionID: sessionID, Role: "user", Agent: row.Agent, TimeCreated: now,
 	}); err != nil {
 		e.releaseBusy(sessionID)
@@ -218,7 +218,7 @@ func (e *Engine) Send(ctx context.Context, sessionID, text string, onDone func(e
 		e.releaseBusy(sessionID)
 		return SendResult{}, fmt.Errorf("session: persist user part: %w", err)
 	}
-	if err := e.db.UpsertPart(userPartRow); err != nil {
+	if err := e.db.UpsertPart(ctx, userPartRow); err != nil {
 		e.releaseBusy(sessionID)
 		return SendResult{}, err
 	}
@@ -231,7 +231,7 @@ func (e *Engine) Send(ctx context.Context, sessionID, text string, onDone func(e
 	e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{SessionID: sessionID, Part: userPart, Time: now})
 
 	t := newTurn(sessionID, row, info, model)
-	e.maybeScheduleTitle(t, text)
+	e.maybeScheduleTitle(ctx, t, text)
 
 	go e.runTurn(turnCtx, t, onDone)
 	return SendResult{MessageID: msgID, PartID: partID}, nil
@@ -556,7 +556,7 @@ func (e *Engine) runTurn(ctx context.Context, t *turn, onDone func(error)) {
 	}
 	// ⑪: the history snapshot is loaded once per turn; each round appends
 	// its completed assistant message (finishRound).
-	sys, hist, herr := e.loadHistory(t)
+	sys, hist, herr := e.loadHistory(ctx, t)
 	if herr != nil {
 		turnErr = herr
 		return
@@ -565,7 +565,7 @@ func (e *Engine) runTurn(ctx context.Context, t *turn, onDone func(error)) {
 	t.hist = hist
 
 	for i := 0; i < maxToolRounds; i++ {
-		req, err := e.buildRequest(t)
+		req, err := e.buildRequest(ctx, t)
 		if err != nil {
 			turnErr = err
 			return
@@ -593,12 +593,12 @@ func (e *Engine) runTurn(ctx context.Context, t *turn, onDone func(error)) {
 // persisted history (LOCKED mapping, see messagesFor) and the tool schemas
 // visible under the session ruleset (re-read each round so "always" replies
 // and rule changes apply from the next round).
-func (e *Engine) buildRequest(t *turn) (llm.Request, error) {
+func (e *Engine) buildRequest(ctx context.Context, t *turn) (llm.Request, error) {
 	messages, err := e.messagesFor(t)
 	if err != nil {
 		return llm.Request{}, err
 	}
-	tools, err := e.toolSchemaList(t.sessionID)
+	tools, err := e.toolSchemaList(ctx, t.sessionID)
 	if err != nil {
 		return llm.Request{}, err
 	}
@@ -632,7 +632,7 @@ func (e *Engine) buildRequest(t *turn) (llm.Request, error) {
 // loadHistory builds the turn's system prompts and the full in-memory
 // history snapshot once (⑪). messagesFor maps this snapshot; the mapping is
 // unchanged (LOCKED).
-func (e *Engine) loadHistory(t *turn) ([]string, []protocol.MessageWithParts, error) {
+func (e *Engine) loadHistory(ctx context.Context, t *turn) ([]string, []protocol.MessageWithParts, error) {
 	sys, err := BuildSystemPrompt(t.row.ProjectDir, t.model, t.model.ID, t.info.ID)
 	if err != nil {
 		return nil, nil, err
@@ -648,13 +648,13 @@ func (e *Engine) loadHistory(t *turn) ([]string, []protocol.MessageWithParts, er
 			}
 		}
 	}
-	rows, err := e.db.ListMessages(t.sessionID)
+	rows, err := e.db.ListMessages(ctx, t.sessionID)
 	if err != nil {
 		return nil, nil, err
 	}
 	hist := make([]protocol.MessageWithParts, 0, len(rows))
 	for _, r := range rows {
-		prs, err := e.db.ListParts(r.ID)
+		prs, err := e.db.ListParts(ctx, r.ID)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -782,7 +782,7 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 	// The assistant row exists before the first stream attempt so a failed
 	// round still finalizes a (possibly empty) assistant message.
 	r := &round{id: protocol.NewID("msg"), now: e.clock()}
-	if err := e.db.CreateMessage(storage.MessageRow{
+	if err := e.db.CreateMessage(ctx, storage.MessageRow{
 		ID: r.id, SessionID: t.sessionID, Role: "assistant", Agent: t.agent, TimeCreated: r.now,
 	}); err != nil {
 		return false, err
@@ -853,7 +853,10 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 			e.lg.Error("persist part marshal failed", "part_id", p.ID, "session_id", t.sessionID, "error", perr)
 			return
 		}
-		if err := e.db.UpsertPart(row); err != nil {
+		// Finalization must land even when the turn ctx is cancelled
+		// (abort): a cancelled ctx would drop the terminal part write and
+		// leave the part "running" in the store.
+		if err := e.db.UpsertPart(context.WithoutCancel(ctx), row); err != nil {
 			e.lg.Error("persist part failed", "part_id", p.ID, "session_id", t.sessionID, "error", err)
 		}
 		e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
@@ -876,7 +879,7 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 			// kept; the turn ends with the ctx error (log only, non-fatal).
 			finalizePart(&textSt, "text")
 			finalizePart(&reasonSt, "reasoning")
-			e.finishRound(t, r, usage, finish)
+			e.finishRound(ctx, t, r, usage, finish)
 			return false, err
 		}
 		if p.Usage != nil {
@@ -889,20 +892,20 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 			finalizePart(&textSt, "text")
 			finalizePart(&reasonSt, "reasoning")
 			if ctx.Err() != nil {
-				e.finishRound(t, r, usage, finish)
+				e.finishRound(ctx, t, r, usage, finish)
 				return false, ctx.Err()
 			}
 			if isOverflowError(p.Err) {
 				e.lg.Info("overflow detected", "session_id", t.sessionID, "model", t.model.ID, "reason", "api_error")
-				e.saveSynthetic(t, r, overflowNote(t.model, 0, p.Err))
-				e.finishRound(t, r, usage, finish)
+				e.saveSynthetic(ctx, t, r, overflowNote(t.model, 0, p.Err))
+				e.finishRound(ctx, t, r, usage, finish)
 				return false, nil
 			}
 			// Mid-stream failure after content: keep the partial text, note
 			// the error on a synthetic part (excluded from history replay —
 			// the model never sees it) and fail the turn (no retry).
-			e.saveSynthetic(t, r, p.Err.Error())
-			e.finishRound(t, r, usage, finish)
+			e.saveSynthetic(ctx, t, r, p.Err.Error())
+			e.finishRound(ctx, t, r, usage, finish)
 			return false, fmt.Errorf("llm stream error: %w", p.Err)
 		}
 		switch p.Kind {
@@ -940,7 +943,7 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 				// are dropped (not persisted, not executed); the turn ends
 				// idle and onDone(nil).
 				e.lg.Info("max tool steps reached", "session_id", t.sessionID, "steps", maxToolSteps)
-				e.finishRound(t, r, usage, finish)
+				e.finishRound(ctx, t, r, usage, finish)
 				return false, nil
 			}
 			t.toolCalls++
@@ -956,11 +959,11 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 	// turn ends with a synthetic note (v1 has no compaction).
 	if usage != nil && t.model.Context > 0 && usage.Input > t.model.Context {
 		e.lg.Info("overflow detected", "session_id", t.sessionID, "model", t.model.ID, "reason", "usage", "input", usage.Input)
-		e.saveSynthetic(t, r, overflowNote(t.model, usage.Input, nil))
-		e.finishRound(t, r, usage, finish)
+		e.saveSynthetic(ctx, t, r, overflowNote(t.model, usage.Input, nil))
+		e.finishRound(ctx, t, r, usage, finish)
 		return false, nil
 	}
-	e.finishRound(t, r, usage, finish)
+	e.finishRound(ctx, t, r, usage, finish)
 
 	// A round continues when the model finished with tool_calls or emitted
 	// any tool part (scripted drivers set Finish inconsistently).
@@ -988,14 +991,14 @@ func (e *Engine) openStream(ctx context.Context, t *turn, r *round, req llm.Requ
 			return stream, nil
 		}
 		if ctx.Err() != nil {
-			e.finishRound(t, r, nil, "")
+			e.finishRound(ctx, t, r, nil, "")
 			return llm.PartStream{}, ctx.Err()
 		}
 		if !llm.IsTransient(sErr) {
 			if isOverflowError(sErr) {
 				e.lg.Info("overflow detected", "session_id", t.sessionID, "model", t.model.ID, "reason", "api_error")
-				e.saveSynthetic(t, r, overflowNote(t.model, 0, sErr))
-				e.finishRound(t, r, nil, "")
+				e.saveSynthetic(ctx, t, r, overflowNote(t.model, 0, sErr))
+				e.finishRound(ctx, t, r, nil, "")
 				// The round is already finalized: the caller ends the
 				// turn idle without reading a stream.
 				return llm.PartStream{}, errRoundEnded
@@ -1003,12 +1006,12 @@ func (e *Engine) openStream(ctx context.Context, t *turn, r *round, req llm.Requ
 			// Pre-stream failure: keep the decoded provider text on a
 			// synthetic note (excluded from history replay) and fail the
 			// turn (mid-stream parity).
-			e.saveSynthetic(t, r, sErr.Error())
-			e.finishRound(t, r, nil, "")
+			e.saveSynthetic(ctx, t, r, sErr.Error())
+			e.finishRound(ctx, t, r, nil, "")
 			return llm.PartStream{}, sErr
 		}
 		if attempt >= maxRetryAttempts {
-			e.finishRound(t, r, nil, "")
+			e.finishRound(ctx, t, r, nil, "")
 			// Retry-exhaustion framing belongs in the boundary error: the
 			// send boundary logs the turn error exactly once.
 			return llm.PartStream{}, fmt.Errorf(
@@ -1027,7 +1030,7 @@ func (e *Engine) openStream(ctx context.Context, t *turn, r *round, req llm.Requ
 		select {
 		case <-retry.C:
 		case <-ctx.Done():
-			e.finishRound(t, r, nil, "")
+			e.finishRound(ctx, t, r, nil, "")
 			return llm.PartStream{}, ctx.Err()
 		}
 	}
@@ -1037,7 +1040,7 @@ func (e *Engine) openStream(ctx context.Context, t *turn, r *round, req llm.Requ
 // message.updated with the final state, deriving cost/tokens from the round's
 // usage (nil-safe). It is called on every round-exit path (success, failure,
 // abort, retry exhaustion, overflow, max-steps).
-func (e *Engine) finishRound(t *turn, r *round, usage *llm.Usage, finish string) {
+func (e *Engine) finishRound(ctx context.Context, t *turn, r *round, usage *llm.Usage, finish string) {
 	var tok protocol.Tokens
 	cost := 0.0
 	if usage != nil {
@@ -1052,7 +1055,10 @@ func (e *Engine) finishRound(t *turn, r *round, usage *llm.Usage, finish string)
 	}
 	end := e.clock()
 	e.lg.Info("round end", "session_id", t.sessionID, "round", r.id, "latency_ms", end-r.now, "finish", finish)
-	if err := e.db.UpdateMessage(storage.MessageRow{
+	// Finalization must land even when the turn ctx is cancelled (abort):
+	// a cancelled ctx would drop the terminal message update (cost/tokens/
+	// time_completed) and the round's snapshot read.
+	if err := e.db.UpdateMessage(context.WithoutCancel(ctx), storage.MessageRow{
 		ID: r.id, SessionID: t.sessionID, Role: "assistant", Agent: t.agent,
 		Cost: cost, Tokens: tok, TimeCreated: r.now, TimeCompleted: &end,
 	}); err != nil {
@@ -1072,15 +1078,15 @@ func (e *Engine) finishRound(t *turn, r *round, usage *llm.Usage, finish string)
 	})
 	// ⑪: append the completed round to the turn's in-memory snapshot so the
 	// next round's request sees it without a DB re-query.
-	if mw, aerr := e.roundAsMessage(t, r); aerr == nil {
+	if mw, aerr := e.roundAsMessage(context.WithoutCancel(ctx), t, r); aerr == nil {
 		t.hist = append(t.hist, mw)
 	}
 }
 
 // roundAsMessage builds the snapshot entry for a completed assistant round:
 // its final message info + non-synthetic parts (⑪).
-func (e *Engine) roundAsMessage(t *turn, r *round) (protocol.MessageWithParts, error) {
-	prs, err := e.db.ListParts(r.id)
+func (e *Engine) roundAsMessage(ctx context.Context, t *turn, r *round) (protocol.MessageWithParts, error) {
+	prs, err := e.db.ListParts(ctx, r.id)
 	if err != nil {
 		return protocol.MessageWithParts{}, err
 	}
@@ -1101,7 +1107,7 @@ func (e *Engine) roundAsMessage(t *turn, r *round) (protocol.MessageWithParts, e
 // saveSynthetic persists an engine-generated text part (mid-stream error
 // note, overflow note) flagged Synthetic: it shows in the TUI but
 // messagesFor excludes it from history replay, so the model never sees it.
-func (e *Engine) saveSynthetic(t *turn, r *round, text string) {
+func (e *Engine) saveSynthetic(ctx context.Context, t *turn, r *round, text string) {
 	syn := true
 	start := e.clock()
 	p := protocol.Part{
@@ -1114,7 +1120,7 @@ func (e *Engine) saveSynthetic(t *turn, r *round, text string) {
 		e.lg.Error("persist part marshal failed", "part_id", p.ID, "session_id", t.sessionID, "error", perr)
 		return
 	}
-	if err := e.db.UpsertPart(row); err != nil {
+	if err := e.db.UpsertPart(ctx, row); err != nil {
 		e.lg.Error("persist part failed", "part_id", p.ID, "session_id", t.sessionID, "error", err)
 	}
 	e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
@@ -1264,7 +1270,7 @@ func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part)
 		raw = json.RawMessage(p.Text)
 	}
 	fail := func(stage int64, msg string) {
-		e.saveToolPart(t, r, toolPart{
+		e.saveToolPart(ctx, t, r, toolPart{
 			callID: callID,
 			name:   name,
 			state: protocol.ToolState{
@@ -1298,7 +1304,7 @@ func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part)
 		fail(start, "unknown tool "+name)
 		return
 	}
-	rules, err := e.rulesetForRow(t.row)
+	rules, err := e.rulesetForRow(ctx, t.row)
 	if err != nil {
 		fail(e.clock(), err.Error())
 		return
@@ -1344,7 +1350,7 @@ func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part)
 				msg = "aborted"
 			}
 			now := e.clock()
-			e.saveToolPart(t, r, toolPart{
+			e.saveToolPart(ctx, t, r, toolPart{
 				callID: callID,
 				name:   name,
 				state: protocol.ToolState{
@@ -1362,7 +1368,7 @@ func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part)
 	t.doomHist = append(t.doomHist, key)
 
 	start := e.clock()
-	e.saveToolPart(t, r, toolPart{
+	e.saveToolPart(ctx, t, r, toolPart{
 		callID: callID,
 		name:   name,
 		state:  protocol.ToolState{Status: "running", Input: input, Time: protocol.PartTime{Start: start}},
@@ -1435,7 +1441,7 @@ func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part)
 			msg = "aborted"
 		}
 		e.lg.Error("tool failed", "session_id", t.sessionID, "tool", name, "error", msg)
-		e.saveToolPart(t, r, toolPart{
+		e.saveToolPart(ctx, t, r, toolPart{
 			callID: callID,
 			name:   name,
 			state: protocol.ToolState{
@@ -1460,7 +1466,7 @@ func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part)
 		}
 		e.lg.Info("tool end", args...)
 	}
-	e.saveToolPart(t, r, toolPart{
+	e.saveToolPart(ctx, t, r, toolPart{
 		callID: callID,
 		name:   name,
 		state: protocol.ToolState{
@@ -1482,7 +1488,7 @@ type toolPart struct {
 	state  protocol.ToolState
 }
 
-func (e *Engine) saveToolPart(t *turn, r *round, tp toolPart) {
+func (e *Engine) saveToolPart(ctx context.Context, t *turn, r *round, tp toolPart) {
 	p := protocol.Part{
 		ID: tp.callID, SessionID: t.sessionID, MessageID: r.id,
 		Type: "tool", Tool: tp.name, CallID: tp.callID, State: &tp.state,
@@ -1492,7 +1498,10 @@ func (e *Engine) saveToolPart(t *turn, r *round, tp toolPart) {
 		e.lg.Error("persist part marshal failed", "part_id", p.ID, "session_id", t.sessionID, "error", perr)
 		return
 	}
-	if err := e.db.UpsertPart(row); err != nil {
+	// Finalization must land even when the turn ctx is cancelled (abort):
+	// a cancelled ctx would drop the terminal tool-part write and leave the
+	// part "running" in the store.
+	if err := e.db.UpsertPart(context.WithoutCancel(ctx), row); err != nil {
 		e.lg.Error("persist part failed", "part_id", p.ID, "session_id", t.sessionID, "error", err)
 	}
 	e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
@@ -1502,11 +1511,11 @@ func (e *Engine) saveToolPart(t *turn, r *round, tp toolPart) {
 
 // maybeScheduleTitle fires the one-shot title generation for the session's
 // first user message when the title is still the default.
-func (e *Engine) maybeScheduleTitle(t *turn, userText string) {
+func (e *Engine) maybeScheduleTitle(ctx context.Context, t *turn, userText string) {
 	if t.row.Title != "" && t.row.Title != "New session" {
 		return
 	}
-	msgs, err := e.db.ListMessages(t.sessionID)
+	msgs, err := e.db.ListMessages(ctx, t.sessionID)
 	if err != nil {
 		return
 	}
@@ -1564,14 +1573,14 @@ func (e *Engine) generateTitle(ctx context.Context, tc *titleCancel, t *turn, us
 	if title == "" {
 		return
 	}
-	if err := e.db.UpdateSession(t.sessionID, storage.SessionRow{Title: title, TimeUpdated: e.clock()}); err != nil {
+	if err := e.db.UpdateSession(ctx, t.sessionID, storage.SessionRow{Title: title, TimeUpdated: e.clock()}); err != nil {
 		return
 	}
-	updated, err := e.db.GetSession(t.sessionID)
+	updated, err := e.db.GetSession(ctx, t.sessionID)
 	if err != nil {
 		return
 	}
-	msgs, err := e.db.ListMessages(t.sessionID)
+	msgs, err := e.db.ListMessages(ctx, t.sessionID)
 	if err != nil {
 		return
 	}

@@ -81,10 +81,10 @@ func BenchmarkUpsertPart(b *testing.B) {
 		b.Fatal(err)
 	}
 	b.Cleanup(func() { db.Close() })
-	if err := db.CreateSession(storage.SessionRow{ID: "ses_bench", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err != nil {
+	if err := db.CreateSession(b.Context(), storage.SessionRow{ID: "ses_bench", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err != nil {
 		b.Fatal(err)
 	}
-	if err := db.CreateMessage(storage.MessageRow{ID: "msg_bench", SessionID: "ses_bench", Role: "assistant", TimeCreated: 2}); err != nil {
+	if err := db.CreateMessage(b.Context(), storage.MessageRow{ID: "msg_bench", SessionID: "ses_bench", Role: "assistant", TimeCreated: 2}); err != nil {
 		b.Fatal(err)
 	}
 	for _, size := range []int{1 << 10, 64 << 10, 256 << 10} {
@@ -97,7 +97,7 @@ func BenchmarkUpsertPart(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				if err := db.UpsertPart(row); err != nil {
+				if err := db.UpsertPart(b.Context(), row); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -113,7 +113,7 @@ func BenchmarkUpsertPart(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			r := row
 			r.ID = fmt.Sprintf("prt_bench_%04d", i&1023)
-			if err := db.UpsertPart(r); err != nil {
+			if err := db.UpsertPart(b.Context(), r); err != nil {
 				b.Fatal(err)
 			}
 		}

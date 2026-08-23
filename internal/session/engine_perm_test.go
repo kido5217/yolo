@@ -24,7 +24,7 @@ type toolPart struct {
 // toolParts lists the session's tool parts (all messages), oldest first.
 func toolParts(t *testing.T, h *harness, ses string) []toolPart {
 	t.Helper()
-	msgs, err := h.db.ListMessages(ses)
+	msgs, err := h.db.ListMessages(t.Context(), ses)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +33,7 @@ func toolParts(t *testing.T, h *harness, ses string) []toolPart {
 		if m.Role != "assistant" {
 			continue
 		}
-		parts, err := h.db.ListParts(m.ID)
+		parts, err := h.db.ListParts(t.Context(), m.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -114,7 +114,7 @@ func TestPermissionDenyStopsToolButNotTurn(t *testing.T) {
 		t.Fatalf("error = %q", st.Error)
 	}
 	// the turn continued to the model's next round.
-	msgs, err := h.db.ListMessages(ses)
+	msgs, err := h.db.ListMessages(t.Context(), ses)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func TestPermissionAlwaysPersistsAndSkipsNext(t *testing.T) {
 	if len(perms) != 1 || perms[0] != "read" {
 		t.Fatalf("asked permissions = %v, want [read]", perms)
 	}
-	rules, err := h.db.AlwaysRules(ses)
+	rules, err := h.db.AlwaysRules(t.Context(), ses)
 	if err != nil {
 		t.Fatal(err)
 	}
