@@ -78,7 +78,7 @@ func run(args []string) int {
 	}
 	switch args[0] {
 	case "help", "-h", "--help":
-		usage(os.Stderr)
+		usage(os.Stdout)
 		return 0
 	case "serve":
 		return serveCmd(args[1:])

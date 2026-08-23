@@ -794,3 +794,25 @@ func TestAuthAddRejectsUnreadableOrEmptyKey(t *testing.T) {
 		}
 	})
 }
+
+// TestHelpToStdout pins Z (cli-6): yolo help prints the usage to stdout,
+// so pipes and capture scripts see it; stderr stays empty.
+func TestHelpToStdout(t *testing.T) {
+	bin := buildBinary(t)
+	for _, arg := range []string{"help", "-h", "--help"} {
+		t.Run(arg, func(t *testing.T) {
+			cmd := exec.Command(bin, arg)
+			var stdout, stderr bytes.Buffer
+			cmd.Stdout, cmd.Stderr = &stdout, &stderr
+			if err := cmd.Run(); err != nil {
+				t.Fatalf("%s exited: %v\nstdout: %s\nstderr: %s", arg, err, stdout.String(), stderr.String())
+			}
+			if !strings.Contains(stdout.String(), "Usage:") {
+				t.Fatalf("%s: stdout missing the usage:\n%s", arg, stdout.String())
+			}
+			if stderr.Len() != 0 {
+				t.Fatalf("%s: stderr must be empty, got %q", arg, stderr.String())
+			}
+		})
+	}
+}
