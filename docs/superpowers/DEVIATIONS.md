@@ -483,3 +483,15 @@ JSON input` before `tea.Run` was ever reached — the plan's predicted
 step-2 failure ("stderr empty") did not occur. Fixed by appending the
 one missing character; the test pins W (row 12) as designed. Resolves per
 principle 5.
+113. Plan Task X test code had two compile errors (test-only/low,
+2026-08-24): (a) the `Drivers` map literal omitted its key —
+`map[string]llm.Driver{hangDriver{gate: gate}}` cannot compile; the
+intended key is the provider id `"kido"` (the session model is
+`kido/q`; the same seam key `buildDeps` uses) — without it the hang
+driver would be unreachable and the test would not pin X; (b)
+`db.CreateSession(...)` was missing the ctx argument (real API
+`CreateSession(ctx, r)`, internal/storage/dao.go — identical
+semantics). Both fixed in `TestServeDrainForceKill`; everything else
+(`drainCtx`/`armForceKill`, the `serveCmd` wiring, the 2 s force-kill
+bound, DEFERRED.md disposition, pinned commit message) lands as
+planned. Resolves per principle 5.
