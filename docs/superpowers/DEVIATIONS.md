@@ -418,3 +418,12 @@ the intended timing failure). Fixed by driving a SESSION-route app via
 subtest in the same file. The amortization, the two switched draft
 assertions, and the 5 s guard are as the brief specifies. Resolves per
 principle 5.
+107. Plan Task T implementation snippet would not compile (impl/low,
+2026-08-23): the brief's `case tea.InterruptMsg: return a.handleKey(…)`
+returned the `[]tea.Cmd` from `handleKey` where `Update` must return a
+`tea.Cmd`. Fixed by mirroring the adjacent `tea.KeyPressMsg` case:
+`cmds := a.handleKey(…); if len(cmds) == 0 { return nil }; return
+tea.Batch(cmds...)`. The synthetic key is the locked `ctrlCKey` shape
+`{Code:'c', Mod: tea.ModCtrl}` (home_test.go:44) and the precedence
+behavior (pending perm ask / open dialog still owns the keys) is exactly
+as the brief specifies. Resolves per principle 5.

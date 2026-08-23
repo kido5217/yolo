@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kido5217/yolo/internal/protocol"
+	"github.com/kido5217/yolo/internal/server/testutil"
 	"github.com/kido5217/yolo/internal/tui/client"
 	"github.com/kido5217/yolo/internal/tui/store"
 )
@@ -203,4 +204,19 @@ func TestAppHandleKeyHome(t *testing.T) {
 			t.Fatalf("dialog = %v (ok=%v), want dlgHelp", d.kind, ok)
 		}
 	})
+}
+
+// TestInterruptMsgOpensQuitDialog pins SIGINT handling (cli-2): a
+// tea.InterruptMsg delivered during Run is treated exactly like the ctrl+c
+// keystroke — it opens the quit-confirm dialog.
+func TestInterruptMsgOpensQuitDialog(t *testing.T) {
+	ts := testutil.Boot(t)
+	c := client.New(ts.URL, ts.Dir)
+	a := newRecApp(c, store.Store{}, "")
+	t.Cleanup(a.Close)
+	a.Update(tea.InterruptMsg{})
+	d, ok := a.dlg.top()
+	if !ok || d.kind != dlgQuit {
+		t.Fatalf("after InterruptMsg dialog = %+v (ok=%v), want dlgQuit on top", d, ok)
+	}
 }

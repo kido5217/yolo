@@ -189,6 +189,15 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 		return tea.Batch(cmds...)
+	case tea.InterruptMsg:
+		// SIGINT during Run: the same as the ctrl+c keystroke (cli-2) —
+		// route it through the full key ladder so a pending permission
+		// ask or an open dialog still owns the keys.
+		cmds := a.handleKey(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+		if len(cmds) == 0 {
+			return nil
+		}
+		return tea.Batch(cmds...)
 	}
 	return nil
 }
