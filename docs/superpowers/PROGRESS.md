@@ -8,10 +8,14 @@ re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 **Status (2026-08-23):** v0.2.0 released — merged to `main` + tagged `v0.2.0` +
 release cut. 16-task implementation, gate-green; `just e2e-live` PASS against
 the real `https://ai.kido.ws/v1` on 2026-08-23 (pre-tag). Beads: epic
-`yolo-8vl` and every subtask closed (board empty). Spec:
+`yolo-8vl` and every subtask closed. Spec:
 `docs/superpowers/specs/2026-08-22-v0.2.0-design.md`; plan:
-`docs/superpowers/plans/2026-08-22-v0.2.0.md`. The 0.3.0 deferred backlog lives
-in `docs/superpowers/DEFERRED.md` (no live bead).
+`docs/superpowers/plans/2026-08-22-v0.2.0.md`. 0.3.0 is in progress on branch
+`v0.3.0` (no upstream): spec `docs/superpowers/specs/2026-08-23-v0.3.0-design.md`,
+Plan 1 `docs/superpowers/plans/2026-08-23-v0.3.0-plan-1-defects.md` (defect
+slice, all 39 tasks authored + committed), beads epic `yolo-5hy` / sub-epic
+`yolo-5hy.1` / task beads `yolo-5hy.1.1`–`.39`; execution starts at Task 0 via
+`bd ready`. The 0.3.0 deferred backlog lives in `docs/superpowers/DEFERRED.md`.
 
 ## Root causes (archive, v0.1.3)
 
