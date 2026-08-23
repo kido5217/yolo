@@ -132,8 +132,11 @@ func (s *Server) handleProvider(w http.ResponseWriter, r *http.Request) {
 
 // handleProviderAuth is the key source view: {key_required, env, status,
 // source} per provider (the two pinned keys plus the loaded source).
-func (s *Server) handleProviderAuth(w http.ResponseWriter, _ *http.Request) {
-	dir := s.WorkDir
+func (s *Server) handleProviderAuth(w http.ResponseWriter, r *http.Request) {
+	dir, ok := s.scoped(w, r)
+	if !ok {
+		return
+	}
 	entries, err := s.providerEntries(dir)
 	if err != nil {
 		s.fail(w, http.StatusInternalServerError, "list providers", err)
