@@ -139,6 +139,12 @@ func (s *Shell) Exec(ctx context.Context, command string, timeoutMS int, onLine 
 				proc2 := s.proc
 				s.proc = nil
 				code := reapProc(proc2, false)
+				if code < 0 {
+					// The process died and Wait() yielded no exit code: a
+					// successful Output with exit -1 would tell the model a
+					// dead mid-command process succeeded (safety-4).
+					return 0, buf.String(), errors.New("shell: command process died without an end marker")
+				}
 				return code, buf.String(), nil
 			}
 			if m := endMarkerRe.FindStringSubmatch(ev.line); m != nil && m[1] == markerN {
@@ -330,8 +336,10 @@ func killGroup(proc *shellProc) {
 
 // reapProc detaches a proc: optionally SIGKILLs its group, releases the
 // output pump (proc.stop has exactly one closer — the detaching side), and
-// reaps the process, returning its exit code (-1 when the code is
-// undetermined, e.g. killed by signal).
+// reaps the process, returning its exit code: 128+signum for a
+// signal-terminated process (matching the marker path, where bash's $?
+// reports the same value, e.g. 137/143), -1 only when the code is
+// undetermined (Wait failed without an exit status).
 func reapProc(proc *shellProc, kill bool) int {
 	if kill {
 		killGroup(proc)
@@ -351,6 +359,9 @@ func reapProc(proc *shellProc, kill bool) int {
 	ee, ok := err.(*exec.ExitError)
 	if !ok {
 		return -1
+	}
+	if cs, ok := ee.Sys().(syscall.WaitStatus); ok && cs.Signaled() {
+		return 128 + int(cs.Signal())
 	}
 	return ee.ExitCode()
 }
