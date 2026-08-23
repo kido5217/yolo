@@ -442,3 +442,86 @@ func hasModelDialog(b []byte) bool {
 		strings.Contains(s, "Qwen*") &&
 		strings.Contains(s, "100k ctx")
 }
+
+// TestModelDialogPatchPaths executes the subchoice cmds end-to-end
+// (testing-2): 'b' (set default) must PATCH the config's model field, 'a'
+// (this session) must PATCH the session's model field. The existing
+// subtest only counts cmds — a 'b' wired to the session-patch path passed
+// everything before this pin.
+func TestModelDialogPatchPaths(t *testing.T) {
+	ts := testutil.Boot(t)
+	ctx := context.Background()
+	c := client.New(ts.URL, ts.Dir)
+	ses, err := c.CreateSession(ctx, "")
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	a := newRecApp(c, store.Store{
+		Current:   &protocol.Session{ID: ses.ID, Agent: "build", Model: refModel("kido", "q")},
+		Providers: tuiProviderFixture(),
+		Agents:    tuiAgentFixture(),
+		Config:    map[string]any{"model": "kido/q"},
+	}, "")
+	a.route = routeSession
+	a.curSessionID = ses.ID
+	t.Cleanup(a.Close)
+
+	open := func() {
+		a.openModelDialog()
+		a.Cmds = nil
+		a.handleKey(pressTab())          // models pane
+		a.handleKey(press(tea.KeyEnter)) // open the subchoice
+	}
+
+	t.Run("b sets the config default model", func(t *testing.T) {
+		open()
+		a.handleKey(press('b'))
+		if len(a.Cmds) != 1 {
+			t.Fatalf("key b emitted %d cmds, want 1", len(a.Cmds))
+		}
+		m := a.Cmds[0]()
+		pm, ok := m.(dlgPatchMsg)
+		if !ok || pm.err != nil {
+			t.Fatalf("b cmd delivered %v (%T), want a successful dlgPatchMsg", pm, m)
+		}
+		if pm.field != "model" || pm.sess != nil || pm.cfg == nil {
+			t.Fatalf("b must PATCH the config: field=%q sess=%v cfg=%v", pm.field, pm.sess, pm.cfg)
+		}
+		if got, _ := pm.cfg["model"].(string); got != "kido/q" {
+			t.Fatalf("config PATCH model = %q, want kido/q", got)
+		}
+		if a.dlg.empty() {
+			t.Fatal("dialog must stay open before the patch msg lands")
+		}
+		a.Update(pm)
+		if !a.dlg.empty() {
+			t.Fatal("dialog must close after the patch msg lands")
+		}
+	})
+
+	t.Run("a sets the session model", func(t *testing.T) {
+		open()
+		a.handleKey(press('a'))
+		if len(a.Cmds) != 1 {
+			t.Fatalf("key a emitted %d cmds, want 1", len(a.Cmds))
+		}
+		m := a.Cmds[0]()
+		pm, ok := m.(dlgPatchMsg)
+		if !ok || pm.err != nil {
+			t.Fatalf("a cmd delivered %v (%T), want a successful dlgPatchMsg", pm, m)
+		}
+		if pm.field != "model" || pm.cfg != nil || pm.sess == nil {
+			t.Fatalf("a must PATCH the session: field=%q cfg=%v sess=%v", pm.field, pm.cfg, pm.sess)
+		}
+		if pm.sess.ID != ses.ID {
+			t.Fatalf("session PATCH id = %q, want %q", pm.sess.ID, ses.ID)
+		}
+		if pm.sess.Model == nil || pm.sess.Model.ID != "q" || pm.sess.Model.ProviderID != "kido" {
+			t.Fatalf("session model after PATCH = %+v, want kido/q", pm.sess.Model)
+		}
+		a.Update(pm)
+		if !a.dlg.empty() {
+			t.Fatal("dialog must close after the patch msg lands")
+		}
+	})
+}
