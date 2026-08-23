@@ -195,8 +195,8 @@ func TestTextAndToolPartRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if back.Text != "hello" || back.Time.End != 9 {
-		t.Fatalf("round trip: %+v", back)
+	if back.Text != "hello" || back.Time.Start != 5 || back.Time.End != 9 {
+		t.Fatalf("round trip: %+v (Time.Start must survive via TimeCreated)", back)
 	}
 	tool := protocol.Part{ID: "prt_tool", MessageID: "msg_1", SessionID: "ses_1", Type: "tool", CallID: "call_1", Tool: "bash", State: &protocol.ToolState{Status: "completed", Input: map[string]any{"command": "ls"}, Output: "ok", Time: protocol.PartTime{Start: 1, End: 2}}}
 	if err := db.UpsertPart(storage.ProtocolToPart(tool)); err != nil {
