@@ -319,6 +319,11 @@ func tuiCmd(args []string) int {
 	app := tui.NewApp(cl, store.State{}, sessionID)
 	deps.Log.Info("tui start", "workdir", wd)
 	_, runErr := tea.NewProgram(app).Run()
+	if runErr != nil {
+		// One line to stderr (no stack): a TUI start failure must be
+		// visible in the dead terminal, not only in the log (row 12).
+		fmt.Fprintf(os.Stderr, "yolo: %v\n", runErr)
+	}
 	deps.Log.Info("tui end", "exit_code", tuiExit(runErr))
 	app.Close()
 	drain(deps, srv)

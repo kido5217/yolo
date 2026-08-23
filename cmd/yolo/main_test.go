@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -534,5 +535,59 @@ func TestJustfileVersionRecipe(t *testing.T) {
 		if !strings.Contains(string(list), want) {
 			t.Fatalf("just --list missing %q:\n%s", want, list)
 		}
+	}
+}
+
+// TestTuiRunErrorPrintsToStderr pins W (row 12): a TUI start failure prints
+// one line to stderr in addition to the log + exit code. The child runs in
+// its own session (no controlling terminal), so bubbletea's Run fails fast
+// with a TTY-open error.
+func TestTuiRunErrorPrintsToStderr(t *testing.T) {
+	bin := buildBinary(t)
+	root := t.TempDir()
+	wd := t.TempDir()
+	script := filepath.Join(root, "script.json")
+	if err := os.WriteFile(script,
+		[]byte(`[{"parts":[{"kind":"text","text":"ok","finish":"stop","usage":{"input":1,"output":1}}]}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(bin, "--dir", wd)
+	env := make([]string, 0, len(os.Environ())+5)
+	for _, kv := range os.Environ() {
+		if strings.HasPrefix(kv, "XDG_") {
+			continue
+		}
+		env = append(env, kv)
+	}
+	env = append(env,
+		"YOLO_LLM=fake", "YOLO_FAKE_SCRIPT="+script,
+		"XDG_CONFIG_HOME="+filepath.Join(root, "config"),
+		"XDG_DATA_HOME="+filepath.Join(root, "data"),
+		"XDG_CACHE_HOME="+filepath.Join(root, "cache"),
+	)
+	cmd.Env = env
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true} // no controlling TTY
+	stdin, err := os.Open("/dev/null")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stdin.Close()
+	cmd.Stdin = stdin
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	err = cmd.Run()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
+		t.Fatalf("exit = %v, want exit code 1 (a TUI start failure)", err)
+	}
+	lines := strings.Split(strings.TrimSpace(stderr.String()), "\n")
+	found := false
+	for _, l := range lines {
+		if strings.HasPrefix(l, "yolo: ") && strings.Contains(l, "TTY") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("stderr has no one-line TUI failure:\n%s", stderr.String())
 	}
 }

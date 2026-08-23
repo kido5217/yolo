@@ -474,3 +474,12 @@ its `store.Store{}` is Task V5 drift, corrected to `store.State{}`.
 Everything else (dlgNone zero value, explicit handleDialogKey guard,
 DEFERRED.md disposition, pinned commit message) lands as planned. Resolves
 per principle 5.
+112. Plan Task W step-1 test literal was malformed (test-only/low,
+2026-08-24): the script JSON literal was missing the closing `]` of the
+outer array (`...}}]}` instead of `...}}]}]`), so the fake driver's
+eager script parse (`fake.FromScript` at buildDeps) failed at startup
+and the child exited 1 with `yolo: fake: parse script: unexpected end of
+JSON input` before `tea.Run` was ever reached — the plan's predicted
+step-2 failure ("stderr empty") did not occur. Fixed by appending the
+one missing character; the test pins W (row 12) as designed. Resolves per
+principle 5.
