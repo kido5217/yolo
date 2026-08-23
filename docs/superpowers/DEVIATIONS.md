@@ -120,3 +120,47 @@ pinned `printVersion` reads `bi.Settings["vcs.revision"]` (map) and
 (key/value slice). Adapted: iterate the slice, match `vcs.revision` /
 `vcs.time` by key, same output. Behavior identical; no test contract
 changed (the pins assert line 1 only).
+79. Spec §4 ① is stale (info, 2026-08-22): the spec prescribes "read
+s.dataDir under the existing mutex in decisionFor" for the concurrency-1 P0,
+but `SetDataDir` was removed in `39a196e` (2026-08-21, before the spec) —
+`dataDir` is now a process-constant constructor field, so the race cannot
+occur. Verified: no writes to `Service.dataDir` outside `New` (grep), and a
+concurrent-sessions `-race` regression test is added instead of the
+prescribed mutex fix (plan Task 4). The P0 bead closes as verified-stale.
+80. Spec §4 ⑦ says "the 28-entry patterns list" (info, 2026-08-22): the
+upstream list in `packages/llm/src/provider-error.ts` has 27 entries. The
+plan ports the actual 27 byte-faithfully; the count in the spec is a typo.
+81. ④/⑥/⑦ change model-visible error text (low, 2026-08-22): provider
+non-2xx errors now surface the DECODED provider message (previously the
+generic status text, because the body was closed before read), the
+overflow classification narrows to the upstream curated classifier (a 401/403/429
+now ends the turn errored with the decoded text instead of a graceful
+overflow note when the text matches "context"/"token"-adjacent phrasing),
+and bash `timeout: 0` now returns "timeout must be a positive integer"
+instead of running unbounded. Per principle 5 the tests define the contract:
+the pins in plan Tasks 2/3/11 assert the new behavior.
+82. ⑦ patterns also run against the APIError body (low, 2026-08-22): the
+plan's implementation snippet matched the curated patterns against
+`err.Error()` only, but the plan's own test case "model context window
+exceeded code" (body `error.code` with a short message) needs the body text.
+Upstream's classifier input (provider/error.ts `message()`) appends the raw
+response body when the decoded message is unhelpful — so yolo's
+`isOverflowError` tests the patterns against `err.Error()` AND the decoded
+`*llm.APIError` body. Test contract kept; snippet adapted.
+83. Plan Task 3 e2e test bugs fixed (low, 2026-08-22): (a) both e2e tests
+set `h.overrideDriver` AFTER `h.build(t)`, but the harness captures the
+driver at build time (engine_test.go `wiredDriver`, seam docs: "set before
+build") — moved before build; (b) `TestNonOverflowAPIErrorFailsTurn` read
+`turnErr` (written by the async `onDone` callback) without the
+done-channel sync the harness convention requires — added the
+`close(done)` + select pattern used by the existing retry/abort tests.
+84. Pre-stream error paths gained a synthetic note + sentinel (low,
+2026-08-22): the plan's test `TestNonOverflowAPIErrorFailsTurn` pins the
+decoded provider text on a synthetic note for a PRE-stream 401, but the
+plan's implementation only touched `isOverflowError` — the pre-stream
+non-transient path returned the error with no note. Added
+`e.saveSynthetic(t, r, sErr.Error())` there (mid-stream parity). Also the
+overflow path previously returned `PartStream{}, nil`: the round loop
+blocked forever on the nil `Parts` channel (the path was dead since ④ made
+provider 400s decodable) — it now returns a private `errRoundEnded`
+sentinel and the caller ends the turn idle without reading a stream.

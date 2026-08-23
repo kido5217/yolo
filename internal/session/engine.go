@@ -1,6 +1,7 @@
 package session
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -30,6 +31,10 @@ import (
 // ErrSessionBusy is returned by Send when the session already has an active
 // turn.
 var ErrSessionBusy = errors.New("session busy")
+
+// errRoundEnded marks a round already finalized inside openStream (the
+// overflow path): the caller ends the turn idle without reading a stream.
+var errRoundEnded = errors.New("round ended")
 
 // maxToolRounds caps the tool round-trips of one turn.
 const maxToolRounds = 50
@@ -653,6 +658,9 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 
 	stream, err := e.openStream(roundCtx, t, r, req)
 	if err != nil {
+		if err == errRoundEnded {
+			return false, nil
+		}
 		return false, err
 	}
 
@@ -840,8 +848,14 @@ func (e *Engine) openStream(ctx context.Context, t *turn, r *round, req llm.Requ
 			if isOverflowError(sErr) {
 				e.saveSynthetic(t, r, overflowNote(t.model, 0, sErr))
 				e.finishRound(t, r, nil, "")
-				return llm.PartStream{}, nil
+				// The round is already finalized: the caller ends the
+				// turn idle without reading a stream.
+				return llm.PartStream{}, errRoundEnded
 			}
+			// Pre-stream failure: keep the decoded provider text on a
+			// synthetic note (excluded from history replay) and fail the
+			// turn (mid-stream parity).
+			e.saveSynthetic(t, r, sErr.Error())
 			e.finishRound(t, r, nil, "")
 			return llm.PartStream{}, sErr
 		}
@@ -934,15 +948,101 @@ func isSyntheticPart(p protocol.Part) bool {
 	return p.Synthetic != nil && *p.Synthetic
 }
 
-// overflowRe matches provider-side context-overflow API errors (400 "prompt
-// too long" and friends). NOTE: "context" also matches context.Canceled —
-// callers MUST check ctx.Err() first.
-var overflowRe = regexp.MustCompile(`(?i)(context|tokens?|too long|exceeds)`)
+// overflowPatterns ports opencode v1.18.18's curated context-overflow
+// classifier (packages/llm/src/provider-error.ts `patterns`) byte-faithfully:
+// 27 entries, case-insensitive.
+var overflowPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)prompt is too long`),
+	regexp.MustCompile(`(?i)request_too_large`),
+	regexp.MustCompile(`(?i)input is too long for requested model`),
+	regexp.MustCompile(`(?i)exceeds the context window`),
+	regexp.MustCompile(`(?i)exceeds (?:the )?(?:model'?s )?maximum context length(?: of [\d,]+ tokens?|\s*\([\d,]+\))`),
+	regexp.MustCompile(`(?i)input token count.*exceeds the maximum`),
+	regexp.MustCompile(`(?i)tokens in request more than max tokens allowed`),
+	regexp.MustCompile(`(?i)maximum prompt length is \d+`),
+	regexp.MustCompile(`(?i)reduce the length of the messages`),
+	regexp.MustCompile(`(?i)maximum context length is \d+ tokens`),
+	regexp.MustCompile(`(?i)exceeds (?:the )?maximum allowed input length of [\d,]+ tokens?`),
+	regexp.MustCompile(`(?i)input \(\d+ tokens\) is longer than the model'?s context length \(\d+ tokens\)`),
+	regexp.MustCompile(`(?i)exceeds the limit of \d+`),
+	regexp.MustCompile(`(?i)exceeds the available context size`),
+	regexp.MustCompile(`(?i)greater than the context length`),
+	regexp.MustCompile(`(?i)context window exceeds limit`),
+	regexp.MustCompile(`(?i)exceeded model token limit`),
+	regexp.MustCompile(`(?i)context[_ ]length[_ ]exceeded`),
+	regexp.MustCompile(`(?i)request entity too large`),
+	regexp.MustCompile(`(?i)context length is only \d+ tokens`),
+	regexp.MustCompile(`(?i)input length.*exceeds.*context length`),
+	regexp.MustCompile(`(?i)prompt too long; exceeded (?:max )?context length`),
+	regexp.MustCompile(`(?i)too large for model with \d+ maximum context length`),
+	regexp.MustCompile(`(?i)prompt has [\d,]+ tokens?, but the configured context size is [\d,]+ tokens?`),
+	regexp.MustCompile(`(?i)model_context_window_exceeded`),
+	regexp.MustCompile(`(?i)too many tokens`),
+	regexp.MustCompile(`(?i)token limit exceeded`),
+}
+
+// overflowExclusions — upstream `exclusions` (AND-NOT: a hit means NOT
+// overflow, even if a pattern also matches).
+var overflowExclusions = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)^(throttling error|service unavailable):`),
+	regexp.MustCompile(`(?i)rate limit`),
+	regexp.MustCompile(`(?i)too many requests`),
+}
+
+// overflowNoBodyRe — the upstream synthesized message form for a bare
+// 400/413 with no body.
+var overflowNoBodyRe = regexp.MustCompile(`(?i)^4(00|13)\s*(status code)?\s*\(no body\)`)
 
 // isOverflowError reports whether an API (non-stream) error is a
-// context-overflow rejection.
+// context-overflow rejection. Port of upstream provider-error.ts
+// isContextOverflow + opencode provider/error.ts parseAPICallError:
+// exclusions AND-NOT the curated patterns; a 413 (any body), a 400/413 with
+// an empty body, or a decoded body whose error.code is
+// "context_length_exceeded" is overflow by status. Task ④'s decoded
+// *llm.APIError makes the provider 400 path live again.
 func isOverflowError(err error) bool {
-	return err != nil && overflowRe.MatchString(err.Error())
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	for _, re := range overflowExclusions {
+		if re.MatchString(msg) {
+			return false
+		}
+	}
+	texts := []string{msg}
+	var api *llm.APIError
+	if errors.As(err, &api) {
+		switch {
+		case api.Status == 413:
+			return true
+		case (api.Status == 400 || api.Status == 413) && len(bytes.TrimSpace(api.Body)) == 0:
+			return true
+		}
+		var env struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		if json.Unmarshal(api.Body, &env) == nil && env.Error.Code == "context_length_exceeded" {
+			return true
+		}
+		// Upstream's classifier input (error.ts message()) includes the
+		// raw response body when the decoded message is unhelpful, so the
+		// curated patterns also run against the body (e.g. a
+		// model_context_window_exceeded code with a short message).
+		if len(api.Body) > 0 {
+			texts = append(texts, string(api.Body))
+		}
+	}
+	for _, text := range texts {
+		for _, re := range overflowPatterns {
+			if re.MatchString(text) {
+				return true
+			}
+		}
+	}
+	return overflowNoBodyRe.MatchString(msg)
 }
 
 // overflowNote renders the fixed overflow text. input > 0 comes from the
