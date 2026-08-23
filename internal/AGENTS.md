@@ -41,7 +41,7 @@ contracts.
   - `auth` — key resolution: env → auth.json → config
   - `storage` — SQLite DAOs + migrations (`modernc.org/sqlite`, pure Go, no cgo)
   - `bus` — event bus
-  - `glob`, `log` — path glob, minimal logging
+  - `glob`, `log` — path glob, slog-based leveled file logger (rotating `<dataDir>/log/yolo.log`, `YOLO_LOG_LEVEL`, opt-in `YOLO_PRINT_LOGS=1` stderr mirror; local-only, zero telemetry)
 - Zero telemetry (root principle 1): no OTEL/OTLP code, no telemetry-identity
   field anywhere in these packages; the config schema omits
   `experimental.openTelemetry` by design.
@@ -62,7 +62,7 @@ contracts.
 
 - Root CI gate at module root: `go vet ./... && go test ./...` plus clean
   `gofmt -l .`; the v0.1.2 commit gate adds `golangci-lint run ./...`
-  (see PROGRESS.md "Active").
+  (root "Commands & verification").
 - Unit tests never hit the network (live paths env-gated; e2e user-run only).
 
 ## Child DOX Index

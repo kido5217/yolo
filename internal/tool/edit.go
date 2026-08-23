@@ -145,6 +145,9 @@ func (editTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 			fp = abs
 		}
 	}
+	if env.Log != nil {
+		env.Log.Info("edit", "path", fp)
+	}
 	l := fileLock(fp)
 	defer l.Unlock()
 

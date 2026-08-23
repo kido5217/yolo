@@ -455,12 +455,15 @@ func TestAuthCmd(t *testing.T) {
 func TestDispatchExitCodes(t *testing.T) {
 	bin := buildBinary(t)
 	tests := []struct {
-		name     string
-		args     []string
-		wantCode int
-		wantPart string
+		name          string
+		args          []string
+		wantCode      int
+		wantPart      string
+		wantFirstLine string
 	}{
-		{name: "version", args: []string{"version"}, wantCode: 0, wantPart: "yolo 0.0.0-dev"},
+		{name: "version", args: []string{"version"}, wantCode: 0, wantFirstLine: "yolo 0.0.0-dev"},
+		{name: "v flag", args: []string{"-v"}, wantCode: 0, wantFirstLine: "yolo 0.0.0-dev"},
+		{name: "version long flag", args: []string{"--version"}, wantCode: 0, wantFirstLine: "yolo 0.0.0-dev"},
 		{name: "explicit help flag", args: []string{"--help"}, wantCode: 0, wantPart: "Usage:"},
 		{name: "unknown flag exits 2", args: []string{"--bogus"}, wantCode: 2},
 		{name: "too many positionals exit 2", args: []string{"a", "b"}, wantCode: 2},
@@ -481,6 +484,55 @@ func TestDispatchExitCodes(t *testing.T) {
 			if tc.wantPart != "" && !strings.Contains(string(out), tc.wantPart) {
 				t.Fatalf("output missing %q:\n%s", tc.wantPart, out)
 			}
+			if tc.wantFirstLine != "" {
+				lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+				if lines[0] != tc.wantFirstLine {
+					t.Fatalf("first line = %q, want %q:\n%s", lines[0], tc.wantFirstLine, out)
+				}
+			}
 		})
+	}
+}
+
+// TestServeVersionFlag pins -v/--version inside the serve flag set: it prints
+// the version block, exits 0, and never starts listening.
+func TestServeVersionFlag(t *testing.T) {
+	bin := buildBinary(t)
+	for _, flag := range []string{"-v", "--version"} {
+		out, err := exec.Command(bin, "serve", flag).CombinedOutput()
+		if err != nil {
+			t.Fatalf("serve %s exit = %v\n%s", flag, err, out)
+		}
+		if !strings.Contains(string(out), "yolo 0.0.0-dev") {
+			t.Fatalf("serve %s missing version:\n%s", flag, out)
+		}
+		if strings.Contains(string(out), "yolo serving on") {
+			t.Fatalf("serve %s started the server:\n%s", flag, out)
+		}
+	}
+}
+
+// TestJustfileVersionRecipe pins the justfile entry point: it parses and the
+// version variable resolves to a non-empty git-derived string (skipped when
+// `just` is not installed — the artifact still ships).
+func TestJustfileVersionRecipe(t *testing.T) {
+	if _, err := exec.LookPath("just"); err != nil {
+		t.Skip("just not installed")
+	}
+	out, err := exec.Command("just", "--evaluate", "version").CombinedOutput()
+	if err != nil {
+		t.Fatalf("just --evaluate version: %v\n%s", err, out)
+	}
+	if v := strings.TrimSpace(string(out)); v == "" || v == "0.0.0-dev" {
+		t.Fatalf("version variable = %q, want a git-derived value", v)
+	}
+	list, err := exec.Command("just", "--list").CombinedOutput()
+	if err != nil {
+		t.Fatalf("just --list: %v\n%s", err, list)
+	}
+	for _, want := range []string{"build", "e2e-live"} {
+		if !strings.Contains(string(list), want) {
+			t.Fatalf("just --list missing %q:\n%s", want, list)
+		}
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"syscall"
@@ -38,6 +39,31 @@ import (
 	"github.com/kido5217/yolo/internal/tui/store"
 )
 
+// version is injected at build time: -ldflags "-X main.version=..." (just build).
+var version = "0.0.0-dev"
+
+// printVersion renders the version block: line 1 is always the ldflags
+// version; lines 2-3 come from Go's automatic VCS stamping and are omitted
+// when absent (e.g. GOFLAGS=-buildvcs=false).
+func printVersion() {
+	fmt.Printf("yolo %s\n", version)
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		for _, s := range bi.Settings {
+			switch s.Key {
+			case "vcs.revision":
+				if len(s.Value) > 8 {
+					s.Value = s.Value[:8]
+				}
+				fmt.Printf("commit %s\n", s.Value)
+			case "vcs.time":
+				if s.Value != "" {
+					fmt.Printf("built  %s\n", s.Value)
+				}
+			}
+		}
+	}
+}
+
 func main() {
 	os.Exit(run(os.Args[1:]))
 }
@@ -45,6 +71,10 @@ func main() {
 func run(args []string) int {
 	if len(args) == 0 {
 		return tuiCmd(nil)
+	}
+	if args[0] == "-v" || args[0] == "--version" {
+		printVersion()
+		return 0
 	}
 	switch args[0] {
 	case "help", "-h", "--help":
@@ -55,7 +85,7 @@ func run(args []string) int {
 	case "auth":
 		return authCmd(args[1:])
 	case "version":
-		fmt.Println("yolo 0.0.0-dev")
+		printVersion()
 		return 0
 	default:
 		return tuiCmd(args)
@@ -69,7 +99,7 @@ Usage:
   yolo [<sessionID>] [--dir DIR]   start the TUI (optionally resume a session)
   yolo serve [--addr ADDR]         run the core server only (default http://127.0.0.1:4096)
   yolo auth <subcommand>           manage credentials (list | add <provider> [key] | remove <provider>)
-  yolo version                     print version
+  yolo [-v|--version]              print version (same as: yolo version)
   yolo help                        this help
 `)
 }
@@ -124,7 +154,7 @@ func buildDeps(workDir string) (*server.Deps, func(), error) {
 	_ = tool.CleanOutputDir(filepath.Join(dataDir, "tool-output"))
 
 	fail := func(err error) (*server.Deps, func(), error) {
-		logger.Errorf("startup failed: %v", err)
+		logger.Error("startup failed", "error", err)
 		logger.Close()
 		return nil, nil, err
 	}
@@ -132,6 +162,9 @@ func buildDeps(workDir string) (*server.Deps, func(), error) {
 	db, err := openDB(filepath.Join(dataDir, "storage", "yolo.db"))
 	if err != nil {
 		return fail(err)
+	}
+	if v, verr := db.SchemaVersion(); verr == nil {
+		logger.Info("storage open", "path", filepath.Join(dataDir, "storage", "yolo.db"), "schema_version", v)
 	}
 	closeDB := func() {
 		_ = db.Close()
@@ -242,14 +275,17 @@ func tuiCmd(args []string) int {
 	}
 	defer closeDB()
 
+	deps.Log.Info("yolo starting", "mode", "tui", "workdir", wd, "version", version)
+
 	srv := server.NewServer(*deps)
 	ln, err := srv.Start("127.0.0.1:0")
 	if err != nil {
-		deps.Log.Errorf("listen: %v", err)
+		deps.Log.Error("listen failed", "error", err)
 		fmt.Fprintf(os.Stderr, "yolo: %v\n", err)
 		drain(deps, srv)
 		return 1
 	}
+	deps.Log.Info("serving on", "addr", ln.String(), "workdir", wd)
 
 	// Swallow signals outside the TUI run so the drain below can finish;
 	// during Run bubbletea's own handler ends the program (the clean-exit
@@ -257,6 +293,12 @@ func tuiCmd(args []string) int {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(stop)
+	go func() {
+		sig := <-stop
+		if sig != nil {
+			deps.Log.Info("received signal, shutting down", "signal", sig.String())
+		}
+	}()
 
 	cl := client.New("http://"+ln.String(), wd)
 	if sessionID != "" {
@@ -275,7 +317,9 @@ func tuiCmd(args []string) int {
 	}
 
 	app := tui.NewApp(cl, store.Store{}, sessionID)
+	deps.Log.Info("tui start", "workdir", wd)
 	_, runErr := tea.NewProgram(app).Run()
+	deps.Log.Info("tui end", "exit_code", tuiExit(runErr))
 	app.Close()
 	drain(deps, srv)
 	return tuiExit(runErr)
@@ -304,9 +348,15 @@ func drain(deps *server.Deps, srv *server.Server) {
 func serveCmd(args []string) int {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	addr := fs.String("addr", "127.0.0.1:4096", "listen address")
+	showVer := fs.Bool("v", false, "print version and exit")
+	showVerLong := fs.Bool("version", false, "print version and exit")
 	// ExitOnError: Parse prints and os.Exit's on bad flags, never returns
 	// a non-nil error.
 	_ = fs.Parse(args)
+	if *showVer || *showVerLong {
+		printVersion()
+		return 0
+	}
 	wd, err := workDir("")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "yolo serve: %v\n", err)
@@ -318,22 +368,23 @@ func serveCmd(args []string) int {
 		return 1
 	}
 	defer closeDB()
+	deps.Log.Info("yolo starting", "mode", "serve", "workdir", wd, "version", version)
 
 	srv := server.NewServer(*deps)
 	ln, err := srv.Start(*addr)
 	if err != nil {
-		deps.Log.Errorf("listen: %v", err)
+		deps.Log.Error("listen failed", "error", err)
 		fmt.Fprintf(os.Stderr, "yolo serve: listen: %v\n", err)
 		drain(deps, srv)
 		return 1
 	}
 	fmt.Printf("yolo serving on http://%s (dir %s)\n", ln.String(), wd)
-	deps.Log.Infof("serving on http://%s (dir %s)", ln.String(), wd)
+	deps.Log.Info("serving on", "addr", ln.String(), "workdir", wd)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-stop
-	deps.Log.Infof("received %s, shutting down", sig)
+	deps.Log.Info("received signal, shutting down", "signal", sig.String())
 	drain(deps, srv)
 	return 0
 }

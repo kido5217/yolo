@@ -368,7 +368,7 @@ func PartToProtocol(r PartRow) (protocol.Part, error) {
 			return p, fmt.Errorf("part %s state: %w", r.ID, err)
 		}
 		p.Text = st.Text
-		p.Time = protocol.PartTime{End: st.End}
+		p.Time = protocol.PartTime{Start: r.TimeCreated, End: st.End}
 		p.Synthetic = st.Synthetic
 	}
 	return p, nil

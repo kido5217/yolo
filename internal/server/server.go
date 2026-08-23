@@ -139,7 +139,7 @@ func (s *Server) initAuth() error {
 		s.authStore = auth.Store{}
 	default:
 		s.authStore = auth.Store{}
-		s.Log.Errorf("auth load (%s): %v", s.authPath, err)
+		s.Log.Error("auth load failed", "path", s.authPath, "error", err)
 	}
 	return nil
 }

@@ -95,6 +95,9 @@ func (writeTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output
 			fp = abs
 		}
 	}
+	if env.Log != nil {
+		env.Log.Info("write", "path", fp)
+	}
 	old := ""
 	if b, rerr := os.ReadFile(fp); rerr == nil {
 		old = string(b)

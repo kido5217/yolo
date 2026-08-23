@@ -14,6 +14,8 @@ var bashDesc string
 
 const defaultBashTimeoutMS = 120000
 
+const maxBashTimeoutMS = 1<<31 - 1 // ~24.8 days; keeps the int64 ns Duration from wrapping
+
 type bashTool struct{}
 
 var _ Tool = bashTool{}
@@ -86,6 +88,13 @@ func bashArgs(raw json.RawMessage) (command string, timeoutMS int, err error) {
 			err = errors.New("timeout must be a positive integer")
 			return
 		}
+		if n <= 0 {
+			err = errors.New("timeout must be a positive integer (milliseconds)")
+			return
+		}
+		if n > maxBashTimeoutMS {
+			n = maxBashTimeoutMS
+		}
 		timeoutMS = n
 	}
 	return
@@ -101,6 +110,9 @@ func (bashTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 	}
 	if env.Shell == nil {
 		return Output{}, errors.New("shell is not initialized")
+	}
+	if env.Log != nil {
+		env.Log.Info("bash command", "command", shortRunes(command, 200))
 	}
 	code, out, err := env.Shell.Exec(ctx, command, timeoutMS, nil)
 	switch {
@@ -134,6 +146,9 @@ func (bashTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 		// Non-zero exit is NOT a tool error; the model sees the exit code
 		// only when present.
 		meta["exit"] = code
+	}
+	if env.Log != nil {
+		env.Log.Info("bash exit", "exit", code, "truncated", cut)
 	}
 	return Output{Title: command, Text: text, Meta: meta}, nil
 }

@@ -1,7 +1,8 @@
 # AGENTS.md — agent instructions for the yolo repo
 
 This file is loaded by any agent (opencode, yolo itself, …) working in this repo.
-Read it before acting. For session state, read `docs/superpowers/PROGRESS.md` second.
+Read it before acting. Task state: beads (`bd ready`). Verified facts:
+`docs/superpowers/PROGRESS.md`. Deviation audit: `docs/superpowers/DEVIATIONS.md`.
 
 ## Project
 
@@ -12,15 +13,18 @@ Read it before acting. For session state, read `docs/superpowers/PROGRESS.md` se
 - Core layering: `protocol` (wire DTOs, single source of truth) → `server` → `session` (agent loop) → `llm` / `provider` / `tool` / `permission` / `config` / `auth` / `storage` / `bus`.
 - Pinned deps, exact versions, **nothing else**: `charm.land/bubbletea/v2` v2.0.8, `charm.land/lipgloss/v2` v2.0.6, `charm.land/bubbles/v2` v2.1.1, `modernc.org/sqlite` v1.56.0 (pure Go, no cgo), `tidwall/jsonc` v0.3.3; dev-only `github.com/charmbracelet/x/exp/teatest/v2` v2.0.0-20260816001655-68d539dca504.
 
-## Key files (read order)
+## Key documents (topic → source of truth)
 
-| File | What it is |
+| Topic | Source of truth |
 |---|---|
-| `docs/superpowers/PROGRESS.md` | **Read first on resume.** Active task, resume instructions, plan deviations, key verified facts (do not re-litigate) |
-| `docs/superpowers/plans/` | Dated implementation plans; one active at a time (named in `PROGRESS.md` → Resume instructions). **Read ONLY the active task slice** |
-| `docs/superpowers/specs/` | Dated approved designs; the active one is named in `PROGRESS.md`. Zero-telemetry statement lives in the v1 design's §1 |
-| `/tmp/opencode-upstream` | Upstream reference clone at tag `v1.18.18`. If missing: `git clone --depth 1 --branch v1.18.18 https://github.com/anomalyco/opencode /tmp/opencode-upstream`. **Never touch `/tmp/opencode`** — pre-existing user data |
-| `.agents/skills/` + `skills-lock.json` | 15 hash-locked golang skills (samber/cc-skills-golang) — see Skills below |
+| Task state (active, next, blocked) | **beads epic (`bd ready`) — read first on resume.** No file |
+| Verified facts (do not re-litigate) | `docs/superpowers/PROGRESS.md` |
+| Deviation audit (append-only, principle 5) | `docs/superpowers/DEVIATIONS.md` |
+| 0.3.0 work list (deferred findings) | `docs/superpowers/DEFERRED.md` |
+| Implementation plan | `docs/superpowers/plans/` — dated, one active at a time (named in the beads epic). **Read ONLY the active task slice** |
+| Approved design | `docs/superpowers/specs/` — dated, the active one is named in the beads epic. Zero-telemetry statement lives in the v1 design's §1 |
+| Upstream reference | `/tmp/opencode-upstream` — clone at tag `v1.18.18`. If missing: `git clone --depth 1 --branch v1.18.18 https://github.com/anomalyco/opencode /tmp/opencode-upstream`. **Never touch `/tmp/opencode`** — pre-existing user data |
+| Golang skills | `.agents/skills/` + `skills-lock.json` — 15 hash-locked (samber/cc-skills-golang) — see Skills below |
 
 ## Core principles (non-negotiable)
 
@@ -28,9 +32,9 @@ Read it before acting. For session state, read `docs/superpowers/PROGRESS.md` se
 2. **Faithful port, one deliberate wire deviation.** Legacy REST paths/JSON shapes and the legacy SSE event set are mirrored so the port is verifiable against opencode's OpenAPI contract. The single deviation: scoping header is **`x-yolo-directory`** (upstream: `x-opencode-directory`).
 3. **Verbatim pins are tests, not decoration.** 14 session prompt files and all tool `desc/*.txt` files are ported **byte-verbatim** from upstream and guarded by sha256 pins in tests. Do not "improve", rewrap, or reword pinned text.
 4. **TUI is a pure client.** Non-test files under `internal/tui/` import only `internal/protocol` + `internal/tui/*` (+ stdlib/charm deps). `_test.go` may use `internal/server/testutil` (escape hatch). Enforced by Task 29.
-5. **Tests define the contract.** When the plan contradicts itself (or its own test code is buggy), resolve per the last-stated call, fix the test, and **log the deviation in `PROGRESS.md` → "Plan deviations logged"** with severity.
-6. **`PROGRESS.md` is never stale.** After any edit, plan, spec, design decision, deviation, or checkpoint — anything that changes what the next session must know — roll `docs/superpowers/PROGRESS.md` before moving on. It is the single thing a future session reads to resume; a stale one is a broken resume. What it holds and how to keep it small: "Commit & branch discipline."
-7. **Subagents one at a time.** Never dispatch more than one subagent concurrently (via the `task` tool): dispatch one, wait for it to fully return, then dispatch the next. This supersedes any plan/spec wording permitting parallel subagents (the v0.1.2 plan/spec "≤3 parallel" text was revised 2026-08-20; see PROGRESS.md deviation log).
+5. **Tests define the contract.** When the plan contradicts itself (or its own test code is buggy), resolve per the last-stated call, fix the test, and **log the deviation in `docs/superpowers/DEVIATIONS.md`** with severity.
+6. **Task state in beads; proven knowledge in docs.** Track task state in beads — never duplicate it in files. When a fact is proven or a deviation is logged, update `docs/superpowers/PROGRESS.md` (facts) / `docs/superpowers/DEVIATIONS.md` (audit) before moving on — a stale audit log is a broken resume. File shapes: "Commit & branch discipline."
+7. **Subagents one at a time.** Never dispatch more than one subagent concurrently (via the `task` tool): dispatch one, wait for it to fully return, then dispatch the next. This supersedes any plan/spec wording permitting parallel subagents (the v0.1.2 plan/spec "≤3 parallel" text was revised 2026-08-20; see `docs/superpowers/DEVIATIONS.md`).
 8. **YOLO spawns only YOLO.** If the root agent is `YOLO`, any subagent it spawns MUST also be `YOLO` — never dispatch a subagent of a different agent type.
 
 ## Commands & verification
@@ -48,7 +52,7 @@ Read it before acting. For session state, read `docs/superpowers/PROGRESS.md` se
   reaches `main` only via a merged PR (branch → commit → push → PR → user merge).
 - Work happens inline on the current task branch (named with the active plan — see `PROGRESS.md` → Resume instructions), **one task at a time**.
 - Conventional commits (`feat:`/`fix:`/`docs:`/`test:`/…, imperative, ≤ 72-char subject). Task commits use **the commit message pinned in the plan**. Between tasks: `docs: checkpoint — Task N (...) done, next is Task N+1`.
-- Update `PROGRESS.md` at each checkpoint. It is a **rolling checkpoint** — keep it small: active task (full detail), one-line last-completed, key verified facts, append-only deviation log (current era inline; 2026-08-20 archived pre-v0.1.2 items 1–66 to `docs/superpowers/deviations-archive-v0.1.0.md`), open items. No per-task history, no plan-slice copies: `git log --oneline` and the plan file are the archive.
+- Update `PROGRESS.md` / `DEVIATIONS.md` when facts or deviations change. **No per-task history in files, no plan-slice copies:** task state is beads; `git log --oneline` and the plan file are the archive. Deviations are append-only in `DEVIATIONS.md` (pre-v0.1.2 items 1–66 frozen in `docs/superpowers/deviations-archive-v0.1.0.md`).
 - **Tag `v0.1.0` (Task 30) ONLY with explicit user go-ahead.** Versioning: **semantic versioning** — `MAJOR.MINOR.PATCH`, MAJOR = breaking changes, MINOR = new features, PATCH = fixes. 0.1.0 = current scope; out-of-scope features land in 0.2.0+.
 
 ## Superpowers workflow (required)
@@ -167,10 +171,149 @@ Default section order:
 
 ## User Preferences
 
-When the user requests a durable behavior change, record it here or in the relevant child AGENTS.md
+- Harnesses: **opencode only** (yolo itself in the future). No claude/codex
+  integrations — their artifacts were removed 2026-08-22 (`bd setup codex/claude
+  --remove`, `CLAUDE.md` deleted). All agent logic lives in `AGENTS.md`; the
+  only managed block is `bd setup opencode` (do not hand-edit its markers).
+  The project beads skill at `.agents/skills/beads/` is bd-managed and stays.
 
 ## Child DOX Index
 
 - `internal/AGENTS.md` — core packages: package map, layering, pinned text, in-code zero telemetry (children: `internal/protocol`, `internal/tui`)
-- `docs/superpowers/AGENTS.md` — process memory: PROGRESS.md checkpoint discipline, plans/specs/reviews layout, deviation log
-- Root-owned files: `README.md`, `LICENSE`, `go.mod`, `.golangci.yml`, `.gitignore`, `skills-lock.json`, `cmd/`, `scripts/`, `.agents/skills/` (hash-locked — do not edit), and root-level project documentation.
+- `docs/superpowers/AGENTS.md` — process memory: verified facts (PROGRESS.md), deviation audit (DEVIATIONS.md), 0.3.0 work list (DEFERRED.md), plans/specs/reviews layout
+- Root-owned files: `README.md`, `LICENSE`, `go.mod`, `justfile`, `.golangci.yml`, `.gitignore`, `skills-lock.json`, `cmd/`, `scripts/`, `.agents/skills/` (hash-locked golang skills — do not edit; `.agents/skills/beads/` is bd-managed), and root-level project documentation.
+
+
+
+
+<!-- BEGIN BEADS INTEGRATION v:1 profile:full hash:19cc25d9 -->
+## Issue Tracking with bd (beads)
+
+**IMPORTANT**: This project uses **bd (beads)** for ALL issue tracking. Do NOT use markdown TODOs, task lists, or other tracking methods.
+
+### Why bd?
+
+- Dependency-aware: Track blockers and relationships between issues
+- Git-friendly: Dolt-powered version control with native sync
+- Agent-optimized: JSON output, ready work detection, discovered-from links
+- Prevents duplicate tracking systems and confusion
+
+### Quick Start
+
+**Check for ready work:**
+
+```bash
+bd ready --json
+```
+
+**Create new issues:**
+
+```bash
+bd create "Issue title" --description="Detailed context" -t bug|feature|task -p 0-4 --json
+bd create "Issue title" --description="What this issue is about" -p 1 --deps discovered-from:bd-123 --json
+```
+
+**Claim and update:**
+
+```bash
+bd update <id> --claim --json
+bd update bd-42 --priority 1 --json
+```
+
+**Complete work:**
+
+```bash
+bd close bd-42 --reason "Completed" --json
+```
+
+### Issue Types
+
+- `bug` - Something broken
+- `feature` - New functionality
+- `task` - Work item (tests, docs, refactoring)
+- `epic` - Large feature with subtasks
+- `chore` - Maintenance (dependencies, tooling)
+
+### Priorities
+
+- `0` - Critical (security, data loss, broken builds)
+- `1` - High (major features, important bugs)
+- `2` - Medium (default, nice-to-have)
+- `3` - Low (polish, optimization)
+- `4` - Backlog (future ideas)
+
+### Workflow for AI Agents
+
+1. **Check ready work**: `bd ready` shows unblocked issues
+2. **Claim your task atomically**: `bd update <id> --claim`
+3. **Work on it**: Implement, test, document
+4. **Discover new work?** Create linked issue:
+   - `bd create "Found bug" --description="Details about what was found" -p 1 --deps discovered-from:<parent-id>`
+5. **Complete**: `bd close <id> --reason "Done"`
+
+### Quality
+- Use `--acceptance` and `--design` fields when creating issues
+- Use `--validate` to check description completeness
+
+### Lifecycle
+- `bd defer <id>` / `bd supersede <id>` for issue management
+- `bd stale` / `bd orphans` / `bd lint` for hygiene
+- `bd human <id>` to flag for human decisions
+- `bd formula list` / `bd mol pour <name>` for structured workflows
+
+### Sync
+
+bd stores issue history in Dolt:
+
+- Each write auto-commits to Dolt history
+- Use `bd dolt push`/`bd dolt pull` for remote sync
+- Do not treat `.beads/issues.jsonl` as the sync protocol
+
+**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
+
+### Important Rules
+
+- ✅ Use bd for ALL task tracking
+- ✅ Always use `--json` flag for programmatic use
+- ✅ Link discovered work with `discovered-from` dependencies
+- ✅ Check `bd ready` before asking "what should I work on?"
+- ❌ Do NOT create markdown TODO lists
+- ❌ Do NOT use external issue trackers
+- ❌ Do NOT duplicate tracking systems
+
+For more details, see README.md and docs/QUICKSTART.md.
+
+## Agent Context Profiles
+
+The managed Beads block is task-tracking guidance, not permission to override repository, user, or orchestrator instructions.
+
+- **Conservative (default)**: Use `bd` for task tracking. Do not run git commits, git pushes, or Dolt remote sync unless explicitly asked. At handoff, report changed files, validation, and suggested next commands.
+- **Minimal**: Keep tool instruction files as pointers to `bd prime`; use the same conservative git policy unless active instructions say otherwise.
+- **Team-maintainer**: Only when the repository explicitly opts in, agents may close beads, run quality gates, commit, and push as part of session close. A current "do not commit" or "do not push" instruction still wins.
+
+## Session Completion
+
+This protocol applies when ending a Beads implementation workflow. It is subordinate to explicit user, repository, and orchestrator instructions.
+
+1. **File issues for remaining work** - Create beads for anything that needs follow-up
+2. **Run quality gates** (if code changed) - Tests, linters, builds
+3. **Update issue status** - Close finished work, update in-progress items
+4. **Handle git/sync by active profile**:
+   ```bash
+   # Conservative/minimal/default: report status and proposed commands; wait for approval.
+   git status
+
+   # Team-maintainer opt-in only, unless current instructions forbid it:
+   git pull --rebase
+   bd dolt push
+   git push
+   git status
+   ```
+5. **Hand off** - Summarize changes, validation, issue status, and any blocked sync/commit/push step
+
+**Critical rules:**
+- Explicit user or orchestrator instructions override this Beads block.
+- Do not commit or push without clear authority from the active profile or the current user request.
+- If a required sync or push is blocked, stop and report the exact command and error.
+
+<!-- END BEADS INTEGRATION -->

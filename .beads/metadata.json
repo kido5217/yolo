@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "yolo",
+  "project_id": "2fca2647-573f-4f9e-abae-abae9c871f10"
+}

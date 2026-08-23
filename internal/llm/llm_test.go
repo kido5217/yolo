@@ -1,12 +1,14 @@
 package llm
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -260,5 +262,106 @@ func TestOpenAIRequestShape(t *testing.T) {
 	fn := tools[0].(map[string]any)["function"].(map[string]any)
 	if fn["name"] != "read" {
 		t.Fatalf("fn = %v", fn)
+	}
+}
+
+// TestOpenAIUpstream400DrainsBody pins the ④ fix: the non-2xx body is read
+// (capped) BEFORE close, so the provider error.message surfaces in the error.
+func TestOpenAIUpstream400DrainsBody(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(400)
+		_, _ = w.Write([]byte(`{"error":{"message":"prompt is too long: 120000 tokens > 100000 maximum"}}`))
+	}))
+	defer srv.Close()
+	_, err := NewOpenAI(srv.Client()).Stream(ctx0(t), Request{
+		Model: "m", APIKey: "k", BaseURL: srv.URL,
+		Messages: []Message{{Role: RoleUser, Content: "x"}},
+	})
+	if err == nil || IsTransient(err) {
+		t.Fatalf("err = %v, want non-transient API error", err)
+	}
+	if !strings.Contains(err.Error(), "prompt is too long: 120000 tokens > 100000 maximum") {
+		t.Fatalf("decoded message missing: %v", err)
+	}
+	if !strings.Contains(err.Error(), "upstream error (http 400):") {
+		t.Fatalf("status framing missing: %v", err)
+	}
+	var api *APIError
+	if !errors.As(err, &api) {
+		t.Fatalf("no *APIError in chain: %v", err)
+	}
+	if api.Status != 400 || api.Message != "prompt is too long: 120000 tokens > 100000 maximum" {
+		t.Fatalf("APIError = %+v", api)
+	}
+}
+
+// TestOpenAIUpstream429DecodesMessage pins that the 429 envelope message is
+// decoded (it used to be lost to the pre-close) while staying transient.
+func TestOpenAIUpstream429DecodesMessage(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(429)
+		_, _ = w.Write([]byte(`{"error":{"message":"slow down"}}`))
+	}))
+	defer srv.Close()
+	_, err := NewOpenAI(srv.Client()).Stream(ctx0(t), Request{
+		Model: "m", APIKey: "k", BaseURL: srv.URL,
+		Messages: []Message{{Role: RoleUser, Content: "x"}},
+	})
+	if err == nil || !IsTransient(err) {
+		t.Fatalf("err = %v, want transient", err)
+	}
+	if !strings.Contains(err.Error(), "slow down") {
+		t.Fatalf("decoded message missing: %v", err)
+	}
+}
+
+// TestOpenAIUpstreamBodyCap pins the 64 KiB drain cap: an oversized body is
+// truncated (no hang, no full-body error text) and the cap is visible on the
+// APIError.
+func TestOpenAIUpstreamBodyCap(t *testing.T) {
+	t.Parallel()
+	big := bytes.Repeat([]byte("x"), 200*1024)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(413)
+		_, _ = w.Write(big)
+	}))
+	defer srv.Close()
+	_, err := NewOpenAI(srv.Client()).Stream(ctx0(t), Request{
+		Model: "m", APIKey: "k", BaseURL: srv.URL,
+		Messages: []Message{{Role: RoleUser, Content: "x"}},
+	})
+	var api *APIError
+	if err == nil || !errors.As(err, &api) {
+		t.Fatalf("err = %v, want *APIError", err)
+	}
+	if len(api.Body) != 64*1024 {
+		t.Fatalf("body cap = %d, want %d", len(api.Body), 64*1024)
+	}
+}
+
+// TestAnthropicUpstream400DrainsBody pins the same ④ fix on the anthropic
+// driver (shared upstreamError).
+func TestAnthropicUpstream400DrainsBody(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(400)
+		_, _ = w.Write([]byte(`{"type":"error","error":{"type":"invalid_request_error","message":"input is too long for requested model"}}`))
+	}))
+	defer srv.Close()
+	_, err := NewAnthropic(srv.Client()).Stream(ctx0(t), Request{
+		Model: "m", APIKey: "k", BaseURL: srv.URL,
+		Messages: []Message{{Role: RoleUser, Content: "x"}},
+	})
+	if err == nil || IsTransient(err) {
+		t.Fatalf("err = %v, want non-transient API error", err)
+	}
+	if !strings.Contains(err.Error(), "input is too long for requested model") {
+		t.Fatalf("decoded message missing: %v", err)
+	}
+	var api *APIError
+	if !errors.As(err, &api) || api.Status != 400 {
+		t.Fatalf("APIError = %v", err)
 	}
 }

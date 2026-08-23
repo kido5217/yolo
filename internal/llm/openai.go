@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -31,7 +30,6 @@ func (o *OpenAI) Stream(ctx context.Context, req Request) (PartStream, error) {
 		return PartStream{}, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
 		return PartStream{}, upstreamError(resp)
 	}
 	ch := make(chan Part, 64)
@@ -39,11 +37,17 @@ func (o *OpenAI) Stream(ctx context.Context, req Request) (PartStream, error) {
 	return PartStream{Parts: ch}, nil
 }
 
-// upstreamError builds an error from a non-2xx response (body ≤ 4KB drained;
-// 429/5xx wrapped in *TransientError); the message prefers {"error":{...}}.
+// errBodyCap bounds the drained non-2xx body (spec ④: 64 KiB).
+const errBodyCap = 64 * 1024
+
+// upstreamError drains the non-2xx body (capped at errBodyCap) BEFORE close,
+// decodes the provider error message ({"error":{...}} envelope first, then a
+// plain-string error, then the trimmed body, then the status line), and
+// returns an *APIError — 429/5xx wrapped in *TransientError.
 func upstreamError(resp *http.Response) error {
-	data, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-	var err error
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, errBodyCap))
+	var msg string
 	var envelope struct {
 		Error json.RawMessage `json:"error"`
 	}
@@ -52,26 +56,22 @@ func upstreamError(resp *http.Response) error {
 			Message string `json:"message"`
 		}
 		if json.Unmarshal(envelope.Error, &obj) == nil && obj.Message != "" {
-			err = errors.New(obj.Message)
+			msg = obj.Message
 		} else {
 			var plain string
 			if json.Unmarshal(envelope.Error, &plain) == nil && plain != "" {
-				err = errors.New(plain)
-			} else {
-				err = fmt.Errorf("upstream error (http %d): %s", resp.StatusCode, strings.TrimSpace(string(data)))
+				msg = plain
 			}
 		}
-	} else {
-		msg := strings.TrimSpace(string(data))
-		if msg == "" {
-			msg = resp.Status
-		}
-		err = fmt.Errorf("upstream error (http %d): %s", resp.StatusCode, msg)
 	}
+	if msg == "" {
+		msg = strings.TrimSpace(string(data))
+	}
+	api := &APIError{Status: resp.StatusCode, Body: data, Message: msg}
 	if resp.StatusCode == 429 || resp.StatusCode >= 500 {
-		return &TransientError{Status: resp.StatusCode, Err: err}
+		return &TransientError{Status: resp.StatusCode, Err: api}
 	}
-	return err
+	return api
 }
 
 // wire request types

@@ -25,7 +25,7 @@
         "sessionID": "SES1",
         "text": "hello",
         "time": {
-          "start": 0
+          "start": "\u003cT\u003e"
         },
         "type": "text"
       }
@@ -59,7 +59,7 @@
         "text": "ok-1",
         "time": {
           "end": "\u003cT\u003e",
-          "start": 0
+          "start": "\u003cT\u003e"
         },
         "type": "text"
       }

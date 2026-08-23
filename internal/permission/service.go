@@ -35,6 +35,7 @@ type Request struct {
 	Meta                        map[string]any
 	PreDecision                 Decision
 	CreatedAt                   int64
+	CfgRules                    []protocol.Rule // the turn's config rules (⑧: no shared state)
 }
 
 type pendingEntry struct {
@@ -50,9 +51,8 @@ type Service struct {
 	lg      *log.Logger // nil = no-op, constructor-carried
 	dataDir string      // plan-matrix dir, process-constant (constructor)
 
-	mu       sync.Mutex
-	pending  map[string]*pendingEntry
-	cfgRules []protocol.Rule
+	mu      sync.Mutex
+	pending map[string]*pendingEntry
 }
 
 // New builds the service. lg may be nil (no-op logging). dataDir is the
@@ -60,14 +60,6 @@ type Service struct {
 func New(db *storage.DB, b *bus.Bus, lg *log.Logger, dataDir string) *Service {
 	return &Service{db: db, bus: b, lg: lg, dataDir: dataDir,
 		pending: map[string]*pendingEntry{}}
-}
-
-// SetConfigRules stores the config permission rules used by DecisionFor
-// between the builtins and the session's always rules.
-func (s *Service) SetConfigRules(rules []protocol.Rule) {
-	s.mu.Lock()
-	s.cfgRules = rules
-	s.mu.Unlock()
 }
 
 // EvaluateRules evaluates builtins + config rules for an action.
@@ -92,13 +84,11 @@ func (s *Service) decisionFor(req Request) Decision {
 	// Unknown (custom) agents fall back to the build matrix via
 	// BuiltinsFor (mirrors the engine's ruleset path).
 	rules := BuiltinsFor(req.Agent, s.dataDir)
-	s.mu.Lock()
-	cfg := s.cfgRules
-	s.mu.Unlock()
+	cfg := req.CfgRules
 	always, err := s.db.AlwaysRules(req.SessionID)
 	if err != nil {
 		// Fail-safe: degrade to no always rules (re-asks at worst).
-		s.lg.Errorf("permission: always rules (session=%s): %v", req.SessionID, err)
+		s.lg.Error("always rules load failed", "session_id", req.SessionID, "error", err)
 		always = []protocol.Rule{}
 	}
 	all := make([]protocol.Rule, 0, len(rules)+len(cfg)+len(always))
@@ -110,6 +100,9 @@ func (s *Service) decisionFor(req Request) Decision {
 	// unknown actions fall through to ask.
 	wildcardOK := corePermissions[req.Permission]
 	anyAsk := false
+	logDecision := func(d Decision) {
+		s.lg.Debug("permission decision", "request_id", req.RequestID, "agent", req.Agent, "permission", req.Permission, "decision", string(d))
+	}
 	for _, res := range req.Resources {
 		last := findLastWithWildcard(all, req.Permission, res, wildcardOK)
 		if last == nil {
@@ -118,14 +111,17 @@ func (s *Service) decisionFor(req Request) Decision {
 		}
 		switch last.Action {
 		case RuleDeny:
+			logDecision(Deny)
 			return Deny
 		case RuleAsk:
 			anyAsk = true
 		}
 	}
 	if anyAsk {
+		logDecision(Ask)
 		return Ask
 	}
+	logDecision(Allow)
 	return Allow
 }
 
@@ -265,29 +261,29 @@ func (s *Service) resolve(requestID string, d Decision, dbResponse, wireReply st
 	s.mu.Lock()
 	e, ok := s.pending[requestID]
 	delete(s.pending, requestID)
-	var sessionID string
-	if ok {
-		sessionID = e.req.SessionID
-	}
 	s.mu.Unlock()
 
+	// ② double-settle: only the remover settles. A concurrent Reply/ctx-cancel
+	// that lost the claim must not flip the row or emit a second
+	// permission.replied.
+	if !ok {
+		return
+	}
 	if err := s.db.ReplyPermission(requestID, dbResponse); err != nil {
 		if !errors.Is(err, storage.ErrNotFound) {
-			s.lg.Errorf("permission: persist reply %s: %v", requestID, err)
+			s.lg.Error("persist reply failed", "request_id", requestID, "error", err)
 		}
 	}
 	props := protocol.PermissionRepliedProps{RequestID: requestID, Reply: wireReply, Auto: auto}
-	if sessionID != "" {
-		props.SessionID = sessionID
+	if sid := e.req.SessionID; sid != "" {
+		props.SessionID = sid
 	}
 	if ev, err := protocol.MakeEvent(protocol.EventTypePermissionReplied, props); err != nil {
-		s.lg.Errorf("permission: marshal %s: %v", protocol.EventTypePermissionReplied, err)
+		s.lg.Error("event marshal failed", "type", protocol.EventTypePermissionReplied, "error", err)
 	} else {
 		s.bus.Publish(ev)
 	}
-	if ok {
-		s.deliver(e, d)
-	}
+	s.deliver(e, d)
 }
 
 func (s *Service) deliver(e *pendingEntry, d Decision) {
@@ -343,7 +339,7 @@ func (s *Service) publishAsked(req Request) {
 		}
 	}
 	if ev, err := protocol.MakeEvent(protocol.EventTypePermissionAsked, props); err != nil {
-		s.lg.Errorf("permission: marshal %s: %v", protocol.EventTypePermissionAsked, err)
+		s.lg.Error("event marshal failed", "type", protocol.EventTypePermissionAsked, "error", err)
 	} else {
 		s.bus.Publish(ev)
 	}

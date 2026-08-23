@@ -153,10 +153,15 @@ func (grepTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 	if !info.IsDir() {
 		searchDir = filepath.Dir(requested)
 	}
-
+	if env.Log != nil {
+		env.Log.Info("grep", "pattern", pattern, "path", searchDir)
+	}
 	matches, truncated, werr := grepWalk(searchDir, re, include)
 	if werr != nil {
 		return Output{}, werr
+	}
+	if env.Log != nil {
+		env.Log.Info("grep results", "pattern", pattern, "matches", len(matches))
 	}
 	if len(matches) == 0 {
 		return empty, nil

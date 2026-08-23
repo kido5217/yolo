@@ -302,3 +302,97 @@ func TestConcurrentSend409(t *testing.T) {
 	}
 	waitIdle(t, h, ses, func() {})
 }
+
+// TestOverflow400FromDriverEndsIdleWithNote pins the revived graceful path:
+// a provider 400 whose DECODED message matches the classifier ends the turn
+// idle with the synthetic overflow note (no turn error).
+func TestOverflow400FromDriverEndsIdleWithNote(t *testing.T) {
+	h := newHarness(t)
+	// overrideDriver must be set BEFORE build (the harness captures the
+	// driver at build time).
+	h.overrideDriver = errDriver{err: errors.New("upstream error (http 400): prompt is too long: 120000 > 100000")}
+	h.build(t)
+	d := t.TempDir()
+	ses := h.startSession(t, d)
+	if err := h.db.UpdateSession(ses, storage.SessionRow{Title: "no-title"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.eng.Send(context.Background(), ses, "big", nil); err != nil {
+		t.Fatal(err)
+	}
+	waitIdle(t, h, ses, func() {})
+	var found bool
+	msgs, _ := h.db.ListMessages(ses)
+	for _, m := range msgs {
+		parts, _ := h.db.ListParts(m.ID)
+		for _, p := range parts {
+			pt, _ := storage.PartToProtocol(p)
+			if strings.Contains(pt.Text, "context overflow") {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatal("synthetic overflow note missing")
+	}
+}
+
+// TestNonOverflowAPIErrorFailsTurn pins that 401/403/429-class errors surface
+// as REAL errors: the turn ends errored (not idle-with-note), the decoded
+// provider text is on the synthetic note, and no overflow note exists.
+func TestNonOverflowAPIErrorFailsTurn(t *testing.T) {
+	h := newHarness(t)
+	// overrideDriver must be set BEFORE build (the harness captures the
+	// driver at build time).
+	h.overrideDriver = errDriver{err: errors.New("upstream error (http 401): Invalid API key provided")}
+	h.build(t)
+	d := t.TempDir()
+	ses := h.startSession(t, d)
+	if err := h.db.UpdateSession(ses, storage.SessionRow{Title: "no-title"}); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	var turnErr error
+	if _, err := h.eng.Send(context.Background(), ses, "hi", func(e error) {
+		turnErr = e
+		close(done)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	waitIdle(t, h, ses, func() {})
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("onDone not called")
+	}
+	if turnErr == nil {
+		t.Fatal("turn ended without error")
+	}
+	msgs, _ := h.db.ListMessages(ses)
+	overflow, realNote := false, false
+	for _, m := range msgs {
+		parts, _ := h.db.ListParts(m.ID)
+		for _, p := range parts {
+			pt, _ := storage.PartToProtocol(p)
+			if strings.Contains(pt.Text, "context overflow") {
+				overflow = true
+			}
+			if strings.Contains(pt.Text, "Invalid API key provided") {
+				realNote = true
+			}
+		}
+	}
+	if overflow {
+		t.Fatal("401 misclassified as overflow")
+	}
+	if !realNote {
+		t.Fatal("decoded provider message missing from the note")
+	}
+}
+
+// errDriver fails every Stream call with a fixed error (pre-stream path).
+type errDriver struct{ err error }
+
+func (e errDriver) Stream(context.Context, llm.Request) (llm.PartStream, error) {
+	return llm.PartStream{}, e.err
+}

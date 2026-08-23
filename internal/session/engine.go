@@ -1,6 +1,7 @@
 package session
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -30,6 +31,10 @@ import (
 // ErrSessionBusy is returned by Send when the session already has an active
 // turn.
 var ErrSessionBusy = errors.New("session busy")
+
+// errRoundEnded marks a round already finalized inside openStream (the
+// overflow path): the caller ends the turn idle without reading a stream.
+var errRoundEnded = errors.New("round ended")
 
 // maxToolRounds caps the tool round-trips of one turn.
 const maxToolRounds = 50
@@ -118,6 +123,10 @@ func New(d Deps) (*Engine, error) {
 	if backoff == nil {
 		backoff = defaultBackoff
 	}
+	lg := d.Log
+	if lg == nil {
+		lg = log.Noop()
+	}
 	return &Engine{
 		db:        d.DB,
 		bus:       d.Bus,
@@ -125,7 +134,7 @@ func New(d Deps) (*Engine, error) {
 		perm:      d.Perm,
 		tools:     d.Tools,
 		schemas:   schemas,
-		lg:        d.Log,
+		lg:        lg,
 		dataDir:   d.DataDir,
 		outputDir: outputDirFor(d.DataDir),
 		cfg:       d.Cfg,
@@ -306,7 +315,7 @@ func (e *Engine) publish(t string, props any) {
 	if err != nil {
 		// A marshal failure here would kill the whole event stream, so it
 		// must be diagnosable, not silently dropped.
-		e.lg.Errorf("session: marshal %s: %v", t, err)
+		e.lg.Error("event marshal failed", "type", t, "error", err)
 		return
 	}
 	e.bus.Publish(ev)
@@ -327,10 +336,13 @@ func (e *Engine) apiKey(providerID string, cfg *protocol.Config) string {
 }
 
 func (e *Engine) driverFor(providerID string, m provider.Model) llm.Driver {
-	if d, ok := e.drivers[providerID]; ok {
-		return d
+	var d llm.Driver
+	if dd, ok := e.drivers[providerID]; ok {
+		d = dd
+	} else {
+		d = e.prov.DriverFor(m)
 	}
-	return e.prov.DriverFor(m)
+	return loggingDriver{inner: d, provider: providerID, model: m.ID, lg: e.lg}
 }
 
 func (e *Engine) limitsFor(cfg *protocol.Config) tool.Limits {
@@ -363,9 +375,16 @@ type turn struct {
 	model     provider.Model
 	cfg       *protocol.Config
 	cfgRules  []protocol.Rule
+	apiKey    string
 
 	doomHist  []permission.CallKey
 	toolCalls int
+
+	// ⑪: per-turn history snapshot — system prompts + the full message
+	// history, loaded once at turn start and appended per round, so
+	// messagesFor maps memory instead of re-querying every row each round.
+	sys  []string
+	hist []protocol.MessageWithParts
 }
 
 // round is one model round's assistant message state: the row id, its
@@ -397,6 +416,9 @@ func newTurn(sessionID string, row storage.SessionRow, info provider.Info, model
 func (e *Engine) runTurn(ctx context.Context, t *turn, onDone func(error)) {
 	var turnErr error
 	defer func() {
+		if errors.Is(turnErr, context.Canceled) {
+			e.lg.Info("turn aborted", "session_id", t.sessionID, "reason", "context_canceled")
+		}
 		e.publish(protocol.EventTypeSessionStatus, protocol.SessionStatusProps{
 			SessionID: t.sessionID,
 			Status:    protocol.SessionStatus{Type: protocol.StatusIdle},
@@ -422,10 +444,25 @@ func (e *Engine) runTurn(ctx context.Context, t *turn, onDone func(error)) {
 		}
 	}
 	t.cfg = cfg
-	// Always publish this turn's rules (empty when the load failed): a
-	// broken config degrades to no config rules instead of silently
-	// inheriting the previous turn's ruleset.
-	e.perm.SetConfigRules(t.cfgRules)
+	if cfgErr != nil {
+		e.lg.Error("config load failed", "path", t.row.ProjectDir, "error", cfgErr)
+	} else {
+		e.lg.Info("config loaded", "path", t.row.ProjectDir)
+	}
+	e.lg.Info("turn start", "session_id", t.sessionID, "agent", t.agent, "model", t.model.ID)
+	if key, source, ok := auth.ResolveKeyWithSource(t.info.ID, t.cfg, os.LookupEnv); ok {
+		t.apiKey = key
+		e.lg.Info("auth resolved", "provider", t.info.ID, "source", source)
+	}
+	// ⑪: the history snapshot is loaded once per turn; each round appends
+	// its completed assistant message (finishRound).
+	sys, hist, herr := e.loadHistory(t)
+	if herr != nil {
+		turnErr = herr
+		return
+	}
+	t.sys = sys
+	t.hist = hist
 
 	for i := 0; i < maxToolRounds; i++ {
 		req, err := e.buildRequest(t)
@@ -467,7 +504,7 @@ func (e *Engine) buildRequest(t *turn) (llm.Request, error) {
 	}
 	return llm.Request{
 		Model:    t.model.ID,
-		APIKey:   e.apiKey(t.info.ID, t.cfg),
+		APIKey:   t.apiKey,
 		BaseURL:  t.info.BaseURL,
 		Messages: messages,
 		Tools:    tools,
@@ -491,10 +528,14 @@ func (e *Engine) buildRequest(t *turn) (llm.Request, error) {
 //     result — the user message is NEVER re-appended (deviation 77: the
 //     plan's re-append made the model see its instruction re-issued every
 //     round, which looped weak models into re-running tools).
-func (e *Engine) messagesFor(t *turn) ([]llm.Message, error) {
+//
+// loadHistory builds the turn's system prompts and the full in-memory
+// history snapshot once (⑪). messagesFor maps this snapshot; the mapping is
+// unchanged (LOCKED).
+func (e *Engine) loadHistory(t *turn) ([]string, []protocol.MessageWithParts, error) {
 	sys, err := BuildSystemPrompt(t.row.ProjectDir, t.model, t.model.ID, t.info.ID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if t.cfg != nil {
 		for _, p := range t.cfg.Instructions {
@@ -507,27 +548,21 @@ func (e *Engine) messagesFor(t *turn) ([]llm.Message, error) {
 			}
 		}
 	}
-	out := make([]llm.Message, 0, len(sys)+8)
-	for _, s := range sys {
-		out = append(out, llm.Message{Role: llm.RoleSystem, Content: s})
-	}
-
 	rows, err := e.db.ListMessages(t.sessionID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	hist := make([]protocol.MessageWithParts, 0, len(rows))
-	lastUserIdx := -1
-	for i, r := range rows {
+	for _, r := range rows {
 		prs, err := e.db.ListParts(r.ID)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		parts := make([]protocol.Part, 0, len(prs))
 		for _, pr := range prs {
 			p, err := storage.PartToProtocol(pr)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			if isSyntheticPart(p) {
 				// Engine-generated notes (error/overflow) are excluded from
@@ -535,9 +570,6 @@ func (e *Engine) messagesFor(t *turn) ([]llm.Message, error) {
 				continue
 			}
 			parts = append(parts, p)
-		}
-		if r.Role == "user" {
-			lastUserIdx = i
 		}
 		hist = append(hist, protocol.MessageWithParts{
 			Info: protocol.Message{
@@ -547,9 +579,22 @@ func (e *Engine) messagesFor(t *turn) ([]llm.Message, error) {
 			Parts: parts,
 		})
 	}
+	return sys, hist, nil
+}
 
-	reminders := PlanReminders(hist, t.agent)
-	for i, mw := range hist {
+func (e *Engine) messagesFor(t *turn) ([]llm.Message, error) {
+	out := make([]llm.Message, 0, len(t.sys)+8)
+	for _, s := range t.sys {
+		out = append(out, llm.Message{Role: llm.RoleSystem, Content: s})
+	}
+	lastUserIdx := -1
+	for i := range t.hist {
+		if t.hist[i].Info.Role == "user" {
+			lastUserIdx = i
+		}
+	}
+	reminders := PlanReminders(t.hist, t.agent)
+	for i, mw := range t.hist {
 		switch mw.Info.Role {
 		case "user":
 			content := joinTextParts(mw.Parts)
@@ -650,9 +695,13 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 	e.publish(protocol.EventTypeMessageUpdated, protocol.MessageUpdatedProps{
 		SessionID: t.sessionID, Info: r.msg,
 	})
+	e.lg.Info("round start", "session_id", t.sessionID, "round", r.id)
 
 	stream, err := e.openStream(roundCtx, t, r, req)
 	if err != nil {
+		if err == errRoundEnded {
+			return false, nil
+		}
 		return false, err
 	}
 
@@ -664,16 +713,11 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 	var textSt, reasonSt textState
 
 	saveDelta := func(st *textState, kind, delta string) {
+		// ⑩: no per-delta DB write (O(n²) for long responses); the text
+		// accumulates in st.buf and finalizePart is the sole upsert. The
+		// wire (delta event) is unchanged; a crash mid-turn loses the
+		// in-flight text (accepted trade, spec §4).
 		st.buf.WriteString(delta)
-		p := protocol.Part{
-			ID: st.id, SessionID: t.sessionID, MessageID: r.id,
-			Type: kind, Text: st.buf.String(),
-			Time: protocol.PartTime{Start: st.start},
-		}
-		// Best-effort persistence: the delta still goes to the TUI.
-		if err := e.db.UpsertPart(storage.ProtocolToPart(p)); err != nil {
-			e.lg.Errorf("session: persist part %s (session=%s): %v", p.ID, t.sessionID, err)
-		}
 		e.publish(protocol.EventTypeMessagePartDelta, protocol.MessagePartDeltaProps{
 			SessionID: t.sessionID, MessageID: r.id, PartID: st.id, Field: kind, Delta: delta,
 		})
@@ -687,10 +731,7 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 			Type: kind, Text: st.buf.String(),
 			Time: protocol.PartTime{Start: st.start},
 		}
-		// Best-effort persistence: the part-created event still goes out.
-		if err := e.db.UpsertPart(storage.ProtocolToPart(p)); err != nil {
-			e.lg.Errorf("session: persist part %s (session=%s): %v", p.ID, t.sessionID, err)
-		}
+		// ⑩: created+delta go to the wire only; finalizePart persists.
 		e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
 			SessionID: t.sessionID, Part: p, Time: e.clock(),
 		})
@@ -708,7 +749,7 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 			Time: protocol.PartTime{Start: st.start, End: e.clock()},
 		}
 		if err := e.db.UpsertPart(storage.ProtocolToPart(p)); err != nil {
-			e.lg.Errorf("session: persist part %s (session=%s): %v", p.ID, t.sessionID, err)
+			e.lg.Error("persist part failed", "part_id", p.ID, "session_id", t.sessionID, "error", err)
 		}
 		e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
 			SessionID: t.sessionID, Part: p, Time: e.clock(),
@@ -747,6 +788,7 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 				return false, ctx.Err()
 			}
 			if isOverflowError(p.Err) {
+				e.lg.Info("overflow detected", "session_id", t.sessionID, "model", t.model.ID, "reason", "api_error")
 				e.saveSynthetic(t, r, overflowNote(t.model, 0, p.Err))
 				e.finishRound(t, r, usage, finish)
 				return false, nil
@@ -785,7 +827,7 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 				// Step budget exhausted: the remaining calls of this stream
 				// are dropped (not persisted, not executed); the turn ends
 				// idle and onDone(nil).
-				e.lg.Infof("session: max tool steps reached (session=%s, steps=%d)", t.sessionID, maxToolSteps)
+				e.lg.Info("max tool steps reached", "session_id", t.sessionID, "steps", maxToolSteps)
 				e.finishRound(t, r, usage, finish)
 				return false, nil
 			}
@@ -801,6 +843,7 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 	// Overflow: the round's input already exceeds the model context; the
 	// turn ends with a synthetic note (v1 has no compaction).
 	if usage != nil && t.model.Context > 0 && usage.Input > t.model.Context {
+		e.lg.Info("overflow detected", "session_id", t.sessionID, "model", t.model.ID, "reason", "usage", "input", usage.Input)
 		e.saveSynthetic(t, r, overflowNote(t.model, usage.Input, nil))
 		e.finishRound(t, r, usage, finish)
 		return false, nil
@@ -838,10 +881,17 @@ func (e *Engine) openStream(ctx context.Context, t *turn, r *round, req llm.Requ
 		}
 		if !llm.IsTransient(sErr) {
 			if isOverflowError(sErr) {
+				e.lg.Info("overflow detected", "session_id", t.sessionID, "model", t.model.ID, "reason", "api_error")
 				e.saveSynthetic(t, r, overflowNote(t.model, 0, sErr))
 				e.finishRound(t, r, nil, "")
-				return llm.PartStream{}, nil
+				// The round is already finalized: the caller ends the
+				// turn idle without reading a stream.
+				return llm.PartStream{}, errRoundEnded
 			}
+			// Pre-stream failure: keep the decoded provider text on a
+			// synthetic note (excluded from history replay) and fail the
+			// turn (mid-stream parity).
+			e.saveSynthetic(t, r, sErr.Error())
 			e.finishRound(t, r, nil, "")
 			return llm.PartStream{}, sErr
 		}
@@ -889,6 +939,7 @@ func (e *Engine) finishRound(t *turn, r *round, usage *llm.Usage, finish string)
 			float64(usage.CacheRead)*t.model.CostCacheRead + float64(usage.CacheWrite)*t.model.CostCacheWrite) / 1e6
 	}
 	end := e.clock()
+	e.lg.Info("round end", "session_id", t.sessionID, "round", r.id, "latency_ms", end-r.now, "finish", finish)
 	if err := e.db.UpdateMessage(storage.MessageRow{
 		ID: r.id, SessionID: t.sessionID, Role: "assistant", Agent: t.agent,
 		Cost: cost, Tokens: tok, TimeCreated: r.now, TimeCompleted: &end,
@@ -896,7 +947,7 @@ func (e *Engine) finishRound(t *turn, r *round, usage *llm.Usage, finish string)
 		// Best-effort: a failed write must not strand the TUI in a
 		// cost-less/incomplete final state, so the final message.updated
 		// still goes out.
-		e.lg.Errorf("session: update message %s (session=%s): %v", r.id, t.sessionID, err)
+		e.lg.Error("update message failed", "message_id", r.id, "session_id", t.sessionID, "error", err)
 	}
 	r.msg.Cost = cost
 	r.msg.Tokens = &tok
@@ -907,6 +958,32 @@ func (e *Engine) finishRound(t *turn, r *round, usage *llm.Usage, finish string)
 	e.publish(protocol.EventTypeMessageUpdated, protocol.MessageUpdatedProps{
 		SessionID: t.sessionID, Info: r.msg,
 	})
+	// ⑪: append the completed round to the turn's in-memory snapshot so the
+	// next round's request sees it without a DB re-query.
+	if mw, aerr := e.roundAsMessage(t, r); aerr == nil {
+		t.hist = append(t.hist, mw)
+	}
+}
+
+// roundAsMessage builds the snapshot entry for a completed assistant round:
+// its final message info + non-synthetic parts (⑪).
+func (e *Engine) roundAsMessage(t *turn, r *round) (protocol.MessageWithParts, error) {
+	prs, err := e.db.ListParts(r.id)
+	if err != nil {
+		return protocol.MessageWithParts{}, err
+	}
+	parts := make([]protocol.Part, 0, len(prs))
+	for _, pr := range prs {
+		p, err := storage.PartToProtocol(pr)
+		if err != nil {
+			return protocol.MessageWithParts{}, err
+		}
+		if isSyntheticPart(p) {
+			continue
+		}
+		parts = append(parts, p)
+	}
+	return protocol.MessageWithParts{Info: r.msg, Parts: parts}, nil
 }
 
 // saveSynthetic persists an engine-generated text part (mid-stream error
@@ -921,7 +998,7 @@ func (e *Engine) saveSynthetic(t *turn, r *round, text string) {
 		Time: protocol.PartTime{Start: start, End: e.clock()},
 	}
 	if err := e.db.UpsertPart(storage.ProtocolToPart(p)); err != nil {
-		e.lg.Errorf("session: persist part %s (session=%s): %v", p.ID, t.sessionID, err)
+		e.lg.Error("persist part failed", "part_id", p.ID, "session_id", t.sessionID, "error", err)
 	}
 	e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
 		SessionID: t.sessionID, Part: p, Time: e.clock(),
@@ -934,15 +1011,101 @@ func isSyntheticPart(p protocol.Part) bool {
 	return p.Synthetic != nil && *p.Synthetic
 }
 
-// overflowRe matches provider-side context-overflow API errors (400 "prompt
-// too long" and friends). NOTE: "context" also matches context.Canceled —
-// callers MUST check ctx.Err() first.
-var overflowRe = regexp.MustCompile(`(?i)(context|tokens?|too long|exceeds)`)
+// overflowPatterns ports opencode v1.18.18's curated context-overflow
+// classifier (packages/llm/src/provider-error.ts `patterns`) byte-faithfully:
+// 27 entries, case-insensitive.
+var overflowPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)prompt is too long`),
+	regexp.MustCompile(`(?i)request_too_large`),
+	regexp.MustCompile(`(?i)input is too long for requested model`),
+	regexp.MustCompile(`(?i)exceeds the context window`),
+	regexp.MustCompile(`(?i)exceeds (?:the )?(?:model'?s )?maximum context length(?: of [\d,]+ tokens?|\s*\([\d,]+\))`),
+	regexp.MustCompile(`(?i)input token count.*exceeds the maximum`),
+	regexp.MustCompile(`(?i)tokens in request more than max tokens allowed`),
+	regexp.MustCompile(`(?i)maximum prompt length is \d+`),
+	regexp.MustCompile(`(?i)reduce the length of the messages`),
+	regexp.MustCompile(`(?i)maximum context length is \d+ tokens`),
+	regexp.MustCompile(`(?i)exceeds (?:the )?maximum allowed input length of [\d,]+ tokens?`),
+	regexp.MustCompile(`(?i)input \(\d+ tokens\) is longer than the model'?s context length \(\d+ tokens\)`),
+	regexp.MustCompile(`(?i)exceeds the limit of \d+`),
+	regexp.MustCompile(`(?i)exceeds the available context size`),
+	regexp.MustCompile(`(?i)greater than the context length`),
+	regexp.MustCompile(`(?i)context window exceeds limit`),
+	regexp.MustCompile(`(?i)exceeded model token limit`),
+	regexp.MustCompile(`(?i)context[_ ]length[_ ]exceeded`),
+	regexp.MustCompile(`(?i)request entity too large`),
+	regexp.MustCompile(`(?i)context length is only \d+ tokens`),
+	regexp.MustCompile(`(?i)input length.*exceeds.*context length`),
+	regexp.MustCompile(`(?i)prompt too long; exceeded (?:max )?context length`),
+	regexp.MustCompile(`(?i)too large for model with \d+ maximum context length`),
+	regexp.MustCompile(`(?i)prompt has [\d,]+ tokens?, but the configured context size is [\d,]+ tokens?`),
+	regexp.MustCompile(`(?i)model_context_window_exceeded`),
+	regexp.MustCompile(`(?i)too many tokens`),
+	regexp.MustCompile(`(?i)token limit exceeded`),
+}
+
+// overflowExclusions — upstream `exclusions` (AND-NOT: a hit means NOT
+// overflow, even if a pattern also matches).
+var overflowExclusions = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)^(throttling error|service unavailable):`),
+	regexp.MustCompile(`(?i)rate limit`),
+	regexp.MustCompile(`(?i)too many requests`),
+}
+
+// overflowNoBodyRe — the upstream synthesized message form for a bare
+// 400/413 with no body.
+var overflowNoBodyRe = regexp.MustCompile(`(?i)^4(00|13)\s*(status code)?\s*\(no body\)`)
 
 // isOverflowError reports whether an API (non-stream) error is a
-// context-overflow rejection.
+// context-overflow rejection. Port of upstream provider-error.ts
+// isContextOverflow + opencode provider/error.ts parseAPICallError:
+// exclusions AND-NOT the curated patterns; a 413 (any body), a 400/413 with
+// an empty body, or a decoded body whose error.code is
+// "context_length_exceeded" is overflow by status. Task ④'s decoded
+// *llm.APIError makes the provider 400 path live again.
 func isOverflowError(err error) bool {
-	return err != nil && overflowRe.MatchString(err.Error())
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	for _, re := range overflowExclusions {
+		if re.MatchString(msg) {
+			return false
+		}
+	}
+	texts := []string{msg}
+	var api *llm.APIError
+	if errors.As(err, &api) {
+		switch {
+		case api.Status == 413:
+			return true
+		case (api.Status == 400 || api.Status == 413) && len(bytes.TrimSpace(api.Body)) == 0:
+			return true
+		}
+		var env struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		if json.Unmarshal(api.Body, &env) == nil && env.Error.Code == "context_length_exceeded" {
+			return true
+		}
+		// Upstream's classifier input (error.ts message()) includes the
+		// raw response body when the decoded message is unhelpful, so the
+		// curated patterns also run against the body (e.g. a
+		// model_context_window_exceeded code with a short message).
+		if len(api.Body) > 0 {
+			texts = append(texts, string(api.Body))
+		}
+	}
+	for _, text := range texts {
+		for _, re := range overflowPatterns {
+			if re.MatchString(text) {
+				return true
+			}
+		}
+	}
+	return overflowNoBodyRe.MatchString(msg)
 }
 
 // overflowNote renders the fixed overflow text. input > 0 comes from the
@@ -1043,6 +1206,7 @@ func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part)
 	// runs (sliding window; a "once" reply does not extend the exemption).
 	key := permission.CallKey{Tool: name, Hash: callKeyHash(raw)}
 	if permission.DoomLoopDue(t.doomHist, key) {
+		e.lg.Info("doom loop trigger", "session_id", t.sessionID, "tool", name)
 		d := e.perm.EvaluateRules(t.agent, t.cfgRules, "doom_loop", []string{name})
 		doomReq := permission.Request{
 			RequestID: protocol.NewID("perm"), SessionID: t.sessionID, Agent: t.agent,
@@ -1050,6 +1214,7 @@ func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part)
 			Resources: []string{name},
 			CallID:    callID, MessageID: r.id,
 			PreDecision: d, CreatedAt: e.clock(),
+			CfgRules: t.cfgRules,
 		}
 		decision, err := e.perm.Ask(ctx, doomReq)
 		if err != nil {
@@ -1104,6 +1269,7 @@ func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part)
 			Resources: []string{pattern},
 			CallID:    callID, MessageID: r.id,
 			PreDecision: d, CreatedAt: e.clock(),
+			CfgRules: t.cfgRules,
 		}
 		decision, aerr := e.perm.Ask(ctx, extReq)
 		if aerr != nil || decision != permission.Allow {
@@ -1120,6 +1286,7 @@ func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part)
 		Resources: resources, Always: always,
 		CallID: callID, MessageID: r.id,
 		PreDecision: d, CreatedAt: e.clock(),
+		CfgRules: t.cfgRules,
 	}
 	decision, err := e.perm.Ask(ctx, preq)
 	if err != nil {
@@ -1138,7 +1305,10 @@ func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part)
 		OutputDir: e.outputDir,
 		Storage:   e.db,
 		SessionID: t.sessionID,
+		Log:       e.lg,
 	}
+	e.lg.Info("tool start", "session_id", t.sessionID, "tool", name)
+	toolStart := e.clock()
 	out, runErr := tl.Run(ctx, raw, env)
 	if runErr != nil {
 		msg := runErr.Error()
@@ -1147,6 +1317,7 @@ func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part)
 			// already force-killed via ctx.
 			msg = "aborted"
 		}
+		e.lg.Error("tool failed", "session_id", t.sessionID, "tool", name, "error", msg)
 		e.saveToolPart(t, r, toolPart{
 			callID: callID,
 			name:   name,
@@ -1161,6 +1332,16 @@ func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part)
 			},
 		})
 		return
+	}
+	{
+		args := []any{"session_id", t.sessionID, "tool", name, "latency_ms", e.clock() - toolStart}
+		if v, ok := out.Meta["exit"]; ok {
+			args = append(args, "exit_code", v)
+		}
+		if v, ok := out.Meta["truncated"]; ok {
+			args = append(args, "truncated", v)
+		}
+		e.lg.Info("tool end", args...)
 	}
 	e.saveToolPart(t, r, toolPart{
 		callID: callID,
@@ -1190,7 +1371,7 @@ func (e *Engine) saveToolPart(t *turn, r *round, tp toolPart) {
 		Type: "tool", Tool: tp.name, CallID: tp.callID, State: &tp.state,
 	}
 	if err := e.db.UpsertPart(storage.ProtocolToPart(p)); err != nil {
-		e.lg.Errorf("session: persist part %s (session=%s): %v", p.ID, t.sessionID, err)
+		e.lg.Error("persist part failed", "part_id", p.ID, "session_id", t.sessionID, "error", err)
 	}
 	e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
 		SessionID: t.sessionID, Part: p, Time: e.clock(),
