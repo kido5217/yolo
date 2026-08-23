@@ -595,7 +595,7 @@ func (d dialogStack) empty() bool { return len(d.items) == 0 }
 var (
 	dividerLineRendered = divider.Render(dividerLine())
 	sessionHelpRendered = dim.Render(sessionHelp)
-	quitDialogRendered  = title.Render("quit? [y/n]")
+	quitDialogRendered  = title.Render("quit? [Y/n]")
 	helpDialogRendered  = title.Render("Help") +
 		"\n" + dim.Render("  | Key | Action |") +
 		"\n" + dim.Render("  |---|---|") +

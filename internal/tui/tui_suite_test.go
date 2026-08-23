@@ -101,7 +101,7 @@ func TestTUIFullTurn(t *testing.T) {
 	// the v2 renderer cell-diffs frames, and on the alt screen's fixed
 	// frame the unchanged tail of the marker line is never re-emitted, so
 	// the contiguous "▾ think" line cannot appear in the byte stream.
-	for _, w := range []string{"\u25BE", "let me think", "world", "quit?", "[y/n]"} {
+	for _, w := range []string{"\u25BE", "let me think", "world", "quit?", "[Y/n]"} {
 		if !strings.Contains(tsTail, w) {
 			t.Errorf("final output missing %q:\n%s", w, tsTail)
 		}
@@ -255,10 +255,10 @@ func TestTUIDialogs(t *testing.T) {
 	capture("Help", "| enter | send prompt |", "pgup/pgdn scroll \u00B7 \\+enter newline")
 	tm.Send(press(tea.KeyEscape))
 	tm.Send(ctrlCKey)
-	capture("quit? [y/n]")
+	capture("quit? [Y/n]")
 
 	last := -1
-	for _, w := range []string{"Model", "Agents", "Help", "quit? [y/n]"} {
+	for _, w := range []string{"Model", "Agents", "Help", "quit? [Y/n]"} {
 		i := strings.Index(seq.String(), w)
 		if i < 0 || i <= last {
 			t.Fatalf("dialog sequence out of order at %q (idx=%d, last=%d)\n%s", w, i, last, seq.String())
