@@ -243,20 +243,20 @@ func (e *Engine) Status(sessionID string) string {
 	return protocol.StatusIdle
 }
 
-// Abort cancels the active turn of the session. It reports whether a turn
-// was active.
+// Abort cancels the active turn of the session (and its title side-call).
+// The turn cancel is invoked under the busy-map lock: a turn starting in the
+// window gets its own cancel, never the previous turn's (TOCTOU, row 4).
 func (e *Engine) Abort(sessionID string) bool {
 	e.mu.Lock()
 	cancel, active := e.busy[sessionID]
 	if tc := e.titleCtx[sessionID]; tc != nil {
 		tc.cancel()
 	}
-	e.mu.Unlock()
-	if !active {
-		return false
+	if active {
+		cancel()
 	}
-	cancel()
-	return true
+	e.mu.Unlock()
+	return active
 }
 
 // Close tears down the session's per-work resources: it aborts the

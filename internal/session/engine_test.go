@@ -1136,3 +1136,47 @@ func TestCloseWhileBusyAbortsAndSuppresses(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 }
+
+// TestAbortThenNewTurnCompletes: an Abort followed by a fresh Send must not
+// cancel the fresh turn (the TOCTOU: turn 1's stale cancel invoked after
+// turn 2 took the busy slot). slowTurn holds turn 1 so the abort lands
+// inside a deterministic busy window.
+func TestAbortThenNewTurnCompletes(t *testing.T) {
+	h := newHarness(t)
+	h.build(t)
+	h.slowTurn = true
+	ses := h.startSession(t, t.TempDir())
+	if _, err := h.eng.Send(t.Context(), ses, "hi", func(error) {}); err != nil {
+		t.Fatalf("Send 1: %v", err)
+	}
+	waitBusy(t, h, ses)
+	if !h.eng.Abort(ses) {
+		t.Fatal("Abort reported no active turn")
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for h.eng.Status(ses) == protocol.StatusBusy {
+		if time.Now().After(deadline) {
+			t.Fatal("turn 1 did not settle after Abort")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	h.slowTurn = false
+	var turn2Err error
+	done := make(chan struct{})
+	waitIdle(t, h, ses, func() {
+		if _, err := h.eng.Send(t.Context(), ses, "again", func(err error) {
+			turn2Err = err
+			close(done)
+		}); err != nil {
+			t.Fatalf("Send 2: %v", err)
+		}
+	})
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("turn 2 onDone never fired")
+	}
+	if turn2Err != nil {
+		t.Fatalf("turn 2 failed after a prior Abort (stale cancel): %v", turn2Err)
+	}
+}

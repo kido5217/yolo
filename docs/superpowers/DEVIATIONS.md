@@ -296,3 +296,8 @@ the pinned assertions (abort applied, `slowCancel` observed, exactly one
 busy `session.status` survives) are unchanged and now deterministic.
 Resolves per principle 5 (tests define the contract; plan's own test code
 buggy — fix the test, log the deviation).
+96. Plan Task E test used the deviation-95(a) 4-arg waitBusy form (low,
+2026-08-23): the harness `waitBusy` takes 3 args, so the pinned
+TestAbortThenNewTurnCompletes could not compile. Fix: Send before
+`waitBusy(t, h, ses)`. Test-only; the pinned assertions are unchanged.
+Resolves per principle 5.
