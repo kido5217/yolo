@@ -235,3 +235,11 @@ status before the count. Both are test-only; the pinned assertions (failed
 turn, `StatusIdle`, exactly one idle event) are unchanged and now
 deterministic. Resolves per principle 5 (tests define the contract; plan's
 own test code buggy — fix the test, log the deviation).
+91. Send early-fail SSE sequence: the lone `session.status` idle frame on the
+Send CreateMessage/UpsertPart error path is no longer published (wire/low,
+2026-08-23): finding [concurrency-5] row 3 — the early-fail path published an
+idle with no preceding busy, a transition no client observed a start to. Spec
+§3.1 B picks "skip both": no status event on early fail; the error reaches the
+TUI via the Send return value (the existing failure channel). The wire-visible
+change is confined to the Send error path (success paths unchanged). Resolves
+per principle 2.

@@ -870,3 +870,28 @@ func TestRunTurnRecoversPanic(t *testing.T) {
 		t.Fatalf("idle session.status events = %d, want 1", idles)
 	}
 }
+
+// TestSendEarlyFailPublishesNoStatus: a Send failure before the turn
+// goroutine starts publishes NO session.status at all (spec §3.1 B: skip
+// both) — no lone idle for a busy no client ever observed. The error is the
+// return value; onDone never fires (the turn goroutine never ran).
+func TestSendEarlyFailPublishesNoStatus(t *testing.T) {
+	h := newHarness(t)
+	h.build(t)
+	ses := h.startSession(t, t.TempDir())
+	if err := h.db.DeleteSession(ses); err != nil {
+		t.Fatal(err)
+	}
+	onDone := make(chan struct{})
+	if _, err := h.eng.Send(t.Context(), ses, "hi", func(error) { close(onDone) }); err == nil {
+		t.Fatal("Send on a deleted session succeeded")
+	}
+	select {
+	case <-onDone:
+		t.Fatal("onDone fired although the turn goroutine never started")
+	case <-time.After(100 * time.Millisecond):
+	}
+	if n := h.eventCount(func(e protocol.Event) bool { return e.Type == protocol.EventTypeSessionStatus }); n != 0 {
+		t.Fatalf("early-fail Send published %d session.status events, want 0 (no lone idle)", n)
+	}
+}

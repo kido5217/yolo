@@ -196,7 +196,7 @@ func (e *Engine) Send(ctx context.Context, sessionID, text string, onDone func(e
 	if err := e.db.CreateMessage(storage.MessageRow{
 		ID: msgID, SessionID: sessionID, Role: "user", Agent: row.Agent, TimeCreated: now,
 	}); err != nil {
-		e.idleAndRelease(sessionID)
+		e.releaseBusy(sessionID)
 		return SendResult{}, err
 	}
 	userPart := protocol.Part{
@@ -204,7 +204,7 @@ func (e *Engine) Send(ctx context.Context, sessionID, text string, onDone func(e
 		Type: "text", Text: text, Time: protocol.PartTime{Start: now},
 	}
 	if err := e.db.UpsertPart(storage.ProtocolToPart(userPart)); err != nil {
-		e.idleAndRelease(sessionID)
+		e.releaseBusy(sessionID)
 		return SendResult{}, err
 	}
 	userMsg := protocol.Message{
@@ -299,13 +299,10 @@ func (e *Engine) Shutdown(ctx context.Context) {
 	}
 }
 
-// idleAndRelease runs the turn-exit cleanup used when the turn goroutine
-// never started.
-func (e *Engine) idleAndRelease(sessionID string) {
-	e.publish(protocol.EventTypeSessionStatus, protocol.SessionStatusProps{
-		SessionID: sessionID,
-		Status:    protocol.SessionStatus{Type: protocol.StatusIdle},
-	})
+// releaseBusy drops the session's busy entry without publishing a status:
+// the turn goroutine never started, so no client observed a busy — a lone
+// idle would be a transition with no observed start (spec §3.1 B).
+func (e *Engine) releaseBusy(sessionID string) {
 	e.mu.Lock()
 	delete(e.busy, sessionID)
 	e.mu.Unlock()
