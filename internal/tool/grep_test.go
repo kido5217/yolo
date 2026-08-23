@@ -94,6 +94,17 @@ func TestGrepLineSplitSemantics(t *testing.T) {
 	}
 }
 
+// TestGrepMissingRootIsError: a stat failure on the searched root is a tool
+// error, not a "No files found" success (error-3).
+func TestGrepMissingRootIsError(t *testing.T) {
+	t.Parallel()
+	env, _ := grepFixture(t)
+	_, err := runTool(t, "grep", env, map[string]any{"pattern": "alpha", "path": "no_such_dir"})
+	if err == nil {
+		t.Fatal("grep on a nonexistent root succeeded — it must be a tool error")
+	}
+}
+
 func TestGrepExactBlock(t *testing.T) {
 	t.Parallel()
 	d := t.TempDir()

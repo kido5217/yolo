@@ -147,7 +147,7 @@ func (grepTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 	}
 	info, serr := os.Stat(requested)
 	if serr != nil {
-		return empty, nil
+		return Output{}, fmt.Errorf("grep: cannot access %s: %w", requested, serr)
 	}
 	searchDir := requested
 	if !info.IsDir() {
