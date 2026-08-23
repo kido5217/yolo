@@ -16,7 +16,7 @@ import (
 type promptModel struct {
 	input textinput.Model
 	sel   int
-	draft string
+	draft strings.Builder
 }
 
 // busyToast is the locked message for a send attempted while the session is

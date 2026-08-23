@@ -462,11 +462,11 @@ func (a *App) inputUpdate(k tea.KeyPressMsg) []tea.Cmd {
 func (a *App) promptEnter() []tea.Cmd {
 	val := a.prompt.input.Value()
 	if strings.HasSuffix(val, "\\") {
-		a.prompt.draft += strings.TrimSuffix(val, "\\") + "\n"
+		a.prompt.draft.WriteString(strings.TrimSuffix(val, "\\") + "\n")
 		a.prompt.input.SetValue("")
 		return nil
 	}
-	text := a.prompt.draft + strings.TrimSpace(val)
+	text := a.prompt.draft.String() + strings.TrimSpace(val)
 	if strings.TrimSpace(text) == "" {
 		return nil
 	}
@@ -505,7 +505,7 @@ func (a *App) applySend(m sendMsg) tea.Cmd {
 		return nil
 	}
 	a.prompt.input.SetValue("")
-	a.prompt.draft = ""
+	a.prompt.draft.Reset()
 	return nil
 }
 

@@ -408,3 +408,13 @@ slicing an unaddressable array value. Fixed by binding first
 (`sum := sha256.Sum256(b)` then `sum[:]`). Emitted schema bytes, the pin
 value, and the style fix are all as the brief specifies. Resolves per
 principle 5.
+106. Plan Task S guard test used the wrong route (test-only/low,
+2026-08-23): the brief built the app with `newRecApp(client.New(...),
+store.Store{}, "")` — a HOME-route app — but the home route's Enter is
+consumed by `homeEnter()` (home.go) before it reaches `promptEnter`, so the
+soft-enter loop never accumulated the draft (red run: draft length 0, not
+the intended timing failure). Fixed by driving a SESSION-route app via
+`testSessionApp(sessionFixture())`, matching the existing soft-enter
+subtest in the same file. The amortization, the two switched draft
+assertions, and the 5 s guard are as the brief specifies. Resolves per
+principle 5.
