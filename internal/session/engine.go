@@ -379,6 +379,12 @@ type turn struct {
 
 	doomHist  []permission.CallKey
 	toolCalls int
+
+	// ⑪: per-turn history snapshot — system prompts + the full message
+	// history, loaded once at turn start and appended per round, so
+	// messagesFor maps memory instead of re-querying every row each round.
+	sys  []string
+	hist []protocol.MessageWithParts
 }
 
 // round is one model round's assistant message state: the row id, its
@@ -448,6 +454,15 @@ func (e *Engine) runTurn(ctx context.Context, t *turn, onDone func(error)) {
 		t.apiKey = key
 		e.lg.Info("auth resolved", "provider", t.info.ID, "source", source)
 	}
+	// ⑪: the history snapshot is loaded once per turn; each round appends
+	// its completed assistant message (finishRound).
+	sys, hist, herr := e.loadHistory(t)
+	if herr != nil {
+		turnErr = herr
+		return
+	}
+	t.sys = sys
+	t.hist = hist
 
 	for i := 0; i < maxToolRounds; i++ {
 		req, err := e.buildRequest(t)
@@ -513,10 +528,14 @@ func (e *Engine) buildRequest(t *turn) (llm.Request, error) {
 //     result — the user message is NEVER re-appended (deviation 77: the
 //     plan's re-append made the model see its instruction re-issued every
 //     round, which looped weak models into re-running tools).
-func (e *Engine) messagesFor(t *turn) ([]llm.Message, error) {
+//
+// loadHistory builds the turn's system prompts and the full in-memory
+// history snapshot once (⑪). messagesFor maps this snapshot; the mapping is
+// unchanged (LOCKED).
+func (e *Engine) loadHistory(t *turn) ([]string, []protocol.MessageWithParts, error) {
 	sys, err := BuildSystemPrompt(t.row.ProjectDir, t.model, t.model.ID, t.info.ID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if t.cfg != nil {
 		for _, p := range t.cfg.Instructions {
@@ -529,27 +548,21 @@ func (e *Engine) messagesFor(t *turn) ([]llm.Message, error) {
 			}
 		}
 	}
-	out := make([]llm.Message, 0, len(sys)+8)
-	for _, s := range sys {
-		out = append(out, llm.Message{Role: llm.RoleSystem, Content: s})
-	}
-
 	rows, err := e.db.ListMessages(t.sessionID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	hist := make([]protocol.MessageWithParts, 0, len(rows))
-	lastUserIdx := -1
-	for i, r := range rows {
+	for _, r := range rows {
 		prs, err := e.db.ListParts(r.ID)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		parts := make([]protocol.Part, 0, len(prs))
 		for _, pr := range prs {
 			p, err := storage.PartToProtocol(pr)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			if isSyntheticPart(p) {
 				// Engine-generated notes (error/overflow) are excluded from
@@ -557,9 +570,6 @@ func (e *Engine) messagesFor(t *turn) ([]llm.Message, error) {
 				continue
 			}
 			parts = append(parts, p)
-		}
-		if r.Role == "user" {
-			lastUserIdx = i
 		}
 		hist = append(hist, protocol.MessageWithParts{
 			Info: protocol.Message{
@@ -569,9 +579,22 @@ func (e *Engine) messagesFor(t *turn) ([]llm.Message, error) {
 			Parts: parts,
 		})
 	}
+	return sys, hist, nil
+}
 
-	reminders := PlanReminders(hist, t.agent)
-	for i, mw := range hist {
+func (e *Engine) messagesFor(t *turn) ([]llm.Message, error) {
+	out := make([]llm.Message, 0, len(t.sys)+8)
+	for _, s := range t.sys {
+		out = append(out, llm.Message{Role: llm.RoleSystem, Content: s})
+	}
+	lastUserIdx := -1
+	for i := range t.hist {
+		if t.hist[i].Info.Role == "user" {
+			lastUserIdx = i
+		}
+	}
+	reminders := PlanReminders(t.hist, t.agent)
+	for i, mw := range t.hist {
 		switch mw.Info.Role {
 		case "user":
 			content := joinTextParts(mw.Parts)
@@ -935,6 +958,32 @@ func (e *Engine) finishRound(t *turn, r *round, usage *llm.Usage, finish string)
 	e.publish(protocol.EventTypeMessageUpdated, protocol.MessageUpdatedProps{
 		SessionID: t.sessionID, Info: r.msg,
 	})
+	// ⑪: append the completed round to the turn's in-memory snapshot so the
+	// next round's request sees it without a DB re-query.
+	if mw, aerr := e.roundAsMessage(t, r); aerr == nil {
+		t.hist = append(t.hist, mw)
+	}
+}
+
+// roundAsMessage builds the snapshot entry for a completed assistant round:
+// its final message info + non-synthetic parts (⑪).
+func (e *Engine) roundAsMessage(t *turn, r *round) (protocol.MessageWithParts, error) {
+	prs, err := e.db.ListParts(r.id)
+	if err != nil {
+		return protocol.MessageWithParts{}, err
+	}
+	parts := make([]protocol.Part, 0, len(prs))
+	for _, pr := range prs {
+		p, err := storage.PartToProtocol(pr)
+		if err != nil {
+			return protocol.MessageWithParts{}, err
+		}
+		if isSyntheticPart(p) {
+			continue
+		}
+		parts = append(parts, p)
+	}
+	return protocol.MessageWithParts{Info: r.msg, Parts: parts}, nil
 }
 
 // saveSynthetic persists an engine-generated text part (mid-stream error

@@ -757,3 +757,45 @@ func TestTextDeltasEmitSSEAndPersistAtFinalize(t *testing.T) {
 		t.Fatalf("persisted text part \"Hello world\" not found (finalization must persist the full text)")
 	}
 }
+
+// TestHistorySnapshotAccumulatesAcrossRounds pins ⑪: over a multi-round tool
+// turn, each round's model request carries the full accumulated history from
+// the turn's in-memory snapshot — identical to a per-round DB replay (the
+// history->llm mapping is untouched).
+func TestHistorySnapshotAccumulatesAcrossRounds(t *testing.T) {
+	h := newHarness(t)
+	h.build(t)
+	ses := h.startSession(t, t.TempDir())
+	h.drv.Turns = []fakellm.Turn{
+		{Parts: []llm.Part{{Kind: "tool", Name: "glob", CallID: "g1", Text: `{"pattern":"x*"}`, Finish: "tool_calls"}}},
+		{Parts: []llm.Part{{Kind: "text", Text: "done", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}},
+	}
+	waitIdle(t, h, ses, func() {
+		if _, err := h.eng.Send(t.Context(), ses, "find x", nil); err != nil {
+			t.Fatalf("Send: %v", err)
+		}
+	})
+	reqs := nonTitle(h.drv.Requests())
+	if len(reqs) != 2 {
+		t.Fatalf("model rounds = %d, want 2", len(reqs))
+	}
+	if n := countRole(reqs[0].Messages, llm.RoleAssistant); n != 0 {
+		t.Fatalf("round1 assistant count = %d, want 0", n)
+	}
+	r2 := reqs[1].Messages
+	if n := countRole(r2, llm.RoleAssistant); n != 1 {
+		t.Fatalf("round2 assistant count = %d, want 1", n)
+	}
+	if n := countRole(r2, llm.RoleTool); n != 1 {
+		t.Fatalf("round2 tool count = %d, want 1 (round1 result must be in history)", n)
+	}
+	var callID string
+	for _, m := range r2 {
+		if m.Role == llm.RoleAssistant && len(m.ToolCalls) > 0 {
+			callID = m.ToolCalls[0].ID
+		}
+	}
+	if callID != "g1" {
+		t.Fatalf("round2 assistant tool call id = %q, want g1", callID)
+	}
+}
