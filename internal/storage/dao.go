@@ -209,7 +209,7 @@ func (d *DB) ListMessages(sessionID string) ([]MessageRow, error) {
 	rows, err := d.Query(
 		`SELECT id, session_id, role, agent, cost, tokens, time_created, `+
 			`time_completed FROM message WHERE session_id=? `+
-			`ORDER BY time_created ASC`, sessionID)
+			`ORDER BY time_created ASC, rowid ASC`, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -283,7 +283,7 @@ func (d *DB) listPartsBy(messageID, typ string) ([]PartRow, error) {
 		q += ` AND type=?`
 		args = append(args, typ)
 	}
-	q += ` ORDER BY time_created ASC`
+	q += ` ORDER BY time_created ASC, rowid ASC`
 	rows, err := d.Query(q, args...)
 	if err != nil {
 		return nil, err
@@ -429,7 +429,7 @@ func (d *DB) ListPermissions(sessionID string, pendingOnly bool) ([]PermissionRo
 	if pendingOnly {
 		q += ` AND response IS NULL`
 	}
-	q += ` ORDER BY time_created ASC`
+	q += ` ORDER BY time_created ASC, rowid ASC`
 	rows, err := d.Query(q, sessionID)
 	if err != nil {
 		return nil, err
@@ -507,7 +507,7 @@ func (d *DB) GetTodos(sessionID string) ([]protocol.Todo, error) {
 func (d *DB) AlwaysRules(sessionID string) ([]protocol.Rule, error) {
 	rows, err := d.Query(
 		`SELECT action, always_json FROM permission WHERE session_id=? `+
-			`AND response='always' ORDER BY time_created ASC`, sessionID)
+			`AND response='always' ORDER BY time_created ASC, rowid ASC`, sessionID)
 	if err != nil {
 		return nil, err
 	}

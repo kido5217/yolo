@@ -490,3 +490,80 @@ func TestProtocolToPartSurfacesMarshalError(t *testing.T) {
 		t.Fatal("ProtocolToPart accepted an unmarshalable tool state (NaN) — the error must surface")
 	}
 }
+
+// TestSameMillisecondTiebreakRowid: same-time_created rows come back in
+// insertion (rowid) order — parts, messages, permissions (safety-4 +
+// database-6). Pre-fix the order is query-plan-dependent; the test pins
+// insertion order.
+func TestSameMillisecondTiebreakRowid(t *testing.T) {
+	db := openDB(t)
+	const ses, msg = "ses_t", "msg_a"
+	if err := db.CreateSession(storage.SessionRow{ID: ses, ProjectDir: "/p", Model: "kido/q", TimeCreated: 1, TimeUpdated: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CreateMessage(storage.MessageRow{ID: "msg_a", SessionID: ses, Role: "user", TimeCreated: 7}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CreateMessage(storage.MessageRow{ID: "msg_b", SessionID: ses, Role: "assistant", TimeCreated: 7}); err != nil {
+		t.Fatal(err)
+	}
+	must := func(id, text string) {
+		t.Helper()
+		if err := db.UpsertPart(storage.PartRow{ID: id, MessageID: msg, SessionID: ses, Type: "text", StateJSON: `{"text":"` + text + `"}`, TimeCreated: 9}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	must("prt_a", "a")
+	must("prt_b", "b")
+	if err := db.SavePermission(storage.PermissionRow{RequestID: "perm_a", SessionID: ses, Action: "bash", TimeCreated: 11}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SavePermission(storage.PermissionRow{RequestID: "perm_b", SessionID: ses, Action: "bash", TimeCreated: 11}); err != nil {
+		t.Fatal(err)
+	}
+
+	ids := func(rows []storage.PartRow) []string {
+		out := make([]string, len(rows))
+		for i, r := range rows {
+			out[i] = r.ID
+		}
+		return out
+	}
+	partRows, err := db.ListParts(msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := ids(partRows), []string{"prt_a", "prt_b"}; !slices.Equal(got, want) {
+		t.Fatalf("ListParts = %v, want %v (rowid tiebreak)", got, want)
+	}
+	msgRows, err := db.ListMessages(ses)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := ids2(msgRows), []string{"msg_a", "msg_b"}; !slices.Equal(got, want) {
+		t.Fatalf("ListMessages = %v, want %v (rowid tiebreak)", got, want)
+	}
+	permRows, err := db.ListPermissions(ses, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := ids3(permRows), []string{"perm_a", "perm_b"}; !slices.Equal(got, want) {
+		t.Fatalf("ListPermissions = %v, want %v (rowid tiebreak)", got, want)
+	}
+}
+
+func ids2(rows []storage.MessageRow) []string {
+	out := make([]string, len(rows))
+	for i, r := range rows {
+		out[i] = r.ID
+	}
+	return out
+}
+
+func ids3(rows []storage.PermissionRow) []string {
+	out := make([]string, len(rows))
+	for i, r := range rows {
+		out[i] = r.RequestID
+	}
+	return out
+}
