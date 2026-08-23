@@ -720,3 +720,40 @@ func TestShutdownAbortsActiveAndWaits(t *testing.T) {
 		t.Fatalf("held streams observing ctx cancellation = %d, want >= 2 (one per session)", got)
 	}
 }
+
+// TestTextDeltasEmitSSEAndPersistAtFinalize pins ⑩'s contract: a multi-delta
+// text stream emits one message.part.delta per delta (wire unchanged) and the
+// persisted part carries the full accumulated text. Per-delta DB writes are
+// removed; only finalization persists (verified by the wave-13 benchmark).
+func TestTextDeltasEmitSSEAndPersistAtFinalize(t *testing.T) {
+	h := newHarness(t)
+	h.build(t)
+	h.drv.Turns = []fakellm.Turn{{Parts: []llm.Part{
+		{Kind: "text", Text: "He"},
+		{Kind: "text", Text: "llo"},
+		{Kind: "text", Text: " world", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 3}},
+	}}}
+	ses := h.startSession(t, t.TempDir())
+	waitIdle(t, h, ses, func() {
+		if _, err := h.eng.Send(t.Context(), ses, "hi", nil); err != nil {
+			t.Fatalf("Send: %v", err)
+		}
+	})
+	if n := h.eventCount(func(e protocol.Event) bool { return e.Type == protocol.EventTypeMessagePartDelta }); n != 3 {
+		t.Fatalf("message.part.delta events = %d, want 3", n)
+	}
+	found := false
+	msgs, _ := h.db.ListMessages(ses)
+	for _, m := range msgs {
+		parts, _ := h.db.ListParts(m.ID)
+		for _, pr := range parts {
+			p, _ := storage.PartToProtocol(pr)
+			if p.Type == "text" && p.Text == "Hello world" {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("persisted text part \"Hello world\" not found (finalization must persist the full text)")
+	}
+}

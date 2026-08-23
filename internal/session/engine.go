@@ -690,16 +690,11 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 	var textSt, reasonSt textState
 
 	saveDelta := func(st *textState, kind, delta string) {
+		// ⑩: no per-delta DB write (O(n²) for long responses); the text
+		// accumulates in st.buf and finalizePart is the sole upsert. The
+		// wire (delta event) is unchanged; a crash mid-turn loses the
+		// in-flight text (accepted trade, spec §4).
 		st.buf.WriteString(delta)
-		p := protocol.Part{
-			ID: st.id, SessionID: t.sessionID, MessageID: r.id,
-			Type: kind, Text: st.buf.String(),
-			Time: protocol.PartTime{Start: st.start},
-		}
-		// Best-effort persistence: the delta still goes to the TUI.
-		if err := e.db.UpsertPart(storage.ProtocolToPart(p)); err != nil {
-			e.lg.Error("persist part failed", "part_id", p.ID, "session_id", t.sessionID, "error", err)
-		}
 		e.publish(protocol.EventTypeMessagePartDelta, protocol.MessagePartDeltaProps{
 			SessionID: t.sessionID, MessageID: r.id, PartID: st.id, Field: kind, Delta: delta,
 		})
@@ -713,10 +708,7 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 			Type: kind, Text: st.buf.String(),
 			Time: protocol.PartTime{Start: st.start},
 		}
-		// Best-effort persistence: the part-created event still goes out.
-		if err := e.db.UpsertPart(storage.ProtocolToPart(p)); err != nil {
-			e.lg.Error("persist part failed", "part_id", p.ID, "session_id", t.sessionID, "error", err)
-		}
+		// ⑩: created+delta go to the wire only; finalizePart persists.
 		e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
 			SessionID: t.sessionID, Part: p, Time: e.clock(),
 		})
