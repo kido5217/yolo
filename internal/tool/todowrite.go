@@ -70,7 +70,6 @@ func (todoWriteTool) External(raw json.RawMessage) ([]string, error) {
 }
 
 func (todoWriteTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output, error) {
-	_ = ctx
 	var in struct {
 		Todos []struct {
 			Content  string `json:"content"`
@@ -112,7 +111,7 @@ func (todoWriteTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Ou
 		env = &Env{}
 	}
 	if env.Storage != nil && env.SessionID != "" {
-		if err := env.Storage.SaveTodos(env.SessionID, todos); err != nil {
+		if err := env.Storage.SaveTodos(ctx, env.SessionID, todos); err != nil {
 			return Output{}, err
 		}
 	}

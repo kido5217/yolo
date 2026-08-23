@@ -16,7 +16,7 @@ import (
 	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/kido5217/yolo/internal/llm"
-	fakellm "github.com/kido5217/yolo/internal/llm/fake"
+	"github.com/kido5217/yolo/internal/llm/fake"
 	"github.com/kido5217/yolo/internal/server/testutil"
 	"github.com/kido5217/yolo/internal/tui"
 	"github.com/kido5217/yolo/internal/tui/client"
@@ -33,7 +33,7 @@ func stripANSITest(b []byte) string { return sgrTestRe.ReplaceAllString(string(b
 func TestHomeRendersListAndNewSession(t *testing.T) {
 	ts := testutil.Boot(t)
 	c := client.New(ts.URL, ts.Dir)
-	a := tui.NewApp(c, store.Store{}, "")
+	a := tui.NewApp(c, store.State{}, "")
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
@@ -65,7 +65,7 @@ func TestHomeRendersListAndNewSession(t *testing.T) {
 func TestResumeMissingSessionExitsWithError(t *testing.T) {
 	ts := testutil.Boot(t)
 	c := client.New(ts.URL, ts.Dir)
-	a := tui.NewApp(c, store.Store{}, "ses_missing")
+	a := tui.NewApp(c, store.State{}, "ses_missing")
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
@@ -84,8 +84,8 @@ func TestResumeMissingSessionExitsWithError(t *testing.T) {
 // completed-tool row is asserted deterministically (bubbletea coalesces view
 // changes between 60fps ticks, so a smaller terminal could scroll past it).
 func TestSessionStreamingViewport(t *testing.T) {
-	drv := fakellm.New(
-		fakellm.Turn{Parts: []llm.Part{
+	drv := fake.New(
+		fake.Turn{Parts: []llm.Part{
 			{Kind: "text", Text: "thinking"},
 			{
 				Kind:   "tool",
@@ -95,7 +95,7 @@ func TestSessionStreamingViewport(t *testing.T) {
 				Finish: "tool_calls",
 			},
 		}},
-		fakellm.Turn{Parts: []llm.Part{
+		fake.Turn{Parts: []llm.Part{
 			{Kind: "text", Text: "done", Finish: "stop"},
 		}},
 	)
@@ -109,7 +109,7 @@ func TestSessionStreamingViewport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	a := tui.NewApp(c, store.Store{}, ses.ID)
+	a := tui.NewApp(c, store.State{}, ses.ID)
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 10))
 
@@ -158,7 +158,7 @@ func TestPromptSendAndSlashMenu(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	a := tui.NewApp(c, store.Store{}, ses.ID)
+	a := tui.NewApp(c, store.State{}, ses.ID)
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
@@ -206,7 +206,7 @@ func TestPromptSendAndSlashMenu(t *testing.T) {
 // either from the store-side busy pre-check or the server 409 (client
 // ErrBusy); both carry the same text.
 func TestPromptSendWhileBusyToasts(t *testing.T) {
-	drv := fakellm.New(fakellm.Turn{
+	drv := fake.New(fake.Turn{
 		Parts: []llm.Part{{Kind: "text", Text: "working", Finish: "stop"}},
 		Delay: 5 * time.Second,
 	})
@@ -217,7 +217,7 @@ func TestPromptSendWhileBusyToasts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	a := tui.NewApp(c, store.Store{}, ses.ID)
+	a := tui.NewApp(c, store.State{}, ses.ID)
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
@@ -247,7 +247,7 @@ func TestPromptSendWhileBusyToasts(t *testing.T) {
 func TestPromptSlashNewWithoutSession(t *testing.T) {
 	ts := testutil.Boot(t)
 	c := client.New(ts.URL, ts.Dir)
-	a := tui.NewApp(c, store.Store{}, "")
+	a := tui.NewApp(c, store.State{}, "")
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 

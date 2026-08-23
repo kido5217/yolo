@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/kido5217/yolo/internal/llm"
-	fakellm "github.com/kido5217/yolo/internal/llm/fake"
+	"github.com/kido5217/yolo/internal/llm/fake"
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/session"
 	"github.com/kido5217/yolo/internal/storage"
@@ -22,7 +22,7 @@ func TestTransientRetrySucceeds(t *testing.T) {
 	h.build(t)
 	d := t.TempDir()
 	ses := h.startSession(t, d)
-	h.drv.Turns = []fakellm.Turn{
+	h.drv.Turns = []fake.Turn{
 		{Err: &llm.TransientError{Status: 429, Err: errors.New("slow down")}},
 		{Err: &llm.TransientError{Status: 503, Err: errors.New("unavailable")}},
 		{Parts: []llm.Part{{Kind: "text", Text: "ok", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}},
@@ -36,15 +36,15 @@ func TestTransientRetrySucceeds(t *testing.T) {
 	// delivery is channel-based and order-preserving, so once the turn's
 	// final idle event is buffered, every earlier event is too.
 	h.waitForEvent(t, func(e protocol.Event) bool {
-		return e.Type == protocol.EventTypeSessionStatus && statusType(t, e).Type == protocol.StatusIdle
+		return e.Type == protocol.EventTypeSessionStatus && statusType(t, e).Type == protocol.SessionStatusIdle
 	})
 	retries := h.eventCount(func(e protocol.Event) bool {
-		return e.Type == protocol.EventTypeSessionStatus && statusType(t, e).Type == protocol.StatusRetry
+		return e.Type == protocol.EventTypeSessionStatus && statusType(t, e).Type == protocol.SessionStatusRetry
 	})
 	if retries != 2 {
 		t.Fatalf("retry events = %d", retries)
 	}
-	msgs, _ := h.db.ListMessages(ses)
+	msgs, _ := h.db.ListMessages(t.Context(), ses)
 	if len(msgs) != 2 || msgs[1].Role != "assistant" {
 		t.Fatalf("turn lost data: %d", len(msgs))
 	}
@@ -59,7 +59,7 @@ func TestTransientGivesUpAfter4(t *testing.T) {
 	d := t.TempDir()
 	ses := h.startSession(t, d)
 	for i := 0; i < 4; i++ {
-		h.drv.Turns = append(h.drv.Turns, fakellm.Turn{Err: &llm.TransientError{Status: 500, Err: errors.New("boom")}})
+		h.drv.Turns = append(h.drv.Turns, fake.Turn{Err: &llm.TransientError{Status: 500, Err: errors.New("boom")}})
 	}
 	h.fastBackoff = true
 	done := make(chan struct{})
@@ -80,7 +80,7 @@ func TestTransientGivesUpAfter4(t *testing.T) {
 		t.Fatalf("attempts = %d, want 4", got)
 	}
 	// turn ended idle; assistant message exists (may be empty)
-	msgs, _ := h.db.ListMessages(ses)
+	msgs, _ := h.db.ListMessages(t.Context(), ses)
 	if len(msgs) < 2 {
 		t.Fatalf("messages = %d", len(msgs))
 	}
@@ -95,7 +95,7 @@ func TestMidStreamErrorNoRetry(t *testing.T) {
 	h.build(t)
 	d := t.TempDir()
 	ses := h.startSession(t, d)
-	h.drv.Turns = []fakellm.Turn{
+	h.drv.Turns = []fake.Turn{
 		{Parts: []llm.Part{
 			{Kind: "text", Text: "partial"},
 			{Kind: "text", Finish: "error", Err: errors.New("connection reset")},
@@ -129,7 +129,7 @@ func TestAbortMidTurn(t *testing.T) {
 	h.build(t)
 	d := t.TempDir()
 	ses := h.startSession(t, d)
-	h.drv.Turns = []fakellm.Turn{
+	h.drv.Turns = []fake.Turn{
 		{Parts: []llm.Part{
 			{Kind: "text", Text: "working"},
 			{Kind: "tool", Name: "bash", CallID: "t1", Text: `{"command":"sleep 10"}`, Finish: "tool_calls"},
@@ -144,10 +144,10 @@ func TestAbortMidTurn(t *testing.T) {
 		t.Fatal("abort rejected")
 	}
 	waitIdle(t, h, ses, func() {})
-	msgs, _ := h.db.ListMessages(ses)
+	msgs, _ := h.db.ListMessages(t.Context(), ses)
 	var state *protocol.ToolState
 	for _, m := range msgs {
-		parts, _ := h.db.ListToolParts(m.ID)
+		parts, _ := h.db.ListToolParts(t.Context(), m.ID)
 		for _, p := range parts {
 			pt, _ := storage.PartToProtocol(p)
 			if pt.Tool != "" {
@@ -173,15 +173,15 @@ func TestMaxToolStepsHalts(t *testing.T) {
 		parts = append(parts, llm.Part{Kind: "tool", Name: "glob", CallID: string(rune('a'+i%26)) + strconv.Itoa(i), Text: fmt.Sprintf(`{"pattern":"p%d*"}`, i), Finish: "tool_calls"})
 	}
 	parts = append(parts, llm.Part{Kind: "text", Text: "end", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}})
-	h.drv.Turns = []fakellm.Turn{{Parts: parts}, {Parts: []llm.Part{{Kind: "text", Text: "x", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}}}
+	h.drv.Turns = []fake.Turn{{Parts: parts}, {Parts: []llm.Part{{Kind: "text", Text: "x", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}}}
 	if _, err := h.eng.Send(context.Background(), ses, "spin", nil); err != nil {
 		t.Fatal(err)
 	}
 	waitIdle(t, h, ses, func() {})
 	var toolParts int
-	msgs, _ := h.db.ListMessages(ses)
+	msgs, _ := h.db.ListMessages(t.Context(), ses)
 	for _, m := range msgs {
-		partsDB, _ := h.db.ListToolParts(m.ID)
+		partsDB, _ := h.db.ListToolParts(t.Context(), m.ID)
 		toolParts += len(partsDB)
 	}
 	if toolParts != 50 {
@@ -232,7 +232,7 @@ func TestBudgetDropCancelsStreamContext(t *testing.T) {
 	d := t.TempDir()
 	ses := h.startSession(t, d)
 	// Suppress the title side-call so exactly one Stream happens.
-	if err := h.db.UpdateSession(ses, storage.SessionRow{Title: "leak"}); err != nil {
+	if err := h.db.UpdateSession(t.Context(), ses, storage.SessionRow{Title: "leak"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := h.eng.Send(context.Background(), ses, "spin", nil); err != nil {
@@ -252,14 +252,14 @@ func TestOverflowHardStop(t *testing.T) {
 	d := t.TempDir()
 	ses := h.startSession(t, d)
 	// model Context is 100000 (harness seam) — make usage.Input 100001
-	h.drv.Turns = []fakellm.Turn{
+	h.drv.Turns = []fake.Turn{
 		{Parts: []llm.Part{{Kind: "text", Text: "big", Finish: "stop", Usage: &llm.Usage{Input: 100001, Output: 5}}}},
 	}
 	if _, err := h.eng.Send(context.Background(), ses, "big", nil); err != nil {
 		t.Fatal(err)
 	}
 	waitIdle(t, h, ses, func() {})
-	msgs, _ := h.db.ListMessages(ses)
+	msgs, _ := h.db.ListMessages(t.Context(), ses)
 	// second turn attempt is NOT made (only 1 request logged)
 	if got := len(nonTitle(h.drv.Requests())); got != 1 {
 		t.Fatalf("requests = %d", got)
@@ -267,7 +267,7 @@ func TestOverflowHardStop(t *testing.T) {
 	// synthetic overflow part present on the assistant message
 	var found bool
 	for _, m := range msgs {
-		parts, _ := h.db.ListParts(m.ID)
+		parts, _ := h.db.ListParts(t.Context(), m.ID)
 		for _, p := range parts {
 			pt, _ := storage.PartToProtocol(p)
 			if pt.Text != "" && strings.Contains(pt.Text, "context overflow") {
@@ -285,7 +285,7 @@ func TestConcurrentSend409(t *testing.T) {
 	h.build(t)
 	d := t.TempDir()
 	ses := h.startSession(t, d)
-	h.drv.Turns = []fakellm.Turn{{Parts: []llm.Part{{Kind: "text", Text: "slow", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}}}
+	h.drv.Turns = []fake.Turn{{Parts: []llm.Part{{Kind: "text", Text: "slow", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}}}
 	h.slowTurn = true // harness seam: hold the turn 500ms via fake driver delay
 	_, err := h.eng.Send(context.Background(), ses, "one", nil)
 	if err != nil {
@@ -314,7 +314,7 @@ func TestOverflow400FromDriverEndsIdleWithNote(t *testing.T) {
 	h.build(t)
 	d := t.TempDir()
 	ses := h.startSession(t, d)
-	if err := h.db.UpdateSession(ses, storage.SessionRow{Title: "no-title"}); err != nil {
+	if err := h.db.UpdateSession(t.Context(), ses, storage.SessionRow{Title: "no-title"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := h.eng.Send(context.Background(), ses, "big", nil); err != nil {
@@ -322,9 +322,9 @@ func TestOverflow400FromDriverEndsIdleWithNote(t *testing.T) {
 	}
 	waitIdle(t, h, ses, func() {})
 	var found bool
-	msgs, _ := h.db.ListMessages(ses)
+	msgs, _ := h.db.ListMessages(t.Context(), ses)
 	for _, m := range msgs {
-		parts, _ := h.db.ListParts(m.ID)
+		parts, _ := h.db.ListParts(t.Context(), m.ID)
 		for _, p := range parts {
 			pt, _ := storage.PartToProtocol(p)
 			if strings.Contains(pt.Text, "context overflow") {
@@ -348,7 +348,7 @@ func TestNonOverflowAPIErrorFailsTurn(t *testing.T) {
 	h.build(t)
 	d := t.TempDir()
 	ses := h.startSession(t, d)
-	if err := h.db.UpdateSession(ses, storage.SessionRow{Title: "no-title"}); err != nil {
+	if err := h.db.UpdateSession(t.Context(), ses, storage.SessionRow{Title: "no-title"}); err != nil {
 		t.Fatal(err)
 	}
 	done := make(chan struct{})
@@ -368,10 +368,10 @@ func TestNonOverflowAPIErrorFailsTurn(t *testing.T) {
 	if turnErr == nil {
 		t.Fatal("turn ended without error")
 	}
-	msgs, _ := h.db.ListMessages(ses)
+	msgs, _ := h.db.ListMessages(t.Context(), ses)
 	overflow, realNote := false, false
 	for _, m := range msgs {
-		parts, _ := h.db.ListParts(m.ID)
+		parts, _ := h.db.ListParts(t.Context(), m.ID)
 		for _, p := range parts {
 			pt, _ := storage.PartToProtocol(p)
 			if strings.Contains(pt.Text, "context overflow") {

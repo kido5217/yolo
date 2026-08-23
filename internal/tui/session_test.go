@@ -13,8 +13,8 @@ import (
 // sessionFixture is the T24 render fixture: one user message plus one
 // assistant message with reasoning, three tool parts (completed, running,
 // error) and a text part, in that order.
-func sessionFixture() store.Store {
-	s := store.Store{Current: &protocol.Session{ID: "ses_0", Title: "T"}}
+func sessionFixture() store.State {
+	s := store.State{Current: &protocol.Session{ID: "ses_0", Title: "T"}}
 	s.Messages = []protocol.MessageWithParts{
 		{
 			Info:  protocol.Message{ID: "m1", Role: "user"},
@@ -43,7 +43,7 @@ func sessionFixture() store.Store {
 func TestRenderMessages(t *testing.T) {
 	tests := []struct {
 		name     string
-		mutate   func(s *store.Store)
+		mutate   func(s *store.State)
 		expanded map[string]bool
 		empty    bool // use the empty store instead of sessionFixture()
 		want     string
@@ -96,7 +96,7 @@ func TestRenderMessages(t *testing.T) {
 		},
 		{
 			name: "message error renders red line after parts",
-			mutate: func(s *store.Store) {
+			mutate: func(s *store.State) {
 				s.Messages[1].Info.Error = &protocol.MessageError{Type: "unknown", Message: "something broke"}
 			},
 			want: "User: hello\n" +
@@ -117,7 +117,7 @@ func TestRenderMessages(t *testing.T) {
 			// Upstream parity: a completed bash part shows its output
 			// inline (10-line head, "…" overflow hint) without alt+e.
 			name: "completed bash collapsed shows 10-line head preview",
-			mutate: func(s *store.Store) {
+			mutate: func(s *store.State) {
 				s.Messages[1].Parts[2].State = &protocol.ToolState{
 					Status: "completed", Title: "ls -la",
 					Output: "l1\nl2\nl3\nl4\nl5\nl6\nl7\nl8\nl9\nl10\nl11\nl12",
@@ -134,7 +134,7 @@ func TestRenderMessages(t *testing.T) {
 		},
 		{
 			name: "completed bash with short output shows it fully, no hint",
-			mutate: func(s *store.Store) {
+			mutate: func(s *store.State) {
 				s.Messages[1].Parts[2].State = &protocol.ToolState{
 					Status: "completed", Title: "ls -la", Output: "a\nb",
 				}
@@ -151,7 +151,7 @@ func TestRenderMessages(t *testing.T) {
 		{
 			// Expanded: the existing tail block alone (no duplicated preview).
 			name: "completed bash expanded shows tail block without preview",
-			mutate: func(s *store.Store) {
+			mutate: func(s *store.State) {
 				s.Messages[1].Parts[2].State = &protocol.ToolState{
 					Status: "completed", Title: "ls -la",
 					Output: "l1\nl2\nl3\nl4\nl5\nl6\nl7\nl8\nl9\nl10\nl11\nl12",
@@ -171,7 +171,7 @@ func TestRenderMessages(t *testing.T) {
 			// Regression: an expanded tool with empty output must not drop the
 			// parts rendered after it (the old `break` escaped the parts loop).
 			name: "expanded empty-output tool keeps later parts",
-			mutate: func(s *store.Store) {
+			mutate: func(s *store.State) {
 				s.Messages[1].Parts[1].State.Output = ""
 			},
 			expanded: map[string]bool{"t1": true},
@@ -188,7 +188,7 @@ func TestRenderMessages(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s := sessionFixture()
 			if tt.empty {
-				s = store.Store{Current: &protocol.Session{ID: "ses_0"}}
+				s = store.State{Current: &protocol.Session{ID: "ses_0"}}
 			}
 			if tt.mutate != nil {
 				tt.mutate(&s)
@@ -202,8 +202,8 @@ func TestRenderMessages(t *testing.T) {
 }
 
 func TestRenderMessagesTitleFallbacks(t *testing.T) {
-	one := func(parts ...protocol.Part) store.Store {
-		s := store.Store{Current: &protocol.Session{ID: "ses_0"}}
+	one := func(parts ...protocol.Part) store.State {
+		s := store.State{Current: &protocol.Session{ID: "ses_0"}}
 		s.Messages = []protocol.MessageWithParts{
 			{Info: protocol.Message{ID: "m1", Role: "assistant"}, Parts: parts},
 		}
@@ -211,7 +211,7 @@ func TestRenderMessagesTitleFallbacks(t *testing.T) {
 	}
 	tests := []struct {
 		name string
-		s    store.Store
+		s    store.State
 		want string
 	}{
 		{
@@ -240,7 +240,7 @@ func TestRenderMessagesTitleFallbacks(t *testing.T) {
 	}
 }
 
-func testSessionApp(s store.Store) *recApp {
+func testSessionApp(s store.State) *recApp {
 	return newRecApp(client.New("http://127.0.0.1:9", ""), s, "ses_0")
 }
 
@@ -260,7 +260,7 @@ func TestSessionKeys(t *testing.T) {
 	})
 
 	t.Run("alt+e is a no-op without tool parts", func(t *testing.T) {
-		s := store.Store{
+		s := store.State{
 			Current: &protocol.Session{ID: "ses_0"},
 			Messages: []protocol.MessageWithParts{{
 				Info:  protocol.Message{ID: "m1", Role: "assistant"},
@@ -288,7 +288,7 @@ func TestSessionKeys(t *testing.T) {
 
 	t.Run("esc while busy aborts and stays on session", func(t *testing.T) {
 		a := testSessionApp(sessionFixture())
-		a.store.Status = protocol.SessionStatus{Type: protocol.StatusBusy}
+		a.store.Status = protocol.SessionStatus{Type: protocol.SessionStatusBusy}
 		a.handleKey(press(tea.KeyEscape))
 		if a.route != routeSession || a.curSessionID != "ses_0" {
 			t.Fatalf("route=%v cur=%s, want routeSession/ses_0", a.route, a.curSessionID)

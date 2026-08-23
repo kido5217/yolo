@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -324,5 +325,46 @@ func TestBashTimeoutRejectedAndClamped(t *testing.T) {
 				t.Fatalf("timeout %v: ms = %d, want %d", c.timeout, gotMS, c.wantMS)
 			}
 		})
+	}
+}
+
+// noopWriteCloser is a WriteCloser that swallows; it stands in for the
+// shell's stdin in reapProc tests (the plan's io.NopCloser(io.Discard) is
+// a ReadCloser — deviation 103).
+type noopWriteCloser struct{}
+
+func (noopWriteCloser) Write(p []byte) (int, error) { return len(p), nil }
+func (noopWriteCloser) Close() error                { return nil }
+
+// TestReapProcWaitFailureIsNegative: a Wait() that fails without an exit
+// code (non-*exec.ExitError) yields -1 — the value the Exec markerless-EOF
+// branch turns into a tool error (safety-4).
+func TestReapProcWaitFailureIsNegative(t *testing.T) {
+	cmd := exec.Command("true")
+	if err := cmd.Run(); err != nil {
+		t.Fatal(err)
+	}
+	proc := &shellProc{
+		cmd:   cmd, // already reaped: the second Wait fails without an ExitError
+		stdin: noopWriteCloser{},
+		stop:  make(chan struct{}),
+	}
+	if code := reapProc(proc, false); code != -1 {
+		t.Fatalf("reapProc on an already-waited cmd = %d, want -1", code)
+	}
+}
+
+// TestShellSelfKillReportsExitCode: a command that kills the shell process
+// (marker never emitted — the markerless-EOF branch) reports the real signal
+// exit code, not an error and not -1.
+func TestShellSelfKillReportsExitCode(t *testing.T) {
+	s := NewShell(t.TempDir(), Limits{})
+	t.Cleanup(func() { _ = s.Close() })
+	code, out, err := s.Exec(context.Background(), "kill -9 $$", 0, nil)
+	if err != nil {
+		t.Fatalf("Exec self-kill: err = %v, want nil (real exit codes are not errors)", err)
+	}
+	if code == 0 || code == -1 {
+		t.Fatalf("Exec self-kill code = %d (out=%q), want the signal exit code (137)", code, out)
 	}
 }

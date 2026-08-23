@@ -14,7 +14,7 @@ import (
 	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/kido5217/yolo/internal/llm"
-	fakellm "github.com/kido5217/yolo/internal/llm/fake"
+	"github.com/kido5217/yolo/internal/llm/fake"
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/server/testutil"
 	"github.com/kido5217/yolo/internal/tui/client"
@@ -35,8 +35,8 @@ func suiteType(tm *teatest.TestModel, s string) {
 // full sequence is asserted from the captured output stream (v2 teatest
 // drains per WaitFor, deviation 50).
 func TestTUIFullTurn(t *testing.T) {
-	drv := fakellm.New(
-		fakellm.Turn{Parts: []llm.Part{
+	drv := fake.New(
+		fake.Turn{Parts: []llm.Part{
 			{Kind: "reasoning", Text: "let me think"},
 			{Kind: "text", Text: "thinking now"},
 			{
@@ -47,14 +47,14 @@ func TestTUIFullTurn(t *testing.T) {
 				Finish: "tool_calls",
 			},
 		}},
-		fakellm.Turn{Parts: []llm.Part{{Kind: "text", Text: "all done"}}},
+		fake.Turn{Parts: []llm.Part{{Kind: "text", Text: "all done"}}},
 	)
 	ts := testutil.BootWithDriver(t, drv)
 	if err := os.WriteFile(filepath.Join(ts.Dir, "hello.txt"), []byte("world\n"), 0o644); err != nil {
 		t.Fatalf("write fixture: %v", err)
 	}
 	c := client.New(ts.URL, ts.Dir)
-	a := newRecApp(c, store.Store{}, "")
+	a := newRecApp(c, store.State{}, "")
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
@@ -101,7 +101,7 @@ func TestTUIFullTurn(t *testing.T) {
 	// the v2 renderer cell-diffs frames, and on the alt screen's fixed
 	// frame the unchanged tail of the marker line is never re-emitted, so
 	// the contiguous "▾ think" line cannot appear in the byte stream.
-	for _, w := range []string{"\u25BE", "let me think", "world", "quit?", "[y/n]"} {
+	for _, w := range []string{"\u25BE", "let me think", "world", "quit?", "[Y/n]"} {
 		if !strings.Contains(tsTail, w) {
 			t.Errorf("final output missing %q:\n%s", w, tsTail)
 		}
@@ -112,17 +112,17 @@ func TestTUIFullTurn(t *testing.T) {
 // caller drives n → type → enter itself.
 func permFlowHarness(t *testing.T) (*teatest.TestModel, *testutil.TestServer) {
 	t.Helper()
-	drv := fakellm.New(
-		fakellm.Turn{Parts: []llm.Part{
+	drv := fake.New(
+		fake.Turn{Parts: []llm.Part{
 			{Kind: "text", Text: "working"},
 			{Kind: "tool", Name: "bash", CallID: "call_1", Args: json.RawMessage(`{"command":"echo hi"}`), Finish: "tool_calls"},
 		}},
-		fakellm.Turn{Parts: []llm.Part{{Kind: "text", Text: "all done"}}},
+		fake.Turn{Parts: []llm.Part{{Kind: "text", Text: "all done"}}},
 	)
 	cfg := &protocol.Config{Permission: map[string]any{"bash": "ask"}}
 	ts := testutil.BootWithDriverConfig(t, drv, cfg)
 	c := client.New(ts.URL, ts.Dir)
-	a := newRecApp(c, store.Store{}, "")
+	a := newRecApp(c, store.State{}, "")
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a,
 		teatest.WithInitialTermSize(80, 24),
@@ -223,7 +223,7 @@ func TestTUIPermissionFlow(t *testing.T) {
 func TestTUIDialogs(t *testing.T) {
 	ts := testutil.Boot(t)
 	c := client.New(ts.URL, ts.Dir)
-	a := newRecApp(c, store.Store{}, "")
+	a := newRecApp(c, store.State{}, "")
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
@@ -255,10 +255,10 @@ func TestTUIDialogs(t *testing.T) {
 	capture("Help", "| enter | send prompt |", "pgup/pgdn scroll \u00B7 \\+enter newline")
 	tm.Send(press(tea.KeyEscape))
 	tm.Send(ctrlCKey)
-	capture("quit? [y/n]")
+	capture("quit? [Y/n]")
 
 	last := -1
-	for _, w := range []string{"Model", "Agents", "Help", "quit? [y/n]"} {
+	for _, w := range []string{"Model", "Agents", "Help", "quit? [Y/n]"} {
 		i := strings.Index(seq.String(), w)
 		if i < 0 || i <= last {
 			t.Fatalf("dialog sequence out of order at %q (idx=%d, last=%d)\n%s", w, i, last, seq.String())

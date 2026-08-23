@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/kido5217/yolo/internal/llm"
-	fakellm "github.com/kido5217/yolo/internal/llm/fake"
+	"github.com/kido5217/yolo/internal/llm/fake"
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/storage"
 )
@@ -24,7 +24,7 @@ type toolPart struct {
 // toolParts lists the session's tool parts (all messages), oldest first.
 func toolParts(t *testing.T, h *harness, ses string) []toolPart {
 	t.Helper()
-	msgs, err := h.db.ListMessages(ses)
+	msgs, err := h.db.ListMessages(t.Context(), ses)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +33,7 @@ func toolParts(t *testing.T, h *harness, ses string) []toolPart {
 		if m.Role != "assistant" {
 			continue
 		}
-		parts, err := h.db.ListParts(m.ID)
+		parts, err := h.db.ListParts(t.Context(), m.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -90,7 +90,7 @@ func TestPermissionDenyStopsToolButNotTurn(t *testing.T) {
 	ses := h.startSession(t, d)
 	// build agent, config deny rule: bash "cat *" is denied.
 	h.cfgPermission = []protocol.Rule{{Permission: "bash", Pattern: "cat *", Action: "deny"}}
-	h.drv.Turns = []fakellm.Turn{
+	h.drv.Turns = []fake.Turn{
 		{Parts: []llm.Part{
 			{Kind: "tool", Name: "bash", CallID: "c1", Text: `{"command":"cat secret.txt"}`, Finish: "tool_calls"},
 		}},
@@ -114,7 +114,7 @@ func TestPermissionDenyStopsToolButNotTurn(t *testing.T) {
 		t.Fatalf("error = %q", st.Error)
 	}
 	// the turn continued to the model's next round.
-	msgs, err := h.db.ListMessages(ses)
+	msgs, err := h.db.ListMessages(t.Context(), ses)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestPermissionAlwaysPersistsAndSkipsNext(t *testing.T) {
 	readCall := func(callID string) llm.Part {
 		return llm.Part{Kind: "tool", Name: "read", CallID: callID, Text: fmt.Sprintf(`{"filePath":%q}`, fp), Finish: "tool_calls"}
 	}
-	h.drv.Turns = []fakellm.Turn{
+	h.drv.Turns = []fake.Turn{
 		{Parts: []llm.Part{readCall("c1")}},
 		{Parts: []llm.Part{readCall("c2")}},
 		{Parts: []llm.Part{{Kind: "text", Text: "done", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}},
@@ -161,7 +161,7 @@ func TestPermissionAlwaysPersistsAndSkipsNext(t *testing.T) {
 	if len(perms) != 1 || perms[0] != "read" {
 		t.Fatalf("asked permissions = %v, want [read]", perms)
 	}
-	rules, err := h.db.AlwaysRules(ses)
+	rules, err := h.db.AlwaysRules(t.Context(), ses)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +181,7 @@ func TestHiddenToolNotSentToModel(t *testing.T) {
 	h.build(t)
 	// wildcard-deny as the LAST edit rule hides both edit and write.
 	h.cfgPermission = []protocol.Rule{{Permission: "edit", Pattern: "*", Action: "deny"}}
-	h.drv.Turns = []fakellm.Turn{{Parts: []llm.Part{{Kind: "text", Text: "x", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}}}
+	h.drv.Turns = []fake.Turn{{Parts: []llm.Part{{Kind: "text", Text: "x", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}}}
 	d := t.TempDir()
 	ses := h.startSession(t, d)
 	waitIdle(t, h, ses, func() {
@@ -214,7 +214,7 @@ func TestDoomLoopThirdIdenticalAsks(t *testing.T) {
 	globCall := func(callID string) llm.Part {
 		return llm.Part{Kind: "tool", Name: "glob", CallID: callID, Text: `{"pattern":"x*"}`, Finish: "tool_calls"}
 	}
-	h.drv.Turns = []fakellm.Turn{
+	h.drv.Turns = []fake.Turn{
 		{Parts: []llm.Part{globCall("a"), globCall("b"), globCall("c"), globCall("d")}},
 		{Parts: []llm.Part{{Kind: "text", Text: "done", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}},
 	}
@@ -271,7 +271,7 @@ func TestPermissionAbortDuringAskAbortsTool(t *testing.T) {
 	ses := h.startSession(t, d) // agent build: read "*.env" ASKS (base matrix)
 	fp := filepath.Join(d, ".env")
 	writeFile(t, fp, "SECRET=1")
-	h.drv.Turns = []fakellm.Turn{
+	h.drv.Turns = []fake.Turn{
 		{Parts: []llm.Part{
 			{Kind: "tool", Name: "read", CallID: "c1", Text: fmt.Sprintf(`{"filePath":%q}`, fp), Finish: "tool_calls"},
 		}},
@@ -306,7 +306,7 @@ func TestPermissionAbortDuringAskAbortsTool(t *testing.T) {
 		t.Fatalf("Send: %v", sendErr)
 	}
 	deadline := time.Now().Add(5 * time.Second)
-	for h.eng.Status(ses) == protocol.StatusBusy {
+	for h.eng.Status(ses) == protocol.SessionStatusBusy {
 		if time.Now().After(deadline) {
 			t.Fatal("engine did not go idle after abort")
 		}

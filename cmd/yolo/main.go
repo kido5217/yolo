@@ -78,7 +78,7 @@ func run(args []string) int {
 	}
 	switch args[0] {
 	case "help", "-h", "--help":
-		usage(os.Stderr)
+		usage(os.Stdout)
 		return 0
 	case "serve":
 		return serveCmd(args[1:])
@@ -316,9 +316,14 @@ func tuiCmd(args []string) int {
 		}
 	}
 
-	app := tui.NewApp(cl, store.Store{}, sessionID)
+	app := tui.NewApp(cl, store.State{}, sessionID)
 	deps.Log.Info("tui start", "workdir", wd)
 	_, runErr := tea.NewProgram(app).Run()
+	if runErr != nil {
+		// One line to stderr (no stack): a TUI start failure must be
+		// visible in the dead terminal, not only in the log (row 12).
+		fmt.Fprintf(os.Stderr, "yolo: %v\n", runErr)
+	}
 	deps.Log.Info("tui end", "exit_code", tuiExit(runErr))
 	app.Close()
 	drain(deps, srv)
@@ -335,14 +340,31 @@ func tuiExit(err error) int {
 	return 1
 }
 
+// drainCtx stops active turns and the listener within the caller's ctx
+// budget, then closes the logger.
+func drainCtx(deps *server.Deps, srv *server.Server, ctx context.Context) {
+	deps.Engine.Shutdown(ctx)
+	srv.Shutdown(ctx)
+	deps.Log.Close()
+}
+
 // drain stops active turns and the listener within one 5 s budget, then
 // closes the logger (process-exit path for serve and TUI mode).
 func drain(deps *server.Deps, srv *server.Server) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	deps.Engine.Shutdown(ctx)
-	srv.Shutdown(ctx)
-	deps.Log.Close()
+	drainCtx(deps, srv, ctx)
+}
+
+// armForceKill blocks on the next signal and cancels the drain ctx
+// immediately (a second signal force-kills instead of waiting out the
+// 5 s budget, concurrency-5).
+func armForceKill(lg *log.Logger, stop <-chan os.Signal, cancel context.CancelFunc) {
+	go func() {
+		sig2 := <-stop
+		lg.Info("second signal, force-killing", "signal", sig2.String())
+		cancel()
+	}()
 }
 
 func serveCmd(args []string) int {
@@ -353,6 +375,11 @@ func serveCmd(args []string) int {
 	// ExitOnError: Parse prints and os.Exit's on bad flags, never returns
 	// a non-nil error.
 	_ = fs.Parse(args)
+	if fs.NArg() > 0 {
+		fmt.Fprintf(os.Stderr, "yolo serve: unexpected argument %q\n", fs.Arg(0))
+		usage(os.Stderr)
+		return 2
+	}
 	if *showVer || *showVerLong {
 		printVersion()
 		return 0
@@ -385,7 +412,10 @@ func serveCmd(args []string) int {
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-stop
 	deps.Log.Info("received signal, shutting down", "signal", sig.String())
-	drain(deps, srv)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	armForceKill(deps.Log, stop, cancel)
+	drainCtx(deps, srv, ctx)
 	return 0
 }
 
@@ -404,6 +434,10 @@ func authCmd(args []string) int {
 
 	switch sub {
 	case "list":
+		if len(rest) != 0 {
+			fmt.Fprintf(os.Stderr, "yolo auth list: unexpected argument %q\n", rest[0])
+			return authUsage()
+		}
 		s, err := loadStore()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "auth list:", err)
@@ -423,18 +457,29 @@ func authCmd(args []string) int {
 		}
 		return 0
 	case "add":
-		if len(rest) < 1 {
+		if len(rest) < 1 || len(rest) > 2 {
+			if len(rest) > 2 {
+				fmt.Fprintf(os.Stderr, "yolo auth add: unexpected argument %q\n", rest[2])
+			}
 			return authUsage()
 		}
 		provider := rest[0]
-		key := ""
+		var key string
 		if len(rest) >= 2 {
-			key = rest[1]
+			key = strings.TrimSpace(rest[1])
 		} else {
 			// no new dep: plain stdin prompt, echo NOT disabled (documented limitation)
 			fmt.Fprint(os.Stderr, "API key: ")
-			line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+			line, rerr := bufio.NewReader(os.Stdin).ReadString('\n')
+			if rerr != nil {
+				fmt.Fprintf(os.Stderr, "auth add: reading key: %v\n", rerr)
+				return 1
+			}
 			key = strings.TrimSpace(line)
+		}
+		if key == "" {
+			fmt.Fprintln(os.Stderr, "auth add: key must not be empty")
+			return 1
 		}
 		s, err := loadStore()
 		if err != nil {
@@ -448,7 +493,10 @@ func authCmd(args []string) int {
 		}
 		return 0
 	case "remove":
-		if len(rest) < 1 {
+		if len(rest) < 1 || len(rest) > 1 {
+			if len(rest) > 1 {
+				fmt.Fprintf(os.Stderr, "yolo auth remove: unexpected argument %q\n", rest[1])
+			}
 			return authUsage()
 		}
 		s, err := loadStore()

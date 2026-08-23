@@ -30,9 +30,9 @@ func (a *App) spinFrame() string {
 // "retry n: msg" while retrying; empty when idle.
 func (a *App) statusSeg() string {
 	switch a.store.Status.Type {
-	case protocol.StatusBusy:
+	case protocol.SessionStatusBusy:
 		return a.spinFrame() + " busy"
-	case protocol.StatusRetry:
+	case protocol.SessionStatusRetry:
 		return a.spinFrame() + fmt.Sprintf(" retry %d: %s", a.store.Status.Attempt, a.store.Status.Message)
 	}
 	return ""
@@ -79,9 +79,12 @@ func (a *App) footerView() string {
 		"↑" + strconv.FormatInt(tokens.Input, 10) + " ↓" + strconv.FormatInt(tokens.Output, 10),
 		fmt.Sprintf("$%.4f", cost),
 	}
-	if a.store.Live {
+	switch {
+	case a.resyncing:
+		segs = append(segs, errRed.Render("◌ reconnecting"))
+	case a.store.Live:
 		segs = append(segs, okGreen.Render("● live"))
-	} else {
+	default:
 		segs = append(segs, errRed.Render("○ off"))
 	}
 	if seg := a.statusSeg(); seg != "" {

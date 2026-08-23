@@ -49,8 +49,8 @@ func (s *Server) providerEntries(dir string) ([]protocol.Provider, error) {
 	out := make([]protocol.Provider, 0, len(cfg.Provider)+2)
 	for _, p := range s.Prov.List() {
 		seen[p.ID] = true
-		st, _ := s.authState(p.ID, p.Auth.KeyRequired, store, cfg)
-		p.Auth = &protocol.ProviderAuth{Type: "api", Status: st, KeyRequired: p.Auth.KeyRequired}
+		st, _ := s.authState(p.ID, p.Auth.RequiresKey, store, cfg)
+		p.Auth = &protocol.ProviderAuth{Type: "api", Status: st, RequiresKey: p.Auth.RequiresKey}
 		if len(p.Env) == 0 {
 			p.Env = []string{auth.EnvName(p.ID)}
 		}
@@ -65,8 +65,8 @@ func (s *Server) providerEntries(dir string) ([]protocol.Provider, error) {
 	sort.Strings(ids)
 	for _, id := range ids {
 		p := provider.FromConfig(id, cfg.Provider[id])
-		st, _ := s.authState(id, p.Auth.KeyRequired, store, cfg)
-		p.Auth = &protocol.ProviderAuth{Type: "api", Status: st, KeyRequired: p.Auth.KeyRequired}
+		st, _ := s.authState(id, p.Auth.RequiresKey, store, cfg)
+		p.Auth = &protocol.ProviderAuth{Type: "api", Status: st, RequiresKey: p.Auth.RequiresKey}
 		if len(p.Env) == 0 {
 			p.Env = []string{auth.EnvName(id)}
 		}
@@ -132,8 +132,11 @@ func (s *Server) handleProvider(w http.ResponseWriter, r *http.Request) {
 
 // handleProviderAuth is the key source view: {key_required, env, status,
 // source} per provider (the two pinned keys plus the loaded source).
-func (s *Server) handleProviderAuth(w http.ResponseWriter, _ *http.Request) {
-	dir := s.WorkDir
+func (s *Server) handleProviderAuth(w http.ResponseWriter, r *http.Request) {
+	dir, ok := s.scoped(w, r)
+	if !ok {
+		return
+	}
 	entries, err := s.providerEntries(dir)
 	if err != nil {
 		s.fail(w, http.StatusInternalServerError, "list providers", err)
@@ -152,9 +155,9 @@ func (s *Server) handleProviderAuth(w http.ResponseWriter, _ *http.Request) {
 	store := s.authSnapshot()
 	out := make(map[string]map[string]any, len(entries))
 	for _, p := range entries {
-		st, src := s.authState(p.ID, p.Auth.KeyRequired, store, cfg)
+		st, src := s.authState(p.ID, p.Auth.RequiresKey, store, cfg)
 		out[p.ID] = map[string]any{
-			"key_required": p.Auth.KeyRequired,
+			"key_required": p.Auth.RequiresKey,
 			"env":          p.Env,
 			"status":       st,
 			"source":       src,
@@ -362,14 +365,14 @@ func (s *Server) handlePermissionList(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rows, err := s.DB.ListSessions(dir, 0)
+	rows, err := s.DB.ListSessions(r.Context(), dir, 0)
 	if err != nil {
 		s.fail(w, http.StatusInternalServerError, "list sessions", err)
 		return
 	}
 	out := make([]protocol.PermissionAskedProps, 0)
 	for _, row := range rows {
-		reqs, err := s.Perm.Pending(row.ID)
+		reqs, err := s.Perm.Pending(r.Context(), row.ID)
 		if err != nil {
 			s.fail(w, http.StatusInternalServerError, "list permissions", err)
 			return
@@ -419,7 +422,7 @@ func (s *Server) handlePermissionReply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("requestID")
-	if err := s.Perm.Reply(id, body.Response); err != nil {
+	if err := s.Perm.Reply(r.Context(), id, body.Response); err != nil {
 		if errors.Is(err, permission.ErrNoPending) {
 			envelope(w, http.StatusNotFound, "no pending permission request", nil)
 			return

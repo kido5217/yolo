@@ -22,7 +22,7 @@ var sseDataPrefix = []byte("data: ")
 // after that. The resync channel receives a ping on every drop: events
 // published while the stream was down are lost (the bus has no replay), so
 // the caller must re-hydrate its state over REST on each ping.
-func (c *Client) Events(ctx context.Context) (chan protocol.Event, chan struct{}) {
+func (c *Service) Events(ctx context.Context) (chan protocol.Event, chan struct{}) {
 	ch := make(chan protocol.Event, 4)
 	resync := make(chan struct{}, 4)
 	go func() {
@@ -54,7 +54,7 @@ func (c *Client) Events(ctx context.Context) (chan protocol.Event, chan struct{}
 // stream reads one /event connection to exhaustion. It returns nil when ctx
 // is done (the caller stops; the channel closes) and an error otherwise (the
 // caller backs off and reconnects).
-func (c *Client) stream(ctx context.Context, ch chan<- protocol.Event) error {
+func (c *Service) stream(ctx context.Context, ch chan<- protocol.Event) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+"/event", nil)
 	if err != nil {
 		return err
@@ -69,7 +69,11 @@ func (c *Client) stream(ctx context.Context, ch chan<- protocol.Event) error {
 		return fmt.Errorf("event stream: status %d", resp.StatusCode)
 	}
 	sc := bufio.NewScanner(resp.Body)
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	// 4 MiB max token: a single data: line carries one whole event JSON;
+	// escaped tool output (~700 KB+ raw, ≥2× when escaped) exceeded the
+	// former 1 MiB cap (safety-2). Overflow still aborts the stream and
+	// fires the resync ping — bounded by the re-hydrate.
+	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for sc.Scan() {
 		// sc.Bytes() is valid until the next Scan; unmarshalling copies the
 		// payload out, so no per-line []byte conversion is needed.

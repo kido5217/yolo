@@ -55,8 +55,9 @@ contracts.
   (golang-database); errors wrapped with `%w` (golang-error-handling).
 - embed quirk (root "Commands & verification"): `import _ "embed"` pattern —
   see `internal/tool/read.go`.
-- Pinned dep set (root "Project"): no new module without an explicit user
-  call.
+- Dependency policy (root "Project"): allowlist + agent-proposable — a new
+  module needs a dep proposal (extensive-web-search-backed evidence) and
+  explicit user approval before it lands.
 
 ## Verification
 

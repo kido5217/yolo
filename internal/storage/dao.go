@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -66,8 +67,8 @@ func nullPtr(p *int64) any {
 
 // CreateSession inserts a session row; an empty agent takes the column
 // default "build" (agentOrDefault), mirroring the message side.
-func (d *DB) CreateSession(r SessionRow) error {
-	_, err := d.Exec(
+func (d *DB) CreateSession(ctx context.Context, r SessionRow) error {
+	_, err := d.ExecContext(ctx,
 		`INSERT INTO session (id, project_dir, title, model, agent, cost, `+
 			`time_created, time_updated) VALUES (?,?,?,?,?,?,?,?)`,
 		r.ID, r.ProjectDir, r.Title, r.Model, agentOrDefault(r.Agent), r.Cost, r.TimeCreated, r.TimeUpdated)
@@ -75,9 +76,9 @@ func (d *DB) CreateSession(r SessionRow) error {
 }
 
 // GetSession fetches one session; missing id -> ErrNotFound.
-func (d *DB) GetSession(id string) (SessionRow, error) {
+func (d *DB) GetSession(ctx context.Context, id string) (SessionRow, error) {
 	var r SessionRow
-	err := d.QueryRow(
+	err := d.QueryRowContext(ctx,
 		`SELECT id, project_dir, title, model, agent, cost, time_created, time_updated FROM session WHERE id=?`, id).
 		Scan(&r.ID, &r.ProjectDir, &r.Title, &r.Model, &r.Agent, &r.Cost, &r.TimeCreated, &r.TimeUpdated)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -90,7 +91,7 @@ func (d *DB) GetSession(id string) (SessionRow, error) {
 }
 
 // ListSessions lists a project directory's sessions, newest (time_updated) first.
-func (d *DB) ListSessions(projectDir string, limit int) ([]SessionRow, error) {
+func (d *DB) ListSessions(ctx context.Context, projectDir string, limit int) ([]SessionRow, error) {
 	q := `SELECT id, project_dir, title, model, agent, cost, time_created, ` +
 		`time_updated FROM session WHERE project_dir=? ORDER BY time_updated DESC`
 	args := []any{projectDir}
@@ -98,7 +99,7 @@ func (d *DB) ListSessions(projectDir string, limit int) ([]SessionRow, error) {
 		q += ` LIMIT ?`
 		args = append(args, limit)
 	}
-	rows, err := d.Query(q, args...)
+	rows, err := d.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +119,7 @@ func (d *DB) ListSessions(projectDir string, limit int) ([]SessionRow, error) {
 }
 
 // UpdateSession patches a session; zero-valued fields are left untouched.
-func (d *DB) UpdateSession(id string, patch SessionRow) error {
+func (d *DB) UpdateSession(ctx context.Context, id string, patch SessionRow) error {
 	sets := []string{}
 	args := []any{}
 	if patch.ProjectDir != "" {
@@ -150,29 +151,33 @@ func (d *DB) UpdateSession(id string, patch SessionRow) error {
 	}
 	query := `UPDATE session SET ` + strings.Join(sets, ",") + ` WHERE id=?`
 	args = append(args, id)
-	res, err := d.Exec(query, args...)
+	res, err := d.ExecContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
 		return ErrNotFound
 	}
 	return nil
 }
 
 // DeleteSession removes a session (messages/parts cascade via FK).
-func (d *DB) DeleteSession(id string) error {
-	_, err := d.Exec(`DELETE FROM session WHERE id=?`, id)
+func (d *DB) DeleteSession(ctx context.Context, id string) error {
+	_, err := d.ExecContext(ctx, `DELETE FROM session WHERE id=?`, id)
 	return err
 }
 
 // CreateMessage inserts a message row.
-func (d *DB) CreateMessage(r MessageRow) error {
+func (d *DB) CreateMessage(ctx context.Context, r MessageRow) error {
 	tok, err := json.Marshal(r.Tokens)
 	if err != nil {
 		return err
 	}
-	_, err = d.Exec(
+	_, err = d.ExecContext(ctx,
 		`INSERT INTO message (id, session_id, role, agent, cost, tokens, `+
 			`time_created, time_completed) VALUES (?,?,?,?,?,?,?,?)`,
 		r.ID, r.SessionID, r.Role, agentOrDefault(r.Agent), r.Cost, string(tok), r.TimeCreated, nullPtr(r.TimeCompleted))
@@ -180,36 +185,40 @@ func (d *DB) CreateMessage(r MessageRow) error {
 }
 
 // UpdateMessage rewrites a message row.
-func (d *DB) UpdateMessage(r MessageRow) error {
+func (d *DB) UpdateMessage(ctx context.Context, r MessageRow) error {
 	tok, err := json.Marshal(r.Tokens)
 	if err != nil {
 		return err
 	}
-	res, err := d.Exec(
+	res, err := d.ExecContext(ctx,
 		`UPDATE message SET session_id=?, role=?, agent=?, cost=?, `+
 			`tokens=?, time_created=?, time_completed=? WHERE id=?`,
 		r.SessionID, r.Role, agentOrDefault(r.Agent), r.Cost, string(tok), r.TimeCreated, nullPtr(r.TimeCompleted), r.ID)
 	if err != nil {
 		return err
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
 		return ErrNotFound
 	}
 	return nil
 }
 
 // DeleteMessage removes a message (parts cascade via FK).
-func (d *DB) DeleteMessage(id string) error {
-	_, err := d.Exec(`DELETE FROM message WHERE id=?`, id)
+func (d *DB) DeleteMessage(ctx context.Context, id string) error {
+	_, err := d.ExecContext(ctx, `DELETE FROM message WHERE id=?`, id)
 	return err
 }
 
 // ListMessages lists a session's messages, earliest first.
-func (d *DB) ListMessages(sessionID string) ([]MessageRow, error) {
-	rows, err := d.Query(
+func (d *DB) ListMessages(ctx context.Context, sessionID string) ([]MessageRow, error) {
+	rows, err := d.QueryContext(ctx,
 		`SELECT id, session_id, role, agent, cost, tokens, time_created, `+
 			`time_completed FROM message WHERE session_id=? `+
-			`ORDER BY time_created ASC`, sessionID)
+			`ORDER BY time_created ASC, rowid ASC`, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -238,8 +247,8 @@ func (d *DB) ListMessages(sessionID string) ([]MessageRow, error) {
 }
 
 // UpsertPart inserts or updates a part row by id.
-func (d *DB) UpsertPart(r PartRow) error {
-	_, err := d.Exec(
+func (d *DB) UpsertPart(ctx context.Context, r PartRow) error {
+	_, err := d.ExecContext(ctx,
 		`INSERT INTO part (id, message_id, session_id, type, tool, state_json, time_created) VALUES (?,?,?,?,?,?,?)
 		 ON CONFLICT(id) DO UPDATE SET
 		   message_id=excluded.message_id, session_id=excluded.session_id,
@@ -250,10 +259,10 @@ func (d *DB) UpsertPart(r PartRow) error {
 }
 
 // GetPart fetches one part; missing id -> ErrNotFound.
-func (d *DB) GetPart(id string) (PartRow, error) {
+func (d *DB) GetPart(ctx context.Context, id string) (PartRow, error) {
 	var r PartRow
 	var tool sql.NullString
-	err := d.QueryRow(
+	err := d.QueryRowContext(ctx,
 		`SELECT id, message_id, session_id, type, tool, state_json, time_created FROM part WHERE id=?`, id).
 		Scan(&r.ID, &r.MessageID, &r.SessionID, &r.Type, &tool, &r.StateJSON, &r.TimeCreated)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -267,24 +276,24 @@ func (d *DB) GetPart(id string) (PartRow, error) {
 }
 
 // ListParts lists a message's parts, earliest first.
-func (d *DB) ListParts(messageID string) ([]PartRow, error) {
-	return d.listPartsBy(messageID, "")
+func (d *DB) ListParts(ctx context.Context, messageID string) ([]PartRow, error) {
+	return d.listPartsBy(ctx, messageID, "")
 }
 
 // ListToolParts lists a message's tool parts, earliest first.
-func (d *DB) ListToolParts(messageID string) ([]PartRow, error) {
-	return d.listPartsBy(messageID, "tool")
+func (d *DB) ListToolParts(ctx context.Context, messageID string) ([]PartRow, error) {
+	return d.listPartsBy(ctx, messageID, "tool")
 }
 
-func (d *DB) listPartsBy(messageID, typ string) ([]PartRow, error) {
+func (d *DB) listPartsBy(ctx context.Context, messageID, typ string) ([]PartRow, error) {
 	q := `SELECT id, message_id, session_id, type, tool, state_json, time_created FROM part WHERE message_id=?`
 	args := []any{messageID}
 	if typ != "" {
 		q += ` AND type=?`
 		args = append(args, typ)
 	}
-	q += ` ORDER BY time_created ASC`
-	rows, err := d.Query(q, args...)
+	q += ` ORDER BY time_created ASC, rowid ASC`
+	rows, err := d.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -305,8 +314,9 @@ func (d *DB) listPartsBy(messageID, typ string) ([]PartRow, error) {
 // ProtocolToPart encodes a wire part into a row. Text/reasoning parts store
 // {"text":..., "end":n, "synthetic":true} (end/synthetic omitted when unset);
 // tool parts store the full protocol.ToolState JSON. CallID is transient and
-// not persisted.
-func ProtocolToPart(p protocol.Part) PartRow {
+// not persisted. A marshal failure (e.g. NaN in a tool state) is an error —
+// persisting "" would 500 every later read.
+func ProtocolToPart(p protocol.Part) (PartRow, error) {
 	r := PartRow{
 		ID:          p.ID,
 		MessageID:   p.MessageID,
@@ -317,13 +327,19 @@ func ProtocolToPart(p protocol.Part) PartRow {
 	}
 	switch {
 	case p.State != nil:
-		b, _ := json.Marshal(p.State)
+		b, err := json.Marshal(p.State)
+		if err != nil {
+			return PartRow{}, fmt.Errorf("part %s state: %w", p.ID, err)
+		}
 		r.StateJSON = string(b)
 	default:
 		// Hot path (streamed deltas): build the fixed 3-key document
 		// directly. Must stay byte-identical to the map marshal: sorted
 		// keys (end, synthetic, text), compact separators.
-		t, _ := json.Marshal(p.Text)
+		t, err := json.Marshal(p.Text)
+		if err != nil {
+			return PartRow{}, fmt.Errorf("part %s text: %w", p.ID, err)
+		}
 		b := make([]byte, 0, len(t)+16)
 		b = append(b, '{')
 		if p.Time.End != 0 {
@@ -331,7 +347,7 @@ func ProtocolToPart(p protocol.Part) PartRow {
 			b = strconv.AppendInt(b, p.Time.End, 10)
 			b = append(b, ',')
 		}
-		if p.Synthetic != nil && *p.Synthetic {
+		if p.IsSynthetic != nil && *p.IsSynthetic {
 			b = append(b, `"synthetic":true,`...)
 		}
 		b = append(b, `"text":`...)
@@ -339,7 +355,7 @@ func ProtocolToPart(p protocol.Part) PartRow {
 		b = append(b, '}')
 		r.StateJSON = string(b)
 	}
-	return r
+	return r, nil
 }
 
 // PartToProtocol decodes a row into a wire part (inverse of ProtocolToPart).
@@ -369,7 +385,7 @@ func PartToProtocol(r PartRow) (protocol.Part, error) {
 		}
 		p.Text = st.Text
 		p.Time = protocol.PartTime{Start: r.TimeCreated, End: st.End}
-		p.Synthetic = st.Synthetic
+		p.IsSynthetic = st.Synthetic
 	}
 	return p, nil
 }
@@ -405,8 +421,8 @@ func SessionFromRow(r SessionRow, msgs []MessageRow) protocol.Session {
 }
 
 // SavePermission inserts or updates a permission request by request_id.
-func (d *DB) SavePermission(r PermissionRow) error {
-	_, err := d.Exec(
+func (d *DB) SavePermission(ctx context.Context, r PermissionRow) error {
+	_, err := d.ExecContext(ctx,
 		`INSERT INTO permission (request_id, session_id, action, resource, `+
 			`response, always_json, time_created) VALUES (?,?,?,?,?,?,?)
 		 ON CONFLICT(request_id) DO UPDATE SET response=excluded.response, always_json=excluded.always_json`,
@@ -416,14 +432,14 @@ func (d *DB) SavePermission(r PermissionRow) error {
 
 // ListPermissions lists a session's permission requests; pendingOnly filters
 // to rows with no response yet.
-func (d *DB) ListPermissions(sessionID string, pendingOnly bool) ([]PermissionRow, error) {
+func (d *DB) ListPermissions(ctx context.Context, sessionID string, pendingOnly bool) ([]PermissionRow, error) {
 	q := `SELECT request_id, session_id, action, resource, response, ` +
 		`always_json, time_created FROM permission WHERE session_id=?`
 	if pendingOnly {
 		q += ` AND response IS NULL`
 	}
-	q += ` ORDER BY time_created ASC`
-	rows, err := d.Query(q, sessionID)
+	q += ` ORDER BY time_created ASC, rowid ASC`
+	rows, err := d.QueryContext(ctx, q, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -443,12 +459,16 @@ func (d *DB) ListPermissions(sessionID string, pendingOnly bool) ([]PermissionRo
 }
 
 // ReplyPermission records a response for a request; unknown id -> ErrNotFound.
-func (d *DB) ReplyPermission(requestID, response string) error {
-	res, err := d.Exec(`UPDATE permission SET response=? WHERE request_id=?`, response, requestID)
+func (d *DB) ReplyPermission(ctx context.Context, requestID, response string) error {
+	res, err := d.ExecContext(ctx, `UPDATE permission SET response=? WHERE request_id=?`, response, requestID)
 	if err != nil {
 		return err
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
 		return ErrNotFound
 	}
 	return nil
@@ -456,17 +476,17 @@ func (d *DB) ReplyPermission(requestID, response string) error {
 
 // SaveTodos replaces a session's todo list wholesale: delete then insert in
 // order, position = index. An empty list clears the session's todos.
-func (d *DB) SaveTodos(sessionID string, todos []protocol.Todo) error {
-	tx, err := d.Begin()
+func (d *DB) SaveTodos(ctx context.Context, sessionID string, todos []protocol.Todo) error {
+	tx, err := d.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`DELETE FROM todo WHERE session_id=?`, sessionID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM todo WHERE session_id=?`, sessionID); err != nil {
 		tx.Rollback()
 		return err
 	}
 	for i, t := range todos {
-		if _, err := tx.Exec(
+		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO todo (session_id, content, status, priority, position) VALUES (?,?,?,?,?)`,
 			sessionID, t.Content, t.Status, t.Priority, i); err != nil {
 			tx.Rollback()
@@ -477,8 +497,8 @@ func (d *DB) SaveTodos(sessionID string, todos []protocol.Todo) error {
 }
 
 // GetTodos lists a session's todos in stable position order.
-func (d *DB) GetTodos(sessionID string) ([]protocol.Todo, error) {
-	rows, err := d.Query(
+func (d *DB) GetTodos(ctx context.Context, sessionID string) ([]protocol.Todo, error) {
+	rows, err := d.QueryContext(ctx,
 		`SELECT content, status, priority FROM todo WHERE session_id=? ORDER BY position ASC`, sessionID)
 	if err != nil {
 		return nil, err
@@ -497,10 +517,10 @@ func (d *DB) GetTodos(sessionID string) ([]protocol.Todo, error) {
 
 // AlwaysRules derives allow rules from response='always' rows: one rule per
 // pattern in always_json, permission taken from the row's action.
-func (d *DB) AlwaysRules(sessionID string) ([]protocol.Rule, error) {
-	rows, err := d.Query(
+func (d *DB) AlwaysRules(ctx context.Context, sessionID string) ([]protocol.Rule, error) {
+	rows, err := d.QueryContext(ctx,
 		`SELECT action, always_json FROM permission WHERE session_id=? `+
-			`AND response='always' ORDER BY time_created ASC`, sessionID)
+			`AND response='always' ORDER BY time_created ASC, rowid ASC`, sessionID)
 	if err != nil {
 		return nil, err
 	}

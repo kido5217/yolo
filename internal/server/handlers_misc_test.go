@@ -35,7 +35,7 @@ func TestProviderListAndAuth(t *testing.T) {
 	if z.ID == "" || len(z.Models) == 0 {
 		t.Fatalf("zen = %+v (server test fixture: seed a minimal zen catalog via Dirs seam)", z)
 	}
-	if z.Auth.KeyRequired != true {
+	if z.Auth.RequiresKey != true {
 		t.Fatalf("zen auth = %+v", z.Auth)
 	}
 	// config-defined provider appears
@@ -338,5 +338,44 @@ func TestConcurrentConfigPatchNoLostUpdate(t *testing.T) {
 		if _, ok := m["kb"+strconv.Itoa(i)]; !ok {
 			t.Fatalf("lost update: missing kb%d (file has %d keys)", i, len(m))
 		}
+	}
+}
+
+// TestProviderAuthScoping: /provider/auth resolves its directory from
+// x-yolo-directory like GET /provider (design-4) — a config-defined provider
+// is visible only in the directory whose yolo.jsonc defines it.
+func TestProviderAuthScoping(t *testing.T) {
+	t.Parallel()
+	s := testutil.Boot(t)
+	dA, dB := t.TempDir(), t.TempDir()
+	if err := os.WriteFile(filepath.Join(dA, "yolo.jsonc"),
+		[]byte(`{"provider":{"acme":{"apiKey":"sk-test"}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	resp, b := testutil.Req(t, s, "GET", "/provider/auth", dA, "")
+	if resp.StatusCode != 200 {
+		t.Fatalf("%d %s", resp.StatusCode, b)
+	}
+	var authA map[string]map[string]any
+	if err := json.Unmarshal(b, &authA); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
+	a, ok := authA["acme"]
+	if !ok {
+		t.Fatalf("dir A /provider/auth has no config provider acme: %s", b)
+	}
+	if a["status"] != "loaded" || a["source"] != "config" {
+		t.Fatalf("acme status/source = %v/%v, want loaded/config: %s", a["status"], a["source"], b)
+	}
+	resp, b = testutil.Req(t, s, "GET", "/provider/auth", dB, "")
+	if resp.StatusCode != 200 {
+		t.Fatalf("%d %s", resp.StatusCode, b)
+	}
+	var authB map[string]map[string]any
+	if err := json.Unmarshal(b, &authB); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
+	if _, ok := authB["acme"]; ok {
+		t.Fatalf("dir B /provider/auth leaked dir A's config provider: %s", b)
 	}
 }

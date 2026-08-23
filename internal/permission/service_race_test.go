@@ -30,12 +30,12 @@ func TestConcurrentSessionsNoRace(t *testing.T) {
 	// decisionFor exercises the db + rules paths in both.
 	sessions := []string{"ses_a", "ses_b"}
 	for _, sid := range sessions {
-		if err := db.CreateSession(storage.SessionRow{ID: sid, ProjectDir: "/w", Agent: "build", Model: "k"}); err != nil {
+		if err := db.CreateSession(t.Context(), storage.SessionRow{ID: sid, ProjectDir: "/w", Agent: "build", Model: "k"}); err != nil {
 			t.Fatal(err)
 		}
 		// Seed a per-session always-rule (response='always' + always_json
 		// patterns) so decisionFor exercises the db AlwaysRules path.
-		if err := db.SavePermission(storage.PermissionRow{
+		if err := db.SavePermission(t.Context(), storage.PermissionRow{
 			RequestID: "seed-" + sid, SessionID: sid, Action: "read",
 			Resource: "/x/*", Response: "always", AlwaysJSON: `["/x/*"]`, TimeCreated: 1,
 		}); err != nil {

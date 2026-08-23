@@ -25,10 +25,10 @@ func pressTab() tea.KeyPressMsg { return tea.KeyPressMsg{Code: '\t'} }
 func pressCtrlP() tea.KeyPressMsg { return tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl} }
 func pressCtrlA() tea.KeyPressMsg { return tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl} }
 
-// tuiProviderFixture mirrors the offline server fixture (provider.
+// providerFixture mirrors the offline server fixture (provider.
 // NewStaticForTest): kido (key-less, Qwen 100k) and opencode (key-required,
 // minimal zen catalog).
-func tuiProviderFixture() []protocol.Provider {
+func providerFixture() []protocol.Provider {
 	return []protocol.Provider{
 		{
 			ID: "kido", Name: "Kido",
@@ -53,13 +53,13 @@ func tuiProviderFixture() []protocol.Provider {
 					Limit:      protocol.ModelLimit{Context: 400000},
 				},
 			},
-			Auth: &protocol.ProviderAuth{Type: "api", Status: "missing", KeyRequired: true},
+			Auth: &protocol.ProviderAuth{Type: "api", Status: "missing", RequiresKey: true},
 		},
 	}
 }
 
-// tuiAgentFixture mirrors the server baseAgents.
-func tuiAgentFixture() []protocol.Agent {
+// agentFixture mirrors the server baseAgents.
+func agentFixture() []protocol.Agent {
 	return []protocol.Agent{
 		{Name: "build", Description: "The default agent. Executes tools based on configured permissions."},
 		{Name: "plan", Description: "Plan mode. Disallows all edit tools."},
@@ -71,8 +71,8 @@ func tuiAgentFixture() []protocol.Agent {
 func modelFixture() *recApp {
 	a := testApp()
 	a.store.Current = &protocol.Session{ID: "ses_1", Agent: "build", Model: refModel("kido", "q")}
-	a.store.Providers = tuiProviderFixture()
-	a.store.Agents = tuiAgentFixture()
+	a.store.Providers = providerFixture()
+	a.store.Agents = agentFixture()
 	a.store.Config = map[string]any{"model": "kido/q"}
 	a.route = routeSession
 	a.curSessionID = "ses_1"
@@ -373,7 +373,7 @@ func TestModelDialogOpen(t *testing.T) {
 		a.store.Providers = nil
 		a.store.Agents = nil
 		a.openModelDialog()
-		a.applyCatalog(catalogMsg{provs: tuiProviderFixture(), agents: tuiAgentFixture()})
+		a.applyCatalog(catalogMsg{provs: providerFixture(), agents: agentFixture()})
 		if len(a.store.Providers) != 2 || len(a.store.Agents) != 3 {
 			t.Fatalf("store = %d providers / %d agents, want 2 / 3", len(a.store.Providers), len(a.store.Agents))
 		}
@@ -403,7 +403,7 @@ func TestTUIModelDialog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	a := newRecApp(c, store.Store{}, ses.ID)
+	a := newRecApp(c, store.State{}, ses.ID)
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
@@ -441,4 +441,87 @@ func hasModelDialog(b []byte) bool {
 		strings.Contains(s, "○ missing") &&
 		strings.Contains(s, "Qwen*") &&
 		strings.Contains(s, "100k ctx")
+}
+
+// TestModelDialogPatchPaths executes the subchoice cmds end-to-end
+// (testing-2): 'b' (set default) must PATCH the config's model field, 'a'
+// (this session) must PATCH the session's model field. The existing
+// subtest only counts cmds — a 'b' wired to the session-patch path passed
+// everything before this pin.
+func TestModelDialogPatchPaths(t *testing.T) {
+	ts := testutil.Boot(t)
+	ctx := context.Background()
+	c := client.New(ts.URL, ts.Dir)
+	ses, err := c.CreateSession(ctx, "")
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	a := newRecApp(c, store.State{
+		Current:   &protocol.Session{ID: ses.ID, Agent: "build", Model: refModel("kido", "q")},
+		Providers: providerFixture(),
+		Agents:    agentFixture(),
+		Config:    map[string]any{"model": "kido/q"},
+	}, "")
+	a.route = routeSession
+	a.curSessionID = ses.ID
+	t.Cleanup(a.Close)
+
+	open := func() {
+		a.openModelDialog()
+		a.Cmds = nil
+		a.handleKey(pressTab())          // models pane
+		a.handleKey(press(tea.KeyEnter)) // open the subchoice
+	}
+
+	t.Run("b sets the config default model", func(t *testing.T) {
+		open()
+		a.handleKey(press('b'))
+		if len(a.Cmds) != 1 {
+			t.Fatalf("key b emitted %d cmds, want 1", len(a.Cmds))
+		}
+		m := a.Cmds[0]()
+		pm, ok := m.(dlgPatchMsg)
+		if !ok || pm.err != nil {
+			t.Fatalf("b cmd delivered %v (%T), want a successful dlgPatchMsg", pm, m)
+		}
+		if pm.field != "model" || pm.sess != nil || pm.cfg == nil {
+			t.Fatalf("b must PATCH the config: field=%q sess=%v cfg=%v", pm.field, pm.sess, pm.cfg)
+		}
+		if got, _ := pm.cfg["model"].(string); got != "kido/q" {
+			t.Fatalf("config PATCH model = %q, want kido/q", got)
+		}
+		if a.dlg.empty() {
+			t.Fatal("dialog must stay open before the patch msg lands")
+		}
+		a.Update(pm)
+		if !a.dlg.empty() {
+			t.Fatal("dialog must close after the patch msg lands")
+		}
+	})
+
+	t.Run("a sets the session model", func(t *testing.T) {
+		open()
+		a.handleKey(press('a'))
+		if len(a.Cmds) != 1 {
+			t.Fatalf("key a emitted %d cmds, want 1", len(a.Cmds))
+		}
+		m := a.Cmds[0]()
+		pm, ok := m.(dlgPatchMsg)
+		if !ok || pm.err != nil {
+			t.Fatalf("a cmd delivered %v (%T), want a successful dlgPatchMsg", pm, m)
+		}
+		if pm.field != "model" || pm.cfg != nil || pm.sess == nil {
+			t.Fatalf("a must PATCH the session: field=%q cfg=%v sess=%v", pm.field, pm.cfg, pm.sess)
+		}
+		if pm.sess.ID != ses.ID {
+			t.Fatalf("session PATCH id = %q, want %q", pm.sess.ID, ses.ID)
+		}
+		if pm.sess.Model == nil || pm.sess.Model.ID != "q" || pm.sess.Model.ProviderID != "kido" {
+			t.Fatalf("session model after PATCH = %+v, want kido/q", pm.sess.Model)
+		}
+		a.Update(pm)
+		if !a.dlg.empty() {
+			t.Fatal("dialog must close after the patch msg lands")
+		}
+	})
 }

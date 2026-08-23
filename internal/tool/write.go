@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/aymanbagabas/go-udiff"
 )
 
 //go:embed desc/write.txt
@@ -116,51 +118,29 @@ func (writeTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output
 	}, nil
 }
 
-// diffCounts is a minimal LCS line diff (upstream edit/write use the JS
-// diff package's diffLines): added/removed = lines not shared by the two
-// contents, split on "\n".
+// diffCounts is the line-based optimal diff (upstream edit/write use the JS
+// diff package's diffLines): added/removed = the lines replaced, via
+// go-udiff v0.4.1's Myers line diff (security-3: the O(n·m) DP blocked the
+// engine for tens of seconds on a one-line edit of a 60k-line file).
 func diffCounts(before, after string) (added, removed int) {
-	oa, na := strings.Split(before, "\n"), strings.Split(after, "\n")
-	common := lcsLen(oa, na)
-	return len(na) - common, len(oa) - common
+	for _, e := range udiff.Lines(before, after) {
+		removed += countLines(before[e.Start:e.End])
+		added += countLines(e.New)
+	}
+	return added, removed
 }
 
-// lcsLen is a rolling two-row LCS length over lines: O(len(a)*len(b))
-// time, O(len(b)) memory. Lines are interned to int codes first (one map
-// scan over the distinct lines) so the DP inner loop compares ints
-// instead of re-running string comparisons on every cell.
-func lcsLen(a, b []string) int {
-	id := make(map[string]int, len(a)+len(b))
-	code := func(s string) int {
-		if v, ok := id[s]; ok {
-			return v
-		}
-		v := len(id)
-		id[s] = v
-		return v
+// countLines counts the lines a line-boundary diff segment contributes:
+// a leading newline is a terminator (not a line), "" is zero lines, and a
+// trailing newline does not open an extra line.
+func countLines(s string) int {
+	s = strings.TrimPrefix(s, "\n")
+	if s == "" {
+		return 0
 	}
-	ai := make([]int, len(a))
-	for i, s := range a {
-		ai[i] = code(s)
+	n := strings.Count(s, "\n")
+	if !strings.HasSuffix(s, "\n") {
+		n++
 	}
-	bi := make([]int, len(b))
-	for j, s := range b {
-		bi[j] = code(s)
-	}
-	prev := make([]int, len(b)+1)
-	cur := make([]int, len(b)+1)
-	for i := len(a) - 1; i >= 0; i-- {
-		for j := len(b) - 1; j >= 0; j-- {
-			switch {
-			case ai[i] == bi[j]:
-				cur[j] = prev[j+1] + 1
-			case prev[j] > cur[j+1]:
-				cur[j] = prev[j]
-			default:
-				cur[j] = cur[j+1]
-			}
-		}
-		prev, cur = cur, prev
-	}
-	return prev[0]
+	return n
 }

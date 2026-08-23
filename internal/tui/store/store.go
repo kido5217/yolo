@@ -9,10 +9,10 @@ import (
 	"github.com/kido5217/yolo/internal/protocol"
 )
 
-// Store is the single shared TUI state. The app loop hydrates it over REST
+// State is the single shared TUI state. The app loop hydrates it over REST
 // and calls Apply per SSE event; only the current session's messages are
 // tracked.
-type Store struct {
+type State struct {
 	Sessions    []protocol.Session
 	Current     *protocol.Session
 	Messages    []protocol.MessageWithParts
@@ -43,7 +43,7 @@ type partState struct {
 }
 
 // Apply folds one server event into the store.
-func (s *Store) Apply(ev protocol.Event) {
+func (s *State) Apply(ev protocol.Event) {
 	switch ev.Type {
 	case protocol.EventTypeMessageUpdated:
 		var p protocol.MessageUpdatedProps
@@ -153,11 +153,11 @@ func (s *Store) Apply(ev protocol.Event) {
 	}
 }
 
-func (s *Store) isCurrent(sessionID string) bool {
+func (s *State) isCurrent(sessionID string) bool {
 	return s.Current != nil && s.Current.ID == sessionID
 }
 
-func (s *Store) upsertSession(se protocol.Session) {
+func (s *State) upsertSession(se protocol.Session) {
 	for i := range s.Sessions {
 		if s.Sessions[i].ID == se.ID {
 			s.Sessions[i] = se
@@ -167,7 +167,7 @@ func (s *Store) upsertSession(se protocol.Session) {
 	s.Sessions = append(s.Sessions, se)
 }
 
-func (s *Store) upsertMessage(m protocol.Message) {
+func (s *State) upsertMessage(m protocol.Message) {
 	for i := range s.Messages {
 		if s.Messages[i].Info.ID == m.ID {
 			s.Messages[i].Info = m
@@ -177,7 +177,7 @@ func (s *Store) upsertMessage(m protocol.Message) {
 	s.Messages = append(s.Messages, protocol.MessageWithParts{Info: m, Parts: []protocol.Part{}})
 }
 
-func (s *Store) upsertPart(part protocol.Part) {
+func (s *State) upsertPart(part protocol.Part) {
 	// A full part update is authoritative in every branch: drop any
 	// accumulation shadow so the next delta re-seeds from the new text.
 	s.deletePartState(part.ID)
@@ -202,7 +202,7 @@ func (s *Store) upsertPart(part protocol.Part) {
 	s.placePart(part.ID, len(s.Messages)-1, 0)
 }
 
-func (s *Store) applyDelta(p protocol.MessagePartDeltaProps) {
+func (s *State) applyDelta(p protocol.MessagePartDeltaProps) {
 	// Fast path: the streaming part's location is known. The re-check
 	// keeps a stale index entry from writing through the wrong slot.
 	if st := s.parts[p.PartID]; st != nil {
@@ -245,11 +245,11 @@ func (s *Store) applyDelta(p protocol.MessagePartDeltaProps) {
 
 // appendDelta appends a streamed delta to the part per field ("text" |
 // "reasoning" -> Text, "input" -> ToolState.Input["input"]). The
-// accumulation runs through the part's builder shadow (Store.parts), so a
+// accumulation runs through the part's builder shadow (State.parts), so a
 // per-token delta is one Write instead of re-copying the whole accumulated
 // text; the slot stores Builder.String() (an alias: the previous snapshot
 // stays intact, Write appends after it or regrows to a new array).
-func (s *Store) appendDelta(pr *protocol.Part, field, delta string) {
+func (s *State) appendDelta(pr *protocol.Part, field, delta string) {
 	if pr.Type == "" {
 		switch field {
 		case "reasoning":
@@ -280,7 +280,7 @@ func (s *Store) appendDelta(pr *protocol.Part, field, delta string) {
 // builderFor returns the part's accumulation shadow, seeding it from the
 // part's current field value on first use (or a field switch) so appending
 // preserves any text already present (hydration, full part update).
-func (s *Store) builderFor(pr *protocol.Part, field string) *strings.Builder {
+func (s *State) builderFor(pr *protocol.Part, field string) *strings.Builder {
 	var seed string
 	if field == "input" {
 		if pr.State != nil {
@@ -308,13 +308,13 @@ func (s *Store) builderFor(pr *protocol.Part, field string) *strings.Builder {
 
 // deletePartState drops one part's state (the full part update that
 // replaces it is authoritative; the next delta re-seeds).
-func (s *Store) deletePartState(partID string) {
+func (s *State) deletePartState(partID string) {
 	delete(s.parts, partID)
 }
 
 // placePart records the part's location, creating the (empty) state when
 // absent — the shadow text is seeded lazily by the first delta.
-func (s *Store) placePart(partID string, i, j int) {
+func (s *State) placePart(partID string, i, j int) {
 	if s.parts == nil {
 		s.parts = make(map[string]*partState)
 	}
@@ -329,7 +329,7 @@ func (s *Store) placePart(partID string, i, j int) {
 // rebuildPartIndex derives every part location fresh from Messages (rare:
 // a message or part removal shifts the slice). Accumulation shadows are
 // dropped with it; the next delta re-seeds from the part's current text.
-func (s *Store) rebuildPartIndex() {
+func (s *State) rebuildPartIndex() {
 	next := make(map[string]*partState)
 	for i := range s.Messages {
 		for j := range s.Messages[i].Parts {
@@ -341,6 +341,6 @@ func (s *Store) rebuildPartIndex() {
 
 // ForgetParts drops every part state and accumulation shadow; call when
 // Messages is replaced wholesale (e.g. a session-route hydrate).
-func (s *Store) ForgetParts() {
+func (s *State) ForgetParts() {
 	s.parts = nil
 }

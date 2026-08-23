@@ -31,6 +31,16 @@ func benchText(size int) string {
 	return s
 }
 
+// benchRow encodes p via ProtocolToPart; the bench inputs are always
+// marshalable, so a failure is a bench bug.
+func benchRow(b testing.TB, p protocol.Part) storage.PartRow {
+	row, err := storage.ProtocolToPart(p)
+	if err != nil {
+		b.Fatal(err)
+	}
+	return row
+}
+
 // BenchmarkProtocolToPart measures the wire-part -> row encoder on the
 // per-delta persist path (dao.go ProtocolToPart): text parts with
 // accumulated streamed output, the finalization shape (end + synthetic),
@@ -45,7 +55,7 @@ func BenchmarkProtocolToPart(b *testing.B) {
 		{"text/1KB", protocol.Part{Type: "text", Text: benchText(1 << 10)}},
 		{"text/64KB", protocol.Part{Type: "text", Text: benchText(64 << 10)}},
 		{"text/128KB", protocol.Part{Type: "text", Text: text128}},
-		{"text/128KB_final", protocol.Part{Type: "text", Text: text128, Time: protocol.PartTime{Start: 1, End: 2}, Synthetic: &syn}},
+		{"text/128KB_final", protocol.Part{Type: "text", Text: text128, Time: protocol.PartTime{Start: 1, End: 2}, IsSynthetic: &syn}},
 		{"tool/input64KB", protocol.Part{Type: "tool", Tool: "bash", State: &protocol.ToolState{Status: "completed", Input: map[string]any{"command": benchText(64 << 10)}, Output: "ok"}}},
 	}
 	for _, c := range cases {
@@ -54,7 +64,7 @@ func BenchmarkProtocolToPart(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				sink = storage.ProtocolToPart(c.p)
+				sink = benchRow(b, c.p)
 			}
 			_ = sink
 		})
@@ -71,23 +81,23 @@ func BenchmarkUpsertPart(b *testing.B) {
 		b.Fatal(err)
 	}
 	b.Cleanup(func() { db.Close() })
-	if err := db.CreateSession(storage.SessionRow{ID: "ses_bench", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err != nil {
+	if err := db.CreateSession(b.Context(), storage.SessionRow{ID: "ses_bench", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err != nil {
 		b.Fatal(err)
 	}
-	if err := db.CreateMessage(storage.MessageRow{ID: "msg_bench", SessionID: "ses_bench", Role: "assistant", TimeCreated: 2}); err != nil {
+	if err := db.CreateMessage(b.Context(), storage.MessageRow{ID: "msg_bench", SessionID: "ses_bench", Role: "assistant", TimeCreated: 2}); err != nil {
 		b.Fatal(err)
 	}
 	for _, size := range []int{1 << 10, 64 << 10, 256 << 10} {
 		b.Run(fmt.Sprintf("update/%dKB", size>>10), func(b *testing.B) {
 			row := storage.PartRow{
 				ID: "prt_bench", MessageID: "msg_bench", SessionID: "ses_bench",
-				Type: "text", StateJSON: storage.ProtocolToPart(protocol.Part{Type: "text", Text: benchText(size)}).StateJSON,
+				Type: "text", StateJSON: benchRow(b, protocol.Part{Type: "text", Text: benchText(size)}).StateJSON,
 				TimeCreated: 3,
 			}
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				if err := db.UpsertPart(row); err != nil {
+				if err := db.UpsertPart(b.Context(), row); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -103,7 +113,7 @@ func BenchmarkUpsertPart(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			r := row
 			r.ID = fmt.Sprintf("prt_bench_%04d", i&1023)
-			if err := db.UpsertPart(r); err != nil {
+			if err := db.UpsertPart(b.Context(), r); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -118,9 +128,9 @@ func BenchmarkPartToProtocol(b *testing.B) {
 		name string
 		row  storage.PartRow
 	}{
-		{"text/64KB", storage.ProtocolToPart(protocol.Part{Type: "text", Text: benchText(64 << 10)})},
-		{"text/128KB", storage.ProtocolToPart(protocol.Part{Type: "text", Text: benchText(128 << 10)})},
-		{"tool/input64KB", storage.ProtocolToPart(protocol.Part{Type: "tool", Tool: "bash", State: &protocol.ToolState{Status: "completed", Input: map[string]any{"command": benchText(64 << 10)}, Output: "ok"}})},
+		{"text/64KB", benchRow(b, protocol.Part{Type: "text", Text: benchText(64 << 10)})},
+		{"text/128KB", benchRow(b, protocol.Part{Type: "text", Text: benchText(128 << 10)})},
+		{"tool/input64KB", benchRow(b, protocol.Part{Type: "tool", Tool: "bash", State: &protocol.ToolState{Status: "completed", Input: map[string]any{"command": benchText(64 << 10)}, Output: "ok"}})},
 	}
 	for _, c := range cases {
 		b.Run(c.name, func(b *testing.B) {

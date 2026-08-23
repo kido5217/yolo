@@ -99,7 +99,7 @@ func BenchmarkMessagesFor(b *testing.B) {
 		b.Fatal(err)
 	}
 	projectDir := b.TempDir()
-	if err := db.CreateSession(storage.SessionRow{ID: sessionID, ProjectDir: projectDir, Model: "kido/q", Agent: "build", TimeCreated: 1, TimeUpdated: 1}); err != nil {
+	if err := db.CreateSession(b.Context(), storage.SessionRow{ID: sessionID, ProjectDir: projectDir, Model: "kido/q", Agent: "build", TimeCreated: 1, TimeUpdated: 1}); err != nil {
 		b.Fatal(err)
 	}
 	userText := benchText(256)
@@ -108,7 +108,11 @@ func BenchmarkMessagesFor(b *testing.B) {
 	bigIn := benchText(32 << 10)
 	bigOut := benchText(64 << 10)
 	addPart := func(mid string, p protocol.Part) {
-		if err := db.UpsertPart(storage.ProtocolToPart(p)); err != nil {
+		row, err := storage.ProtocolToPart(p)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if err := db.UpsertPart(b.Context(), row); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -118,7 +122,7 @@ func BenchmarkMessagesFor(b *testing.B) {
 		if i%2 == 1 {
 			role = "assistant"
 		}
-		if err := db.CreateMessage(storage.MessageRow{ID: mid, SessionID: sessionID, Role: role, Agent: "build", TimeCreated: int64(i) + 2}); err != nil {
+		if err := db.CreateMessage(b.Context(), storage.MessageRow{ID: mid, SessionID: sessionID, Role: role, Agent: "build", TimeCreated: int64(i) + 2}); err != nil {
 			b.Fatal(err)
 		}
 		if role == "user" {
@@ -133,7 +137,7 @@ func BenchmarkMessagesFor(b *testing.B) {
 			addPart(mid, protocol.Part{ID: fmt.Sprintf("prt_bench_%03d_b", i), MessageID: mid, SessionID: sessionID, Type: "tool", Tool: "bash", State: &protocol.ToolState{Status: "completed", Input: map[string]any{"command": bigIn}, Output: bigOut, Time: protocol.PartTime{Start: int64(i), End: int64(i) + 1}}})
 		}
 	}
-	row, err := db.GetSession(sessionID)
+	row, err := db.GetSession(b.Context(), sessionID)
 	if err != nil {
 		b.Fatal(err)
 	}

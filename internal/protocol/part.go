@@ -17,18 +17,18 @@ type ToolState struct {
 }
 
 type Part struct {
-	ID        string         `json:"id"`
-	SessionID string         `json:"sessionID"`
-	MessageID string         `json:"messageID"`
-	Type      string         `json:"type"` // "text" | "reasoning" | "tool"
-	Text      string         `json:"text,omitempty"`
-	CallID    string         `json:"callID,omitempty"`
-	Tool      string         `json:"tool,omitempty"`
-	State     *ToolState     `json:"state,omitempty"`
-	Synthetic *bool          `json:"synthetic,omitempty"`
-	Ignored   *bool          `json:"ignored,omitempty"`
-	Time      PartTime       `json:"time"`
-	Metadata  map[string]any `json:"metadata,omitempty"`
+	ID          string         `json:"id"`
+	SessionID   string         `json:"sessionID"`
+	MessageID   string         `json:"messageID"`
+	Type        string         `json:"type"` // "text" | "reasoning" | "tool"
+	Text        string         `json:"text,omitempty"`
+	CallID      string         `json:"callID,omitempty"`
+	Tool        string         `json:"tool,omitempty"`
+	State       *ToolState     `json:"state,omitempty"`
+	IsSynthetic *bool          `json:"isSynthetic,omitempty"`
+	IsIgnored   *bool          `json:"isIgnored,omitempty"`
+	Time        PartTime       `json:"time"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
 }
 
 type MessageWithParts struct {

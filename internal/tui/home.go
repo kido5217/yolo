@@ -69,7 +69,7 @@ func lineContent(s protocol.Session, now int64) string {
 }
 
 // visible returns the sessions home renders.
-func (h *homeModel) visible(s *store.Store) []protocol.Session {
+func (h *homeModel) visible(s *store.State) []protocol.Session {
 	ses := s.Sessions
 	if len(ses) > maxHomeSessions {
 		ses = ses[:maxHomeSessions]
@@ -77,9 +77,9 @@ func (h *homeModel) visible(s *store.Store) []protocol.Session {
 	return ses
 }
 
-func (h *homeModel) lineCount(s *store.Store) int { return 1 + len(h.visible(s)) }
+func (h *homeModel) lineCount(s *store.State) int { return 1 + len(h.visible(s)) }
 
-func (h *homeModel) clampCursor(s *store.Store) {
+func (h *homeModel) clampCursor(s *store.State) {
 	if h.cursor >= h.lineCount(s) {
 		h.cursor = h.lineCount(s) - 1
 	}
@@ -88,7 +88,7 @@ func (h *homeModel) clampCursor(s *store.Store) {
 	}
 }
 
-func (h *homeModel) moveCursor(s *store.Store, d int) {
+func (h *homeModel) moveCursor(s *store.State, d int) {
 	h.clampCursor(s)
 	n := h.lineCount(s)
 	h.cursor = ((h.cursor+d)%n + n) % n
@@ -97,7 +97,7 @@ func (h *homeModel) moveCursor(s *store.Store, d int) {
 const helpText = "\u2191/\u2193 move \u00B7 enter open \u00B7 n new \u00B7 /help"
 
 // render produces the locked home layout for the store.
-func (h *homeModel) render(s *store.Store) string {
+func (h *homeModel) render(s *store.State) string {
 	h.clampCursor(s)
 	rows := h.visible(s)
 	var b strings.Builder

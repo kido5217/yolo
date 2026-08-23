@@ -85,7 +85,7 @@ func (a *App) syncModelSel() {
 }
 
 // currentProv is the selected provider, if the index is in range.
-func (m *modelDlg) currentProv(st *store.Store) (protocol.Provider, bool) {
+func (m *modelDlg) currentProv(st *store.State) (protocol.Provider, bool) {
 	if m.selProv >= 0 && m.selProv < len(st.Providers) {
 		return st.Providers[m.selProv], true
 	}
@@ -107,7 +107,7 @@ func modelsOf(p protocol.Provider) []protocol.Model {
 }
 
 // selectedRef is the "provider/id" wire value of the selected model.
-func (m *modelDlg) selectedRef(st *store.Store) string {
+func (m *modelDlg) selectedRef(st *store.State) string {
 	p, ok := m.currentProv(st)
 	if !ok {
 		return ""
@@ -124,7 +124,7 @@ func (m *modelDlg) selectedRef(st *store.Store) string {
 
 // modelIsCurrent reports whether the model is the session model or the config
 // default (the row gets the "*" marker).
-func modelIsCurrent(st *store.Store, p protocol.Provider, m protocol.Model) bool {
+func modelIsCurrent(st *store.State, p protocol.Provider, m protocol.Model) bool {
 	if cur := st.Current; cur != nil && cur.Model != nil && cur.Model.ProviderID == p.ID && cur.Model.ID == m.ID {
 		return true
 	}
@@ -190,7 +190,7 @@ func (m *modelDlg) handleKey(a *App, k tea.KeyPressMsg) []tea.Cmd {
 }
 
 // move steps the focused pane's selection with wraparound.
-func (m *modelDlg) move(st *store.Store, d int) {
+func (m *modelDlg) move(st *store.State, d int) {
 	if m.pane == paneProviders {
 		n := len(st.Providers)
 		if n == 0 {
@@ -207,7 +207,7 @@ func (m *modelDlg) move(st *store.Store, d int) {
 }
 
 // modelCount is the length of the selected provider's model list.
-func (m *modelDlg) modelCount(st *store.Store) int {
+func (m *modelDlg) modelCount(st *store.State) int {
 	if p, ok := m.currentProv(st); ok {
 		return len(modelsOf(p))
 	}
@@ -217,7 +217,7 @@ func (m *modelDlg) modelCount(st *store.Store) int {
 // view renders the two panes: provider rows (auth dot + status), the selected
 // provider's models in the right pane, the subchoice overlay and the keymap
 // hint.
-func (m *modelDlg) view(st *store.Store) string {
+func (m *modelDlg) view(st *store.State) string {
 	var b strings.Builder
 	b.WriteString(title.Render("Model") + "\n")
 	provs := st.Providers
@@ -279,7 +279,7 @@ func (m *modelDlg) view(st *store.Store) string {
 }
 
 // modelCell renders one right-pane model row (default marker, context, cost).
-func (m *modelDlg) modelCell(st *store.Store, p protocol.Provider, models []protocol.Model, j int) string {
+func (m *modelDlg) modelCell(st *store.State, p protocol.Provider, models []protocol.Model, j int) string {
 	mm := models[j]
 	cell := mm.Name
 	if modelIsCurrent(st, p, mm) {
@@ -297,7 +297,7 @@ func providerStatus(auth *protocol.ProviderAuth) (plain, styled string) {
 	switch {
 	case auth != nil && auth.Status == "loaded":
 		return "● loaded", okGreen.Render("● loaded")
-	case auth != nil && auth.KeyRequired && auth.Status == "missing":
+	case auth != nil && auth.RequiresKey && auth.Status == "missing":
 		return "○ missing", errRed.Render("○ missing")
 	default:
 		return "· not-required", dim.Render("· not-required")

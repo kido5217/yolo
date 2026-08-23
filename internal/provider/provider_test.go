@@ -208,11 +208,11 @@ func TestRegistryListAndResolve(t *testing.T) {
 	if len(z.Models) != 57 {
 		t.Fatalf("zen models = %d", len(z.Models))
 	}
-	if z.Auth == nil || z.Auth.KeyRequired != true || z.Auth.Status != "missing" {
+	if z.Auth == nil || z.Auth.RequiresKey != true || z.Auth.Status != "missing" {
 		t.Fatalf("zen auth = %+v", z.Auth)
 	}
 	k := byID["kido"]
-	if k.Auth == nil || k.Auth.KeyRequired != false || k.Auth.Status != "not-required" {
+	if k.Auth == nil || k.Auth.RequiresKey != false || k.Auth.Status != "not-required" {
 		t.Fatalf("kido auth = %+v", k.Auth)
 	}
 	info, model, err := reg.Resolve("kido/Qwen3.8-27B")

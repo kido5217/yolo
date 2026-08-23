@@ -4,9 +4,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/provider"
@@ -200,5 +202,28 @@ func TestPlanReminders(t *testing.T) {
 	// build→build: none
 	if got4 := PlanReminders([]protocol.MessageWithParts{mkp("user", "build")}, "build"); len(got4) != 0 {
 		t.Fatalf("build reminders = %q", got4)
+	}
+}
+
+// TestGitRepoCacheExpires: a dir that becomes a git repo mid-process stops
+// being permanently "no" once the TTL passes (pre-fix the first "no" is
+// cached forever).
+func TestGitRepoCacheExpires(t *testing.T) {
+	dir := t.TempDir()
+	oldTTL := gitCacheTTL
+	gitCacheTTL = 30 * time.Millisecond
+	t.Cleanup(func() { gitCacheTTL = oldTTL })
+	if gitRepo(dir) {
+		t.Fatal("temp dir reported as a git repo before init")
+	}
+	if err := exec.Command("git", "init", "-q", dir).Run(); err != nil {
+		t.Skipf("git unavailable: %v", err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for !gitRepo(dir) {
+		if time.Now().After(deadline) {
+			t.Fatal("cache did not expire: dir is a git repo but gitRepo still false")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

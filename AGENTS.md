@@ -11,7 +11,23 @@ Read it before acting. Task state: beads (`bd ready`). Verified facts:
 - Module `github.com/kido5217/yolo`, binary `yolo`, Go ≥ 1.25 (installed 1.26.5).
 - Single binary: starts the core HTTP server (REST + SSE) **in-process**, then runs the bubbletea v2 TUI which talks to it **only** via the wire contract.
 - Core layering: `protocol` (wire DTOs, single source of truth) → `server` → `session` (agent loop) → `llm` / `provider` / `tool` / `permission` / `config` / `auth` / `storage` / `bus`.
-- Pinned deps, exact versions, **nothing else**: `charm.land/bubbletea/v2` v2.0.8, `charm.land/lipgloss/v2` v2.0.6, `charm.land/bubbles/v2` v2.1.1, `modernc.org/sqlite` v1.56.0 (pure Go, no cgo), `tidwall/jsonc` v0.3.3; dev-only `github.com/charmbracelet/x/exp/teatest/v2` v2.0.0-20260816001655-68d539dca504.
+- **Dependency policy — allowlist + agent-proposable.** Runtime deps are pinned
+  at exact versions. Allowlist: `charm.land/bubbletea/v2` v2.0.8,
+  `charm.land/lipgloss/v2` v2.0.6, `charm.land/bubbles/v2` v2.1.1,
+  `modernc.org/sqlite` v1.56.0 (pure Go, no cgo), `tidwall/jsonc` v0.3.3,
+  `github.com/aymanbagabas/go-udiff` v0.4.1 (proposal #1, user-approved
+  2026-08-23; lands in 0.3.0 Plan 1 task N — the Myers line diff); dev-only
+  `github.com/charmbracelet/x/exp/teatest/v2`
+  v2.0.0-20260816001655-68d539dca504. Anything outside the allowlist requires
+  an agent **dep proposal** (in the task's spec/plan or beads issue) BEFORE any
+  `go get`/`go mod tidy`: module + exact version; evidence from **extensive web
+  search** — the agent MUST treat its own memory as outdated: maintenance
+  status, last activity, license, and available versions are verified live
+  (e.g. GitHub API, `go list -m`), never recalled; checklist: actively
+  maintained, pure Go / no cgo, permissive license (MIT/BSD), transitive
+  surface (how many NEW modules it adds to the build); why stdlib or
+  hand-rolling is inadequate. Landing requires explicit user approval;
+  approved deps join this allowlist + a `PROGRESS.md` fact.
 
 ## Key documents (topic → source of truth)
 
@@ -73,6 +89,17 @@ Entries live under `superpowers:` skills; invoke a skill **before** acting when 
 | 2+ independent tasks with no shared state | `dispatching-parallel-agents` — apply sequentially: one subagent at a time (core principle 7) |
 | Feature work needing workspace isolation | `using-git-worktrees` |
 | Implementation complete, deciding integration | `finishing-a-development-branch` |
+
+- **One subagent per bead (preferred workflow):** execute each bead in a freshly
+  spawned subagent — one at a time (core principle 7); if the root is `YOLO`, the
+  subagent must be `YOLO` too (core principle 8). The root session only plans,
+  dispatches, and reviews. A bead done inline triggers the compaction discipline below.
+- **Subagent thinking level:** dispatch bead subagents with `thinking=medium` —
+  the dispatch prompt states the requirement so the subagent calibrates its
+  reasoning effort accordingly (medium depth, not maximum, not minimal).
+- **Compaction discipline:** after finishing each task/bead that was not delegated to a
+  subagent, compact the session (opencode: `/compact`) before starting the next task —
+  inline work accumulates root context. Work delegated to a subagent is exempt.
 
 ## Golang skills (15, in `.agents/skills/`, hash-locked in `skills-lock.json`)
 

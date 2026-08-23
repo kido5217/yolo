@@ -44,7 +44,7 @@ teatest suites.
   - v2 `tea.Tick(d, f)` callback is `func(time.Time) tea.Msg`; v2 programs
     handle `tea.QuitMsg` internally
   - `charmbracelet/colorprofile` stays indirect — never import it directly
-    ("nothing else" dep rule)
+    (dependency policy: allowlist only, root "Project")
 - lipgloss v2 `Render()` appends a trailing SGR reset AFTER the styled
   input: `TrimRight` padded plain strings BEFORE styling (a post-style trim
   silently misses), and count display widths in runes

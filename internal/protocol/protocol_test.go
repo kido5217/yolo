@@ -2,6 +2,7 @@ package protocol_test
 
 import (
 	"encoding/json"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -175,18 +176,62 @@ func TestParsePermsRejectsNonStringValues(t *testing.T) {
 }
 
 func TestSessionStatusWire(t *testing.T) {
-	b, err := json.Marshal(protocol.SessionStatus{Type: protocol.StatusRetry, Attempt: 2, Message: "429", Next: 2000})
+	b, err := json.Marshal(protocol.SessionStatus{Type: protocol.SessionStatusRetry, Attempt: 2, Message: "429", Next: 2000})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if want := `{"type":"retry","attempt":2,"message":"429","next":2000}`; string(b) != want {
 		t.Fatalf("status shape: %s", b)
 	}
-	bi, err := json.Marshal(protocol.SessionStatus{Type: protocol.StatusIdle})
+	bi, err := json.Marshal(protocol.SessionStatus{Type: protocol.SessionStatusIdle})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(bi) != `{"type":"idle"}` {
 		t.Fatalf("idle shape: %s", bi)
+	}
+}
+
+// TestWireBoolTags pins the predicate-form JSON keys of the wire DTO bools
+// (naming-9, deviation 108): the tags are part of the wire contract, so a
+// drift between field name and tag is a test failure.
+func TestWireBoolTags(t *testing.T) {
+	cases := []struct {
+		typ  any
+		name string
+	}{
+		{protocol.ProviderAuth{}, "RequiresKey"},
+		{protocol.Model{}, "SupportsToolCall"},
+		{protocol.Model{}, "SupportsReasoning"},
+		{protocol.Model{}, "SupportsAttachment"},
+		{protocol.Agent{}, "IsHidden"},
+		{protocol.Part{}, "IsSynthetic"},
+		{protocol.Part{}, "IsIgnored"},
+		{protocol.PermissionRepliedProps{}, "IsAuto"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f, found := reflect.TypeOf(c.typ).FieldByName(c.name)
+			if !found {
+				t.Fatalf("field %s missing", c.name)
+			}
+			tag := f.Tag.Get("json")
+			// expected = lowerCamel of the field name; HasPrefix tolerates an
+			// omitempty suffix.
+			expected := strings.ToLower(c.name[:1]) + c.name[1:]
+			if !strings.HasPrefix(tag, expected) {
+				t.Fatalf("field %s json tag = %q, want prefix %q", c.name, tag, expected)
+			}
+		})
+	}
+}
+
+// TestSessionStatusConstantNames pins the owning-type-prefixed status
+// constants (naming-10, internal rename — the JSON values are unchanged).
+func TestSessionStatusConstantNames(t *testing.T) {
+	// The prefixed names must exist and carry the locked values.
+	if protocol.SessionStatusIdle != "idle" || protocol.SessionStatusBusy != "busy" || protocol.SessionStatusRetry != "retry" {
+		t.Fatalf("SessionStatus* constants changed: %q %q %q",
+			protocol.SessionStatusIdle, protocol.SessionStatusBusy, protocol.SessionStatusRetry)
 	}
 }

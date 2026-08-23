@@ -17,10 +17,10 @@ func ev(t *testing.T, typ string, props any) protocol.Event {
 }
 
 // seed is the pinned store state: one current session, one message, one part.
-func seed(t *testing.T) *store.Store {
+func seed(t *testing.T) *store.State {
 	t.Helper()
 	cur := protocol.Session{ID: "ses_1", Title: "T", ProjectID: "prj_1", Directory: "/d"}
-	return &store.Store{
+	return &store.State{
 		Sessions: []protocol.Session{cur},
 		Current:  &cur,
 		Messages: []protocol.MessageWithParts{{

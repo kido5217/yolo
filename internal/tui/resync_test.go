@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -34,7 +35,7 @@ func TestAppResyncRehydrates(t *testing.T) {
 
 	// Fresh app on the same session with an empty display store: simulate
 	// the state where the SSE transcript state was lost in a drop.
-	ra := newRecApp(c, store.Store{}, ses.ID)
+	ra := newRecApp(c, store.State{}, ses.ID)
 	t.Cleanup(ra.Close)
 
 	// (1) The resync pump is wired and delivers resyncMsg on a ping.
@@ -62,5 +63,37 @@ func TestAppResyncRehydrates(t *testing.T) {
 	ra.Update(hm)
 	if got := len(ra.store.Messages); got != 2 {
 		t.Fatalf("store after resync re-hydrate has %d messages, want 2", got)
+	}
+}
+
+// TestAppResyncFooter pins the outage-window footer (concurrency-4): a
+// transient SSE drop flips the footer to a non-live "reconnecting" state,
+// restored to "● live" when the re-hydrate completes; the terminal
+// connLostMsg still renders "○ off".
+func TestAppResyncFooter(t *testing.T) {
+	ts := testutil.Boot(t)
+	c := client.New(ts.URL, ts.Dir)
+	ra := newRecApp(c, store.State{}, "")
+	t.Cleanup(ra.Close)
+	ra.store.Live = true
+	if got := ra.footerView(); !strings.Contains(got, "● live") {
+		t.Fatalf("live baseline footer = %q, want \"● live\"", got)
+	}
+	// Transient drop: the footer leaves the live state for the outage window.
+	ra.Update(resyncMsg{})
+	if got := ra.footerView(); strings.Contains(got, "● live") || !strings.Contains(got, "reconnecting") {
+		t.Fatalf("outage footer = %q, want a non-live \"reconnecting\" state", got)
+	}
+	// The re-hydrate completes: back to live.
+	ra.Update(hydratedMsg{})
+	if got := ra.footerView(); !strings.Contains(got, "● live") {
+		t.Fatalf("post-rehydrate footer = %q, want \"● live\" restored", got)
+	}
+	// Terminal loss stays off (unchanged behavior).
+	ra.Update(resyncMsg{})
+	ra.Update(hydratedMsg{})
+	ra.Update(connLostMsg{})
+	if got := ra.footerView(); !strings.Contains(got, "○ off") {
+		t.Fatalf("connLost footer = %q, want \"○ off\"", got)
 	}
 }

@@ -48,9 +48,9 @@ func newSessionModel(w, h int) sessionModel {
 	}
 }
 
-func sessionBusy(st *store.Store) bool {
+func sessionBusy(st *store.State) bool {
 	switch st.Status.Type {
-	case protocol.StatusBusy, protocol.StatusRetry:
+	case protocol.SessionStatusBusy, protocol.SessionStatusRetry:
 		return true
 	}
 	return false
@@ -65,7 +65,7 @@ const sessionHelp = "pgup/pgdn scroll \u00B7 alt+e expand \u00B7 alt+t think \u0
 // The transcript re-renders only when dirty (store mutation or expand
 // toggle); frames that only advance the footer spinner or report a status
 // tick reuse the existing viewport content instead of rebuilding it.
-func (sm *sessionModel) sync(st *store.Store, w, h int) {
+func (sm *sessionModel) sync(st *store.State, w, h int) {
 	if sm.vm.Width() != w || sm.vm.Height() != h {
 		sm.vm.SetWidth(w)
 		sm.vm.SetHeight(h)
@@ -89,7 +89,7 @@ func (sm *sessionModel) sync(st *store.Store, w, h int) {
 // every message after the first, and message errors as a red "! message" line.
 // expanded maps partID to the parts whose I/O block or reasoning text is
 // shown.
-func renderMessages(st *store.Store, expanded map[string]bool, w int) string {
+func renderMessages(st *store.State, expanded map[string]bool, w int) string {
 	blocks := make([]string, 0, len(st.Messages))
 	for _, m := range st.Messages {
 		if m.Info.Role == "user" {
@@ -282,7 +282,7 @@ func tailLines(s string, n int) string {
 
 // lastToolPartID returns the ID of the most recent tool part in the
 // transcript (the part "e" toggles).
-func lastToolPartID(st *store.Store) string {
+func lastToolPartID(st *store.State) string {
 	id := ""
 	for _, m := range st.Messages {
 		for _, p := range m.Parts {

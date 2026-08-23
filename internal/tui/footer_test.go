@@ -13,7 +13,7 @@ import (
 // store (footer unit table; the client is a dead endpoint, no requests are
 // made). The Current session and its Model ref are copied (the only field
 // with a pointer) so subtest mutations stay local.
-func footerApp(st store.Store) *recApp {
+func footerApp(st store.State) *recApp {
 	a := testApp()
 	if st.Current != nil {
 		cp := *st.Current
@@ -29,7 +29,7 @@ func footerApp(st store.Store) *recApp {
 }
 
 func TestFooterRender(t *testing.T) {
-	idle := store.Store{
+	idle := store.State{
 		Live: true,
 		Current: &protocol.Session{
 			ID:     "ses_1",
@@ -43,7 +43,7 @@ func TestFooterRender(t *testing.T) {
 		name   string
 		route  route
 		cfg    map[string]any
-		mutate func(*store.Store)
+		mutate func(*store.State)
 		want   string
 	}{
 		{
@@ -54,33 +54,33 @@ func TestFooterRender(t *testing.T) {
 		{
 			name:   "session sse off",
 			route:  routeSession,
-			mutate: func(s *store.Store) { s.Live = false },
+			mutate: func(s *store.State) { s.Live = false },
 			want:   "kido/q · build · ↑123 ↓45 · $0.0002 · ○ off",
 		},
 		{
 			name:   "session busy",
 			route:  routeSession,
-			mutate: func(s *store.Store) { s.Status = protocol.SessionStatus{Type: protocol.StatusBusy} },
+			mutate: func(s *store.State) { s.Status = protocol.SessionStatus{Type: protocol.SessionStatusBusy} },
 			want:   "kido/q · build · ↑123 ↓45 · $0.0002 · ● live · ⠋ busy",
 		},
 		{
 			name:  "session retry shows attempt and message",
 			route: routeSession,
-			mutate: func(s *store.Store) {
-				s.Status = protocol.SessionStatus{Type: protocol.StatusRetry, Attempt: 2, Message: "rate limited"}
+			mutate: func(s *store.State) {
+				s.Status = protocol.SessionStatus{Type: protocol.SessionStatusRetry, Attempt: 2, Message: "rate limited"}
 			},
 			want: "kido/q · build · ↑123 ↓45 · $0.0002 · ● live · ⠋ retry 2: rate limited",
 		},
 		{
 			name:   "session without model",
 			route:  routeSession,
-			mutate: func(s *store.Store) { s.Current.Model = nil },
+			mutate: func(s *store.State) { s.Current.Model = nil },
 			want:   "no model · build · ↑123 ↓45 · $0.0002 · ● live",
 		},
 		{
 			name:   "cost rounds to four decimals",
 			route:  routeSession,
-			mutate: func(s *store.Store) { s.Current.Cost = 1.23456 },
+			mutate: func(s *store.State) { s.Current.Cost = 1.23456 },
 			want:   "kido/q · build · ↑123 ↓45 · $1.2346 · ● live",
 		},
 		{

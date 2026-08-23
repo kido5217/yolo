@@ -54,7 +54,7 @@ cleanup() {
     wait "$SERVER_PID" 2>/dev/null
   fi
 }
-trap cleanup EXIT
+trap cleanup INT TERM EXIT
 
 uri() { jq -rn --arg p "$1" '$p | @uri'; }
 # req METHOD PATH [BODY] -> sets globals HTTP_STATUS and BODY (call directly,
@@ -150,7 +150,8 @@ if [ -n "$SESS_ID" ]; then
       tail -5 "$SERVER_LOG"
       ;;
     *)
-      bad "no assistant text reply within ${TURN_TIMEOUT}s"
+      bad "no assistant text reply within ${TURN_TIMEOUT}s; server log tail:"
+      tail -5 "$SERVER_LOG"
       ;;
   esac
   if [ -n "$SESS_ID" ]; then

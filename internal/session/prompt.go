@@ -121,19 +121,36 @@ func yesNo(b bool) string {
 	return "no"
 }
 
+// gitCacheTTL bounds a cached git-repo answer: a dir that becomes a git repo
+// mid-process stops being permanently "no". Upstream keeps the answer static
+// per instance (ctx.project.vcs, detected at project scan) — the expiry is a
+// deliberate deviation (behavior/low, deviation 99).
+var gitCacheTTL = 60 * time.Second
+
+// gitCacheMaxEntries caps the cache: a churning directory set must not grow
+// the map unbounded (a cap breach drops the whole cache — a recheck storm is
+// bounded by the 2 s exec timeout anyway).
+const gitCacheMaxEntries = 1024
+
+type gitCacheEntry struct {
+	isRepo bool
+	expiry time.Time
+}
+
 var gitCache struct {
 	mu sync.Mutex
-	m  map[string]bool
+	m  map[string]gitCacheEntry
 }
 
 // gitRepo reports whether dir is inside a git work tree. Detection is
 // `git -C dir rev-parse --is-inside-work-tree` with a 2s timeout; any failure
-// counts as "no". Results are cached per directory.
+// counts as "no". Results are cached per directory, bounded and expiring.
 func gitRepo(dir string) bool {
+	now := time.Now()
 	gitCache.mu.Lock()
-	if v, ok := gitCache.m[dir]; ok {
+	if e, ok := gitCache.m[dir]; ok && now.Before(e.expiry) {
 		gitCache.mu.Unlock()
-		return v
+		return e.isRepo
 	}
 	gitCache.mu.Unlock()
 
@@ -143,10 +160,10 @@ func gitRepo(dir string) bool {
 	v := err == nil && strings.TrimSpace(string(out)) == "true"
 
 	gitCache.mu.Lock()
-	if gitCache.m == nil {
-		gitCache.m = map[string]bool{}
+	if gitCache.m == nil || len(gitCache.m) >= gitCacheMaxEntries {
+		gitCache.m = map[string]gitCacheEntry{}
 	}
-	gitCache.m[dir] = v
+	gitCache.m[dir] = gitCacheEntry{isRepo: v, expiry: now.Add(gitCacheTTL)}
 	gitCache.mu.Unlock()
 	return v
 }

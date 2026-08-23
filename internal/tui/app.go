@@ -39,8 +39,8 @@ const (
 // App is the root bubbletea model: routes, store, dialog stack and the SSE
 // event pump.
 type App struct {
-	*client.Client
-	store        store.Store
+	*client.Service
+	store        store.State
 	route        route
 	curSessionID string
 	home         homeModel
@@ -55,21 +55,22 @@ type App struct {
 	lastErr      string
 	spinIdx      int // footer spinner frame
 	// tea plumbing
-	size     tea.WindowSizeMsg
-	eventCh  chan protocol.Event
-	resyncCh chan struct{} // SSE drop pings from the client
-	stop     context.CancelFunc
-	emitSink func(cmds ...tea.Cmd) // test seam, set from _test.go only
+	size      tea.WindowSizeMsg
+	eventCh   chan protocol.Event
+	resyncCh  chan struct{} // SSE drop pings from the client
+	resyncing bool          // a transient SSE drop's re-hydrate is in flight
+	stop      context.CancelFunc
+	emitSink  func(cmds ...tea.Cmd) // test seam, set from _test.go only
 }
 
 // NewApp builds the root model. A non-empty startSessionID starts on that
 // session (resume); empty starts at home. The prompt is always focused with a
 // static (non-blinking) cursor.
-func NewApp(c *client.Client, s store.Store, startSessionID string) *App {
+func NewApp(c *client.Service, s store.State, startSessionID string) *App {
 	ctx, cancel := context.WithCancel(context.Background())
 	eventCh, resyncCh := c.Events(ctx)
 	a := &App{
-		Client:   c,
+		Service:  c,
 		store:    s,
 		route:    routeHome,
 		home:     homeModel{now: nowMillis},
@@ -143,7 +144,9 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 	case resyncMsg:
 		// The SSE stream dropped (the client is reconnecting): events
 		// published in the gap are unrecoverable — re-hydrate the current
-		// route over REST and re-arm the resync pump.
+		// route over REST and re-arm the resync pump. The footer shows the
+		// outage window until the re-hydrate completes (concurrency-4).
+		a.resyncing = true
 		a.sess.isDirty = true
 		return tea.Batch(a.hydrateCmd(), a.resyncPump())
 	case spinMsg:
@@ -157,6 +160,10 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 	case HydrateMsg:
 		return a.hydrateCmd()
 	case hydratedMsg:
+		if a.resyncing {
+			a.resyncing = false
+			a.store.Live = true
+		}
 		return a.applyHydrate(m)
 	case catalogMsg:
 		return a.applyCatalog(m)
@@ -178,6 +185,15 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 		return a.applyCommandExec(m)
 	case tea.KeyPressMsg:
 		cmds := a.handleKey(m)
+		if len(cmds) == 0 {
+			return nil
+		}
+		return tea.Batch(cmds...)
+	case tea.InterruptMsg:
+		// SIGINT during Run: the same as the ctrl+c keystroke (cli-2) —
+		// route it through the full key ladder so a pending permission
+		// ask or an open dialog still owns the keys.
+		cmds := a.handleKey(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 		if len(cmds) == 0 {
 			return nil
 		}
@@ -455,11 +471,11 @@ func (a *App) inputUpdate(k tea.KeyPressMsg) []tea.Cmd {
 func (a *App) promptEnter() []tea.Cmd {
 	val := a.prompt.input.Value()
 	if strings.HasSuffix(val, "\\") {
-		a.prompt.draft += strings.TrimSuffix(val, "\\") + "\n"
+		a.prompt.draft.WriteString(strings.TrimSuffix(val, "\\") + "\n")
 		a.prompt.input.SetValue("")
 		return nil
 	}
-	text := a.prompt.draft + strings.TrimSpace(val)
+	text := a.prompt.draft.String() + strings.TrimSpace(val)
 	if strings.TrimSpace(text) == "" {
 		return nil
 	}
@@ -498,7 +514,7 @@ func (a *App) applySend(m sendMsg) tea.Cmd {
 		return nil
 	}
 	a.prompt.input.SetValue("")
-	a.prompt.draft = ""
+	a.prompt.draft.Reset()
 	return nil
 }
 
@@ -558,7 +574,8 @@ func (a *App) applyCommandExec(m commandExecMsg) tea.Cmd {
 type dialogKind int
 
 const (
-	dlgQuit dialogKind = iota
+	dlgNone dialogKind = iota // zero value: not a real dialog
+	dlgQuit
 	dlgHelp
 	dlgModel
 	dlgAgents
@@ -595,7 +612,7 @@ func (d dialogStack) empty() bool { return len(d.items) == 0 }
 var (
 	dividerLineRendered = divider.Render(dividerLine())
 	sessionHelpRendered = dim.Render(sessionHelp)
-	quitDialogRendered  = title.Render("quit? [y/n]")
+	quitDialogRendered  = title.Render("quit? [Y/n]")
 	helpDialogRendered  = title.Render("Help") +
 		"\n" + dim.Render("  | Key | Action |") +
 		"\n" + dim.Render("  |---|---|") +
@@ -647,6 +664,10 @@ func (a *App) handleDialogKey(d dialog, k tea.KeyPressMsg) []tea.Cmd {
 		if key.Matches(k, dlgNo) {
 			a.dlg.pop()
 		}
+		return nil
+	}
+	if d.kind == dlgNone {
+		a.dlg.pop() // defensive: the zero dialog is not a real dialog
 		return nil
 	}
 	switch d.kind {

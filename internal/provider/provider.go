@@ -248,14 +248,14 @@ func (r *Registry) List() []protocol.Provider {
 		for _, m := range i.Models {
 			p.Models[m.ID] = protocol.Model{
 				ID: m.ID, ProviderID: i.ID, Name: m.Name, Family: m.Family,
-				ToolCall: m.ToolCall, Reasoning: m.Reasoning, Attachment: m.Attachment,
+				SupportsToolCall: m.ToolCall, SupportsReasoning: m.Reasoning, SupportsAttachment: m.Attachment,
 				Limit:   protocol.ModelLimit{Context: m.Context, Output: m.Output},
 				Cost:    protocol.ModelCost{Input: m.CostIn, Output: m.CostOut, CacheRead: m.CostCacheRead, CacheWrite: m.CostCacheWrite},
 				Adapter: m.Adapter,
 			}
 		}
 		p.Auth = &protocol.ProviderAuth{
-			Type: "api", KeyRequired: i.KeyRequired,
+			Type: "api", RequiresKey: i.KeyRequired,
 			Status: authStatus(i),
 		}
 		out = append(out, p)

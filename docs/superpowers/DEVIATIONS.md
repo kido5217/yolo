@@ -213,3 +213,310 @@ fixture, where walk order visits `zz/*` before `zz.txt` (entry "zz" <
 "zz.txt") but sort order keeps `zz.txt` first ("." < "/") — the old
 implementation fails the corrected test. Resolves per principle 5 (tests
 define the contract; the spec's order is authoritative).
+89. Quit-confirm dialog text changed `quit? [y/n]` → `quit? [Y/n]` (low,
+2026-08-23): user-requested 0.3.0 UX change — the dialog marks the default
+choice with a capital letter. The text is yolo-side (upstream's quit
+confirm is a button-style Confirm/Cancel dialog, no `quit? [y/n]` literal),
+so no verbatim-port conflict; the render text was test-pinned
+(help_test.go, tui_suite_test.go) and the pins moved with it. No keymap
+change: y/enter/ctrl+c confirmed before this change (dlgYes binding) and
+ now have an explicit test pin for enter (default-choice semantics).
+Resolves per principle 2 (one deliberate deviation per change, logged).
+90. Plan Task A test code had two bugs; fixed, assertions kept (low,
+2026-08-23): (a) `panicDriver` used a value receiver, so `p.fired.Store(true)`
+mutated a copy of the driver held in the `llm.Driver` interface — the
+`pd.fired.Load()` "probe was never called" guard could never pass. Fix:
+pointer receiver + `h.overrideDriver = &pd`. (b) The final
+`eventCount(idle)` ran immediately after `onDone`, but the idle
+`session.status` is the LAST publish in the turn's defer (same closure that
+fires `onDone`), so it raced the harness's collector goroutine (count read 0
+before the collector folded the event). Fix: `h.waitForEvent` on the idle
+status before the count. Both are test-only; the pinned assertions (failed
+turn, `StatusIdle`, exactly one idle event) are unchanged and now
+deterministic. Resolves per principle 5 (tests define the contract; plan's
+own test code buggy — fix the test, log the deviation).
+91. Send early-fail SSE sequence: the lone `session.status` idle frame on the
+Send CreateMessage/UpsertPart error path is no longer published (wire/low,
+2026-08-23): finding [concurrency-5] row 3 — the early-fail path published an
+idle with no preceding busy, a transition no client observed a start to. Spec
+§3.1 B picks "skip both": no status event on early fail; the error reaches the
+TUI via the Send return value (the existing failure channel). The wire-visible
+change is confined to the Send error path (success paths unchanged). Resolves
+per principle 2.
+92. Plan Task C test driver had the deviation-90 value-receiver bug class
+(low, 2026-08-23): `holdTitleDriver` used a value receiver, so
+`d.cancelled.Store(true)` inside `Stream` mutated the copy of the driver
+held in the `llm.Driver` interface — the `hd.cancelled.Load()` guards in
+TestAbortCancelsTitleGoroutine and TestShutdownCancelsAndWaitsTitle could
+never pass. Fix: pointer receiver + `h.overrideDriver = &hd`. Test-only;
+the pinned assertions are unchanged. Resolves per principle 5.
+93. dropTitleCtx conditional drop (low, 2026-08-23): the plan-pinned
+unconditional `delete(e.titleCtx, sessionID)` in the title goroutine's
+defer could remove a NEWER title's cancel — a retry that schedules a
+second title while the first is still in flight (turn ended without an
+assistant message; title call bounded at 30 s) makes the first exit
+drop the second's cancel, leaving it uncancellable by Abort/Shutdown
+(spec §3.1 C "cancelled by Abort"). Fix: `dropTitleCtx(sessionID,
+cancel)` deletes only when `e.titleCtx[sessionID] == cancel`.
+Resolves per principle 5 (review finding on plan-pinned shape; spec is
+the binding authority). Implementation note: Go forbids `==` between
+non-nil func values, so the tracked cancel is stored as a
+`*titleCancel` pointer wrapper and the comparison is on the pointer
+(identity semantics identical to the stated form); the Abort/Shutdown
+call sites invoke `tc.cancel()` / append `tc.cancel` under the same lock
+discipline.
+94. Delete-while-busy aborts the in-flight turn (behavior/med, 2026-08-23):
+findings [troubleshoot-5] + [concurrency-2] Close half — `DELETE
+/session/{id}` previously only closed the bash shell; the in-flight turn kept
+publishing events for the deleted session and a post-Close tool call
+re-spawned a leaked shell. Upstream `Session.remove` (session.ts:606-629)
+cancels subagent jobs, removes child sessions and durable event rows, but
+does NOT interrupt the in-flight main turn (it runs in the instance-scoped
+Runner; `SessionRunState.cancel` is the separate abort path) — upstream parity
+is structurally unachievable (yolo has no subagent jobs, no durable event
+rows, a per-session engine), so yolo aborts the turn on delete: Close =
+Abort + suppress the session's events + settle-then-close the shell (bounded
+2 s, then hard close). The user-initiated delete is treated as an abort
+intent; partial assistant content persists as today (no synthetic
+"aborted" note). Resolves per principle 2 + the implement-everything scope
+policy (spec §2.4a).
+95. Plan Task D test code had two bugs; fixed, assertions kept (low,
+2026-08-23): (a) TestCloseWhileBusyAbortsAndSuppresses called
+`waitBusy(t, h, ses, fn)` — a 4-arg form that does not exist (the harness
+`waitBusy` takes 3 args and all existing callers use that form), so the
+pinned test could not compile. Fix: `Send` before `waitBusy(t, h, ses)` —
+the same start-then-act-within-the-busy-window intent. (b) The flag-based
+`waitBusy` does not guarantee the busy `session.status` EVENT is published
+before `Close` (the busy flag is set synchronously in Send, but the event is
+published from the turn goroutine), so the "busy-only statuses survive"
+count raced the publish and read 0. Fix: `h.waitForEvent` on the busy status
+event for the session before `Close` — matching the plan's own Step 2
+expectation that the busy event is delivered pre-Delete. Both are test-only;
+the pinned assertions (abort applied, `slowCancel` observed, exactly one
+busy `session.status` survives) are unchanged and now deterministic.
+Resolves per principle 5 (tests define the contract; plan's own test code
+buggy — fix the test, log the deviation).
+96. Plan Task E test used the deviation-95(a) 4-arg waitBusy form (low,
+2026-08-23): the harness `waitBusy` takes 3 args, so the pinned
+TestAbortThenNewTurnCompletes could not compile. Fix: Send before
+`waitBusy(t, h, ses)`. Test-only; the pinned assertions are unchanged.
+Resolves per principle 5.
+97. Tool-round text part ids: post-tool text now starts a fresh part id
+(wire/med, 2026-08-23): finding [troubleshoot-3] — the pre-tool
+finalizePart did not reset the round's textState, so post-tool deltas
+appended to the already-finalized part id and the round-exit finalize
+re-persisted + re-published it (≥2 final part.updated frames per text part;
+the transcript showed one merged part). Upstream mints a fresh part id per
+text block; yolo now resets the text/reasoning state (id + buffer) at the
+tool boundary, so post-tool text is a new part and each part finalizes
+exactly once. Wire-visible on tool rounds that continue with text after a
+tool call: part-frame sequence and transcript structure change (new part id
++ its own start/final frames instead of a re-finalization frame).
+Resolves per principle 2 (parity fix; spec §3.1 F).
+98. Plan Task F test code inspected the wrong assistant message (low,
+2026-08-23): runRound mints a new assistant message per round and a tool
+round (sawToolPart) always continues to a round 2, where the auto fake
+synthesizes an ok-N text part — the pinned test's "last assistant message"
+selection read round 2's message, never the tool round's parts. Fix:
+collect text parts across all assistant messages into a text→id map and
+assert "before"/"after" present with distinct ids; the session-wide
+per-id ≤2 part.updated frame check is unchanged. Test-only; the pinned
+contract (fresh part id per text block, no re-finalization) is unchanged.
+Resolves per principle 5.
+99. git-repo cache now expires (behavior/low, 2026-08-23): finding
+[design-7] — the package-global git-dir cache was unbounded and non-expiring:
+ a dir that became a git repo mid-process stayed "no" forever in every env
+ block. Now bounded (1024 entries; cap breach drops the cache) with a 60 s
+ TTL. Upstream check: `Is directory a git repo` renders from
+ `ctx.project.vcs` (system.ts:79) — a persisted project property detected at
+ project scan, static per instance, never re-checked; yolo's per-process cache
+ is the faithful equivalent, so the expiry is a deliberate deviation from the
+ upstream static answer. Model-visible only in the env-block line for a dir
+ whose git status changes mid-process (previously permanently stale "no", now
+ correct within 60 s). The pinned env-block text is unchanged. Resolves per
+ principle 2 + the implement-everything scope policy (spec §3.1 G).
+ 100. Plan Task G test set the short TTL after the first gitRepo call
+ (low, 2026-08-23): the pre-init "not a repo" check inserted a "no" entry
+ whose expiry was computed with the default 60 s TTL before the test
+ shortened `gitCacheTTL` to 30 ms, so the 2 s expiry poll would time out
+ post-fix. Fix: shorten the TTL (with cleanup restore) before the first
+ `gitRepo` call. Test-only; the pinned behavior (a cached "no" expires once
+ the TTL passes) is unchanged. Resolves per principle 5.
+101. Plan Task I test code referenced a nonexistent message row (low,
+2026-08-23): the pinned test mints parts with `MessageID: "msg_t"`
+(`const ses, msg = "ses_t", "msg_t"`) but never creates a `msg_t` message
+row; with `_foreign_keys=1` in the DSN the `UpsertPart` insert fails
+(FK `part.message_id REFERENCES message(id)`), so the test could never
+pass pre- or post-fix. Fix: point the parts at the real `msg_a` row
+(one token, `const ses, msg = "ses_t", "msg_a"`). Test-only; the pinned
+contract (same-time_created rows come back in insertion/rowid order) is
+unchanged. Resolves per principle 5.
+102. Plan Task K brief put the live turn ctx at the finalization sites
+(low, 2026-08-23): the brief's ctx-source map said the turn ctx at every
+site inside `finishRound`/`finalizePart`/`saveToolPart`; implemented
+literally, the pre-existing abort tests
+(TestPermissionAbortDuringAskAbortsTool, TestAbortMidTurn) failed —
+the finalization DB writes ran on the already-cancelled turn ctx, the
+driver failed them with `context.Canceled`, and the tool part stayed
+`running` (End:0) in the store, while the abort contract pins the
+finalized `error: aborted` part. Fix: `context.WithoutCancel(ctx)` in
+exactly those three finalization functions (internal/session/engine.go) —
+values preserved, cancellation dropped; `saveSynthetic` keeps the plain
+ctx (its call sites check `ctx.Err()` first and return before it), and
+all cancellable work (stream Next, perm Ask, tool Run, round-start
+loads) still uses the live turn ctx. Impact: round-finalization writes
+are no longer interruptible by turn cancel — deliberate: they record the
+terminal state of an exiting round. No wire change. Resolves per
+principle 5.
+103. Plan Task M test code + brief were inconsistent (medium, 2026-08-23):
+(a) the brief's TestReapProcWaitFailureIsNegative set `stdin` to
+`io.NopCloser(io.Discard)` — an `io.ReadCloser`, but `shellProc.stdin` is
+an `io.WriteCloser`; the test would not compile. Fixed with a no-op
+WriteCloser (test-only). (b) The brief expected both pin tests to PASS
+pre-fix, but TestShellSelfKillReportsExitCode failed pre-fix with code =
+-1: Go's `(*exec.ExitError).ExitCode()` returns -1 for a signal-terminated
+process, so the old reapProc already conflated "killed by signal" with
+"Wait failed", and the brief's Step 3 snippet (code < 0 → error in the
+markerless-EOF branch) would have turned real signal-kills (137/143) into
+errors — contradicting the brief's own interface note ("real exit codes —
+including 137/143 from a signal — still surface as meta[\"exit\"]") and the
+test (err == nil, code 137). Fix: reapProc now maps a signal-terminated
+process to 128+signum (syscall.WaitStatus), matching the marker path where
+bash's `$?` reports the same value; -1 is reserved for a Wait failure with
+no exit status, and only that becomes the tool error in the markerless-EOF
+branch. Resolves per principle 5 (test + interface note = the last-stated
+call).
+104. write/edit added/removed counts: DP-LCS replaced by the go-udiff Myers
+line diff (behavior/low, parity fix, 2026-08-23; the plan assigned this
+entry the number 94, already in use — next free is 104): finding
+[security-3] — the O(len·len) DP on every write/edit blocked the engine
+~tens of seconds on a one-line edit of a ~60k-line file (~3.6e9 cells).
+`diffCounts` now uses `udiff.Lines` (go-udiff v0.4.1 — dep proposal #1,
+user-approved 2026-08-23; BSD-3, zero deps, pure Go) and derives
+added/removed from the edit list. The counts are the optimal
+newline-terminated-line edit — verified 1:1 against the upstream jsdiff
+`diffLines` line model on all 10 `TestDiffCountsPins` cases. Three former
+pins changed because the OLD DP (bare-line `strings.Split`) deviated from
+upstream: `{"x",""}` (1,1)→(0,1), `{"a\n","a"}` (0,1)→(1,1),
+`{"p\nq\nr","q\nr\ns"}` (1,1)→(2,2). Model-visible in the write/edit tool
+meta (added/removed) only for those edge shapes. Resolves per principle 2
+(parity fix; spec §3.3 N).
+105. Plan Task O test/helper would not compile (test-only/low, 2026-08-23):
+both the one-off hash helper and TestGlobSchemaEmittedBytes sliced the
+return of `sha256.Sum256(b)` directly (`sha256.Sum256(b)[:]`) — Go forbids
+slicing an unaddressable array value. Fixed by binding first
+(`sum := sha256.Sum256(b)` then `sum[:]`). Emitted schema bytes, the pin
+value, and the style fix are all as the brief specifies. Resolves per
+principle 5.
+106. Plan Task S guard test used the wrong route (test-only/low,
+2026-08-23): the brief built the app with `newRecApp(client.New(...),
+store.Store{}, "")` — a HOME-route app — but the home route's Enter is
+consumed by `homeEnter()` (home.go) before it reaches `promptEnter`, so the
+soft-enter loop never accumulated the draft (red run: draft length 0, not
+the intended timing failure). Fixed by driving a SESSION-route app via
+`testSessionApp(sessionFixture())`, matching the existing soft-enter
+subtest in the same file. The amortization, the two switched draft
+assertions, and the 5 s guard are as the brief specifies. Resolves per
+principle 5.
+107. Plan Task T implementation snippet would not compile (impl/low,
+2026-08-23): the brief's `case tea.InterruptMsg: return a.handleKey(…)`
+returned the `[]tea.Cmd` from `handleKey` where `Update` must return a
+`tea.Cmd`. Fixed by mirroring the adjacent `tea.KeyPressMsg` case:
+`cmds := a.handleKey(…); if len(cmds) == 0 { return nil }; return
+tea.Batch(cmds...)`. The synthetic key is the locked `ctrlCKey` shape
+`{Code:'c', Mod: tea.ModCtrl}` (home_test.go:44) and the precedence
+behavior (pending perm ask / open dialog still owns the keys) is exactly
+as the brief specifies. Resolves per principle 5.
+108. wire-DTO bool JSON tags renamed to predicate form (wire/medium,
+2026-08-23; the plan assigned this entry the number 95, already in use —
+next free is 108): finding [naming-9] — the protocol bool fields lacked
+is/has predicate form. Renamed: ProviderAuth.KeyRequired→RequiresKey
+(`keyRequired`→`requiresKey`), Model.ToolCall→SupportsToolCall
+(`toolcall`→`supportsToolCall`), Model.Reasoning→SupportsReasoning
+(`reasoning`→`supportsReasoning`), Model.Attachment→SupportsAttachment
+(`attachment`→`supportsAttachment`), Agent.Hidden→IsHidden
+(`hidden`→`isHidden`), Part.Synthetic→IsSynthetic
+(`synthetic`→`isSynthetic`), Part.Ignored→IsIgnored (`ignored`→`isIgnored`),
+PermissionRepliedProps.Auto→IsAuto (`auto`→`isAuto`). Server and TUI are
+one module: every encoder and decoder moved in the same commit, so the
+in-process wire is consistent; the deviation is against the
+upstream-mirrored JSON shapes (principle 2), accepted by spec §3.5 V / §5.
+Pinned by protocol.TestWireBoolTags; server golden provider.json
+regenerated (four key renames only, values unchanged). Resolves per
+principle 5 (spec-directed wire change).
+109. Plan Task V1 tag-pin test would not compile (test-only/low,
+2026-08-23): the brief's case rows were parenthesized tuples
+(`(protocol.Part{}, "IsSynthetic")`) — not a composite value in Go — and
+`f := reflect.TypeOf(c.typ).FieldByName(c.name)` ignored the method's
+second return value. Fixed to positional composite rows
+(`{protocol.Part{}, "IsSynthetic"}`) and
+`f, found := …; if !found { … }`. The eight predicate renames, JSON tags,
+and the lowerCamel prefix assertion are as the brief specifies. Resolves
+per principle 5.
+110. client sentinel error text gains the "client: " package prefix
+(render/low, 2026-08-23; the plan assigned this entry the number 96,
+already in use — next free is 110): finding [naming-3] — the sentinel
+messages ("not found", "session busy", "bad request") carried no package
+origin, lost when wrapped, and their text is what the user sees in the
+status line. client.ErrNotFound/ErrBusy/ErrBadRequest now read
+"client: not found" / "client: session busy" / "client: bad request";
+errors.Is matching is value-based and unchanged. The visible
+status-line/toast text changes (e.g. "client: session busy: <server
+message>"). Pinned by client.TestSentinelPrefixes. Resolves per principle
+5 (spec-directed render change).
+111. Plan Task V7 test pinned in the external test package (test-only/low,
+2026-08-23): the plan slice pinned TestZeroDialogIsNotQuit in
+internal/tui/app_test.go, which is `package tui_test` (external, since
+creation) — the white-box test cannot compile there (undefined: newRecApp,
+dialog, dlgQuit, press; all unexported internals). The test moved
+unchanged to internal/tui/rec_test.go (`package tui`, home of newRecApp);
+its `store.Store{}` is Task V5 drift, corrected to `store.State{}`.
+Everything else (dlgNone zero value, explicit handleDialogKey guard,
+DEFERRED.md disposition, pinned commit message) lands as planned. Resolves
+per principle 5.
+112. Plan Task W step-1 test literal was malformed (test-only/low,
+2026-08-24): the script JSON literal was missing the closing `]` of the
+outer array (`...}}]}` instead of `...}}]}]`), so the fake driver's
+eager script parse (`fake.FromScript` at buildDeps) failed at startup
+and the child exited 1 with `yolo: fake: parse script: unexpected end of
+JSON input` before `tea.Run` was ever reached — the plan's predicted
+step-2 failure ("stderr empty") did not occur. Fixed by appending the
+one missing character; the test pins W (row 12) as designed. Resolves per
+principle 5.
+113. Plan Task X test code had two compile errors (test-only/low,
+2026-08-24): (a) the `Drivers` map literal omitted its key —
+`map[string]llm.Driver{hangDriver{gate: gate}}` cannot compile; the
+intended key is the provider id `"kido"` (the session model is
+`kido/q`; the same seam key `buildDeps` uses) — without it the hang
+driver would be unreachable and the test would not pin X; (b)
+`db.CreateSession(...)` was missing the ctx argument (real API
+`CreateSession(ctx, r)`, internal/storage/dao.go — identical
+semantics). Both fixed in `TestServeDrainForceKill`; everything else
+(`drainCtx`/`armForceKill`, the `serveCmd` wiring, the 2 s force-kill
+bound, DEFERRED.md disposition, pinned commit message) lands as
+planned. Resolves per principle 5.
+114. Plan Task AC benchmark code needed two fixes (test-only/low,
+2026-08-24): (a) the plan's `st := &store.Store{}` does not compile —
+the type is `store.State` (store.go:15; the same Task V5 drift noted
+in 111), corrected in `BenchmarkStoreApply`; (b) the plan's
+`message.updated` prop map omitted the top-level `sessionID` that
+`Apply` gates on (store.go:50 `isCurrent`), which would have silently
+dropped every `message.updated` and left `upsertMessage` unmeasured —
+the plan's own verification step directs adjusting the maps to the
+wire names the store decodes, so `"sessionID": "ses_bench"` was added
+per that instruction. Everything else (part/delta maps, event-type
+constants, hermetic no-baseline-claim scope, pinned commit message)
+lands as planned. Resolves per principle 5.
+115. Plan 1 close-out -race gate vs a pre-existing wall-clock
+threshold (test-only/low, 2026-08-24): the close-out's full gate
+(`go test -race ./...`) failed in `TestDraftSoftEnterAmortized` —
+40k soft-enters take 9–10.5 s under the race detector against the
+pinned `< 5s` bound (1.3 s without `-race`; ~8x slowdown on this
+string-heavy path). The test and its code path (draft growth,
+datastruct-9) predate Plan 1 and were untouched by its 39 tasks.
+Fix: the bound is now `draftAmortizedLimit` — 5 s via a
+`//go:build !race` file, 40 s via a `//go:build race` file (Go sets
+the `race` build tag when `-race` is passed; verified on go1.26.7).
+The iteration count is unchanged, so a quadratic draft re-scan
+(minutes under race) still fails the relaxed bound; the bound only
+absorbs the instrumentation slowdown. Resolves per principle 5.

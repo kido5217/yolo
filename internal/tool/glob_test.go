@@ -1,6 +1,9 @@
 package tool
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -109,5 +112,21 @@ func TestGlobBoundedWalkEarlyStop(t *testing.T) {
 	}
 	if out.Meta["count"] != 100 {
 		t.Fatalf("count = %v, want 100", out.Meta["count"])
+	}
+}
+
+// TestGlobSchemaEmittedBytes pins the glob tool's emitted JSON schema
+// byte-for-byte: the "path" description is verbatim upstream text, so a
+// line-layout change in the Go source must not change the emitted bytes
+// (style-007).
+func TestGlobSchemaEmittedBytes(t *testing.T) {
+	t.Parallel()
+	b, err := json.Marshal(globTool{}.Schema())
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(b)
+	if got := hex.EncodeToString(sum[:]); got != "7be2f83680be0648b924faaf2a003118a79903dc865b7a4d6262c6b0c5be1684" {
+		t.Fatalf("glob schema sha256 = %s, want 7be2f83680be0648b924faaf2a003118a79903dc865b7a4d6262c6b0c5be1684 (emitted bytes changed)", got)
 	}
 }

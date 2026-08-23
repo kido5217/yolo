@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -18,8 +19,17 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kido5217/yolo/internal/auth"
+	"github.com/kido5217/yolo/internal/bus"
+	"github.com/kido5217/yolo/internal/config"
+	"github.com/kido5217/yolo/internal/llm"
+	"github.com/kido5217/yolo/internal/log"
+	"github.com/kido5217/yolo/internal/permission"
 	"github.com/kido5217/yolo/internal/protocol"
+	"github.com/kido5217/yolo/internal/provider"
 	"github.com/kido5217/yolo/internal/server"
+	"github.com/kido5217/yolo/internal/session"
+	"github.com/kido5217/yolo/internal/storage"
+	"github.com/kido5217/yolo/internal/tool"
 	"github.com/kido5217/yolo/internal/tui/client"
 )
 
@@ -150,7 +160,7 @@ func TestDrainCancelsBusyTurnAndClosesListener(t *testing.T) {
 	}
 
 	deadline := time.Now().Add(3 * time.Second)
-	for deps.Engine.Status(ses.ID) != protocol.StatusBusy {
+	for deps.Engine.Status(ses.ID) != protocol.SessionStatusBusy {
 		if time.Now().After(deadline) {
 			t.Fatal("turn never became busy")
 		}
@@ -161,8 +171,8 @@ func TestDrainCancelsBusyTurnAndClosesListener(t *testing.T) {
 	drain(deps, srv)
 	elapsed := time.Since(start)
 
-	if got := deps.Engine.Status(ses.ID); got != protocol.StatusIdle {
-		t.Fatalf("status after drain = %q, want %q", got, protocol.StatusIdle)
+	if got := deps.Engine.Status(ses.ID); got != protocol.SessionStatusIdle {
+		t.Fatalf("status after drain = %q, want %q", got, protocol.SessionStatusIdle)
 	}
 	if conn, err := net.DialTimeout("tcp", ln.String(), 500*time.Millisecond); err == nil {
 		_ = conn.Close()
@@ -534,5 +544,326 @@ func TestJustfileVersionRecipe(t *testing.T) {
 		if !strings.Contains(string(list), want) {
 			t.Fatalf("just --list missing %q:\n%s", want, list)
 		}
+	}
+}
+
+// TestTuiRunErrorPrintsToStderr pins W (row 12): a TUI start failure prints
+// one line to stderr in addition to the log + exit code. The child runs in
+// its own session (no controlling terminal), so bubbletea's Run fails fast
+// with a TTY-open error.
+func TestTuiRunErrorPrintsToStderr(t *testing.T) {
+	bin := buildBinary(t)
+	root := t.TempDir()
+	wd := t.TempDir()
+	script := filepath.Join(root, "script.json")
+	if err := os.WriteFile(script,
+		[]byte(`[{"parts":[{"kind":"text","text":"ok","finish":"stop","usage":{"input":1,"output":1}}]}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(bin, "--dir", wd)
+	env := make([]string, 0, len(os.Environ())+5)
+	for _, kv := range os.Environ() {
+		if strings.HasPrefix(kv, "XDG_") {
+			continue
+		}
+		env = append(env, kv)
+	}
+	env = append(env,
+		"YOLO_LLM=fake", "YOLO_FAKE_SCRIPT="+script,
+		"XDG_CONFIG_HOME="+filepath.Join(root, "config"),
+		"XDG_DATA_HOME="+filepath.Join(root, "data"),
+		"XDG_CACHE_HOME="+filepath.Join(root, "cache"),
+	)
+	cmd.Env = env
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true} // no controlling TTY
+	stdin, err := os.Open("/dev/null")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stdin.Close()
+	cmd.Stdin = stdin
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	err = cmd.Run()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
+		t.Fatalf("exit = %v, want exit code 1 (a TUI start failure)", err)
+	}
+	lines := strings.Split(strings.TrimSpace(stderr.String()), "\n")
+	found := false
+	for _, l := range lines {
+		if strings.HasPrefix(l, "yolo: ") && strings.Contains(l, "TTY") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("stderr has no one-line TUI failure:\n%s", stderr.String())
+	}
+}
+
+// TestServeDrainForceKill pins X (concurrency-5): a turn hung on a
+// provider call that ignores cancellation outlasts the drain budget, so
+// only the second signal's force-kill (immediate ctx cancel) ends the
+// drain — measured against the real drainCtx + armForceKill wiring.
+func TestServeDrainForceKill(t *testing.T) {
+	root := t.TempDir()
+	wd := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
+
+	db, err := openDB(filepath.Join(root, "yolo.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	logger := log.New(root) // closed by drainCtx; not cleaned up separately
+	b := bus.New()
+	perm := permission.New(db, b, logger, root)
+	prov := provider.NewStaticForTest()
+
+	gate := make(chan struct{}) // never closed: the hang lives past cancellation
+	engine, err := session.New(session.Deps{
+		DB: db, Bus: b, Prov: prov, Perm: perm,
+		Tools: tool.Registry(), DataDir: root, Log: logger,
+		Cfg:     func(string) (*protocol.Config, error) { return &protocol.Config{}, nil },
+		Drivers: map[string]llm.Driver{"kido": hangDriver{gate: gate}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deps := &server.Deps{
+		DB: db, Bus: b, Perm: perm, Log: logger, Prov: prov,
+		Dirs:    config.Dirs{Home: root, Data: root, Cache: root},
+		WorkDir: wd, Engine: engine,
+	}
+	srv := server.NewServer(*deps)
+	if _, err := srv.Start("127.0.0.1:0"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	now := time.Now().UnixMilli()
+	sid := protocol.NewID("ses")
+	if err := db.CreateSession(context.Background(), storage.SessionRow{
+		ID: sid, ProjectDir: wd, Title: "t", Model: "kido/q",
+		TimeCreated: now, TimeUpdated: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := engine.Send(ctx, sid, "hang", func(error) {}); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for engine.Status(sid) != "busy" && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if engine.Status(sid) != "busy" {
+		t.Fatal("turn never went busy")
+	}
+
+	// First signal: serveCmd's main body reads it, the drain starts with
+	// its 5 s budget, and the force-kill arm blocks on the next signal.
+	stop := make(chan os.Signal, 2)
+	dctx, dcancel := context.WithTimeout(context.Background(), 5*time.Second)
+	armForceKill(logger, stop, dcancel)
+	stop <- syscall.SIGTERM
+	<-stop // the first-signal read
+	done := make(chan struct{})
+	go func() {
+		drainCtx(deps, srv, dctx)
+		close(done)
+	}()
+	time.Sleep(300 * time.Millisecond) // the drain is now waiting on the hung turn
+
+	// Second signal: force-kill cancels the drain ctx immediately.
+	stop <- syscall.SIGTERM
+	at := time.Now()
+	select {
+	case <-done:
+		if el := time.Since(at); el > 2*time.Second {
+			t.Fatalf("drain took %v after the force-kill, want < 2s (pre-fix: full 5s budget)", el)
+		}
+	case <-time.After(7 * time.Second):
+		t.Fatal("drain did not end after the force-kill cancel")
+	}
+}
+
+// hangDriver parks a turn in Stream without honoring ctx: a provider call
+// that hangs past cancellation (the live scenario force-kill protects).
+type hangDriver struct{ gate chan struct{} }
+
+func (h hangDriver) Stream(ctx context.Context, req llm.Request) (llm.PartStream, error) {
+	<-h.gate
+	return llm.PartStream{}, nil
+}
+
+// TestAuthAddRejectsUnreadableOrEmptyKey pins Y (error-6/cli-3): a
+// ReadString failure or an empty-after-trim key is an error + exit 1 with
+// nothing persisted; a valid key still persists.
+func TestAuthAddRejectsUnreadableOrEmptyKey(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
+
+	withStdio := func(t *testing.T, stdin string, stdinClosed bool, fn func()) (string, string) {
+		t.Helper()
+		oldIn, oldOut, oldErr := os.Stdin, os.Stdout, os.Stderr
+		t.Cleanup(func() { os.Stdin, os.Stdout, os.Stderr = oldIn, oldOut, oldErr })
+		if stdin != "" || stdinClosed {
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if stdin != "" {
+				_, _ = w.WriteString(stdin)
+			}
+			_ = w.Close()
+			os.Stdin = r
+		}
+		outR, outW, _ := os.Pipe()
+		errR, errW, _ := os.Pipe()
+		os.Stdout, os.Stderr = outW, errW
+		fn()
+		_ = outW.Close()
+		_ = errW.Close()
+		outB, _ := io.ReadAll(outR)
+		errB, _ := io.ReadAll(errR)
+		return string(outB), string(errB)
+	}
+
+	readStore := func() map[string]string {
+		p, err := auth.Path()
+		if err != nil {
+			t.Fatalf("auth.Path: %v", err)
+		}
+		s, err := auth.LoadFrom(p)
+		if err != nil {
+			t.Fatalf("load store: %v", err)
+		}
+		out := map[string]string{}
+		for id, e := range s {
+			out[id] = e.Key
+		}
+		return out
+	}
+
+	t.Run("closed stdin: read error, nothing persisted", func(t *testing.T) {
+		var code int
+		_, stderr := withStdio(t, "", true, func() { code = authCmd([]string{"add", "acme"}) })
+		if code != 1 {
+			t.Fatalf("exit = %d, want 1", code)
+		}
+		if !strings.Contains(stderr, "auth add:") {
+			t.Fatalf("stderr = %q, want an auth add: error line", stderr)
+		}
+		if got := readStore(); len(got) != 0 {
+			t.Fatalf("store = %v, want empty (nothing persisted)", got)
+		}
+	})
+	t.Run("empty line: trimmed empty, nothing persisted", func(t *testing.T) {
+		var code int
+		_, stderr := withStdio(t, "\n", false, func() { code = authCmd([]string{"add", "acme"}) })
+		if code != 1 || !strings.Contains(stderr, "auth add:") {
+			t.Fatalf("exit = %d stderr = %q, want 1 + auth add: line", code, stderr)
+		}
+		if got := readStore(); len(got) != 0 {
+			t.Fatalf("store = %v, want empty", got)
+		}
+	})
+	t.Run("whitespace-only argument rejected", func(t *testing.T) {
+		var code int
+		_, _ = withStdio(t, "", false, func() { code = authCmd([]string{"add", "acme", "   "}) })
+		if code != 1 {
+			t.Fatalf("exit = %d, want 1", code)
+		}
+		if got := readStore(); len(got) != 0 {
+			t.Fatalf("store = %v, want empty", got)
+		}
+	})
+	t.Run("valid stdin key still persists", func(t *testing.T) {
+		var code int
+		_, _ = withStdio(t, "sk-abc\n", false, func() { code = authCmd([]string{"add", "acme"}) })
+		if code != 0 {
+			t.Fatalf("exit = %d, want 0", code)
+		}
+		if got := readStore(); got["acme"] != "sk-abc" {
+			t.Fatalf("store = %v, want acme=sk-abc", got)
+		}
+	})
+}
+
+// TestHelpToStdout pins Z (cli-6): yolo help prints the usage to stdout,
+// so pipes and capture scripts see it; stderr stays empty.
+func TestHelpToStdout(t *testing.T) {
+	bin := buildBinary(t)
+	for _, arg := range []string{"help", "-h", "--help"} {
+		t.Run(arg, func(t *testing.T) {
+			cmd := exec.Command(bin, arg)
+			var stdout, stderr bytes.Buffer
+			cmd.Stdout, cmd.Stderr = &stdout, &stderr
+			if err := cmd.Run(); err != nil {
+				t.Fatalf("%s exited: %v\nstdout: %s\nstderr: %s", arg, err, stdout.String(), stderr.String())
+			}
+			if !strings.Contains(stdout.String(), "Usage:") {
+				t.Fatalf("%s: stdout missing the usage:\n%s", arg, stdout.String())
+			}
+			if stderr.Len() != 0 {
+				t.Fatalf("%s: stderr must be empty, got %q", arg, stderr.String())
+			}
+		})
+	}
+}
+
+// TestRejectUnexpectedPositionals pins AA (cli-7): serve and auth reject
+// unexpected positional args with usage + exit 2, matching tuiCmd.
+// Assertions are on exit codes (the usage text is covered by TestAuthCmd).
+func TestRejectUnexpectedPositionals(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
+
+	if code := run([]string{"auth", "list", "x"}); code != 2 {
+		t.Fatalf("auth list x exit = %d, want 2", code)
+	}
+	if code := run([]string{"auth", "remove", "a", "b"}); code != 2 {
+		t.Fatalf("auth remove a b exit = %d, want 2", code)
+	}
+	if code := run([]string{"auth", "add", "a", "b", "c"}); code != 2 {
+		t.Fatalf("auth add a b c exit = %d, want 2", code)
+	}
+	if code := run([]string{"auth", "list"}); code != 0 {
+		t.Fatalf("auth list (valid) exit = %d, want 0", code)
+	}
+
+	// serve: subprocess — pre-fix it would start serving and block on the
+	// signal channel, so the 10 s watchdog proves the rejection path.
+	bin := buildBinary(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	srv := exec.CommandContext(ctx, bin, "serve", "junk")
+	env := make([]string, 0, len(os.Environ())+5)
+	for _, kv := range os.Environ() {
+		if strings.HasPrefix(kv, "XDG_") {
+			continue
+		}
+		env = append(env, kv)
+	}
+	script := filepath.Join(root, "script.json")
+	_ = os.WriteFile(script, []byte(`[{"parts":[{"kind":"text","text":"ok","finish":"stop","usage":{"input":1,"output":1}}]}`), 0o644)
+	env = append(env,
+		"YOLO_LLM=fake", "YOLO_FAKE_SCRIPT="+script,
+		"XDG_CONFIG_HOME="+filepath.Join(root, "config"),
+		"XDG_DATA_HOME="+filepath.Join(root, "data"),
+		"XDG_CACHE_HOME="+filepath.Join(root, "cache"),
+	)
+	srv.Env = env
+	err := srv.Run()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 2 {
+		t.Fatalf("serve junk exit = %v, want exit code 2 (pre-fix: it starts serving and is killed by the watchdog)", err)
 	}
 }

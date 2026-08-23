@@ -2,7 +2,9 @@ package tui
 
 import (
 	"errors"
+	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -271,7 +273,7 @@ func TestPromptSend(t *testing.T) {
 
 	t.Run("busy store: locked toast, no send", func(t *testing.T) {
 		a := testSessionApp(sessionFixture())
-		a.store.Status = protocol.SessionStatus{Type: protocol.StatusBusy}
+		a.store.Status = protocol.SessionStatus{Type: protocol.SessionStatusBusy}
 		typeStr(a, "x")
 		a.handleKey(press(tea.KeyEnter))
 		if len(a.Cmds) != 0 {
@@ -284,7 +286,7 @@ func TestPromptSend(t *testing.T) {
 
 	t.Run("retry store also blocks with the toast", func(t *testing.T) {
 		a := testSessionApp(sessionFixture())
-		a.store.Status = protocol.SessionStatus{Type: protocol.StatusRetry}
+		a.store.Status = protocol.SessionStatus{Type: protocol.SessionStatusRetry}
 		typeStr(a, "x")
 		a.handleKey(press(tea.KeyEnter))
 		if !hasToast(a, "abort or wait (esc aborts)") {
@@ -329,8 +331,8 @@ func TestPromptSend(t *testing.T) {
 		if len(a.Cmds) != 0 {
 			t.Fatalf("recorded %d cmds, want 0 on soft enter", len(a.Cmds))
 		}
-		if a.prompt.draft != "a\n" {
-			t.Fatalf("draft = %q, want a\\n", a.prompt.draft)
+		if a.prompt.draft.String() != "a\n" {
+			t.Fatalf("draft = %q, want a\\n", a.prompt.draft.String())
 		}
 		if a.prompt.input.Value() != "" {
 			t.Fatal("the line must start empty after soft enter")
@@ -341,8 +343,8 @@ func TestPromptSend(t *testing.T) {
 			t.Fatalf("recorded %d cmds, want 1 final send", len(a.Cmds))
 		}
 		a.Update(sendMsg{err: nil})
-		if a.prompt.draft != "" || a.prompt.input.Value() != "" {
-			t.Fatalf("draft=%q value=%q after success, want both empty", a.prompt.draft, a.prompt.input.Value())
+		if a.prompt.draft.String() != "" || a.prompt.input.Value() != "" {
+			t.Fatalf("draft=%q value=%q after success, want both empty", a.prompt.draft.String(), a.prompt.input.Value())
 		}
 	})
 }
@@ -415,4 +417,24 @@ func TestPromptKeyRouting(t *testing.T) {
 			t.Fatalf("value = %q, want cleared", a.prompt.input.Value())
 		}
 	})
+}
+
+// TestDraftSoftEnterAmortized pins the draft growth path (datastruct-9):
+// many soft-enters must stay linear in total draft bytes (the old
+// `draft += line` string concat is quadratic).
+func TestDraftSoftEnterAmortized(t *testing.T) {
+	a := testSessionApp(sessionFixture())
+	t.Cleanup(a.Close)
+	line := strings.Repeat("x", 100) + "\\" // 100 chars + the soft-enter backslash
+	start := time.Now()
+	for i := 0; i < 40000; i++ { // 4 MB of draft total
+		a.prompt.input.SetValue(line)
+		a.handleKey(press(tea.KeyEnter))
+	}
+	if d := time.Since(start); d > draftAmortizedLimit {
+		t.Fatalf("40k soft-enters took %v, want < %v (draft growth must be amortized)", d, draftAmortizedLimit)
+	}
+	if got := a.prompt.draft.String(); len(got) != 40000*101 {
+		t.Fatalf("draft length = %d, want %d", len(got), 40000*101)
+	}
 }

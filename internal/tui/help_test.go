@@ -49,12 +49,13 @@ func TestHelpAnyKeyCloses(t *testing.T) {
 	}
 }
 
-// T28 locks the quit-confirm text to `quit? [y/n]`; y exits, n/esc go back.
+// T28 locks the quit-confirm text to `quit? [Y/n]`; y/enter exit, n/esc go
+// back (enter is the pinned default-confirm key).
 func TestQuitConfirmTextAndKeys(t *testing.T) {
 	a := testApp()
 	a.dlg.push(dialog{kind: dlgQuit})
-	if got := stripANSI(a.dlgView()); got != "quit? [y/n]" {
-		t.Fatalf("quit dialog = %q, want %q", got, "quit? [y/n]")
+	if got := stripANSI(a.dlgView()); got != "quit? [Y/n]" {
+		t.Fatalf("quit dialog = %q, want %q", got, "quit? [Y/n]")
 	}
 	cmds := a.handleKey(press('y'))
 	if len(cmds) != 1 {
@@ -64,7 +65,17 @@ func TestQuitConfirmTextAndKeys(t *testing.T) {
 	if _, ok := m.(tea.QuitMsg); !ok {
 		t.Fatalf("quit cmd yields %T, want tea.QuitMsg", m)
 	}
-	a.dlg.items = nil // y exits; clear the stack for the n path
+	a.dlg.items = nil // y exits; clear the stack for the enter path
+	a.dlg.push(dialog{kind: dlgQuit})
+	cmds = a.handleKey(press(tea.KeyEnter))
+	if len(cmds) != 1 {
+		t.Fatalf("enter returned %d cmds, want 1 (quit)", len(cmds))
+	}
+	m = cmds[0]()
+	if _, ok := m.(tea.QuitMsg); !ok {
+		t.Fatalf("enter cmd yields %T, want tea.QuitMsg", m)
+	}
+	a.dlg.items = nil // enter exits; clear the stack for the n path
 	a.dlg.push(dialog{kind: dlgQuit})
 	if cmds := a.handleKey(press('n')); len(cmds) != 0 {
 		t.Fatalf("n returned %d cmds, want 0", len(cmds))

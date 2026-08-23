@@ -33,7 +33,7 @@ func (a *App) closeAgentDialog() {
 }
 
 // currentAgentName is the session agent, falling back to the config agent.
-func currentAgentName(st *store.Store) string {
+func currentAgentName(st *store.State) string {
 	if cur := st.Current; cur != nil && cur.Agent != "" {
 		return cur.Agent
 	}
@@ -60,7 +60,7 @@ func (a *App) syncAgentSel() {
 }
 
 // selectedName is the name of the selected agent.
-func (m *agentDlg) selectedName(st *store.Store) string {
+func (m *agentDlg) selectedName(st *store.State) string {
 	if m.sel >= 0 && m.sel < len(st.Agents) {
 		return st.Agents[m.sel].Name
 	}
@@ -111,7 +111,7 @@ func (m *agentDlg) handleKey(a *App, k tea.KeyPressMsg) []tea.Cmd {
 }
 
 // view renders the agent list, the subchoice overlay and the keymap hint.
-func (m *agentDlg) view(st *store.Store) string {
+func (m *agentDlg) view(st *store.State) string {
 	var b strings.Builder
 	b.WriteString(title.Render("Agents") + "\n")
 	if len(st.Agents) == 0 {
