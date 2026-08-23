@@ -51,13 +51,6 @@ tasks, spec §4).
 e2e-live` PASS pre-tag, epic `yolo-8vl` closed; v0.1.3 released — PR #7,
 deviations 73–77. Detail in `git log --oneline`.)
 
-## Open items
-
-- [x] Version wiring — spec'd in v0.2.0 design §2 (ldflags + VCS stamping +
-  justfile); tracked as bead `yolo-2bf`.
-- [x] All 15 waves full-coverage (wave-1 skipped chunks backfilled — deviation 67; no
-  residual `COVERAGE: skipped` notes)
-
 ## Key verified facts (so they don't get re-litigated)
 
 - Permission engine = port of `packages/opencode/src/permission/index.ts` + matrices in
@@ -67,7 +60,7 @@ is `*` deny; `write`+`edit` both map to permission `edit`.
 - Pinned deps: `charm.land/bubbletea/v2` v2.0.8, `charm.land/lipgloss/v2` v2.0.6,
 `charm.land/bubbles/v2` v2.1.1, `modernc.org/sqlite` v1.56.0 (pure Go, no cgo),
 `tidwall/jsonc` v0.3.3; dev-only `teatest/v2` v2.0.0-20260816001655-68d539dca504.
-- Module `github.com/kido5217/yolo`, Go ≥ 1.25 (installed 1.26.5).
+- Module `github.com/kido5217/yolo`, Go ≥ 1.25 (installed 1.26.7).
 - Single deliberate wire deviation: `x-yolo-directory` header.
 - Test gating: unit tests never hit network; `YOLO_LLM=fake` (+ `YOLO_FAKE_SCRIPT`) selects
 the scripted fake driver; zen fixture gate = 57 models (42 openai + 15 anthropic,
@@ -82,17 +75,16 @@ plain strings (`TrimRight`) BEFORE styling (a styled string's last bytes are `\x
 post-style trim silently misses), and count display widths in runes
 (`utf8.RuneCountInString`) — `·` is 2 bytes, `○` 3 (both 1 column). Both bit T27's two-pane
 column math.
-- e2e/endpoint facts (Task 30): `scripts/e2e-live.sh` (entry point `just e2e-live`,
-script path unchanged) validated PASS (exit 0) 2026-08-18
-BOTH against a mock OpenAI SSE endpoint and the REAL `https://ai.kido.ws/v1`,
-and re-validated PASS on 2026-08-23 before the v0.2.0 tag — the spec v1
-dogfood success criterion is met (completed `bash ls /tmp` tool call + text reply; abort
-idle → `aborted:false`, busy → `aborted:true`; SIGTERM → exit 0). `ai.kido.ws` accepts ANY
-bearer token (private endpoint; no auth.json on this host — key order env → auth.json →
-config). `GET /global/health` → `{"status":"ok"}`; `/session/{id}/message` rows =
-`{"info":{role,error:{type},...},"parts":[...]}` (jq: `.info.role`). Script mechanics:
-`req()` must set globals (never run inside `$(…)` — subshell loses `HTTP_STATUS`); boot
-from the scratch project dir (deviation 65).
+- e2e/endpoint facts: `scripts/e2e-live.sh` (entry point `just e2e-live`),
+  validated PASS against the REAL `https://ai.kido.ws/v1` on 2026-08-24
+  (post Plan 1 merge; the pre-tag re-validation of spec §5) — success shape:
+  completed bash tool call + text reply; abort idle → `aborted:false`, busy
+  → `aborted:true`; SIGTERM → exit 0. `ai.kido.ws` accepts ANY bearer token
+  (private endpoint — key order env → auth.json → config).
+  `GET /global/health` → `{"status":"ok"}`; `/session/{id}/message` rows =
+  `{"info":{role,error:{type},...},"parts":[...]}` (jq: `.info.role`). Script
+  mechanics: `req()` must set globals (never run inside `$(…)` — subshell
+  loses `HTTP_STATUS`); boot from the scratch project dir (deviation 65).
 - teatest v2 output mechanics (bit T28's suites): (a) each `WaitFor` drains the SHARED
 output buffer — consecutive `WaitFor`s observe DISJOINT slices, so a multi-token terminal
 state must be ONE merged condition, never two sequential waits (an idle app emits no new

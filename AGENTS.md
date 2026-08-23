@@ -8,7 +8,7 @@ Read it before acting. Task state: beads (`bd ready`). Verified facts:
 
 **yolo** is a faithful Go port of [opencode](https://github.com/anomalyco/opencode) **v1.18.18** — TUI + core server only (web/desktop/slack/console dropped). Purpose: test the capabilities of **Qwen3.8-27B** on a single RTX 5090 behind `https://ai.kido.ws/v1`.
 
-- Module `github.com/kido5217/yolo`, binary `yolo`, Go ≥ 1.25 (installed 1.26.5).
+- Module `github.com/kido5217/yolo`, binary `yolo`, Go ≥ 1.25 (installed 1.26.7).
 - Single binary: starts the core HTTP server (REST + SSE) **in-process**, then runs the bubbletea v2 TUI which talks to it **only** via the wire contract.
 - Core layering: `protocol` (wire DTOs, single source of truth) → `server` → `session` (agent loop) → `llm` / `provider` / `tool` / `permission` / `config` / `auth` / `storage` / `bus`.
 - **Dependency policy — allowlist + agent-proposable.** Runtime deps are pinned
@@ -16,7 +16,7 @@ Read it before acting. Task state: beads (`bd ready`). Verified facts:
   `charm.land/lipgloss/v2` v2.0.6, `charm.land/bubbles/v2` v2.1.1,
   `modernc.org/sqlite` v1.56.0 (pure Go, no cgo), `tidwall/jsonc` v0.3.3,
   `github.com/aymanbagabas/go-udiff` v0.4.1 (proposal #1, user-approved
-  2026-08-23; lands in 0.3.0 Plan 1 task N — the Myers line diff); dev-only
+  2026-08-23 — the Myers line diff); dev-only
   `github.com/charmbracelet/x/exp/teatest/v2`
   v2.0.0-20260816001655-68d539dca504. Anything outside the allowlist requires
   an agent **dep proposal** (in the task's spec/plan or beads issue) BEFORE any
@@ -38,7 +38,7 @@ Read it before acting. Task state: beads (`bd ready`). Verified facts:
 | Deviation audit (append-only, principle 5) | `docs/superpowers/DEVIATIONS.md` |
 | 0.3.0 work list (deferred findings) | `docs/superpowers/DEFERRED.md` |
 | Implementation plan | `docs/superpowers/plans/` — dated, one active at a time (named in the beads epic). **Read ONLY the active task slice** |
-| Approved design | `docs/superpowers/specs/` — dated, the active one is named in the beads epic. Zero-telemetry statement lives in the v1 design's §1 |
+| Approved design | `docs/superpowers/specs/` — dated, the active one is named in the beads epic. Zero-telemetry statement: `2026-08-17-yolo-go-port-design.md` §1 |
 | Upstream reference | `/tmp/opencode-upstream` — clone at tag `v1.18.18`. If missing: `git clone --depth 1 --branch v1.18.18 https://github.com/anomalyco/opencode /tmp/opencode-upstream`. **Never touch `/tmp/opencode`** — pre-existing user data |
 | Golang skills | `.agents/skills/` + `skills-lock.json` — 15 hash-locked (samber/cc-skills-golang) — see Skills below |
 
@@ -47,17 +47,17 @@ Read it before acting. Task state: beads (`bd ready`). Verified facts:
 1. **Zero telemetry.** yolo runs on the end user's machine and must contain zero telemetry: no usage data ever sent to any remote server, no opt-in telemetry. Upstream telemetry surfaces are **skipped, not deferred**: OTEL/OTLP exporter (`packages/core/src/observability/otlp.ts`), OpenTelemetry spans on LLM calls (`experimental.openTelemetry` / `experimental_telemetry` in `packages/opencode/src/session/llm.ts`), telemetry-identity field. `OTEL_*` env vars are inert; the ported config schema omits `experimental.openTelemetry`. Full statement: spec §1.
 2. **Faithful port, one deliberate wire deviation.** Legacy REST paths/JSON shapes and the legacy SSE event set are mirrored so the port is verifiable against opencode's OpenAPI contract. The single deviation: scoping header is **`x-yolo-directory`** (upstream: `x-opencode-directory`).
 3. **Verbatim pins are tests, not decoration.** 14 session prompt files and all tool `desc/*.txt` files are ported **byte-verbatim** from upstream and guarded by sha256 pins in tests. Do not "improve", rewrap, or reword pinned text.
-4. **TUI is a pure client.** Non-test files under `internal/tui/` import only `internal/protocol` + `internal/tui/*` (+ stdlib/charm deps). `_test.go` may use `internal/server/testutil` (escape hatch). Enforced by Task 29.
+4. **TUI is a pure client.** Non-test files under `internal/tui/` import only `internal/protocol` + `internal/tui/*` (+ stdlib/charm deps). `_test.go` may use `internal/server/testutil` (escape hatch). Enforced by `TestImportsDirection` (`internal/tui/imports_test.go`).
 5. **Tests define the contract.** When the plan contradicts itself (or its own test code is buggy), resolve per the last-stated call, fix the test, and **log the deviation in `docs/superpowers/DEVIATIONS.md`** with severity.
 6. **Task state in beads; proven knowledge in docs.** Track task state in beads — never duplicate it in files. When a fact is proven or a deviation is logged, update `docs/superpowers/PROGRESS.md` (facts) / `docs/superpowers/DEVIATIONS.md` (audit) before moving on — a stale audit log is a broken resume. File shapes: "Commit & branch discipline."
-7. **Subagents one at a time.** Never dispatch more than one subagent concurrently (via the `task` tool): dispatch one, wait for it to fully return, then dispatch the next. This supersedes any plan/spec wording permitting parallel subagents (the v0.1.2 plan/spec "≤3 parallel" text was revised 2026-08-20; see `docs/superpowers/DEVIATIONS.md`).
+7. **Subagents one at a time.** Never dispatch more than one subagent concurrently (via the `task` tool): dispatch one, wait for it to fully return, then dispatch the next. This supersedes any plan/spec wording permitting parallel subagents.
 8. **YOLO spawns only YOLO.** If the root agent is `YOLO`, any subagent it spawns MUST also be `YOLO` — never dispatch a subagent of a different agent type.
 
 ## Commands & verification
 
 - **The CI gate (run at module root):** `go vet ./... && go test ./...` — **every task ends with both green and a commit.**
 - **Formatting (run at module root after every completed step, before the commit):** gofmt from the **Go 1.26** toolchain on all code — `gofmt -l .` must print nothing; if it prints files, run `gofmt -w` on them and re-run the gate.
-- Unit/integration tests **never hit the network.** Live paths are env-gated: `YOLO_LLM=fake` (+ `YOLO_FAKE_SCRIPT`) selects the scripted fake driver; the e2e smoke vs `ai.kido.ws` (`scripts/e2e-live.sh`, created in Task 30) is on-demand, user-run, never CI.
+- Unit/integration tests **never hit the network.** Live paths are env-gated: `YOLO_LLM=fake` (+ `YOLO_FAKE_SCRIPT`) selects the scripted fake driver; the e2e smoke vs `ai.kido.ws` (`scripts/e2e-live.sh`) is on-demand, user-run, never CI.
 - Host toolchain quirk (both installed toolchains): plain `import "embed"` + scalar `//go:embed` fails typecheck with `embed imported and not used` — the workaround in use is `import _ "embed"` (see `internal/tool/read.go`). Keep the pattern.
 - Zen catalog CDN (`models.opencode.ai`) blocks python-urllib (403) — fetch with **curl + browser UA**.
 
@@ -66,10 +66,10 @@ Read it before acting. Task state: beads (`bd ready`). Verified facts:
 - **NEVER commit directly onto `main`** (user directive, 2026-08-22). Every change —
   code, docs, checkpoints, release bookkeeping — is committed on a task branch and
   reaches `main` only via a merged PR (branch → commit → push → PR → user merge).
-- Work happens inline on the current task branch (named with the active plan — see `PROGRESS.md` → Resume instructions), **one task at a time**.
+- Work happens inline on the current task branch (named with the active plan), **one task at a time**.
 - Conventional commits (`feat:`/`fix:`/`docs:`/`test:`/…, imperative, ≤ 72-char subject). Task commits use **the commit message pinned in the plan**. Between tasks: `docs: checkpoint — Task N (...) done, next is Task N+1`.
 - Update `PROGRESS.md` / `DEVIATIONS.md` when facts or deviations change. **No per-task history in files, no plan-slice copies:** task state is beads; `git log --oneline` and the plan file are the archive. Deviations are append-only in `DEVIATIONS.md` (pre-v0.1.2 items 1–66 frozen in `docs/superpowers/deviations-archive-v0.1.0.md`).
-- **Tag `v0.1.0` (Task 30) ONLY with explicit user go-ahead.** Versioning: **semantic versioning** — `MAJOR.MINOR.PATCH`, MAJOR = breaking changes, MINOR = new features, PATCH = fixes. 0.1.0 = current scope; out-of-scope features land in 0.2.0+.
+- **Tags ONLY with explicit user go-ahead.** Versioning: **semantic versioning** — `MAJOR.MINOR.PATCH`, MAJOR = breaking changes, MINOR = new features, PATCH = fixes.
 
 ## Superpowers workflow (required)
 
@@ -198,11 +198,10 @@ Default section order:
 
 ## User Preferences
 
-- Harnesses: **opencode only** (yolo itself in the future). No claude/codex
-  integrations — their artifacts were removed 2026-08-22 (`bd setup codex/claude
-  --remove`, `CLAUDE.md` deleted). All agent logic lives in `AGENTS.md`; the
-  only managed block is `bd setup opencode` (do not hand-edit its markers).
-  The project beads skill at `.agents/skills/beads/` is bd-managed and stays.
+- Harnesses: **opencode only** (yolo itself in the future). All agent logic
+  lives in `AGENTS.md`; the only managed block is `bd setup opencode` (do not
+  hand-edit its markers). The project beads skill at `.agents/skills/beads/`
+  is bd-managed and stays.
 
 ## Child DOX Index
 
