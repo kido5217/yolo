@@ -323,3 +323,22 @@ assert "before"/"after" present with distinct ids; the session-wide
 per-id ≤2 part.updated frame check is unchanged. Test-only; the pinned
 contract (fresh part id per text block, no re-finalization) is unchanged.
 Resolves per principle 5.
+99. git-repo cache now expires (behavior/low, 2026-08-23): finding
+[design-7] — the package-global git-dir cache was unbounded and non-expiring:
+ a dir that became a git repo mid-process stayed "no" forever in every env
+ block. Now bounded (1024 entries; cap breach drops the cache) with a 60 s
+ TTL. Upstream check: `Is directory a git repo` renders from
+ `ctx.project.vcs` (system.ts:79) — a persisted project property detected at
+ project scan, static per instance, never re-checked; yolo's per-process cache
+ is the faithful equivalent, so the expiry is a deliberate deviation from the
+ upstream static answer. Model-visible only in the env-block line for a dir
+ whose git status changes mid-process (previously permanently stale "no", now
+ correct within 60 s). The pinned env-block text is unchanged. Resolves per
+ principle 2 + the implement-everything scope policy (spec §3.1 G).
+ 100. Plan Task G test set the short TTL after the first gitRepo call
+ (low, 2026-08-23): the pre-init "not a repo" check inserted a "no" entry
+ whose expiry was computed with the default 60 s TTL before the test
+ shortened `gitCacheTTL` to 30 ms, so the 2 s expiry poll would time out
+ post-fix. Fix: shorten the TTL (with cleanup restore) before the first
+ `gitRepo` call. Test-only; the pinned behavior (a cached "no" expires once
+ the TTL passes) is unchanged. Resolves per principle 5.
