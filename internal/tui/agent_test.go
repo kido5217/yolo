@@ -269,7 +269,7 @@ func TestTUIAgentDialog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	a := newRecApp(c, store.Store{}, ses.ID)
+	a := newRecApp(c, store.State{}, ses.ID)
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 

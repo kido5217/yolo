@@ -40,7 +40,7 @@ const (
 // event pump.
 type App struct {
 	*client.Service
-	store        store.Store
+	store        store.State
 	route        route
 	curSessionID string
 	home         homeModel
@@ -66,7 +66,7 @@ type App struct {
 // NewApp builds the root model. A non-empty startSessionID starts on that
 // session (resume); empty starts at home. The prompt is always focused with a
 // static (non-blinking) cursor.
-func NewApp(c *client.Service, s store.Store, startSessionID string) *App {
+func NewApp(c *client.Service, s store.State, startSessionID string) *App {
 	ctx, cancel := context.WithCancel(context.Background())
 	eventCh, resyncCh := c.Events(ctx)
 	a := &App{

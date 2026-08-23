@@ -14,8 +14,8 @@ import (
 // per-frame transcript shape the session route re-renders. The width is
 // 80 (the plan geometry); expanded toggles which parts show their I/O or
 // reasoning body.
-func benchStore(n int, expanded bool) *store.Store {
-	st := &store.Store{}
+func benchStore(n int, expanded bool) *store.State {
+	st := &store.State{}
 	for i := 0; i < n; i++ {
 		mid := fmt.Sprintf("msg_bench_%03d", i)
 		parts := []protocol.Part{
@@ -77,7 +77,7 @@ func benchStore(n int, expanded bool) *store.Store {
 
 // benchExpanded returns the part-id set the alt+e/alt+t toggles would show,
 // keyed to every tool and reasoning part when expanded is true.
-func benchExpanded(st *store.Store, expanded bool) map[string]bool {
+func benchExpanded(st *store.State, expanded bool) map[string]bool {
 	m := map[string]bool{}
 	if !expanded {
 		return m

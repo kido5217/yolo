@@ -316,7 +316,7 @@ func tuiCmd(args []string) int {
 		}
 	}
 
-	app := tui.NewApp(cl, store.Store{}, sessionID)
+	app := tui.NewApp(cl, store.State{}, sessionID)
 	deps.Log.Info("tui start", "workdir", wd)
 	_, runErr := tea.NewProgram(app).Run()
 	deps.Log.Info("tui end", "exit_code", tuiExit(runErr))

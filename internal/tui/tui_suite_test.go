@@ -54,7 +54,7 @@ func TestTUIFullTurn(t *testing.T) {
 		t.Fatalf("write fixture: %v", err)
 	}
 	c := client.New(ts.URL, ts.Dir)
-	a := newRecApp(c, store.Store{}, "")
+	a := newRecApp(c, store.State{}, "")
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
@@ -122,7 +122,7 @@ func permFlowHarness(t *testing.T) (*teatest.TestModel, *testutil.TestServer) {
 	cfg := &protocol.Config{Permission: map[string]any{"bash": "ask"}}
 	ts := testutil.BootWithDriverConfig(t, drv, cfg)
 	c := client.New(ts.URL, ts.Dir)
-	a := newRecApp(c, store.Store{}, "")
+	a := newRecApp(c, store.State{}, "")
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a,
 		teatest.WithInitialTermSize(80, 24),
@@ -223,7 +223,7 @@ func TestTUIPermissionFlow(t *testing.T) {
 func TestTUIDialogs(t *testing.T) {
 	ts := testutil.Boot(t)
 	c := client.New(ts.URL, ts.Dir)
-	a := newRecApp(c, store.Store{}, "")
+	a := newRecApp(c, store.State{}, "")
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 

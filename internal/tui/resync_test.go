@@ -35,7 +35,7 @@ func TestAppResyncRehydrates(t *testing.T) {
 
 	// Fresh app on the same session with an empty display store: simulate
 	// the state where the SSE transcript state was lost in a drop.
-	ra := newRecApp(c, store.Store{}, ses.ID)
+	ra := newRecApp(c, store.State{}, ses.ID)
 	t.Cleanup(ra.Close)
 
 	// (1) The resync pump is wired and delivers resyncMsg on a ping.
@@ -73,7 +73,7 @@ func TestAppResyncRehydrates(t *testing.T) {
 func TestAppResyncFooter(t *testing.T) {
 	ts := testutil.Boot(t)
 	c := client.New(ts.URL, ts.Dir)
-	ra := newRecApp(c, store.Store{}, "")
+	ra := newRecApp(c, store.State{}, "")
 	t.Cleanup(ra.Close)
 	ra.store.Live = true
 	if got := ra.footerView(); !strings.Contains(got, "● live") {

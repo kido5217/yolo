@@ -215,7 +215,7 @@ func permHarness(t *testing.T) (*testutil.TestServer, *client.Service, *teatest.
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	a := newRecApp(c, store.Store{}, ses.ID)
+	a := newRecApp(c, store.State{}, ses.ID)
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 16))
 	return ts, c, tm, ses.ID
@@ -362,7 +362,7 @@ func TestPermissionKeyReplyWiring(t *testing.T) {
 			t.Cleanup(srv.Close)
 
 			c := client.New(srv.URL, "")
-			a := newRecApp(c, store.Store{
+			a := newRecApp(c, store.State{
 				Pending: []protocol.PermissionAskedProps{permProps()},
 			}, "ses_1")
 			t.Cleanup(a.Close)

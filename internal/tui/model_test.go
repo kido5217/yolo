@@ -403,7 +403,7 @@ func TestTUIModelDialog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	a := newRecApp(c, store.Store{}, ses.ID)
+	a := newRecApp(c, store.State{}, ses.ID)
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
@@ -456,7 +456,7 @@ func TestModelDialogPatchPaths(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	a := newRecApp(c, store.Store{
+	a := newRecApp(c, store.State{
 		Current:   &protocol.Session{ID: ses.ID, Agent: "build", Model: refModel("kido", "q")},
 		Providers: tuiProviderFixture(),
 		Agents:    tuiAgentFixture(),
