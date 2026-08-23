@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/kido5217/yolo/internal/llm"
-	fakellm "github.com/kido5217/yolo/internal/llm/fake"
+	"github.com/kido5217/yolo/internal/llm/fake"
 )
 
 // TestBashTruncatedOutputTellsModelWhereFullOutputIs is the model-visible
@@ -18,7 +18,7 @@ import (
 func TestBashTruncatedOutputTellsModelWhereFullOutputIs(t *testing.T) {
 	h := newHarness(t)
 	h.build(t)
-	h.drv.Turns = []fakellm.Turn{
+	h.drv.Turns = []fake.Turn{
 		{Parts: []llm.Part{
 			{Kind: "tool", Name: "bash", CallID: "call_seq", Text: `{"command":"seq 1 3000"}`},
 		}},

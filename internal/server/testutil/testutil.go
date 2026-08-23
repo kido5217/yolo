@@ -19,7 +19,7 @@ import (
 	"github.com/kido5217/yolo/internal/bus"
 	"github.com/kido5217/yolo/internal/config"
 	"github.com/kido5217/yolo/internal/llm"
-	fakellm "github.com/kido5217/yolo/internal/llm/fake"
+	"github.com/kido5217/yolo/internal/llm/fake"
 	"github.com/kido5217/yolo/internal/log"
 	"github.com/kido5217/yolo/internal/permission"
 	"github.com/kido5217/yolo/internal/protocol"
@@ -37,7 +37,7 @@ type TestServer struct {
 	DB      *storage.DB
 	Bus     *bus.Bus
 	Eng     *session.Engine
-	Fake    *fakellm.Driver
+	Fake    *fake.Driver
 	PermSvc *permission.Service
 	Dir     string
 	Home    string
@@ -53,12 +53,12 @@ type TestServer struct {
 // cleanup on t.
 func Boot(t *testing.T) *TestServer {
 	t.Helper()
-	return bootLog(t, fakellm.New(fakellm.AutoText()), &protocol.Config{}, "")
+	return bootLog(t, fake.New(fake.AutoText()), &protocol.Config{}, "")
 }
 
 // BootWithDriver boots the full stack with a caller-provided fake driver
 // (the env-gate variant, YOLO_LLM=fake).
-func BootWithDriver(t *testing.T, drv *fakellm.Driver) *TestServer {
+func BootWithDriver(t *testing.T, drv *fake.Driver) *TestServer {
 	t.Helper()
 	return bootLog(t, drv, &protocol.Config{}, "")
 }
@@ -67,7 +67,7 @@ func BootWithDriver(t *testing.T, drv *fakellm.Driver) *TestServer {
 // and pins the engine's config dependency to cfg (empty per directory by
 // default). Tests use it to exercise config-driven behavior such as
 // permission rules without a yolo.jsonc file.
-func BootWithDriverConfig(t *testing.T, drv *fakellm.Driver, cfg *protocol.Config) *TestServer {
+func BootWithDriverConfig(t *testing.T, drv *fake.Driver, cfg *protocol.Config) *TestServer {
 	t.Helper()
 	return bootLog(t, drv, cfg, "")
 }
@@ -75,14 +75,14 @@ func BootWithDriverConfig(t *testing.T, drv *fakellm.Driver, cfg *protocol.Confi
 // BootWithDriverLog boots the full stack with a caller-provided fake driver,
 // writing server logs to logDir (TestServer.LogDir) so tests can read
 // <logDir>/log/yolo.log.
-func BootWithDriverLog(t *testing.T, drv *fakellm.Driver, logDir string) *TestServer {
+func BootWithDriverLog(t *testing.T, drv *fake.Driver, logDir string) *TestServer {
 	t.Helper()
 	return bootLog(t, drv, &protocol.Config{}, logDir)
 }
 
 // bootLog boots the FULL stack on the given kido driver (no network); with
 // logDir set, server logs go to <logDir>/log/yolo.log.
-func bootLog(t *testing.T, drv *fakellm.Driver, cfg *protocol.Config, logDir string) *TestServer {
+func bootLog(t *testing.T, drv *fake.Driver, cfg *protocol.Config, logDir string) *TestServer {
 	t.Helper()
 	root := t.TempDir()
 	dataDir := filepath.Join(root, "data")

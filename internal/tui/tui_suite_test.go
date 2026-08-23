@@ -14,7 +14,7 @@ import (
 	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/kido5217/yolo/internal/llm"
-	fakellm "github.com/kido5217/yolo/internal/llm/fake"
+	"github.com/kido5217/yolo/internal/llm/fake"
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/server/testutil"
 	"github.com/kido5217/yolo/internal/tui/client"
@@ -35,8 +35,8 @@ func suiteType(tm *teatest.TestModel, s string) {
 // full sequence is asserted from the captured output stream (v2 teatest
 // drains per WaitFor, deviation 50).
 func TestTUIFullTurn(t *testing.T) {
-	drv := fakellm.New(
-		fakellm.Turn{Parts: []llm.Part{
+	drv := fake.New(
+		fake.Turn{Parts: []llm.Part{
 			{Kind: "reasoning", Text: "let me think"},
 			{Kind: "text", Text: "thinking now"},
 			{
@@ -47,7 +47,7 @@ func TestTUIFullTurn(t *testing.T) {
 				Finish: "tool_calls",
 			},
 		}},
-		fakellm.Turn{Parts: []llm.Part{{Kind: "text", Text: "all done"}}},
+		fake.Turn{Parts: []llm.Part{{Kind: "text", Text: "all done"}}},
 	)
 	ts := testutil.BootWithDriver(t, drv)
 	if err := os.WriteFile(filepath.Join(ts.Dir, "hello.txt"), []byte("world\n"), 0o644); err != nil {
@@ -112,12 +112,12 @@ func TestTUIFullTurn(t *testing.T) {
 // caller drives n → type → enter itself.
 func permFlowHarness(t *testing.T) (*teatest.TestModel, *testutil.TestServer) {
 	t.Helper()
-	drv := fakellm.New(
-		fakellm.Turn{Parts: []llm.Part{
+	drv := fake.New(
+		fake.Turn{Parts: []llm.Part{
 			{Kind: "text", Text: "working"},
 			{Kind: "tool", Name: "bash", CallID: "call_1", Args: json.RawMessage(`{"command":"echo hi"}`), Finish: "tool_calls"},
 		}},
-		fakellm.Turn{Parts: []llm.Part{{Kind: "text", Text: "all done"}}},
+		fake.Turn{Parts: []llm.Part{{Kind: "text", Text: "all done"}}},
 	)
 	cfg := &protocol.Config{Permission: map[string]any{"bash": "ask"}}
 	ts := testutil.BootWithDriverConfig(t, drv, cfg)

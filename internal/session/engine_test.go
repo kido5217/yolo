@@ -14,7 +14,7 @@ import (
 
 	"github.com/kido5217/yolo/internal/bus"
 	"github.com/kido5217/yolo/internal/llm"
-	fakellm "github.com/kido5217/yolo/internal/llm/fake"
+	"github.com/kido5217/yolo/internal/llm/fake"
 	"github.com/kido5217/yolo/internal/permission"
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/provider"
@@ -28,7 +28,7 @@ type harness struct {
 	db  *storage.DB
 	bus *bus.Bus
 	eng *session.Engine
-	drv *fakellm.Driver
+	drv *fake.Driver
 	svc *permission.Service
 
 	// dataDir is shared by the engine Deps and the permission service (the
@@ -137,7 +137,7 @@ func (h *harness) queueReplies(responses ...string) {
 
 func (h *harness) build(t *testing.T) {
 	t.Helper()
-	drv := fakellm.New()
+	drv := fake.New()
 	reg, err := provider.NewWithSeams(t.Context(), t.TempDir(), func(providerID string) (provider.Info, provider.Model, error) {
 		return provider.Info{ID: "kido", Name: "kido", BaseURL: "http://fake", KeyRequired: false},
 			provider.Model{ID: "q", Name: "q", Adapter: "openai", Context: 100000, ToolCall: true}, nil
@@ -177,7 +177,7 @@ func (h *harness) build(t *testing.T) {
 // wrapper, or h.overrideDriver when a test set it before build (bespoke
 // stream behavior). The title side-call shares the same driver, so
 // overrides must be concurrency-safe.
-func (h *harness) wiredDriver(drv *fakellm.Driver) llm.Driver {
+func (h *harness) wiredDriver(drv *fake.Driver) llm.Driver {
 	if h.overrideDriver != nil {
 		return h.overrideDriver
 	}
@@ -439,7 +439,7 @@ func TestSingleTextTurnEndToEnd(t *testing.T) {
 	h := newHarness(t)
 	h.build(t)
 
-	h.drv.Turns = []fakellm.Turn{{Parts: []llm.Part{
+	h.drv.Turns = []fake.Turn{{Parts: []llm.Part{
 		{Kind: "text", Text: "Hel"},
 		{Kind: "text", Text: "lo"},
 		{Kind: "text", Text: "", Finish: "stop", Usage: &llm.Usage{Input: 42, Output: 7}},
@@ -580,7 +580,7 @@ func TestHistoryReplayIncludesToolResults(t *testing.T) {
 	fp := filepath.Join(d, "f.txt")
 	writeFile(t, fp, "content")
 
-	h.drv.Turns = []fakellm.Turn{
+	h.drv.Turns = []fake.Turn{
 		{Parts: []llm.Part{
 			{Kind: "text", Text: "checking"},
 			{Kind: "tool", Name: "read", CallID: "call_1", Text: fmt.Sprintf(`{"filePath":%q}`, fp)},
@@ -728,7 +728,7 @@ func TestShutdownAbortsActiveAndWaits(t *testing.T) {
 func TestTextDeltasEmitSSEAndPersistAtFinalize(t *testing.T) {
 	h := newHarness(t)
 	h.build(t)
-	h.drv.Turns = []fakellm.Turn{{Parts: []llm.Part{
+	h.drv.Turns = []fake.Turn{{Parts: []llm.Part{
 		{Kind: "text", Text: "He"},
 		{Kind: "text", Text: "llo"},
 		{Kind: "text", Text: " world", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 3}},
@@ -766,7 +766,7 @@ func TestHistorySnapshotAccumulatesAcrossRounds(t *testing.T) {
 	h := newHarness(t)
 	h.build(t)
 	ses := h.startSession(t, t.TempDir())
-	h.drv.Turns = []fakellm.Turn{
+	h.drv.Turns = []fake.Turn{
 		{Parts: []llm.Part{{Kind: "tool", Name: "glob", CallID: "g1", Text: `{"pattern":"x*"}`, Finish: "tool_calls"}}},
 		{Parts: []llm.Part{{Kind: "text", Text: "done", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}},
 	}
@@ -901,7 +901,7 @@ func TestSendEarlyFailPublishesNoStatus(t *testing.T) {
 // goroutine is in flight for the whole test window.
 type holdTitleDriver struct {
 	cancelled atomic.Bool
-	inner     *fakellm.Driver
+	inner     *fake.Driver
 }
 
 func (d *holdTitleDriver) Stream(ctx context.Context, req llm.Request) (llm.PartStream, error) {
@@ -915,7 +915,7 @@ func (d *holdTitleDriver) Stream(ctx context.Context, req llm.Request) (llm.Part
 
 func titleProbeHarness(t *testing.T) (*harness, *holdTitleDriver) {
 	h := newHarness(t)
-	hd := holdTitleDriver{inner: fakellm.New(fakellm.Turn{Parts: []llm.Part{
+	hd := holdTitleDriver{inner: fake.New(fake.Turn{Parts: []llm.Part{
 		{Kind: "text", Text: "hi", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}},
 	}})}
 	h.overrideDriver = &hd
@@ -980,7 +980,7 @@ func TestShutdownCancelsAndWaitsTitle(t *testing.T) {
 // the second title stream is held until its ctx is cancelled (counted).
 // Turn requests forward to an auto-text fake.
 type supersededTitleDriver struct {
-	inner     *fakellm.Driver
+	inner     *fake.Driver
 	titleSeq  atomic.Int32
 	release1  chan struct{}
 	cancelled atomic.Bool
@@ -1011,7 +1011,7 @@ func (d *supersededTitleDriver) Stream(ctx context.Context, req llm.Request) (ll
 // for the unconditional-drop review finding).
 func TestSupersededTitleDropKeepsNewerCancel(t *testing.T) {
 	h := newHarness(t)
-	hd := &supersededTitleDriver{inner: fakellm.New(fakellm.AutoText()), release1: make(chan struct{})}
+	hd := &supersededTitleDriver{inner: fake.New(fake.AutoText()), release1: make(chan struct{})}
 	h.overrideDriver = hd
 	h.build(t)
 	ses := h.startSession(t, t.TempDir())
@@ -1194,7 +1194,7 @@ func TestToolRoundMintsFreshTextPart(t *testing.T) {
 	d := t.TempDir()
 	fp := filepath.Join(d, "f.txt")
 	writeFile(t, fp, "content")
-	h.drv.Turns = []fakellm.Turn{
+	h.drv.Turns = []fake.Turn{
 		{Parts: []llm.Part{
 			{Kind: "text", Text: "before"},
 			{Kind: "tool", Name: "read", CallID: "call_1", Text: fmt.Sprintf(`{"filePath":%q}`, fp)},

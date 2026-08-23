@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/kido5217/yolo/internal/llm"
-	fakellm "github.com/kido5217/yolo/internal/llm/fake"
+	"github.com/kido5217/yolo/internal/llm/fake"
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/server"
 	"github.com/kido5217/yolo/internal/server/testutil"
@@ -434,7 +434,7 @@ func TestFakeFromEnv(t *testing.T) {
 func TestSendLogsFailedTurn(t *testing.T) {
 	t.Parallel()
 	logDir := t.TempDir()
-	drv := fakellm.New(fakellm.Turn{Err: errors.New("boom")})
+	drv := fake.New(fake.Turn{Err: errors.New("boom")})
 	s := testutil.BootWithDriverLog(t, drv, logDir)
 	d := t.TempDir()
 	resp, b := testutil.Req(t, s, "POST", "/session", d, `{}`)

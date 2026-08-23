@@ -16,7 +16,7 @@ import (
 	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/kido5217/yolo/internal/llm"
-	fakellm "github.com/kido5217/yolo/internal/llm/fake"
+	"github.com/kido5217/yolo/internal/llm/fake"
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/server/testutil"
 	"github.com/kido5217/yolo/internal/tui/client"
@@ -200,12 +200,12 @@ func permKey(r rune) tea.KeyPressMsg {
 // tool row is visible at the end).
 func permHarness(t *testing.T) (*testutil.TestServer, *client.Client, *teatest.TestModel, string) {
 	t.Helper()
-	drv := fakellm.New(
-		fakellm.Turn{Parts: []llm.Part{
+	drv := fake.New(
+		fake.Turn{Parts: []llm.Part{
 			{Kind: "text", Text: "listing"},
 			{Kind: "tool", Name: "bash", CallID: "call_1", Args: json.RawMessage(`{"command":"ls -la"}`), Finish: "tool_calls"},
 		}},
-		fakellm.Turn{Parts: []llm.Part{{Kind: "text", Text: "done", Finish: "stop"}}},
+		fake.Turn{Parts: []llm.Part{{Kind: "text", Text: "done", Finish: "stop"}}},
 	)
 	cfg := &protocol.Config{Permission: map[string]any{"bash": "ask"}}
 	ts := testutil.BootWithDriverConfig(t, drv, cfg)

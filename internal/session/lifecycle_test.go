@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/kido5217/yolo/internal/llm"
-	fakellm "github.com/kido5217/yolo/internal/llm/fake"
+	"github.com/kido5217/yolo/internal/llm/fake"
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/session"
 	"github.com/kido5217/yolo/internal/storage"
@@ -22,7 +22,7 @@ func TestTransientRetrySucceeds(t *testing.T) {
 	h.build(t)
 	d := t.TempDir()
 	ses := h.startSession(t, d)
-	h.drv.Turns = []fakellm.Turn{
+	h.drv.Turns = []fake.Turn{
 		{Err: &llm.TransientError{Status: 429, Err: errors.New("slow down")}},
 		{Err: &llm.TransientError{Status: 503, Err: errors.New("unavailable")}},
 		{Parts: []llm.Part{{Kind: "text", Text: "ok", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}},
@@ -59,7 +59,7 @@ func TestTransientGivesUpAfter4(t *testing.T) {
 	d := t.TempDir()
 	ses := h.startSession(t, d)
 	for i := 0; i < 4; i++ {
-		h.drv.Turns = append(h.drv.Turns, fakellm.Turn{Err: &llm.TransientError{Status: 500, Err: errors.New("boom")}})
+		h.drv.Turns = append(h.drv.Turns, fake.Turn{Err: &llm.TransientError{Status: 500, Err: errors.New("boom")}})
 	}
 	h.fastBackoff = true
 	done := make(chan struct{})
@@ -95,7 +95,7 @@ func TestMidStreamErrorNoRetry(t *testing.T) {
 	h.build(t)
 	d := t.TempDir()
 	ses := h.startSession(t, d)
-	h.drv.Turns = []fakellm.Turn{
+	h.drv.Turns = []fake.Turn{
 		{Parts: []llm.Part{
 			{Kind: "text", Text: "partial"},
 			{Kind: "text", Finish: "error", Err: errors.New("connection reset")},
@@ -129,7 +129,7 @@ func TestAbortMidTurn(t *testing.T) {
 	h.build(t)
 	d := t.TempDir()
 	ses := h.startSession(t, d)
-	h.drv.Turns = []fakellm.Turn{
+	h.drv.Turns = []fake.Turn{
 		{Parts: []llm.Part{
 			{Kind: "text", Text: "working"},
 			{Kind: "tool", Name: "bash", CallID: "t1", Text: `{"command":"sleep 10"}`, Finish: "tool_calls"},
@@ -173,7 +173,7 @@ func TestMaxToolStepsHalts(t *testing.T) {
 		parts = append(parts, llm.Part{Kind: "tool", Name: "glob", CallID: string(rune('a'+i%26)) + strconv.Itoa(i), Text: fmt.Sprintf(`{"pattern":"p%d*"}`, i), Finish: "tool_calls"})
 	}
 	parts = append(parts, llm.Part{Kind: "text", Text: "end", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}})
-	h.drv.Turns = []fakellm.Turn{{Parts: parts}, {Parts: []llm.Part{{Kind: "text", Text: "x", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}}}
+	h.drv.Turns = []fake.Turn{{Parts: parts}, {Parts: []llm.Part{{Kind: "text", Text: "x", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}}}
 	if _, err := h.eng.Send(context.Background(), ses, "spin", nil); err != nil {
 		t.Fatal(err)
 	}
@@ -252,7 +252,7 @@ func TestOverflowHardStop(t *testing.T) {
 	d := t.TempDir()
 	ses := h.startSession(t, d)
 	// model Context is 100000 (harness seam) — make usage.Input 100001
-	h.drv.Turns = []fakellm.Turn{
+	h.drv.Turns = []fake.Turn{
 		{Parts: []llm.Part{{Kind: "text", Text: "big", Finish: "stop", Usage: &llm.Usage{Input: 100001, Output: 5}}}},
 	}
 	if _, err := h.eng.Send(context.Background(), ses, "big", nil); err != nil {
@@ -285,7 +285,7 @@ func TestConcurrentSend409(t *testing.T) {
 	h.build(t)
 	d := t.TempDir()
 	ses := h.startSession(t, d)
-	h.drv.Turns = []fakellm.Turn{{Parts: []llm.Part{{Kind: "text", Text: "slow", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}}}
+	h.drv.Turns = []fake.Turn{{Parts: []llm.Part{{Kind: "text", Text: "slow", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}}}
 	h.slowTurn = true // harness seam: hold the turn 500ms via fake driver delay
 	_, err := h.eng.Send(context.Background(), ses, "one", nil)
 	if err != nil {

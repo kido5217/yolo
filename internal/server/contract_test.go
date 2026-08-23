@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/kido5217/yolo/internal/llm"
-	fakellm "github.com/kido5217/yolo/internal/llm/fake"
+	"github.com/kido5217/yolo/internal/llm/fake"
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/server"
 	"github.com/kido5217/yolo/internal/server/testutil"
@@ -411,7 +411,7 @@ func osEnvMap() map[string]string {
 // newSrvFakeEnv boots the full stack but wires the kido driver from the
 // YOLO_LLM/YOLO_FAKE_SCRIPT environment (the M5 env gate), so the e2e runs the
 // same path as `yolo serve` with YOLO_LLM=fake.
-func newSrvFakeEnv(t *testing.T, script string) (*testutil.TestServer, *fakellm.Driver) {
+func newSrvFakeEnv(t *testing.T, script string) (*testutil.TestServer, *fake.Driver) {
 	t.Helper()
 	t.Setenv("YOLO_LLM", "fake")
 	t.Setenv("YOLO_FAKE_SCRIPT", script)

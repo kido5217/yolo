@@ -3,14 +3,14 @@ package server
 import (
 	"fmt"
 
-	fakellm "github.com/kido5217/yolo/internal/llm/fake"
+	"github.com/kido5217/yolo/internal/llm/fake"
 )
 
 // FakeFromEnv resolves YOLO_LLM/YOLO_FAKE_SCRIPT (M5 gate):
 //   - unset          -> (nil, nil): production drivers
 //   - "fake" + script -> scripted driver loaded from YOLO_FAKE_SCRIPT
 //   - "fake" w/o script, or any other value -> error (500 at boot)
-func FakeFromEnv(env map[string]string) (*fakellm.Driver, error) {
+func FakeFromEnv(env map[string]string) (*fake.Driver, error) {
 	mode, ok := env["YOLO_LLM"]
 	if !ok || mode == "" {
 		return nil, nil
@@ -22,5 +22,5 @@ func FakeFromEnv(env map[string]string) (*fakellm.Driver, error) {
 	if script == "" {
 		return nil, fmt.Errorf("YOLO_LLM=fake requires YOLO_FAKE_SCRIPT (json script path)")
 	}
-	return fakellm.FromScript(script)
+	return fake.FromScript(script)
 }
