@@ -90,6 +90,10 @@ Entries live under `superpowers:` skills; invoke a skill **before** acting when 
 | Feature work needing workspace isolation | `using-git-worktrees` |
 | Implementation complete, deciding integration | `finishing-a-development-branch` |
 
+- **One subagent per bead (preferred workflow):** execute each bead in a freshly
+  spawned subagent — one at a time (core principle 7); if the root is `YOLO`, the
+  subagent must be `YOLO` too (core principle 8). The root session only plans,
+  dispatches, and reviews. A bead done inline triggers the compaction discipline below.
 - **Compaction discipline:** after finishing each task/bead that was not delegated to a
   subagent, compact the session (opencode: `/compact`) before starting the next task —
   inline work accumulates root context. Work delegated to a subagent is exempt.
