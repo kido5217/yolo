@@ -5,7 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -317,4 +320,63 @@ func TestPermissionDialogHTTPReply(t *testing.T) {
 
 	_ = tm.Quit()
 	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
+}
+
+// TestPermissionKeyReplyWiring executes each reply cmd and pins the wire
+// body per key (testing-1): 1→once, 2→always, 3→reject, esc→reject.
+// TestPermissionKeyGate only counts cmds — a '1'→always mixup passed the
+// whole suite before this pin.
+func TestPermissionKeyReplyWiring(t *testing.T) {
+	for _, tc := range []struct {
+		key  rune
+		want string
+	}{
+		{'1', "once"},
+		{'2', "always"},
+		{'3', "reject"},
+		{tea.KeyEscape, "reject"},
+	} {
+		t.Run(tc.want, func(t *testing.T) {
+			var mu sync.Mutex
+			var got string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch {
+				case r.URL.Path == "/event":
+					w.Header().Set("Content-Type", "text/event-stream")
+					fl, _ := w.(http.Flusher)
+					fl.Flush()
+					<-r.Context().Done()
+				case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/reply"):
+					var body struct {
+						Response string `json:"response"`
+					}
+					_ = json.NewDecoder(r.Body).Decode(&body)
+					mu.Lock()
+					got = body.Response
+					mu.Unlock()
+					w.WriteHeader(http.StatusNoContent)
+				default:
+					w.WriteHeader(http.StatusNoContent)
+				}
+			}))
+			t.Cleanup(srv.Close)
+
+			c := client.New(srv.URL, "")
+			a := newRecApp(c, store.Store{
+				Pending: []protocol.PermissionAskedProps{permProps()},
+			}, "ses_1")
+			t.Cleanup(a.Close)
+
+			cmds := a.handleKey(press(tc.key))
+			if len(cmds) != 1 {
+				t.Fatalf("key %q emitted %d cmds, want 1", tc.key, len(cmds))
+			}
+			cmds[0]() // runs the reply POST synchronously
+			mu.Lock()
+			defer mu.Unlock()
+			if got != tc.want {
+				t.Fatalf("key %q replied %q, want %q", tc.key, got, tc.want)
+			}
+		})
+	}
 }
