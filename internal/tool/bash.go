@@ -14,6 +14,8 @@ var bashDesc string
 
 const defaultBashTimeoutMS = 120000
 
+const maxBashTimeoutMS = 1<<31 - 1 // ~24.8 days; keeps the int64 ns Duration from wrapping
+
 type bashTool struct{}
 
 var _ Tool = bashTool{}
@@ -85,6 +87,13 @@ func bashArgs(raw json.RawMessage) (command string, timeoutMS int, err error) {
 		if !ok2 {
 			err = errors.New("timeout must be a positive integer")
 			return
+		}
+		if n <= 0 {
+			err = errors.New("timeout must be a positive integer (milliseconds)")
+			return
+		}
+		if n > maxBashTimeoutMS {
+			n = maxBashTimeoutMS
 		}
 		timeoutMS = n
 	}

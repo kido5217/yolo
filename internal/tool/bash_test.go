@@ -282,3 +282,47 @@ func TestBashPermissionPatterns(t *testing.T) {
 		t.Fatal("perm action")
 	}
 }
+
+// TestBashTimeoutRejectedAndClamped pins ⑥: timeout <= 0 is rejected with a
+// tool-result error naming the constraint; values above 2^31-1 ms are
+// clamped to that ceiling (the int64 ns Duration cannot wrap).
+func TestBashTimeoutRejectedAndClamped(t *testing.T) {
+	cases := []struct {
+		name    string
+		timeout any
+		wantErr bool
+		wantMS  int
+	}{
+		{"zero rejected", 0, true, 0},
+		{"negative rejected", -5, true, 0}, // argInt rejects f<0
+		{"default when absent", nil, false, defaultBashTimeoutMS},
+		{"small ok", 300, false, 300},
+		{"ceiling kept", 1<<31 - 1, false, 1<<31 - 1},
+		{"above ceiling clamped", 1 << 32, false, 1<<31 - 1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m := map[string]any{"command": "ls"}
+			if c.timeout != nil {
+				m["timeout"] = c.timeout
+			}
+			raw, _ := json.Marshal(m)
+			_, gotMS, err := bashArgs(raw)
+			if c.wantErr {
+				if err == nil {
+					t.Fatalf("timeout %v: want error, got nil (ms=%d)", c.timeout, gotMS)
+				}
+				if !strings.Contains(err.Error(), "positive integer") {
+					t.Fatalf("timeout %v: error %q does not name the constraint", c.timeout, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("timeout %v: unexpected error %v", c.timeout, err)
+			}
+			if gotMS != c.wantMS {
+				t.Fatalf("timeout %v: ms = %d, want %d", c.timeout, gotMS, c.wantMS)
+			}
+		})
+	}
+}
