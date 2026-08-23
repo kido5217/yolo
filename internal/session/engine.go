@@ -70,6 +70,11 @@ type Deps struct {
 	Backoff func(attempt int) time.Duration
 }
 
+// titleCancel carries one title stream's cancel as a pointer so a stale
+// title's exit can check identity against the tracked entry (func values
+// are incomparable; only == nil is allowed on them).
+type titleCancel struct{ cancel context.CancelFunc }
+
 type Engine struct {
 	db        *storage.DB
 	bus       *bus.Bus
@@ -88,7 +93,7 @@ type Engine struct {
 	mu        sync.Mutex
 	busy      map[string]context.CancelFunc
 	shells    map[string]*tool.Shell
-	titleCtx  map[string]context.CancelFunc
+	titleCtx  map[string]*titleCancel
 	titleWait sync.WaitGroup
 }
 
@@ -146,7 +151,7 @@ func New(d Deps) (*Engine, error) {
 		backoff:   backoff,
 		busy:      map[string]context.CancelFunc{},
 		shells:    map[string]*tool.Shell{},
-		titleCtx:  map[string]context.CancelFunc{},
+		titleCtx:  map[string]*titleCancel{},
 	}, nil
 }
 
@@ -241,8 +246,8 @@ func (e *Engine) Status(sessionID string) string {
 func (e *Engine) Abort(sessionID string) bool {
 	e.mu.Lock()
 	cancel, active := e.busy[sessionID]
-	if tcancel := e.titleCtx[sessionID]; tcancel != nil {
-		tcancel()
+	if tc := e.titleCtx[sessionID]; tc != nil {
+		tc.cancel()
 	}
 	e.mu.Unlock()
 	if !active {
@@ -274,8 +279,8 @@ func (e *Engine) Shutdown(ctx context.Context) {
 	for _, cancel := range e.busy {
 		cancels = append(cancels, cancel)
 	}
-	for _, cancel := range e.titleCtx {
-		cancels = append(cancels, cancel)
+	for _, tc := range e.titleCtx {
+		cancels = append(cancels, tc.cancel)
 	}
 	e.mu.Unlock()
 	for _, cancel := range cancels {
@@ -1425,18 +1430,19 @@ func (e *Engine) maybeScheduleTitle(t *turn, userText string) {
 		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	tc := &titleCancel{cancel: cancel}
 	e.mu.Lock()
-	e.titleCtx[t.sessionID] = cancel
+	e.titleCtx[t.sessionID] = tc
 	e.mu.Unlock()
 	e.titleWait.Add(1)
-	go e.generateTitle(ctx, cancel, t, userText)
+	go e.generateTitle(ctx, tc, t, userText)
 }
 
 // generateTitle best-effort: errors are dropped (title stays the default).
-func (e *Engine) generateTitle(ctx context.Context, cancel context.CancelFunc, t *turn, userText string) {
-	defer cancel()
+func (e *Engine) generateTitle(ctx context.Context, tc *titleCancel, t *turn, userText string) {
+	defer tc.cancel()
 	defer e.titleWait.Done()
-	defer e.dropTitleCtx(t.sessionID)
+	defer e.dropTitleCtx(t.sessionID, tc)
 	cfg, _ := e.loadCfg(t.row.ProjectDir)
 	req := llm.Request{
 		Model:   t.model.ID,
@@ -1489,10 +1495,15 @@ func (e *Engine) generateTitle(ctx context.Context, cancel context.CancelFunc, t
 	})
 }
 
-// dropTitleCtx removes the session's tracked title cancel.
-func (e *Engine) dropTitleCtx(sessionID string) {
+// dropTitleCtx removes the session's tracked title cancel — but only when
+// it still holds THIS one: a newer title scheduled in the meantime
+// replaces the entry, and a stale exit must not drop the newer cancel (it
+// must stay cancellable by Abort/Shutdown).
+func (e *Engine) dropTitleCtx(sessionID string, tc *titleCancel) {
 	e.mu.Lock()
-	delete(e.titleCtx, sessionID)
+	if e.titleCtx[sessionID] == tc {
+		delete(e.titleCtx, sessionID)
+	}
 	e.mu.Unlock()
 }
 

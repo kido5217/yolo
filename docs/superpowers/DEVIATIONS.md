@@ -250,3 +250,18 @@ held in the `llm.Driver` interface — the `hd.cancelled.Load()` guards in
 TestAbortCancelsTitleGoroutine and TestShutdownCancelsAndWaitsTitle could
 never pass. Fix: pointer receiver + `h.overrideDriver = &hd`. Test-only;
 the pinned assertions are unchanged. Resolves per principle 5.
+93. dropTitleCtx conditional drop (low, 2026-08-23): the plan-pinned
+unconditional `delete(e.titleCtx, sessionID)` in the title goroutine's
+defer could remove a NEWER title's cancel — a retry that schedules a
+second title while the first is still in flight (turn ended without an
+assistant message; title call bounded at 30 s) makes the first exit
+drop the second's cancel, leaving it uncancellable by Abort/Shutdown
+(spec §3.1 C "cancelled by Abort"). Fix: `dropTitleCtx(sessionID,
+cancel)` deletes only when `e.titleCtx[sessionID] == cancel`.
+Resolves per principle 5 (review finding on plan-pinned shape; spec is
+the binding authority). Implementation note: Go forbids `==` between
+non-nil func values, so the tracked cancel is stored as a
+`*titleCancel` pointer wrapper and the comparison is on the pointer
+(identity semantics identical to the stated form); the Abort/Shutdown
+call sites invoke `tc.cancel()` / append `tc.cancel` under the same lock
+discipline.

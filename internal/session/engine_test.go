@@ -973,3 +973,104 @@ func TestShutdownCancelsAndWaitsTitle(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 }
+
+// supersededTitleDriver: the first title stream is held until released,
+// then completes with a text part (the resulting title write is the
+// deterministic signal that the first title goroutine's body finished);
+// the second title stream is held until its ctx is cancelled (counted).
+// Turn requests forward to an auto-text fake.
+type supersededTitleDriver struct {
+	inner     *fakellm.Driver
+	titleSeq  atomic.Int32
+	release1  chan struct{}
+	cancelled atomic.Bool
+}
+
+func (d *supersededTitleDriver) Stream(ctx context.Context, req llm.Request) (llm.PartStream, error) {
+	if !isTitleReq(req) {
+		return d.inner.Stream(ctx, req)
+	}
+	switch d.titleSeq.Add(1) {
+	case 1:
+		<-d.release1
+		ch := make(chan llm.Part, 1)
+		ch <- llm.Part{Kind: "text", Text: "t1-done", Finish: "stop"}
+		close(ch)
+		return llm.PartStream{Parts: ch}, nil
+	default:
+		<-ctx.Done()
+		d.cancelled.Store(true)
+		return llm.PartStream{}, ctx.Err()
+	}
+}
+
+// TestSupersededTitleDropKeepsNewerCancel: a retry that schedules a second
+// title while the first is still in flight replaces the tracked cancel;
+// when the first title then exits, its dropTitleCtx must NOT drop the
+// newer cancel — Abort must still cancel the second title (regression pin
+// for the unconditional-drop review finding).
+func TestSupersededTitleDropKeepsNewerCancel(t *testing.T) {
+	h := newHarness(t)
+	hd := &supersededTitleDriver{inner: fakellm.New(fakellm.AutoText()), release1: make(chan struct{})}
+	h.overrideDriver = hd
+	h.build(t)
+	ses := h.startSession(t, t.TempDir())
+
+	// Turn A schedules title T1 (held by the driver) and completes.
+	waitIdle(t, h, ses, func() {
+		if _, err := h.eng.Send(t.Context(), ses, "hi", nil); err != nil {
+			t.Fatalf("Send A: %v", err)
+		}
+	})
+
+	// Construct the defect precondition for Send B: the turn ended with no
+	// assistant message (the round's row is deleted), the title is still
+	// the default — so maybeScheduleTitle fires a SECOND title (T2) whose
+	// cancel replaces T1's in the tracked map.
+	msgs, err := h.db.ListMessages(ses)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range msgs {
+		if m.Role == "assistant" {
+			if err := h.db.DeleteMessage(m.ID); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	waitIdle(t, h, ses, func() {
+		if _, err := h.eng.Send(t.Context(), ses, "hi", nil); err != nil {
+			t.Fatalf("Send B: %v", err)
+		}
+	})
+
+	// Release T1: its stream completes, the title is written (the
+	// session.updated event below), and the goroutine exits — its
+	// dropTitleCtx defer runs while T2's cancel is the tracked entry.
+	close(hd.release1)
+	h.waitForEvent(t, func(e protocol.Event) bool {
+		if e.Type != protocol.EventTypeSessionUpdated {
+			return false
+		}
+		var p protocol.SessionUpdatedProps
+		if err := json.Unmarshal(e.Properties, &p); err != nil {
+			t.Fatal(err)
+		}
+		return p.SessionID == ses && p.Info.Title == "t1-done"
+	})
+	// The session.updated publish is the LAST body statement of T1's
+	// generateTitle; the dropTitleCtx defer runs immediately after the
+	// return. Let the defer land so the Abort below observes the
+	// post-drop state (the unconditional-drop bug only manifests then).
+	time.Sleep(50 * time.Millisecond)
+
+	h.eng.Abort(ses)
+	deadline := time.Now().Add(2 * time.Second)
+	for !hd.cancelled.Load() {
+		if time.Now().After(deadline) {
+			t.Fatal("Abort did not cancel the second (newer) title after the first title's exit dropped the tracked cancel")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
