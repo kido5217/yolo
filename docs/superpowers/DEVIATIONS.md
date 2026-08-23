@@ -520,3 +520,17 @@ the `race` build tag when `-race` is passed; verified on go1.26.7).
 The iteration count is unchanged, so a quadratic draft re-scan
 (minutes under race) still fails the relaxed bound; the bound only
 absorbs the instrumentation slowdown. Resolves per principle 5.
+116. Plan 2 R3 (refactor-2) runRound line target vs the named
+extracts (test-only/low, 2026-08-24): the plan's Step 4 gate required
+`runRound` ≤ 75 lines (the spec row's "~60-line round driver"), but
+both the plan's Step 3 and the spec row keep the round exit paths
+(err/p.Err switch, tool budget drop, final-overflow block — ~105
+lines) inside the driver; the two named extracts (`partState`,
+`streamWithRetry` = the `openStream` rename) landed verbatim, leaving
+`runRound` at 139 lines. Resolution: the named extracts are the
+contract, the line count a stale estimate (consistent with the plan's
+global constraint "locate by name, never by line number"); no
+behavior change, pins green UNMODIFIED (engine_test.go +
+engine_perm_test.go). The same gate's `grep -rn openStream` → 0 check
+caught a stale doc ref in engine.go:30 left behind by the R2 split;
+fixed in the same commit as this entry. Resolves per principle 5.

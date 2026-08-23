@@ -27,8 +27,9 @@ import (
 // turn.
 var ErrSessionBusy = errors.New("session busy")
 
-// errRoundEnded marks a round already finalized inside openStream (the
-// overflow path): the caller ends the turn idle without reading a stream.
+// errRoundEnded marks a round already finalized inside streamWithRetry
+// (the overflow path): the caller ends the turn idle without reading a
+// stream.
 var errRoundEnded = errors.New("round ended")
 
 // maxToolRounds caps the tool round-trips of one turn.
