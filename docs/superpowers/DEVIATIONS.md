@@ -495,3 +495,15 @@ semantics). Both fixed in `TestServeDrainForceKill`; everything else
 (`drainCtx`/`armForceKill`, the `serveCmd` wiring, the 2 s force-kill
 bound, DEFERRED.md disposition, pinned commit message) lands as
 planned. Resolves per principle 5.
+114. Plan Task AC benchmark code needed two fixes (test-only/low,
+2026-08-24): (a) the plan's `st := &store.Store{}` does not compile —
+the type is `store.State` (store.go:15; the same Task V5 drift noted
+in 111), corrected in `BenchmarkStoreApply`; (b) the plan's
+`message.updated` prop map omitted the top-level `sessionID` that
+`Apply` gates on (store.go:50 `isCurrent`), which would have silently
+dropped every `message.updated` and left `upsertMessage` unmeasured —
+the plan's own verification step directs adjusting the maps to the
+wire names the store decodes, so `"sessionID": "ses_bench"` was added
+per that instruction. Everything else (part/delta maps, event-type
+constants, hermetic no-baseline-claim scope, pinned commit message)
+lands as planned. Resolves per principle 5.
