@@ -138,6 +138,9 @@ func (readTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 			fp = abs
 		}
 	}
+	if env.Log != nil {
+		env.Log.Info("read", "path", fp)
+	}
 	title := readTitle(env.Dir, fp)
 
 	fi, err := os.Stat(fp)

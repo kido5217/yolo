@@ -123,6 +123,10 @@ func New(d Deps) (*Engine, error) {
 	if backoff == nil {
 		backoff = defaultBackoff
 	}
+	lg := d.Log
+	if lg == nil {
+		lg = log.Noop()
+	}
 	return &Engine{
 		db:        d.DB,
 		bus:       d.Bus,
@@ -130,7 +134,7 @@ func New(d Deps) (*Engine, error) {
 		perm:      d.Perm,
 		tools:     d.Tools,
 		schemas:   schemas,
-		lg:        d.Log,
+		lg:        lg,
 		dataDir:   d.DataDir,
 		outputDir: outputDirFor(d.DataDir),
 		cfg:       d.Cfg,
@@ -311,7 +315,7 @@ func (e *Engine) publish(t string, props any) {
 	if err != nil {
 		// A marshal failure here would kill the whole event stream, so it
 		// must be diagnosable, not silently dropped.
-		e.lg.Errorf("session: marshal %s: %v", t, err)
+		e.lg.Error("event marshal failed", "type", t, "error", err)
 		return
 	}
 	e.bus.Publish(ev)
@@ -332,10 +336,13 @@ func (e *Engine) apiKey(providerID string, cfg *protocol.Config) string {
 }
 
 func (e *Engine) driverFor(providerID string, m provider.Model) llm.Driver {
-	if d, ok := e.drivers[providerID]; ok {
-		return d
+	var d llm.Driver
+	if dd, ok := e.drivers[providerID]; ok {
+		d = dd
+	} else {
+		d = e.prov.DriverFor(m)
 	}
-	return e.prov.DriverFor(m)
+	return loggingDriver{inner: d, provider: providerID, model: m.ID, lg: e.lg}
 }
 
 func (e *Engine) limitsFor(cfg *protocol.Config) tool.Limits {
@@ -368,6 +375,7 @@ type turn struct {
 	model     provider.Model
 	cfg       *protocol.Config
 	cfgRules  []protocol.Rule
+	apiKey    string
 
 	doomHist  []permission.CallKey
 	toolCalls int
@@ -402,6 +410,9 @@ func newTurn(sessionID string, row storage.SessionRow, info provider.Info, model
 func (e *Engine) runTurn(ctx context.Context, t *turn, onDone func(error)) {
 	var turnErr error
 	defer func() {
+		if errors.Is(turnErr, context.Canceled) {
+			e.lg.Info("turn aborted", "session_id", t.sessionID, "reason", "context_canceled")
+		}
 		e.publish(protocol.EventTypeSessionStatus, protocol.SessionStatusProps{
 			SessionID: t.sessionID,
 			Status:    protocol.SessionStatus{Type: protocol.StatusIdle},
@@ -427,6 +438,16 @@ func (e *Engine) runTurn(ctx context.Context, t *turn, onDone func(error)) {
 		}
 	}
 	t.cfg = cfg
+	if cfgErr != nil {
+		e.lg.Error("config load failed", "path", t.row.ProjectDir, "error", cfgErr)
+	} else {
+		e.lg.Info("config loaded", "path", t.row.ProjectDir)
+	}
+	e.lg.Info("turn start", "session_id", t.sessionID, "agent", t.agent, "model", t.model.ID)
+	if key, source, ok := auth.ResolveKeyWithSource(t.info.ID, t.cfg, os.LookupEnv); ok {
+		t.apiKey = key
+		e.lg.Info("auth resolved", "provider", t.info.ID, "source", source)
+	}
 
 	for i := 0; i < maxToolRounds; i++ {
 		req, err := e.buildRequest(t)
@@ -468,7 +489,7 @@ func (e *Engine) buildRequest(t *turn) (llm.Request, error) {
 	}
 	return llm.Request{
 		Model:    t.model.ID,
-		APIKey:   e.apiKey(t.info.ID, t.cfg),
+		APIKey:   t.apiKey,
 		BaseURL:  t.info.BaseURL,
 		Messages: messages,
 		Tools:    tools,
@@ -651,6 +672,7 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 	e.publish(protocol.EventTypeMessageUpdated, protocol.MessageUpdatedProps{
 		SessionID: t.sessionID, Info: r.msg,
 	})
+	e.lg.Info("round start", "session_id", t.sessionID, "round", r.id)
 
 	stream, err := e.openStream(roundCtx, t, r, req)
 	if err != nil {
@@ -676,7 +698,7 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 		}
 		// Best-effort persistence: the delta still goes to the TUI.
 		if err := e.db.UpsertPart(storage.ProtocolToPart(p)); err != nil {
-			e.lg.Errorf("session: persist part %s (session=%s): %v", p.ID, t.sessionID, err)
+			e.lg.Error("persist part failed", "part_id", p.ID, "session_id", t.sessionID, "error", err)
 		}
 		e.publish(protocol.EventTypeMessagePartDelta, protocol.MessagePartDeltaProps{
 			SessionID: t.sessionID, MessageID: r.id, PartID: st.id, Field: kind, Delta: delta,
@@ -693,7 +715,7 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 		}
 		// Best-effort persistence: the part-created event still goes out.
 		if err := e.db.UpsertPart(storage.ProtocolToPart(p)); err != nil {
-			e.lg.Errorf("session: persist part %s (session=%s): %v", p.ID, t.sessionID, err)
+			e.lg.Error("persist part failed", "part_id", p.ID, "session_id", t.sessionID, "error", err)
 		}
 		e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
 			SessionID: t.sessionID, Part: p, Time: e.clock(),
@@ -712,7 +734,7 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 			Time: protocol.PartTime{Start: st.start, End: e.clock()},
 		}
 		if err := e.db.UpsertPart(storage.ProtocolToPart(p)); err != nil {
-			e.lg.Errorf("session: persist part %s (session=%s): %v", p.ID, t.sessionID, err)
+			e.lg.Error("persist part failed", "part_id", p.ID, "session_id", t.sessionID, "error", err)
 		}
 		e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
 			SessionID: t.sessionID, Part: p, Time: e.clock(),
@@ -751,6 +773,7 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 				return false, ctx.Err()
 			}
 			if isOverflowError(p.Err) {
+				e.lg.Info("overflow detected", "session_id", t.sessionID, "model", t.model.ID, "reason", "api_error")
 				e.saveSynthetic(t, r, overflowNote(t.model, 0, p.Err))
 				e.finishRound(t, r, usage, finish)
 				return false, nil
@@ -789,7 +812,7 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 				// Step budget exhausted: the remaining calls of this stream
 				// are dropped (not persisted, not executed); the turn ends
 				// idle and onDone(nil).
-				e.lg.Infof("session: max tool steps reached (session=%s, steps=%d)", t.sessionID, maxToolSteps)
+				e.lg.Info("max tool steps reached", "session_id", t.sessionID, "steps", maxToolSteps)
 				e.finishRound(t, r, usage, finish)
 				return false, nil
 			}
@@ -805,6 +828,7 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 	// Overflow: the round's input already exceeds the model context; the
 	// turn ends with a synthetic note (v1 has no compaction).
 	if usage != nil && t.model.Context > 0 && usage.Input > t.model.Context {
+		e.lg.Info("overflow detected", "session_id", t.sessionID, "model", t.model.ID, "reason", "usage", "input", usage.Input)
 		e.saveSynthetic(t, r, overflowNote(t.model, usage.Input, nil))
 		e.finishRound(t, r, usage, finish)
 		return false, nil
@@ -842,6 +866,7 @@ func (e *Engine) openStream(ctx context.Context, t *turn, r *round, req llm.Requ
 		}
 		if !llm.IsTransient(sErr) {
 			if isOverflowError(sErr) {
+				e.lg.Info("overflow detected", "session_id", t.sessionID, "model", t.model.ID, "reason", "api_error")
 				e.saveSynthetic(t, r, overflowNote(t.model, 0, sErr))
 				e.finishRound(t, r, nil, "")
 				// The round is already finalized: the caller ends the
@@ -899,6 +924,7 @@ func (e *Engine) finishRound(t *turn, r *round, usage *llm.Usage, finish string)
 			float64(usage.CacheRead)*t.model.CostCacheRead + float64(usage.CacheWrite)*t.model.CostCacheWrite) / 1e6
 	}
 	end := e.clock()
+	e.lg.Info("round end", "session_id", t.sessionID, "round", r.id, "latency_ms", end-r.now, "finish", finish)
 	if err := e.db.UpdateMessage(storage.MessageRow{
 		ID: r.id, SessionID: t.sessionID, Role: "assistant", Agent: t.agent,
 		Cost: cost, Tokens: tok, TimeCreated: r.now, TimeCompleted: &end,
@@ -906,7 +932,7 @@ func (e *Engine) finishRound(t *turn, r *round, usage *llm.Usage, finish string)
 		// Best-effort: a failed write must not strand the TUI in a
 		// cost-less/incomplete final state, so the final message.updated
 		// still goes out.
-		e.lg.Errorf("session: update message %s (session=%s): %v", r.id, t.sessionID, err)
+		e.lg.Error("update message failed", "message_id", r.id, "session_id", t.sessionID, "error", err)
 	}
 	r.msg.Cost = cost
 	r.msg.Tokens = &tok
@@ -931,7 +957,7 @@ func (e *Engine) saveSynthetic(t *turn, r *round, text string) {
 		Time: protocol.PartTime{Start: start, End: e.clock()},
 	}
 	if err := e.db.UpsertPart(storage.ProtocolToPart(p)); err != nil {
-		e.lg.Errorf("session: persist part %s (session=%s): %v", p.ID, t.sessionID, err)
+		e.lg.Error("persist part failed", "part_id", p.ID, "session_id", t.sessionID, "error", err)
 	}
 	e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
 		SessionID: t.sessionID, Part: p, Time: e.clock(),
@@ -1139,6 +1165,7 @@ func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part)
 	// runs (sliding window; a "once" reply does not extend the exemption).
 	key := permission.CallKey{Tool: name, Hash: callKeyHash(raw)}
 	if permission.DoomLoopDue(t.doomHist, key) {
+		e.lg.Info("doom loop trigger", "session_id", t.sessionID, "tool", name)
 		d := e.perm.EvaluateRules(t.agent, t.cfgRules, "doom_loop", []string{name})
 		doomReq := permission.Request{
 			RequestID: protocol.NewID("perm"), SessionID: t.sessionID, Agent: t.agent,
@@ -1237,7 +1264,10 @@ func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part)
 		OutputDir: e.outputDir,
 		Storage:   e.db,
 		SessionID: t.sessionID,
+		Log:       e.lg,
 	}
+	e.lg.Info("tool start", "session_id", t.sessionID, "tool", name)
+	toolStart := e.clock()
 	out, runErr := tl.Run(ctx, raw, env)
 	if runErr != nil {
 		msg := runErr.Error()
@@ -1246,6 +1276,7 @@ func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part)
 			// already force-killed via ctx.
 			msg = "aborted"
 		}
+		e.lg.Error("tool failed", "session_id", t.sessionID, "tool", name, "error", msg)
 		e.saveToolPart(t, r, toolPart{
 			callID: callID,
 			name:   name,
@@ -1260,6 +1291,16 @@ func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part)
 			},
 		})
 		return
+	}
+	{
+		args := []any{"session_id", t.sessionID, "tool", name, "latency_ms", e.clock() - toolStart}
+		if v, ok := out.Meta["exit"]; ok {
+			args = append(args, "exit_code", v)
+		}
+		if v, ok := out.Meta["truncated"]; ok {
+			args = append(args, "truncated", v)
+		}
+		e.lg.Info("tool end", args...)
 	}
 	e.saveToolPart(t, r, toolPart{
 		callID: callID,
@@ -1289,7 +1330,7 @@ func (e *Engine) saveToolPart(t *turn, r *round, tp toolPart) {
 		Type: "tool", Tool: tp.name, CallID: tp.callID, State: &tp.state,
 	}
 	if err := e.db.UpsertPart(storage.ProtocolToPart(p)); err != nil {
-		e.lg.Errorf("session: persist part %s (session=%s): %v", p.ID, t.sessionID, err)
+		e.lg.Error("persist part failed", "part_id", p.ID, "session_id", t.sessionID, "error", err)
 	}
 	e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
 		SessionID: t.sessionID, Part: p, Time: e.clock(),

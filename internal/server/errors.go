@@ -16,7 +16,7 @@ func recoverMiddleware(logger *log.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rec := recover(); rec != nil {
-				logger.Errorf("handler panic (path=%s): %v\n%s", r.URL.Path, rec, debug.Stack())
+				logger.Error("handler panic", "path", r.URL.Path, "recovered", rec, "stack", string(debug.Stack()))
 				envelope(w, http.StatusInternalServerError, "internal error", nil)
 			}
 		}()
@@ -37,7 +37,7 @@ func envelope(w http.ResponseWriter, code int, msg string, data any) {
 // the generic msg), then the envelope is written. Wire shape unchanged.
 func (s *Server) fail(w http.ResponseWriter, code int, msg string, err error) {
 	if err != nil {
-		s.Log.Errorf("server: %s: %v", msg, err)
+		s.Log.Error("request failed", "op", msg, "error", err)
 	}
 	envelope(w, code, msg, nil)
 }

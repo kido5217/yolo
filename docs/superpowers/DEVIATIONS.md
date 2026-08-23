@@ -174,3 +174,26 @@ property is pinned instead by concurrent `TestDecisionForUsesRequestCfgRules`
 (two rule sets interleaved on the same `Service`, each keeps its own verdict,
 `-race` clean); the engine wiring is guarded by the existing engine perm
 tests. Resolves per principle 5 (tests define the contract).
+86. Go 1.26 stdlib slog TextHandler does not render spec §3's pinned line
+format (low, 2026-08-22): (a) `slog.HandlerOptions.TimeFormat` was removed
+in Go 1.26; (b) the TextHandler emits `msg` BEFORE handler (With) attrs, so
+`With("run", id)` yields `msg=... run=...` — the pinned order is
+`run=<8hex> msg=...`; (c) the TextHandler quotes `msg` when it contains
+spaces (`msg="serving on"`), but the pinned format is unquoted
+(`msg=serving on`). Resolution: `internal/log` implements a small
+`pinnedHandler` (slog.Handler) that owns the pinned field order and
+quoting — msg unquoted (control chars escaped so a message cannot forge a
+line), k=v values quoted/escaped only when they contain chars that could
+break the key=value shape (CWE-117 preserved). The plan's
+`rotatingWriter` moves verbatim; `New` opens the file eagerly (best-effort)
+so the log file exists before the first level-passing write (the pinned
+level test reads the file even when everything is filtered).
+87. Pinned rotation test's line-count estimate under-shot (low, 2026-08-22):
+the plan's `TestRotationTriggersOnSize` writes `(5*miB)/1100 + 2` lines
+assuming ~1100-byte lines; actual lines are ~1076 bytes
+(`time=...Z level=INFO run=8hex msg=line i=N pad=1000x`), so the total
+stays just under the 5 MiB threshold and rotation never triggers. Fixed the
+estimate to 1000 bytes/line (`(5*miB)/1000 + 2`), which guarantees the
+threshold is crossed. Test bug in the plan's own test; resolved per
+principle 5 (tests define the contract — the contract being "a write that
+would push the active file past 5MiB rotates").

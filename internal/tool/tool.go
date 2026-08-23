@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/kido5217/yolo/internal/log"
 	"github.com/kido5217/yolo/internal/permission"
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/storage"
@@ -50,6 +51,17 @@ type Env struct {
 	OutputDir string
 	Storage   *storage.DB
 	SessionID string
+	// Log receives tool-level log points (nil = no-op; wired by the engine).
+	Log *log.Logger
+}
+
+// shortRunes truncates s to n runes (command logging; "..." marker).
+func shortRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "..."
 }
 
 // Output is a tool result: Title for the TUI, Text for the model, Meta for

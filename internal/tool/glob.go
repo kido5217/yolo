@@ -111,6 +111,9 @@ func (globTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 	if serr != nil || !fi.IsDir() {
 		return Output{}, fmt.Errorf("glob path must be a directory: %s", search)
 	}
+	if env.Log != nil {
+		env.Log.Info("glob", "pattern", pattern, "path", search)
+	}
 
 	var files []string
 	werr := filepath.WalkDir(search, func(dpath string, d fs.DirEntry, err error) error {
@@ -140,6 +143,9 @@ func (globTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 	})
 	if werr != nil {
 		return Output{}, werr
+	}
+	if env.Log != nil {
+		env.Log.Info("glob results", "pattern", pattern, "count", len(files))
 	}
 	sort.Strings(files)
 	truncated := len(files) > globLimit

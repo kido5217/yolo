@@ -102,6 +102,9 @@ func (bashTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 	if env.Shell == nil {
 		return Output{}, errors.New("shell is not initialized")
 	}
+	if env.Log != nil {
+		env.Log.Info("bash command", "command", shortRunes(command, 200))
+	}
 	code, out, err := env.Shell.Exec(ctx, command, timeoutMS, nil)
 	switch {
 	case errors.Is(err, errShellTimeout):
@@ -134,6 +137,9 @@ func (bashTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 		// Non-zero exit is NOT a tool error; the model sees the exit code
 		// only when present.
 		meta["exit"] = code
+	}
+	if env.Log != nil {
+		env.Log.Info("bash exit", "exit", code, "truncated", cut)
 	}
 	return Output{Title: command, Text: text, Meta: meta}, nil
 }

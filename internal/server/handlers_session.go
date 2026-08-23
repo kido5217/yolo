@@ -287,10 +287,10 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(err, context.Canceled) {
-			s.Log.Infof("session: turn aborted (session=%s)", id)
+			s.Log.Info("turn aborted", "session_id", id)
 			return
 		}
-		s.Log.Errorf("session: turn failed (session=%s): %v", id, err)
+		s.Log.Error("turn failed", "session_id", id, "error", err)
 	})
 	switch {
 	case err == nil:
@@ -377,7 +377,7 @@ func (s *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
 func (s *Server) emit(t string, props any) {
 	ev, err := protocol.MakeEvent(t, props)
 	if err != nil {
-		s.Log.Errorf("emit %s: %v", t, err)
+		s.Log.Error("event emit failed", "type", t, "error", err)
 		return
 	}
 	s.Bus.Publish(ev)

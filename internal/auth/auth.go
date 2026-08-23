@@ -115,26 +115,33 @@ func EnvName(providerID string) string {
 	return b.String() + "_API_KEY"
 }
 
-// ResolveKey finds a provider API key: env -> auth.json -> config
-// provider.<id>.apiKey then provider.<id>.options.apiKey.
-func ResolveKey(providerID string, cfg *protocol.Config, env func(string) (string, bool)) (string, bool) {
+// ResolveKeyWithSource is ResolveKey plus the winning source
+// ("env" | "auth.json" | "config"); never the key itself in logs.
+func ResolveKeyWithSource(providerID string, cfg *protocol.Config, env func(string) (string, bool)) (string, string, bool) {
 	if k, ok := env(EnvName(providerID)); ok && k != "" {
-		return k, true
+		return k, "env", true
 	}
 	if s, err := Load(); err == nil {
 		if e, ok := s[providerID]; ok && e.Key != "" {
-			return e.Key, true
+			return e.Key, "auth.json", true
 		}
 	}
 	if cfg != nil {
 		if pc, ok := cfg.Provider[providerID]; ok {
 			if pc.APIKey != "" {
-				return pc.APIKey, true
+				return pc.APIKey, "config", true
 			}
 			if k, ok := pc.Options["apiKey"].(string); ok && k != "" {
-				return k, true
+				return k, "config", true
 			}
 		}
 	}
-	return "", false
+	return "", "", false
+}
+
+// ResolveKey finds a provider API key: env -> auth.json -> config
+// provider.<id>.apiKey then provider.<id>.options.apiKey.
+func ResolveKey(providerID string, cfg *protocol.Config, env func(string) (string, bool)) (string, bool) {
+	k, _, ok := ResolveKeyWithSource(providerID, cfg, env)
+	return k, ok
 }
