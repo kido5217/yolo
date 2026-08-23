@@ -5,17 +5,20 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
-**Status (2026-08-23):** v0.2.0 released — merged to `main` + tagged `v0.2.0` +
+**Status (2026-08-24):** v0.2.0 released — merged to `main` + tagged `v0.2.0` +
 release cut. 16-task implementation, gate-green; `just e2e-live` PASS against
 the real `https://ai.kido.ws/v1` on 2026-08-23 (pre-tag). Beads: epic
 `yolo-8vl` and every subtask closed. Spec:
 `docs/superpowers/specs/2026-08-22-v0.2.0-design.md`; plan:
 `docs/superpowers/plans/2026-08-22-v0.2.0.md`. 0.3.0 is in progress on branch
-`v0.3.0` (no upstream): spec `docs/superpowers/specs/2026-08-23-v0.3.0-design.md`,
-Plan 1 `docs/superpowers/plans/2026-08-23-v0.3.0-plan-1-defects.md` (defect
-slice, all 39 tasks authored + committed), beads epic `yolo-5hy` / sub-epic
-`yolo-5hy.1` / task beads `yolo-5hy.1.1`–`.39`; execution starts at Task 0 via
-`bd ready`. The 0.3.0 deferred backlog lives in `docs/superpowers/DEFERRED.md`.
+`v0.3.0` (no upstream): spec
+`docs/superpowers/specs/2026-08-23-v0.3.0-design.md`. **Plan 1 (defect slice)
+complete 2026-08-24** — all 39 tasks closed (beads `yolo-5hy.1.1`–`.39`,
+sub-epic `yolo-5hy.1` closed); close-out gate green (`go vet ./...` +
+`go test ./...` + `go test -race ./...` + `gofmt -l .` + `golangci-lint run
+./...`). Next: Plan 2 (refactor slice, 16 tasks, spec §4) — its sub-epic is
+created when Plan 2 starts; release epic `yolo-5hy` stays open. The 0.3.0
+deferred backlog lives in `docs/superpowers/DEFERRED.md`.
 
 ## Root causes (archive, v0.1.3)
 
@@ -37,15 +40,16 @@ prompt+model does NOT loop in upstream opencode. Detail: deviations 73–77.
 
 ## Last completed
 
-v0.2.0 released (2026-08-23, `v0.2.0` → `main` + tag `v0.2.0` + release cut):
-all 16 plan tasks done — version wiring + `justfile`, the slog logging rework
-(run id, `YOLO_LOG_LEVEL`, `YOLO_PRINT_LOGS` mirror, new log points), and the
-12 v0.1.2 backlog fixes (①–⑫ + version stream + logging stream). Deviations
-78–88 logged. `just e2e-live` PASS against the real `ai.kido.ws` 2026-08-23.
-All beads closed (epic `yolo-8vl` + subtasks + `yolo-k98`); the 0.3.0 deferred
-backlog persists in `DEFERRED.md`.
-(Prior: v0.2.0 spec written + committed 2026-08-22; v0.1.3 released — PR #7 →
-`main` `1d3eca6` + tag + release; the five root causes are deviations 73–77.)
+0.3.0 Plan 1 (defect slice) complete (2026-08-24, branch `v0.3.0`): all 39
+plan tasks closed as beads `yolo-5hy.1.1`–`.39` (engine lifecycle, storage,
+tools, server, TUI, CLI/e2e, naming V1–V8, two hermetic benchmarks),
+DEFERRED.md dispositions landed, close-out gate green incl. `-race` +
+`golangci-lint`. Deviations 112–115 logged (plan test-code fixes in W/X/AC +
+the race-tolerant draft amortization bound). Next: Plan 2 (refactors, 16
+tasks, spec §4).
+(Prior: v0.2.0 released 2026-08-23 — 16 tasks, deviations 78–88, `just
+e2e-live` PASS pre-tag, epic `yolo-8vl` closed; v0.1.3 released — PR #7,
+deviations 73–77. Detail in `git log --oneline`.)
 
 ## Open items
 
