@@ -507,3 +507,16 @@ wire names the store decodes, so `"sessionID": "ses_bench"` was added
 per that instruction. Everything else (part/delta maps, event-type
 constants, hermetic no-baseline-claim scope, pinned commit message)
 lands as planned. Resolves per principle 5.
+115. Plan 1 close-out -race gate vs a pre-existing wall-clock
+threshold (test-only/low, 2026-08-24): the close-out's full gate
+(`go test -race ./...`) failed in `TestDraftSoftEnterAmortized` —
+40k soft-enters take 9–10.5 s under the race detector against the
+pinned `< 5s` bound (1.3 s without `-race`; ~8x slowdown on this
+string-heavy path). The test and its code path (draft growth,
+datastruct-9) predate Plan 1 and were untouched by its 39 tasks.
+Fix: the bound is now `draftAmortizedLimit` — 5 s via a
+`//go:build !race` file, 40 s via a `//go:build race` file (Go sets
+the `race` build tag when `-race` is passed; verified on go1.26.7).
+The iteration count is unchanged, so a quadratic draft re-scan
+(minutes under race) still fails the relaxed bound; the bound only
+absorbs the instrumentation slowdown. Resolves per principle 5.

@@ -431,8 +431,8 @@ func TestDraftSoftEnterAmortized(t *testing.T) {
 		a.prompt.input.SetValue(line)
 		a.handleKey(press(tea.KeyEnter))
 	}
-	if d := time.Since(start); d > 5*time.Second {
-		t.Fatalf("40k soft-enters took %v, want < 5s (draft growth must be amortized)", d)
+	if d := time.Since(start); d > draftAmortizedLimit {
+		t.Fatalf("40k soft-enters took %v, want < %v (draft growth must be amortized)", d, draftAmortizedLimit)
 	}
 	if got := a.prompt.draft.String(); len(got) != 40000*101 {
 		t.Fatalf("draft length = %d, want %d", len(got), 40000*101)
