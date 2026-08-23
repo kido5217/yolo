@@ -368,3 +368,21 @@ loads) still uses the live turn ctx. Impact: round-finalization writes
 are no longer interruptible by turn cancel — deliberate: they record the
 terminal state of an exiting round. No wire change. Resolves per
 principle 5.
+103. Plan Task M test code + brief were inconsistent (medium, 2026-08-23):
+(a) the brief's TestReapProcWaitFailureIsNegative set `stdin` to
+`io.NopCloser(io.Discard)` — an `io.ReadCloser`, but `shellProc.stdin` is
+an `io.WriteCloser`; the test would not compile. Fixed with a no-op
+WriteCloser (test-only). (b) The brief expected both pin tests to PASS
+pre-fix, but TestShellSelfKillReportsExitCode failed pre-fix with code =
+-1: Go's `(*exec.ExitError).ExitCode()` returns -1 for a signal-terminated
+process, so the old reapProc already conflated "killed by signal" with
+"Wait failed", and the brief's Step 3 snippet (code < 0 → error in the
+markerless-EOF branch) would have turned real signal-kills (137/143) into
+errors — contradicting the brief's own interface note ("real exit codes —
+including 137/143 from a signal — still surface as meta[\"exit\"]") and the
+test (err == nil, code 137). Fix: reapProc now maps a signal-terminated
+process to 128+signum (syscall.WaitStatus), matching the marker path where
+bash's `$?` reports the same value; -1 is reserved for a Wait failure with
+no exit status, and only that becomes the tool error in the markerless-EOF
+branch. Resolves per principle 5 (test + interface note = the last-stated
+call).
