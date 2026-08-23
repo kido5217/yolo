@@ -90,6 +90,10 @@ Entries live under `superpowers:` skills; invoke a skill **before** acting when 
 | Feature work needing workspace isolation | `using-git-worktrees` |
 | Implementation complete, deciding integration | `finishing-a-development-branch` |
 
+- **Compaction discipline:** after finishing each task/bead that was not delegated to a
+  subagent, compact the session (opencode: `/compact`) before starting the next task —
+  inline work accumulates root context. Work delegated to a subagent is exempt.
+
 ## Golang skills (15, in `.agents/skills/`, hash-locked in `skills-lock.json`)
 
 Invoke the relevant one(s) **per task**. Do not edit skills; they are pinned by hash.
