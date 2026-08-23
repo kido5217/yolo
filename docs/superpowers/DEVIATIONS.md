@@ -301,3 +301,25 @@ buggy — fix the test, log the deviation).
 TestAbortThenNewTurnCompletes could not compile. Fix: Send before
 `waitBusy(t, h, ses)`. Test-only; the pinned assertions are unchanged.
 Resolves per principle 5.
+97. Tool-round text part ids: post-tool text now starts a fresh part id
+(wire/med, 2026-08-23): finding [troubleshoot-3] — the pre-tool
+finalizePart did not reset the round's textState, so post-tool deltas
+appended to the already-finalized part id and the round-exit finalize
+re-persisted + re-published it (≥2 final part.updated frames per text part;
+the transcript showed one merged part). Upstream mints a fresh part id per
+text block; yolo now resets the text/reasoning state (id + buffer) at the
+tool boundary, so post-tool text is a new part and each part finalizes
+exactly once. Wire-visible on tool rounds that continue with text after a
+tool call: part-frame sequence and transcript structure change (new part id
++ its own start/final frames instead of a re-finalization frame).
+Resolves per principle 2 (parity fix; spec §3.1 F).
+98. Plan Task F test code inspected the wrong assistant message (low,
+2026-08-23): runRound mints a new assistant message per round and a tool
+round (sawToolPart) always continues to a round 2, where the auto fake
+synthesizes an ok-N text part — the pinned test's "last assistant message"
+selection read round 2's message, never the tool round's parts. Fix:
+collect text parts across all assistant messages into a text→id map and
+assert "before"/"after" present with distinct ids; the session-wide
+per-id ≤2 part.updated frame check is unchanged. Test-only; the pinned
+contract (fresh part id per text block, no re-finalization) is unchanged.
+Resolves per principle 5.

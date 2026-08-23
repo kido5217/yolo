@@ -1180,3 +1180,93 @@ func TestAbortThenNewTurnCompletes(t *testing.T) {
 		t.Fatalf("turn 2 failed after a prior Abort (stale cancel): %v", turn2Err)
 	}
 }
+
+// TestToolRoundMintsFreshTextPart: a tool round whose stream continues with
+// text after the tool call starts a NEW text part (fresh id, upstream
+// parity) instead of appending to the finalized pre-tool part — and each
+// part is finalized exactly once (no re-finalization frames). The engine
+// mints a fresh assistant message per round and the tool round continues to
+// a synthesized round-2 message, so the persisted assertion collects across
+// all assistant messages (the "before"/"after" parts are round 1's).
+func TestToolRoundMintsFreshTextPart(t *testing.T) {
+	h := newHarness(t)
+	h.build(t)
+	d := t.TempDir()
+	fp := filepath.Join(d, "f.txt")
+	writeFile(t, fp, "content")
+	h.drv.Turns = []fakellm.Turn{
+		{Parts: []llm.Part{
+			{Kind: "text", Text: "before"},
+			{Kind: "tool", Name: "read", CallID: "call_1", Text: fmt.Sprintf(`{"filePath":%q}`, fp)},
+			{Kind: "text", Text: "after", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 2}},
+		}},
+	}
+	ses := h.startSession(t, d)
+	waitIdle(t, h, ses, func() {
+		if _, err := h.eng.Send(t.Context(), ses, "read f.txt", nil); err != nil {
+			t.Fatalf("Send: %v", err)
+		}
+	})
+
+	// Persisted: the session's assistant messages carry text parts "before"
+	// and "after" with distinct ids (pre-fix: one merged "beforeafter"
+	// part).
+	byText := map[string]string{}
+	for _, m := range mustListMessages(t, h.db, ses) {
+		if m.Role != "assistant" {
+			continue
+		}
+		rows, err := h.db.ListParts(m.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, r := range rows {
+			p, err := storage.PartToProtocol(r)
+			if err != nil {
+				t.Fatalf("PartToProtocol: %v", err)
+			}
+			if p.Type == "text" {
+				byText[p.Text] = p.ID
+			}
+		}
+	}
+	for _, want := range []string{"before", "after"} {
+		if byText[want] == "" {
+			t.Fatalf("text part %q not persisted (got %v)", want, byText)
+		}
+	}
+	if byText["before"] == byText["after"] {
+		t.Fatal("pre-tool and post-tool text parts share an id")
+	}
+
+	// Wire: no part id gets more than start + final part.updated frames
+	// (pre-fix the pre-tool id gets a third, re-finalization frame).
+	frames := map[string]int{}
+	h.eventsMu.Lock()
+	for _, e := range h.events {
+		if e.Type != protocol.EventTypeMessagePartUpdated {
+			continue
+		}
+		var p protocol.MessagePartUpdatedProps
+		if json.Unmarshal(e.Properties, &p) != nil || p.SessionID != ses {
+			continue
+		}
+		frames[p.Part.ID]++
+	}
+	h.eventsMu.Unlock()
+	for id, n := range frames {
+		if n > 2 {
+			t.Fatalf("part %s published %d part.updated frames, want ≤ 2 (no re-finalization)", id, n)
+		}
+	}
+}
+
+// mustListMessages is the test-local ListMessages wrapper (fatal on error).
+func mustListMessages(t *testing.T, db *storage.DB, ses string) []storage.MessageRow {
+	t.Helper()
+	rows, err := db.ListMessages(ses)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rows
+}

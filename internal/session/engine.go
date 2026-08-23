@@ -918,6 +918,13 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 			sawToolPart = true
 			finalizePart(&textSt, "text")
 			finalizePart(&reasonSt, "reasoning")
+			// A tool round that continues the text stream after the tool
+			// call starts a NEW text block (fresh part id, upstream parity)
+			// instead of re-using the finalized part's id (troubleshoot-3).
+			textSt.id = ""
+			textSt.buf.Reset()
+			reasonSt.id = ""
+			reasonSt.buf.Reset()
 			if t.toolCalls >= maxToolSteps {
 				// Step budget exhausted: the remaining calls of this stream
 				// are dropped (not persisted, not executed); the turn ends
