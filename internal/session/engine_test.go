@@ -895,3 +895,81 @@ func TestSendEarlyFailPublishesNoStatus(t *testing.T) {
 		t.Fatalf("early-fail Send published %d session.status events, want 0 (no lone idle)", n)
 	}
 }
+
+// holdTitleDriver holds title streams until the request ctx is cancelled
+// (counted) and forwards turn requests to a plain fake — the title
+// goroutine is in flight for the whole test window.
+type holdTitleDriver struct {
+	cancelled atomic.Bool
+	inner     *fakellm.Driver
+}
+
+func (d *holdTitleDriver) Stream(ctx context.Context, req llm.Request) (llm.PartStream, error) {
+	if isTitleReq(req) {
+		<-ctx.Done()
+		d.cancelled.Store(true)
+		return llm.PartStream{}, ctx.Err()
+	}
+	return d.inner.Stream(ctx, req)
+}
+
+func titleProbeHarness(t *testing.T) (*harness, *holdTitleDriver) {
+	h := newHarness(t)
+	hd := holdTitleDriver{inner: fakellm.New(fakellm.Turn{Parts: []llm.Part{
+		{Kind: "text", Text: "hi", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}},
+	}})}
+	h.overrideDriver = &hd
+	h.build(t)
+	return h, &hd
+}
+
+// TestAbortCancelsTitleGoroutine: Abort cancels the in-flight title side-call
+// (30 s background ctx is gone — the goroutine ends on the abort, not the
+// timeout).
+func TestAbortCancelsTitleGoroutine(t *testing.T) {
+	h, hd := titleProbeHarness(t)
+	ses := h.startSession(t, t.TempDir())
+	waitIdle(t, h, ses, func() {
+		if _, err := h.eng.Send(t.Context(), ses, "hi", nil); err != nil {
+			t.Fatalf("Send: %v", err)
+		}
+	})
+	h.eng.Abort(ses)
+	deadline := time.Now().Add(2 * time.Second)
+	for !hd.cancelled.Load() {
+		if time.Now().After(deadline) {
+			t.Fatal("Abort did not cancel the in-flight title goroutine")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// TestShutdownCancelsAndWaitsTitle: Shutdown cancels an in-flight title
+// goroutine and waits for it (bounded) before returning — no UpdateSession /
+// session.updated after the store closes (design-3 fold-in).
+func TestShutdownCancelsAndWaitsTitle(t *testing.T) {
+	h, hd := titleProbeHarness(t)
+	ses := h.startSession(t, t.TempDir())
+	waitIdle(t, h, ses, func() {
+		if _, err := h.eng.Send(t.Context(), ses, "hi", nil); err != nil {
+			t.Fatalf("Send: %v", err)
+		}
+	})
+	done := make(chan struct{})
+	go func() {
+		h.eng.Shutdown(t.Context())
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Shutdown did not return while a title goroutine was held")
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for !hd.cancelled.Load() {
+		if time.Now().After(deadline) {
+			t.Fatal("Shutdown did not cancel the in-flight title goroutine")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}

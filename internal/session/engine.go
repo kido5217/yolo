@@ -85,9 +85,11 @@ type Engine struct {
 	clock     func() int64
 	backoff   func(attempt int) time.Duration
 
-	mu     sync.Mutex
-	busy   map[string]context.CancelFunc
-	shells map[string]*tool.Shell
+	mu        sync.Mutex
+	busy      map[string]context.CancelFunc
+	shells    map[string]*tool.Shell
+	titleCtx  map[string]context.CancelFunc
+	titleWait sync.WaitGroup
 }
 
 // New builds the engine from its deps. DB, Bus, Prov, Perm and Tools are
@@ -144,6 +146,7 @@ func New(d Deps) (*Engine, error) {
 		backoff:   backoff,
 		busy:      map[string]context.CancelFunc{},
 		shells:    map[string]*tool.Shell{},
+		titleCtx:  map[string]context.CancelFunc{},
 	}, nil
 }
 
@@ -238,6 +241,9 @@ func (e *Engine) Status(sessionID string) string {
 func (e *Engine) Abort(sessionID string) bool {
 	e.mu.Lock()
 	cancel, active := e.busy[sessionID]
+	if tcancel := e.titleCtx[sessionID]; tcancel != nil {
+		tcancel()
+	}
 	e.mu.Unlock()
 	if !active {
 		return false
@@ -264,8 +270,11 @@ func (e *Engine) Close(sessionID string) {
 // ctx is done), then releases all session shells.
 func (e *Engine) Shutdown(ctx context.Context) {
 	e.mu.Lock()
-	cancels := make([]context.CancelFunc, 0, len(e.busy))
+	cancels := make([]context.CancelFunc, 0, len(e.busy)+len(e.titleCtx))
 	for _, cancel := range e.busy {
+		cancels = append(cancels, cancel)
+	}
+	for _, cancel := range e.titleCtx {
 		cancels = append(cancels, cancel)
 	}
 	e.mu.Unlock()
@@ -289,6 +298,22 @@ func (e *Engine) Shutdown(ctx context.Context) {
 		case <-ctx.Done():
 		case <-tick.C:
 		}
+	}
+	// Title side-calls are tracked the same way: the bounded wait keeps
+	// Shutdown from returning while a title goroutine can still touch the
+	// store or publish session.updated (design-3 fold-in).
+	fin := make(chan struct{})
+	go func() {
+		e.titleWait.Wait()
+		close(fin)
+	}()
+	remain := time.Until(deadline)
+	if remain < 0 {
+		remain = 0
+	}
+	select {
+	case <-fin:
+	case <-time.After(remain):
 	}
 	e.mu.Lock()
 	shells := e.shells
@@ -1400,12 +1425,18 @@ func (e *Engine) maybeScheduleTitle(t *turn, userText string) {
 		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	e.mu.Lock()
+	e.titleCtx[t.sessionID] = cancel
+	e.mu.Unlock()
+	e.titleWait.Add(1)
 	go e.generateTitle(ctx, cancel, t, userText)
 }
 
 // generateTitle best-effort: errors are dropped (title stays the default).
 func (e *Engine) generateTitle(ctx context.Context, cancel context.CancelFunc, t *turn, userText string) {
 	defer cancel()
+	defer e.titleWait.Done()
+	defer e.dropTitleCtx(t.sessionID)
 	cfg, _ := e.loadCfg(t.row.ProjectDir)
 	req := llm.Request{
 		Model:   t.model.ID,
@@ -1456,6 +1487,13 @@ func (e *Engine) generateTitle(ctx context.Context, cancel context.CancelFunc, t
 		SessionID: t.sessionID,
 		Info:      storage.SessionFromRow(updated, msgs),
 	})
+}
+
+// dropTitleCtx removes the session's tracked title cancel.
+func (e *Engine) dropTitleCtx(sessionID string) {
+	e.mu.Lock()
+	delete(e.titleCtx, sessionID)
+	e.mu.Unlock()
 }
 
 // callKeyHash returns the sha256 hex of the canonical (sorted-key) JSON form

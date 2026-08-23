@@ -243,3 +243,10 @@ idle with no preceding busy, a transition no client observed a start to. Spec
 TUI via the Send return value (the existing failure channel). The wire-visible
 change is confined to the Send error path (success paths unchanged). Resolves
 per principle 2.
+92. Plan Task C test driver had the deviation-90 value-receiver bug class
+(low, 2026-08-23): `holdTitleDriver` used a value receiver, so
+`d.cancelled.Store(true)` inside `Stream` mutated the copy of the driver
+held in the `llm.Driver` interface — the `hd.cancelled.Load()` guards in
+TestAbortCancelsTitleGoroutine and TestShutdownCancelsAndWaitsTitle could
+never pass. Fix: pointer receiver + `h.overrideDriver = &hd`. Test-only;
+the pinned assertions are unchanged. Resolves per principle 5.
