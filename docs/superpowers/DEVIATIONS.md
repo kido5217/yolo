@@ -351,3 +351,20 @@ pass pre- or post-fix. Fix: point the parts at the real `msg_a` row
 (one token, `const ses, msg = "ses_t", "msg_a"`). Test-only; the pinned
 contract (same-time_created rows come back in insertion/rowid order) is
 unchanged. Resolves per principle 5.
+102. Plan Task K brief put the live turn ctx at the finalization sites
+(low, 2026-08-23): the brief's ctx-source map said the turn ctx at every
+site inside `finishRound`/`finalizePart`/`saveToolPart`; implemented
+literally, the pre-existing abort tests
+(TestPermissionAbortDuringAskAbortsTool, TestAbortMidTurn) failed —
+the finalization DB writes ran on the already-cancelled turn ctx, the
+driver failed them with `context.Canceled`, and the tool part stayed
+`running` (End:0) in the store, while the abort contract pins the
+finalized `error: aborted` part. Fix: `context.WithoutCancel(ctx)` in
+exactly those three finalization functions (internal/session/engine.go) —
+values preserved, cancellation dropped; `saveSynthetic` keeps the plain
+ctx (its call sites check `ctx.Err()` first and return before it), and
+all cancellable work (stream Next, perm Ask, tool Run, round-start
+loads) still uses the live turn ctx. Impact: round-finalization writes
+are no longer interruptible by turn cancel — deliberate: they record the
+terminal state of an exiting round. No wire change. Resolves per
+principle 5.
