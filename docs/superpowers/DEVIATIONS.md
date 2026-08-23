@@ -265,3 +265,34 @@ non-nil func values, so the tracked cancel is stored as a
 (identity semantics identical to the stated form); the Abort/Shutdown
 call sites invoke `tc.cancel()` / append `tc.cancel` under the same lock
 discipline.
+94. Delete-while-busy aborts the in-flight turn (behavior/med, 2026-08-23):
+findings [troubleshoot-5] + [concurrency-2] Close half — `DELETE
+/session/{id}` previously only closed the bash shell; the in-flight turn kept
+publishing events for the deleted session and a post-Close tool call
+re-spawned a leaked shell. Upstream `Session.remove` (session.ts:606-629)
+cancels subagent jobs, removes child sessions and durable event rows, but
+does NOT interrupt the in-flight main turn (it runs in the instance-scoped
+Runner; `SessionRunState.cancel` is the separate abort path) — upstream parity
+is structurally unachievable (yolo has no subagent jobs, no durable event
+rows, a per-session engine), so yolo aborts the turn on delete: Close =
+Abort + suppress the session's events + settle-then-close the shell (bounded
+2 s, then hard close). The user-initiated delete is treated as an abort
+intent; partial assistant content persists as today (no synthetic
+"aborted" note). Resolves per principle 2 + the implement-everything scope
+policy (spec §2.4a).
+95. Plan Task D test code had two bugs; fixed, assertions kept (low,
+2026-08-23): (a) TestCloseWhileBusyAbortsAndSuppresses called
+`waitBusy(t, h, ses, fn)` — a 4-arg form that does not exist (the harness
+`waitBusy` takes 3 args and all existing callers use that form), so the
+pinned test could not compile. Fix: `Send` before `waitBusy(t, h, ses)` —
+the same start-then-act-within-the-busy-window intent. (b) The flag-based
+`waitBusy` does not guarantee the busy `session.status` EVENT is published
+before `Close` (the busy flag is set synchronously in Send, but the event is
+published from the turn goroutine), so the "busy-only statuses survive"
+count raced the publish and read 0. Fix: `h.waitForEvent` on the busy status
+event for the session before `Close` — matching the plan's own Step 2
+expectation that the busy event is delivered pre-Delete. Both are test-only;
+the pinned assertions (abort applied, `slowCancel` observed, exactly one
+busy `session.status` survives) are unchanged and now deterministic.
+Resolves per principle 5 (tests define the contract; plan's own test code
+buggy — fix the test, log the deviation).

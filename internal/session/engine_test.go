@@ -1074,3 +1074,65 @@ func TestSupersededTitleDropKeepsNewerCancel(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 }
+
+// TestCloseWhileBusyAbortsAndSuppresses: Close on a session with an in-flight
+// turn aborts the turn (the held slow stream observes the ctx cancel),
+// suppresses the post-Delete event stream (busy-only statuses survive), and
+// releases the session. The slowTurn hold makes the busy window
+// deterministic.
+func TestCloseWhileBusyAbortsAndSuppresses(t *testing.T) {
+	h := newHarness(t)
+	h.build(t)
+	h.slowTurn = true
+	ses := h.startSession(t, t.TempDir())
+	if _, err := h.eng.Send(t.Context(), ses, "hi", func(error) {}); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	waitBusy(t, h, ses)
+	// The busy event (not just the flag) must be published before Close:
+	// the flag is set synchronously in Send, but runTurn publishes the busy
+	// status from its goroutine — without this, the suppressed-count
+	// assertion below races the publish (could read 0).
+	h.waitForEvent(t, func(e protocol.Event) bool {
+		if e.Type != protocol.EventTypeSessionStatus {
+			return false
+		}
+		var p protocol.SessionStatusProps
+		if err := json.Unmarshal(e.Properties, &p); err != nil {
+			t.Fatal(err)
+		}
+		return p.SessionID == ses && p.Status.Type == protocol.StatusBusy
+	})
+	h.eng.Close(ses)
+	deadline := time.Now().Add(5 * time.Second)
+	for h.eng.Status(ses) == protocol.StatusBusy {
+		if time.Now().After(deadline) {
+			t.Fatal("turn still busy after Close (abort not applied)")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if h.slowCancel.Load() == 0 {
+		t.Fatal("Close did not abort the in-flight turn (held stream never saw ctx cancel)")
+	}
+	// Exactly the busy status survives; the post-Delete idle is suppressed.
+	deadline = time.Now().Add(2 * time.Second)
+	for {
+		n := h.eventCount(func(e protocol.Event) bool {
+			if e.Type != protocol.EventTypeSessionStatus {
+				return false
+			}
+			var p protocol.SessionStatusProps
+			if json.Unmarshal(e.Properties, &p) != nil || p.SessionID != ses {
+				return false
+			}
+			return true
+		})
+		if n == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("session.status events for closed session = %d, want 1 (busy only; the post-Delete idle is suppressed)", n)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}

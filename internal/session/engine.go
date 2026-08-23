@@ -95,6 +95,7 @@ type Engine struct {
 	shells    map[string]*tool.Shell
 	titleCtx  map[string]*titleCancel
 	titleWait sync.WaitGroup
+	deleted   map[string]struct{}
 }
 
 // New builds the engine from its deps. DB, Bus, Prov, Perm and Tools are
@@ -152,6 +153,7 @@ func New(d Deps) (*Engine, error) {
 		busy:      map[string]context.CancelFunc{},
 		shells:    map[string]*tool.Shell{},
 		titleCtx:  map[string]*titleCancel{},
+		deleted:   map[string]struct{}{},
 	}, nil
 }
 
@@ -257,17 +259,39 @@ func (e *Engine) Abort(sessionID string) bool {
 	return true
 }
 
-// Close releases the session's per-work resources (the bash shell).
+// Close tears down the session's per-work resources: it aborts the
+// in-flight turn, suppresses further events for the session, and closes the
+// bash shell only after the turn settles (bounded wait, then hard close).
+// Deleting a session must not leave a live turn publishing events for a gone
+// session or a post-Close tool call re-spawning a leaked shell
+// (troubleshoot-5; deviation 94 — upstream lets the main turn run on).
 func (e *Engine) Close(sessionID string) {
+	e.Abort(sessionID)
 	e.mu.Lock()
+	e.deleted[sessionID] = struct{}{}
 	s, ok := e.shells[sessionID]
-	if ok {
-		delete(e.shells, sessionID)
-	}
+	delete(e.shells, sessionID)
 	e.mu.Unlock()
 	if ok {
-		_ = s.Close()
+		e.settleAndClose(sessionID, s)
 	}
+}
+
+// settleAndClose waits for the session's in-flight turn to release the busy
+// flag (bounded to 2 s; the Close abort unblocks it, so the wait is short in
+// practice) before closing the shell.
+func (e *Engine) settleAndClose(sessionID string, s *tool.Shell) {
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		e.mu.Lock()
+		_, busy := e.busy[sessionID]
+		e.mu.Unlock()
+		if !busy || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	_ = s.Close()
 }
 
 // Shutdown drains the engine for process exit: it cancels every active
@@ -339,6 +363,9 @@ func (e *Engine) releaseBusy(sessionID string) {
 }
 
 func (e *Engine) publish(t string, props any) {
+	if e.eventSuppressed(props) {
+		return
+	}
 	ev, err := protocol.MakeEvent(t, props)
 	if err != nil {
 		// A marshal failure here would kill the whole event stream, so it
@@ -347,6 +374,32 @@ func (e *Engine) publish(t string, props any) {
 		return
 	}
 	e.bus.Publish(ev)
+}
+
+// eventSuppressed reports whether the event belongs to a closed (deleted)
+// session: post-DELETE the engine must not publish further events for it.
+// The engine publishes exactly these five prop shapes, so the switch is
+// closed.
+func (e *Engine) eventSuppressed(props any) bool {
+	var sid string
+	switch p := props.(type) {
+	case protocol.SessionStatusProps:
+		sid = p.SessionID
+	case protocol.MessageUpdatedProps:
+		sid = p.SessionID
+	case protocol.MessagePartUpdatedProps:
+		sid = p.SessionID
+	case protocol.MessagePartDeltaProps:
+		sid = p.SessionID
+	case protocol.SessionUpdatedProps:
+		sid = p.SessionID
+	default:
+		return false
+	}
+	e.mu.Lock()
+	_, del := e.deleted[sid]
+	e.mu.Unlock()
+	return del
 }
 
 func (e *Engine) loadCfg(projectDir string) (*protocol.Config, error) {
@@ -380,10 +433,16 @@ func (e *Engine) limitsFor(cfg *protocol.Config) tool.Limits {
 	return tool.Limits{}
 }
 
-// shellFor returns the session's lazily-spawned bash shell.
+// shellFor returns the session's lazily-spawned bash shell, or nil for a
+// closed session (a late tool call of the aborted turn gets the handled
+// "shell is not initialized" tool error instead of re-spawning a leaked
+// shell).
 func (e *Engine) shellFor(sessionID, dir string) *tool.Shell {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if _, del := e.deleted[sessionID]; del {
+		return nil
+	}
 	s, ok := e.shells[sessionID]
 	if !ok {
 		s = tool.NewShell(dir, tool.Limits{})
