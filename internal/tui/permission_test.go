@@ -198,7 +198,7 @@ func permKey(r rune) tea.KeyPressMsg {
 // whole 9-line end transcript — user, divider, listing text, the completed
 // tool row, its 3-line inline output preview and "done" — so the completed
 // tool row is visible at the end).
-func permHarness(t *testing.T) (*testutil.TestServer, *client.Client, *teatest.TestModel, string) {
+func permHarness(t *testing.T) (*testutil.TestServer, *client.Service, *teatest.TestModel, string) {
 	t.Helper()
 	drv := fake.New(
 		fake.Turn{Parts: []llm.Part{

@@ -24,9 +24,9 @@ var (
 	ErrBadRequest = errors.New("bad request")
 )
 
-// Client talks to one core server. Dir is the scope directory (abs); ""
+// Service talks to one core server. Dir is the scope directory (abs); ""
 // falls back to the server work dir (header omitted).
-type Client struct {
+type Service struct {
 	BaseURL string
 	Dir     string
 	HC      *http.Client
@@ -34,11 +34,11 @@ type Client struct {
 }
 
 // New returns a client for base with scope dir.
-func New(base, dir string) *Client {
-	return &Client{BaseURL: base, Dir: dir, HC: &http.Client{}}
+func New(base, dir string) *Service {
+	return &Service{BaseURL: base, Dir: dir, HC: &http.Client{}}
 }
 
-func (c *Client) backoff(n int) time.Duration {
+func (c *Service) backoff(n int) time.Duration {
 	if c.Backoff != nil {
 		return c.Backoff(n)
 	}
@@ -51,7 +51,7 @@ func (c *Client) backoff(n int) time.Duration {
 	return d
 }
 
-func (c *Client) dirHeader(req *http.Request) {
+func (c *Service) dirHeader(req *http.Request) {
 	if c.Dir != "" {
 		req.Header.Set("x-yolo-directory", url.PathEscape(c.Dir))
 	}
@@ -60,7 +60,7 @@ func (c *Client) dirHeader(req *http.Request) {
 // do performs one request: dir header, JSON body, JSON decode, error mapping.
 // The (method, path, in, out) 5-parameter form is an accepted wire-helper
 // exception to the ≤4-parameter guideline: every wrapper routes through it.
-func (c *Client) do(ctx context.Context, method, path string, in, out any) error {
+func (c *Service) do(ctx context.Context, method, path string, in, out any) error {
 	var rd io.Reader
 	if in != nil {
 		b, err := json.Marshal(in)
@@ -125,12 +125,12 @@ func httpErr(code int, b []byte) error {
 func PathEscapeID(id string) string { return url.PathEscape(id) }
 
 // Health checks GET /global/health.
-func (c *Client) Health(ctx context.Context) error {
+func (c *Service) Health(ctx context.Context) error {
 	return c.do(ctx, http.MethodGet, "/global/health", nil, nil)
 }
 
 // ListSessions is GET /session.
-func (c *Client) ListSessions(ctx context.Context) ([]protocol.Session, error) {
+func (c *Service) ListSessions(ctx context.Context) ([]protocol.Session, error) {
 	var out []protocol.Session
 	if err := c.do(ctx, http.MethodGet, "/session", nil, &out); err != nil {
 		return nil, err
@@ -139,33 +139,33 @@ func (c *Client) ListSessions(ctx context.Context) ([]protocol.Session, error) {
 }
 
 // CreateSession is POST /session (201).
-func (c *Client) CreateSession(ctx context.Context, title string) (protocol.Session, error) {
+func (c *Service) CreateSession(ctx context.Context, title string) (protocol.Session, error) {
 	var out protocol.Session
 	err := c.do(ctx, http.MethodPost, "/session", map[string]string{"title": title}, &out)
 	return out, err
 }
 
 // GetSession is GET /session/{id}.
-func (c *Client) GetSession(ctx context.Context, id string) (protocol.Session, error) {
+func (c *Service) GetSession(ctx context.Context, id string) (protocol.Session, error) {
 	var out protocol.Session
 	err := c.do(ctx, http.MethodGet, "/session/"+PathEscapeID(id), nil, &out)
 	return out, err
 }
 
 // PatchSession is PATCH /session/{id}.
-func (c *Client) PatchSession(ctx context.Context, id string, patch map[string]any) (protocol.Session, error) {
+func (c *Service) PatchSession(ctx context.Context, id string, patch map[string]any) (protocol.Session, error) {
 	var out protocol.Session
 	err := c.do(ctx, http.MethodPatch, "/session/"+PathEscapeID(id), patch, &out)
 	return out, err
 }
 
 // DeleteSession is DELETE /session/{id} (204).
-func (c *Client) DeleteSession(ctx context.Context, id string) error {
+func (c *Service) DeleteSession(ctx context.Context, id string) error {
 	return c.do(ctx, http.MethodDelete, "/session/"+PathEscapeID(id), nil, nil)
 }
 
 // ListMessages is GET /session/{id}/message.
-func (c *Client) ListMessages(ctx context.Context, id string) ([]protocol.MessageWithParts, error) {
+func (c *Service) ListMessages(ctx context.Context, id string) ([]protocol.MessageWithParts, error) {
 	var out []protocol.MessageWithParts
 	if err := c.do(ctx, http.MethodGet, "/session/"+PathEscapeID(id)+"/message", nil, &out); err != nil {
 		return nil, err
@@ -174,7 +174,7 @@ func (c *Client) ListMessages(ctx context.Context, id string) ([]protocol.Messag
 }
 
 // SendMessage is POST /session/{id}/message (202); ErrBusy on 409.
-func (c *Client) SendMessage(ctx context.Context, id, text string) (string, error) {
+func (c *Service) SendMessage(ctx context.Context, id, text string) (string, error) {
 	var out struct {
 		MessageID string `json:"message_id"`
 	}
@@ -189,7 +189,7 @@ func (c *Client) SendMessage(ctx context.Context, id, text string) (string, erro
 }
 
 // Abort is POST /session/{id}/abort.
-func (c *Client) Abort(ctx context.Context, id string) (bool, error) {
+func (c *Service) Abort(ctx context.Context, id string) (bool, error) {
 	var out struct {
 		Aborted bool `json:"aborted"`
 	}
@@ -200,7 +200,7 @@ func (c *Client) Abort(ctx context.Context, id string) (bool, error) {
 }
 
 // Command is POST /session/{id}/command.
-func (c *Client) Command(ctx context.Context, id, cmd string) (protocol.CommandResponse, error) {
+func (c *Service) Command(ctx context.Context, id, cmd string) (protocol.CommandResponse, error) {
 	var out protocol.CommandResponse
 	err := c.do(ctx, http.MethodPost, "/session/"+PathEscapeID(id)+"/command", map[string]string{"command": cmd}, &out)
 	return out, err
@@ -209,7 +209,7 @@ func (c *Client) Command(ctx context.Context, id, cmd string) (protocol.CommandR
 // Status is GET /session/status. The wire carries plain strings
 // ("idle"|"busy"|"retry") per session id; the plan's
 // map[string]protocol.SessionStatus cannot be decoded from it (deviation).
-func (c *Client) Status(ctx context.Context) (map[string]string, error) {
+func (c *Service) Status(ctx context.Context) (map[string]string, error) {
 	var out struct {
 		Sessions map[string]string `json:"sessions"`
 	}
@@ -220,7 +220,7 @@ func (c *Client) Status(ctx context.Context) (map[string]string, error) {
 }
 
 // ListProviders is GET /provider.
-func (c *Client) ListProviders(ctx context.Context) ([]protocol.Provider, error) {
+func (c *Service) ListProviders(ctx context.Context) ([]protocol.Provider, error) {
 	var out []protocol.Provider
 	if err := c.do(ctx, http.MethodGet, "/provider", nil, &out); err != nil {
 		return nil, err
@@ -229,21 +229,21 @@ func (c *Client) ListProviders(ctx context.Context) ([]protocol.Provider, error)
 }
 
 // GetConfig is GET /config.
-func (c *Client) GetConfig(ctx context.Context) (map[string]any, error) {
+func (c *Service) GetConfig(ctx context.Context) (map[string]any, error) {
 	var out map[string]any
 	err := c.do(ctx, http.MethodGet, "/config", nil, &out)
 	return out, err
 }
 
 // PatchConfig is PATCH /config (server deep-merges).
-func (c *Client) PatchConfig(ctx context.Context, patch map[string]any) (map[string]any, error) {
+func (c *Service) PatchConfig(ctx context.Context, patch map[string]any) (map[string]any, error) {
 	var out map[string]any
 	err := c.do(ctx, http.MethodPatch, "/config", patch, &out)
 	return out, err
 }
 
 // GlobalConfig is GET /global/config; a non-nil patch makes it a PATCH.
-func (c *Client) GlobalConfig(ctx context.Context, patch map[string]any) (map[string]any, error) {
+func (c *Service) GlobalConfig(ctx context.Context, patch map[string]any) (map[string]any, error) {
 	var out map[string]any
 	if patch == nil {
 		err := c.do(ctx, http.MethodGet, "/global/config", nil, &out)
@@ -254,7 +254,7 @@ func (c *Client) GlobalConfig(ctx context.Context, patch map[string]any) (map[st
 }
 
 // Auth is PUT /auth/{providerID} (key) or, with remove, DELETE (204).
-func (c *Client) Auth(ctx context.Context, providerID, key string, remove bool) error {
+func (c *Service) Auth(ctx context.Context, providerID, key string, remove bool) error {
 	id := PathEscapeID(providerID)
 	if remove {
 		return c.do(ctx, http.MethodDelete, "/auth/"+id, nil, nil)
@@ -263,7 +263,7 @@ func (c *Client) Auth(ctx context.Context, providerID, key string, remove bool) 
 }
 
 // ListAgents is GET /agent.
-func (c *Client) ListAgents(ctx context.Context) ([]protocol.Agent, error) {
+func (c *Service) ListAgents(ctx context.Context) ([]protocol.Agent, error) {
 	var out []protocol.Agent
 	if err := c.do(ctx, http.MethodGet, "/agent", nil, &out); err != nil {
 		return nil, err
@@ -272,7 +272,7 @@ func (c *Client) ListAgents(ctx context.Context) ([]protocol.Agent, error) {
 }
 
 // ListCommands is GET /command.
-func (c *Client) ListCommands(ctx context.Context) ([]protocol.Command, error) {
+func (c *Service) ListCommands(ctx context.Context) ([]protocol.Command, error) {
 	var out []protocol.Command
 	if err := c.do(ctx, http.MethodGet, "/command", nil, &out); err != nil {
 		return nil, err
@@ -281,7 +281,7 @@ func (c *Client) ListCommands(ctx context.Context) ([]protocol.Command, error) {
 }
 
 // ListPermissions is GET /permission (pending asks for the dir).
-func (c *Client) ListPermissions(ctx context.Context) ([]protocol.PermissionAskedProps, error) {
+func (c *Service) ListPermissions(ctx context.Context) ([]protocol.PermissionAskedProps, error) {
 	var out []protocol.PermissionAskedProps
 	if err := c.do(ctx, http.MethodGet, "/permission", nil, &out); err != nil {
 		return nil, err
@@ -290,7 +290,7 @@ func (c *Client) ListPermissions(ctx context.Context) ([]protocol.PermissionAske
 }
 
 // ReplyPermission is POST /permission/{requestID}/reply (204).
-func (c *Client) ReplyPermission(ctx context.Context, requestID, reply string) error {
+func (c *Service) ReplyPermission(ctx context.Context, requestID, reply string) error {
 	return c.do(
 		ctx, http.MethodPost, "/permission/"+PathEscapeID(requestID)+"/reply",
 		map[string]string{"response": reply}, nil,

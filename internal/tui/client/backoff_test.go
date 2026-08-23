@@ -6,7 +6,7 @@ import (
 )
 
 func TestBackoffNeverZeroOrUncapped(t *testing.T) {
-	c := &Client{}
+	c := &Service{}
 	for _, n := range []int{0, 1, 4, 5, 6, 63, 64, 65, 1024} {
 		d := c.backoff(n)
 		if d <= 0 {
