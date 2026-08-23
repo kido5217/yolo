@@ -134,9 +134,7 @@ func diffCounts(before, after string) (added, removed int) {
 // a leading newline is a terminator (not a line), "" is zero lines, and a
 // trailing newline does not open an extra line.
 func countLines(s string) int {
-	if strings.HasPrefix(s, "\n") {
-		s = s[1:]
-	}
+	s = strings.TrimPrefix(s, "\n")
 	if s == "" {
 		return 0
 	}
