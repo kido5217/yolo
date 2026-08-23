@@ -213,3 +213,12 @@ fixture, where walk order visits `zz/*` before `zz.txt` (entry "zz" <
 "zz.txt") but sort order keeps `zz.txt` first ("." < "/") — the old
 implementation fails the corrected test. Resolves per principle 5 (tests
 define the contract; the spec's order is authoritative).
+89. Quit-confirm dialog text changed `quit? [y/n]` → `quit? [Y/n]` (low,
+2026-08-23): user-requested 0.3.0 UX change — the dialog marks the default
+choice with a capital letter. The text is yolo-side (upstream's quit
+confirm is a button-style Confirm/Cancel dialog, no `quit? [y/n]` literal),
+so no verbatim-port conflict; the render text was test-pinned
+(help_test.go, tui_suite_test.go) and the pins moved with it. No keymap
+change: y/enter/ctrl+c confirmed before this change (dlgYes binding) and
+now have an explicit test pin for enter (default-choice semantics).
+Resolves per principle 2 (one deliberate deviation per change, logged).
