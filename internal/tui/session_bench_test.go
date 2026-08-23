@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -119,4 +120,63 @@ func BenchmarkRenderMessages(b *testing.B) {
 			}
 		})
 	}
+}
+
+// BenchmarkStoreApply pins the per-event fold path (candidate-9): the
+// message/part upserts plus the delta burst through the per-part builder
+// (appendDelta zero-copy). Hermetic — no baseline claim; a future
+// quadratic re-scan or builder reset would show up here.
+func BenchmarkStoreApply(b *testing.B) {
+	for _, n := range []int{50, 200} {
+		b.Run(fmt.Sprintf("msgs/%d", n), func(b *testing.B) {
+			evs := applyBenchEvents(n)
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				st := &store.State{}
+				st.Current = &protocol.Session{ID: "ses_bench"}
+				for _, ev := range evs {
+					st.Apply(ev)
+				}
+			}
+		})
+	}
+}
+
+// applyBenchEvents builds the SSE stream for n assistant messages in the
+// benchStore shape: one message.updated, one part.updated per part, and a
+// 20-delta burst per text part (the streamed hot path).
+func applyBenchEvents(n int) []protocol.Event {
+	evs := make([]protocol.Event, 0, n*8)
+	add := func(typ string, props any) {
+		raw, err := json.Marshal(props)
+		if err != nil {
+			panic(err)
+		}
+		evs = append(evs, protocol.Event{Type: typ, Properties: raw})
+	}
+	for i := 0; i < n; i++ {
+		mid := fmt.Sprintf("msg_bench_%03d", i)
+		msg := protocol.Message{ID: mid, SessionID: "ses_bench", Role: "assistant", Agent: "build"}
+		add(protocol.EventTypeMessageUpdated, map[string]any{"sessionID": "ses_bench", "info": msg})
+		for _, ptype := range []string{"text", "text", "reasoning", "tool", "tool"} {
+			pid := mid + "_" + ptype + fmt.Sprint(i)
+			part := protocol.Part{
+				ID: pid, MessageID: mid, SessionID: "ses_bench", Type: ptype,
+				Text: strings.Repeat("line. ", 8),
+			}
+			if ptype == "tool" {
+				part.Tool = "grep"
+				part.State = &protocol.ToolState{Status: "completed", Title: "grep needle"}
+			}
+			add(protocol.EventTypeMessagePartUpdated, map[string]any{"part": part})
+		}
+		// delta burst on the first text part
+		for d := 0; d < 20; d++ {
+			add(protocol.EventTypeMessagePartDelta, map[string]any{
+				"sessionID": "ses_bench", "messageID": mid,
+				"partID": mid + "_text" + fmt.Sprint(i), "field": "text", "delta": "tok",
+			})
+		}
+	}
+	return evs
 }
