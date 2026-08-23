@@ -698,3 +698,99 @@ func (h hangDriver) Stream(ctx context.Context, req llm.Request) (llm.PartStream
 	<-h.gate
 	return llm.PartStream{}, nil
 }
+
+// TestAuthAddRejectsUnreadableOrEmptyKey pins Y (error-6/cli-3): a
+// ReadString failure or an empty-after-trim key is an error + exit 1 with
+// nothing persisted; a valid key still persists.
+func TestAuthAddRejectsUnreadableOrEmptyKey(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
+
+	withStdio := func(t *testing.T, stdin string, stdinClosed bool, fn func()) (string, string) {
+		t.Helper()
+		oldIn, oldOut, oldErr := os.Stdin, os.Stdout, os.Stderr
+		t.Cleanup(func() { os.Stdin, os.Stdout, os.Stderr = oldIn, oldOut, oldErr })
+		if stdin != "" || stdinClosed {
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if stdin != "" {
+				_, _ = w.WriteString(stdin)
+			}
+			_ = w.Close()
+			os.Stdin = r
+		}
+		outR, outW, _ := os.Pipe()
+		errR, errW, _ := os.Pipe()
+		os.Stdout, os.Stderr = outW, errW
+		fn()
+		_ = outW.Close()
+		_ = errW.Close()
+		outB, _ := io.ReadAll(outR)
+		errB, _ := io.ReadAll(errR)
+		return string(outB), string(errB)
+	}
+
+	readStore := func() map[string]string {
+		p, err := auth.Path()
+		if err != nil {
+			t.Fatalf("auth.Path: %v", err)
+		}
+		s, err := auth.LoadFrom(p)
+		if err != nil {
+			t.Fatalf("load store: %v", err)
+		}
+		out := map[string]string{}
+		for id, e := range s {
+			out[id] = e.Key
+		}
+		return out
+	}
+
+	t.Run("closed stdin: read error, nothing persisted", func(t *testing.T) {
+		var code int
+		_, stderr := withStdio(t, "", true, func() { code = authCmd([]string{"add", "acme"}) })
+		if code != 1 {
+			t.Fatalf("exit = %d, want 1", code)
+		}
+		if !strings.Contains(stderr, "auth add:") {
+			t.Fatalf("stderr = %q, want an auth add: error line", stderr)
+		}
+		if got := readStore(); len(got) != 0 {
+			t.Fatalf("store = %v, want empty (nothing persisted)", got)
+		}
+	})
+	t.Run("empty line: trimmed empty, nothing persisted", func(t *testing.T) {
+		var code int
+		_, stderr := withStdio(t, "\n", false, func() { code = authCmd([]string{"add", "acme"}) })
+		if code != 1 || !strings.Contains(stderr, "auth add:") {
+			t.Fatalf("exit = %d stderr = %q, want 1 + auth add: line", code, stderr)
+		}
+		if got := readStore(); len(got) != 0 {
+			t.Fatalf("store = %v, want empty", got)
+		}
+	})
+	t.Run("whitespace-only argument rejected", func(t *testing.T) {
+		var code int
+		_, _ = withStdio(t, "", false, func() { code = authCmd([]string{"add", "acme", "   "}) })
+		if code != 1 {
+			t.Fatalf("exit = %d, want 1", code)
+		}
+		if got := readStore(); len(got) != 0 {
+			t.Fatalf("store = %v, want empty", got)
+		}
+	})
+	t.Run("valid stdin key still persists", func(t *testing.T) {
+		var code int
+		_, _ = withStdio(t, "sk-abc\n", false, func() { code = authCmd([]string{"add", "acme"}) })
+		if code != 0 {
+			t.Fatalf("exit = %d, want 0", code)
+		}
+		if got := readStore(); got["acme"] != "sk-abc" {
+			t.Fatalf("store = %v, want acme=sk-abc", got)
+		}
+	})
+}

@@ -452,14 +452,22 @@ func authCmd(args []string) int {
 			return authUsage()
 		}
 		provider := rest[0]
-		key := ""
+		var key string
 		if len(rest) >= 2 {
-			key = rest[1]
+			key = strings.TrimSpace(rest[1])
 		} else {
 			// no new dep: plain stdin prompt, echo NOT disabled (documented limitation)
 			fmt.Fprint(os.Stderr, "API key: ")
-			line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+			line, rerr := bufio.NewReader(os.Stdin).ReadString('\n')
+			if rerr != nil {
+				fmt.Fprintf(os.Stderr, "auth add: reading key: %v\n", rerr)
+				return 1
+			}
 			key = strings.TrimSpace(line)
+		}
+		if key == "" {
+			fmt.Fprintln(os.Stderr, "auth add: key must not be empty")
+			return 1
 		}
 		s, err := loadStore()
 		if err != nil {
