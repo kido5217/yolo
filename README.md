@@ -11,7 +11,8 @@ yolo contains **zero telemetry**: it runs on your machine, sends nothing anywher
 ## Build
 
 ```sh
-go build -o yolo ./cmd/yolo
+just build                    # version-stamped binary (git describe)
+go build -o yolo ./cmd/yolo   # plain build (no version stamp)
 ```
 
 ## Run
@@ -111,7 +112,7 @@ go vet ./... && go test ./...     # the CI gate — never hits the network
 
 Dev mode: `YOLO_LLM=fake` (+ optional `YOLO_FAKE_SCRIPT=path.json`) swaps the LLM drivers for a scripted fake (one scripted turn per model request; `"delay_ms"` per turn for slow-turn tests). The e2e suite exercises the full TUI against this.
 
-**Live e2e (manual, never in CI)**: `scripts/e2e-live.sh` builds the binary, boots `yolo serve` from a scratch project pinned to the real `kido` endpoint, and drives the wire contract: health check → create a `yolo`-agent session → send "list files in /tmp" (asserts a completed `read`/`glob`/`grep`/`bash` tool call plus a non-empty text reply) → abort tests (idle → `aborted:false`, busy → `aborted:true`) → SIGTERM → graceful exit 0. Requires `KIDO_API_KEY`; `KIDO_BASE_URL` (default `https://ai.kido.ws/v1`) and `E2E_TIMEOUT` (default 180 s) are optional.
+**Live e2e (manual, never in CI)**: `just e2e-live` (`scripts/e2e-live.sh`) builds the binary, boots `yolo serve` from a scratch project pinned to the real `kido` endpoint, and drives the wire contract: health check → create a `yolo`-agent session → send "list files in /tmp" (asserts a completed `read`/`glob`/`grep`/`bash` tool call plus a non-empty text reply) → abort tests (idle → `aborted:false`, busy → `aborted:true`) → SIGTERM → graceful exit 0. Requires `KIDO_API_KEY`; `KIDO_BASE_URL` (default `https://ai.kido.ws/v1`) and `E2E_TIMEOUT` (default 180 s) are optional.
 
 ## v1 non-goals
 

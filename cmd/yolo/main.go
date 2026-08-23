@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"syscall"
@@ -38,6 +39,31 @@ import (
 	"github.com/kido5217/yolo/internal/tui/store"
 )
 
+// version is injected at build time: -ldflags "-X main.version=..." (just build).
+var version = "0.0.0-dev"
+
+// printVersion renders the version block: line 1 is always the ldflags
+// version; lines 2-3 come from Go's automatic VCS stamping and are omitted
+// when absent (e.g. GOFLAGS=-buildvcs=false).
+func printVersion() {
+	fmt.Printf("yolo %s\n", version)
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		for _, s := range bi.Settings {
+			switch s.Key {
+			case "vcs.revision":
+				if len(s.Value) > 8 {
+					s.Value = s.Value[:8]
+				}
+				fmt.Printf("commit %s\n", s.Value)
+			case "vcs.time":
+				if s.Value != "" {
+					fmt.Printf("built  %s\n", s.Value)
+				}
+			}
+		}
+	}
+}
+
 func main() {
 	os.Exit(run(os.Args[1:]))
 }
@@ -45,6 +71,10 @@ func main() {
 func run(args []string) int {
 	if len(args) == 0 {
 		return tuiCmd(nil)
+	}
+	if args[0] == "-v" || args[0] == "--version" {
+		printVersion()
+		return 0
 	}
 	switch args[0] {
 	case "help", "-h", "--help":
@@ -55,7 +85,7 @@ func run(args []string) int {
 	case "auth":
 		return authCmd(args[1:])
 	case "version":
-		fmt.Println("yolo 0.0.0-dev")
+		printVersion()
 		return 0
 	default:
 		return tuiCmd(args)
@@ -69,7 +99,7 @@ Usage:
   yolo [<sessionID>] [--dir DIR]   start the TUI (optionally resume a session)
   yolo serve [--addr ADDR]         run the core server only (default http://127.0.0.1:4096)
   yolo auth <subcommand>           manage credentials (list | add <provider> [key] | remove <provider>)
-  yolo version                     print version
+  yolo [-v|--version]              print version (same as: yolo version)
   yolo help                        this help
 `)
 }
@@ -304,9 +334,15 @@ func drain(deps *server.Deps, srv *server.Server) {
 func serveCmd(args []string) int {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	addr := fs.String("addr", "127.0.0.1:4096", "listen address")
+	showVer := fs.Bool("v", false, "print version and exit")
+	showVerLong := fs.Bool("version", false, "print version and exit")
 	// ExitOnError: Parse prints and os.Exit's on bad flags, never returns
 	// a non-nil error.
 	_ = fs.Parse(args)
+	if *showVer || *showVerLong {
+		printVersion()
+		return 0
+	}
 	wd, err := workDir("")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "yolo serve: %v\n", err)

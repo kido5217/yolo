@@ -113,3 +113,10 @@ tool] + exactly ONE user message. Residual minor divergences noted, not
 changed: yolo sends system entries as separate RoleSystem messages (upstream
 joins to one string) and omits reasoning parts on replay (upstream replays
 them) — neither is tool-round-specific; revisit if a loop recurs.
+78. Plan Task 1 pins Go <1.26 `runtime/debug` API (info, 2026-08-22): the
+pinned `printVersion` reads `bi.Settings["vcs.revision"]` (map) and
+`ReadBuildInfo() (…, err)`, but the installed toolchain (1.26.5) returns
+`ReadBuildInfo() (*BuildInfo, ok bool)` with `Settings []BuildSetting`
+(key/value slice). Adapted: iterate the slice, match `vcs.revision` /
+`vcs.time` by key, same output. Behavior identical; no test contract
+changed (the pins assert line 1 only).
