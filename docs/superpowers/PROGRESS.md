@@ -108,4 +108,6 @@ not a separator. The first command (n=0) masked the group bug because counter==0
 - SSE drop contract (v0.1.3): `client.Events` returns `(events, resync)`; a ping per drop
 (buffered, non-blocking); app re-hydrates the current route on `resyncMsg` (the bus has
 no replay — gap events are unrecoverable, recovery is REST hydration from storage).
+- go-udiff v0.4.1 pinned as the direct line-diff dependency (2026-08-23, 0.3.0 task N,
+deviation 104) — the sole new dependency of 0.3.0 (root AGENTS.md allowlist, proposal #1).
 

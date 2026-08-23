@@ -386,3 +386,18 @@ bash's `$?` reports the same value; -1 is reserved for a Wait failure with
 no exit status, and only that becomes the tool error in the markerless-EOF
 branch. Resolves per principle 5 (test + interface note = the last-stated
 call).
+104. write/edit added/removed counts: DP-LCS replaced by the go-udiff Myers
+line diff (behavior/low, parity fix, 2026-08-23; the plan assigned this
+entry the number 94, already in use — next free is 104): finding
+[security-3] — the O(len·len) DP on every write/edit blocked the engine
+~tens of seconds on a one-line edit of a ~60k-line file (~3.6e9 cells).
+`diffCounts` now uses `udiff.Lines` (go-udiff v0.4.1 — dep proposal #1,
+user-approved 2026-08-23; BSD-3, zero deps, pure Go) and derives
+added/removed from the edit list. The counts are the optimal
+newline-terminated-line edit — verified 1:1 against the upstream jsdiff
+`diffLines` line model on all 10 `TestDiffCountsPins` cases. Three former
+pins changed because the OLD DP (bare-line `strings.Split`) deviated from
+upstream: `{"x",""}` (1,1)→(0,1), `{"a\n","a"}` (0,1)→(1,1),
+`{"p\nq\nr","q\nr\ns"}` (1,1)→(2,2). Model-visible in the write/edit tool
+meta (added/removed) only for those edge shapes. Resolves per principle 2
+(parity fix; spec §3.3 N).
