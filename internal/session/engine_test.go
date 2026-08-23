@@ -799,3 +799,74 @@ func TestHistorySnapshotAccumulatesAcrossRounds(t *testing.T) {
 		t.Fatalf("round2 assistant tool call id = %q, want g1", callID)
 	}
 }
+
+// panicDriver panics on its first non-title Stream call (the tool/driver
+// panic probe). Title requests get a short plain stream — the test
+// pre-titles the session so no title side-call actually races the probe.
+type panicDriver struct{ fired atomic.Bool }
+
+func (p *panicDriver) Stream(ctx context.Context, req llm.Request) (llm.PartStream, error) {
+	if isTitleReq(req) {
+		ch := make(chan llm.Part, 1)
+		ch <- llm.Part{Kind: "text", Text: "t", Finish: "stop"}
+		close(ch)
+		return llm.PartStream{Parts: ch}, nil
+	}
+	p.fired.Store(true)
+	panic("engine panic probe")
+}
+
+// TestRunTurnRecoversPanic: a tool/driver panic escapes no goroutine — the
+// turn ends failed (idle status + onDone(err)), the process lives. Without
+// the recover this test's binary crashes (unrecovered panic in the turn
+// goroutine).
+func TestRunTurnRecoversPanic(t *testing.T) {
+	h := newHarness(t)
+	pd := panicDriver{}
+	h.overrideDriver = &pd
+	h.build(t)
+	ses := h.startSession(t, t.TempDir())
+	if err := h.db.UpdateSession(ses, storage.SessionRow{Title: "titled", TimeUpdated: time.Now().UnixMilli()}); err != nil {
+		t.Fatal(err)
+	}
+	var doneErr error
+	done := make(chan struct{})
+	if _, err := h.eng.Send(t.Context(), ses, "hi", func(err error) {
+		doneErr = err
+		close(done)
+	}); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("onDone never fired after a turn panic")
+	}
+	if !pd.fired.Load() {
+		t.Fatal("probe driver was never called; test is vacuous")
+	}
+	if doneErr == nil {
+		t.Fatal("turn panic reported success (onDone(nil))")
+	}
+	if got := h.eng.Status(ses); got != protocol.StatusIdle {
+		t.Fatalf("status after recovered panic = %s, want %s", got, protocol.StatusIdle)
+	}
+	// The idle event is the last publish in the turn's defer (same closure
+	// that fires onDone), so wait for the collector goroutine to fold it
+	// before counting — counting right after onDone races the collector.
+	h.waitForEvent(t, func(e protocol.Event) bool {
+		if e.Type != protocol.EventTypeSessionStatus {
+			return false
+		}
+		return statusType(t, e).Type == protocol.StatusIdle
+	})
+	idles := h.eventCount(func(e protocol.Event) bool {
+		if e.Type != protocol.EventTypeSessionStatus {
+			return false
+		}
+		return statusType(t, e).Type == protocol.StatusIdle
+	})
+	if idles != 1 {
+		t.Fatalf("idle session.status events = %d, want 1", idles)
+	}
+}

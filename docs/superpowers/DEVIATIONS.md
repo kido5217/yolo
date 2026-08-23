@@ -220,5 +220,18 @@ confirm is a button-style Confirm/Cancel dialog, no `quit? [y/n]` literal),
 so no verbatim-port conflict; the render text was test-pinned
 (help_test.go, tui_suite_test.go) and the pins moved with it. No keymap
 change: y/enter/ctrl+c confirmed before this change (dlgYes binding) and
-now have an explicit test pin for enter (default-choice semantics).
+ now have an explicit test pin for enter (default-choice semantics).
 Resolves per principle 2 (one deliberate deviation per change, logged).
+90. Plan Task A test code had two bugs; fixed, assertions kept (low,
+2026-08-23): (a) `panicDriver` used a value receiver, so `p.fired.Store(true)`
+mutated a copy of the driver held in the `llm.Driver` interface — the
+`pd.fired.Load()` "probe was never called" guard could never pass. Fix:
+pointer receiver + `h.overrideDriver = &pd`. (b) The final
+`eventCount(idle)` ran immediately after `onDone`, but the idle
+`session.status` is the LAST publish in the turn's defer (same closure that
+fires `onDone`), so it raced the harness's collector goroutine (count read 0
+before the collector folded the event). Fix: `h.waitForEvent` on the idle
+status before the count. Both are test-only; the pinned assertions (failed
+turn, `StatusIdle`, exactly one idle event) are unchanged and now
+deterministic. Resolves per principle 5 (tests define the contract; plan's
+own test code buggy — fix the test, log the deviation).

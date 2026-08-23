@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -416,6 +417,14 @@ func newTurn(sessionID string, row storage.SessionRow, info provider.Info, model
 func (e *Engine) runTurn(ctx context.Context, t *turn, onDone func(error)) {
 	var turnErr error
 	defer func() {
+		if rec := recover(); rec != nil {
+			// A panic (tool/driver/DB) must not crash the single binary and
+			// must not report false success: the turn finalizes as failed
+			// through the normal exit path (idle + onDone(err)).
+			turnErr = fmt.Errorf("session: turn panicked: %v", rec)
+			e.lg.Error("turn panicked", "session_id", t.sessionID,
+				"panic", fmt.Sprintf("%v", rec), "stack", string(debug.Stack()))
+		}
 		if errors.Is(turnErr, context.Canceled) {
 			e.lg.Info("turn aborted", "session_id", t.sessionID, "reason", "context_canceled")
 		}
