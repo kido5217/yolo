@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"strings"
 )
 
 // Role is a chat message role.
@@ -108,6 +110,27 @@ type TransientError struct {
 
 func (e *TransientError) Error() string { return e.Err.Error() }
 func (e *TransientError) Unwrap() error { return e.Err }
+
+// APIError is a decoded non-2xx upstream response. Body is the drained
+// (capped, 64 KiB) response body; Message is the provider-decoded error text
+// ("" when the body carries no message). The error text keeps the existing
+// "upstream error (http %d): ..." framing so pins and logs stay comparable.
+type APIError struct {
+	Status  int
+	Body    []byte
+	Message string
+}
+
+func (e *APIError) Error() string {
+	msg := e.Message
+	if msg == "" {
+		msg = strings.TrimSpace(string(e.Body))
+	}
+	if msg == "" {
+		msg = fmt.Sprintf("%d %s", e.Status, http.StatusText(e.Status))
+	}
+	return fmt.Sprintf("upstream error (http %d): %s", e.Status, msg)
+}
 
 // IsTransient reports whether err is retryable: a 429/5xx TransientError or a
 // network error. Context errors are not transient.
