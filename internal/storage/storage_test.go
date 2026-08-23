@@ -567,3 +567,19 @@ func ids3(rows []storage.PermissionRow) []string {
 	}
 	return out
 }
+
+// TestUpdateNotFoundPaths: a zero-rows update maps to ErrNotFound (the
+// surviving path after Task J starts returning driver RowsAffected errors
+// as-is instead of masking them as not-found).
+func TestUpdateNotFoundPaths(t *testing.T) {
+	db := openDB(t)
+	if err := db.UpdateSession("ses_nope", storage.SessionRow{Title: "x"}); !errors.Is(err, storage.ErrNotFound) {
+		t.Fatalf("UpdateSession missing id: err = %v, want ErrNotFound", err)
+	}
+	if err := db.UpdateMessage(storage.MessageRow{ID: "msg_nope"}); !errors.Is(err, storage.ErrNotFound) {
+		t.Fatalf("UpdateMessage missing id: err = %v, want ErrNotFound", err)
+	}
+	if err := db.ReplyPermission("perm_nope", "once"); !errors.Is(err, storage.ErrNotFound) {
+		t.Fatalf("ReplyPermission missing id: err = %v, want ErrNotFound", err)
+	}
+}
