@@ -108,7 +108,11 @@ func BenchmarkMessagesFor(b *testing.B) {
 	bigIn := benchText(32 << 10)
 	bigOut := benchText(64 << 10)
 	addPart := func(mid string, p protocol.Part) {
-		if err := db.UpsertPart(storage.ProtocolToPart(p)); err != nil {
+		row, err := storage.ProtocolToPart(p)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if err := db.UpsertPart(row); err != nil {
 			b.Fatal(err)
 		}
 	}

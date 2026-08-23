@@ -31,6 +31,16 @@ func benchText(size int) string {
 	return s
 }
 
+// benchRow encodes p via ProtocolToPart; the bench inputs are always
+// marshalable, so a failure is a bench bug.
+func benchRow(b testing.TB, p protocol.Part) storage.PartRow {
+	row, err := storage.ProtocolToPart(p)
+	if err != nil {
+		b.Fatal(err)
+	}
+	return row
+}
+
 // BenchmarkProtocolToPart measures the wire-part -> row encoder on the
 // per-delta persist path (dao.go ProtocolToPart): text parts with
 // accumulated streamed output, the finalization shape (end + synthetic),
@@ -54,7 +64,7 @@ func BenchmarkProtocolToPart(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				sink = storage.ProtocolToPart(c.p)
+				sink = benchRow(b, c.p)
 			}
 			_ = sink
 		})
@@ -81,7 +91,7 @@ func BenchmarkUpsertPart(b *testing.B) {
 		b.Run(fmt.Sprintf("update/%dKB", size>>10), func(b *testing.B) {
 			row := storage.PartRow{
 				ID: "prt_bench", MessageID: "msg_bench", SessionID: "ses_bench",
-				Type: "text", StateJSON: storage.ProtocolToPart(protocol.Part{Type: "text", Text: benchText(size)}).StateJSON,
+				Type: "text", StateJSON: benchRow(b, protocol.Part{Type: "text", Text: benchText(size)}).StateJSON,
 				TimeCreated: 3,
 			}
 			b.ReportAllocs()
@@ -118,9 +128,9 @@ func BenchmarkPartToProtocol(b *testing.B) {
 		name string
 		row  storage.PartRow
 	}{
-		{"text/64KB", storage.ProtocolToPart(protocol.Part{Type: "text", Text: benchText(64 << 10)})},
-		{"text/128KB", storage.ProtocolToPart(protocol.Part{Type: "text", Text: benchText(128 << 10)})},
-		{"tool/input64KB", storage.ProtocolToPart(protocol.Part{Type: "tool", Tool: "bash", State: &protocol.ToolState{Status: "completed", Input: map[string]any{"command": benchText(64 << 10)}, Output: "ok"}})},
+		{"text/64KB", benchRow(b, protocol.Part{Type: "text", Text: benchText(64 << 10)})},
+		{"text/128KB", benchRow(b, protocol.Part{Type: "text", Text: benchText(128 << 10)})},
+		{"tool/input64KB", benchRow(b, protocol.Part{Type: "tool", Tool: "bash", State: &protocol.ToolState{Status: "completed", Input: map[string]any{"command": benchText(64 << 10)}, Output: "ok"}})},
 	}
 	for _, c := range cases {
 		b.Run(c.name, func(b *testing.B) {

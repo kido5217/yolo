@@ -3,6 +3,7 @@ package storage_test
 import (
 	"errors"
 	"fmt"
+	"math"
 	"path/filepath"
 	"slices"
 	"sync"
@@ -184,7 +185,11 @@ func TestTextAndToolPartRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := protocol.Part{ID: "prt_txt", MessageID: "msg_1", SessionID: "ses_1", Type: "text", Text: "hello", Time: protocol.PartTime{Start: 5, End: 9}}
-	if err := db.UpsertPart(storage.ProtocolToPart(text)); err != nil {
+	textRow, err := storage.ProtocolToPart(text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpsertPart(textRow); err != nil {
 		t.Fatal(err)
 	}
 	row, err := db.GetPart("prt_txt")
@@ -199,7 +204,11 @@ func TestTextAndToolPartRoundTrip(t *testing.T) {
 		t.Fatalf("round trip: %+v (Time.Start must survive via TimeCreated)", back)
 	}
 	tool := protocol.Part{ID: "prt_tool", MessageID: "msg_1", SessionID: "ses_1", Type: "tool", CallID: "call_1", Tool: "bash", State: &protocol.ToolState{Status: "completed", Input: map[string]any{"command": "ls"}, Output: "ok", Time: protocol.PartTime{Start: 1, End: 2}}}
-	if err := db.UpsertPart(storage.ProtocolToPart(tool)); err != nil {
+	toolRow, err := storage.ProtocolToPart(tool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpsertPart(toolRow); err != nil {
 		t.Fatal(err)
 	}
 	prow, err := db.GetPart("prt_tool")
@@ -259,7 +268,11 @@ func TestProtocolToPartTextStateJSONBytes(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := storage.ProtocolToPart(c.p).StateJSON; got != c.want {
+			row, err := storage.ProtocolToPart(c.p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := row.StateJSON; got != c.want {
 				t.Errorf("StateJSON = %s, want %s", got, c.want)
 			}
 		})
@@ -462,5 +475,18 @@ func TestReopenAlreadyMigratedDatabase(t *testing.T) {
 	}
 	if row.Title != "t" {
 		t.Fatalf("title = %q, want t", row.Title)
+	}
+}
+
+// TestProtocolToPartSurfacesMarshalError: an unmarshalable tool state (NaN in
+// input) must fail at write time, not persist StateJSON="" and 500 every
+// later read (safety-3 + error-2).
+func TestProtocolToPartSurfacesMarshalError(t *testing.T) {
+	_, err := storage.ProtocolToPart(protocol.Part{
+		ID: "prt_1", MessageID: "msg_1", SessionID: "ses_1", Type: "tool", Tool: "bash",
+		State: &protocol.ToolState{Status: "running", Input: map[string]any{"n": math.NaN()}},
+	})
+	if err == nil {
+		t.Fatal("ProtocolToPart accepted an unmarshalable tool state (NaN) — the error must surface")
 	}
 }

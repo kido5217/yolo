@@ -305,8 +305,9 @@ func (d *DB) listPartsBy(messageID, typ string) ([]PartRow, error) {
 // ProtocolToPart encodes a wire part into a row. Text/reasoning parts store
 // {"text":..., "end":n, "synthetic":true} (end/synthetic omitted when unset);
 // tool parts store the full protocol.ToolState JSON. CallID is transient and
-// not persisted.
-func ProtocolToPart(p protocol.Part) PartRow {
+// not persisted. A marshal failure (e.g. NaN in a tool state) is an error —
+// persisting "" would 500 every later read.
+func ProtocolToPart(p protocol.Part) (PartRow, error) {
 	r := PartRow{
 		ID:          p.ID,
 		MessageID:   p.MessageID,
@@ -317,13 +318,19 @@ func ProtocolToPart(p protocol.Part) PartRow {
 	}
 	switch {
 	case p.State != nil:
-		b, _ := json.Marshal(p.State)
+		b, err := json.Marshal(p.State)
+		if err != nil {
+			return PartRow{}, fmt.Errorf("part %s state: %w", p.ID, err)
+		}
 		r.StateJSON = string(b)
 	default:
 		// Hot path (streamed deltas): build the fixed 3-key document
 		// directly. Must stay byte-identical to the map marshal: sorted
 		// keys (end, synthetic, text), compact separators.
-		t, _ := json.Marshal(p.Text)
+		t, err := json.Marshal(p.Text)
+		if err != nil {
+			return PartRow{}, fmt.Errorf("part %s text: %w", p.ID, err)
+		}
 		b := make([]byte, 0, len(t)+16)
 		b = append(b, '{')
 		if p.Time.End != 0 {
@@ -339,7 +346,7 @@ func ProtocolToPart(p protocol.Part) PartRow {
 		b = append(b, '}')
 		r.StateJSON = string(b)
 	}
-	return r
+	return r, nil
 }
 
 // PartToProtocol decodes a row into a wire part (inverse of ProtocolToPart).

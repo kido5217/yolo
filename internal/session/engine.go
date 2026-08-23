@@ -213,7 +213,12 @@ func (e *Engine) Send(ctx context.Context, sessionID, text string, onDone func(e
 		ID: partID, SessionID: sessionID, MessageID: msgID,
 		Type: "text", Text: text, Time: protocol.PartTime{Start: now},
 	}
-	if err := e.db.UpsertPart(storage.ProtocolToPart(userPart)); err != nil {
+	userPartRow, err := storage.ProtocolToPart(userPart)
+	if err != nil {
+		e.releaseBusy(sessionID)
+		return SendResult{}, fmt.Errorf("session: persist user part: %w", err)
+	}
+	if err := e.db.UpsertPart(userPartRow); err != nil {
 		e.releaseBusy(sessionID)
 		return SendResult{}, err
 	}
@@ -843,7 +848,12 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 			Type: kind, Text: st.buf.String(),
 			Time: protocol.PartTime{Start: st.start, End: e.clock()},
 		}
-		if err := e.db.UpsertPart(storage.ProtocolToPart(p)); err != nil {
+		row, perr := storage.ProtocolToPart(p)
+		if perr != nil {
+			e.lg.Error("persist part marshal failed", "part_id", p.ID, "session_id", t.sessionID, "error", perr)
+			return
+		}
+		if err := e.db.UpsertPart(row); err != nil {
 			e.lg.Error("persist part failed", "part_id", p.ID, "session_id", t.sessionID, "error", err)
 		}
 		e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
@@ -1099,7 +1109,12 @@ func (e *Engine) saveSynthetic(t *turn, r *round, text string) {
 		Type: "text", Text: text, Synthetic: &syn,
 		Time: protocol.PartTime{Start: start, End: e.clock()},
 	}
-	if err := e.db.UpsertPart(storage.ProtocolToPart(p)); err != nil {
+	row, perr := storage.ProtocolToPart(p)
+	if perr != nil {
+		e.lg.Error("persist part marshal failed", "part_id", p.ID, "session_id", t.sessionID, "error", perr)
+		return
+	}
+	if err := e.db.UpsertPart(row); err != nil {
 		e.lg.Error("persist part failed", "part_id", p.ID, "session_id", t.sessionID, "error", err)
 	}
 	e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
@@ -1472,7 +1487,12 @@ func (e *Engine) saveToolPart(t *turn, r *round, tp toolPart) {
 		ID: tp.callID, SessionID: t.sessionID, MessageID: r.id,
 		Type: "tool", Tool: tp.name, CallID: tp.callID, State: &tp.state,
 	}
-	if err := e.db.UpsertPart(storage.ProtocolToPart(p)); err != nil {
+	row, perr := storage.ProtocolToPart(p)
+	if perr != nil {
+		e.lg.Error("persist part marshal failed", "part_id", p.ID, "session_id", t.sessionID, "error", perr)
+		return
+	}
+	if err := e.db.UpsertPart(row); err != nil {
 		e.lg.Error("persist part failed", "part_id", p.ID, "session_id", t.sessionID, "error", err)
 	}
 	e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
