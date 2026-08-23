@@ -181,7 +181,7 @@ Default section order:
 
 - `internal/AGENTS.md` — core packages: package map, layering, pinned text, in-code zero telemetry (children: `internal/protocol`, `internal/tui`)
 - `docs/superpowers/AGENTS.md` — process memory: verified facts (PROGRESS.md), deviation audit (DEVIATIONS.md), 0.3.0 work list (DEFERRED.md), plans/specs/reviews layout
-- Root-owned files: `README.md`, `LICENSE`, `go.mod`, `.golangci.yml`, `.gitignore`, `skills-lock.json`, `cmd/`, `scripts/`, `.agents/skills/` (hash-locked golang skills — do not edit; `.agents/skills/beads/` is bd-managed), and root-level project documentation.
+- Root-owned files: `README.md`, `LICENSE`, `go.mod`, `justfile`, `.golangci.yml`, `.gitignore`, `skills-lock.json`, `cmd/`, `scripts/`, `.agents/skills/` (hash-locked golang skills — do not edit; `.agents/skills/beads/` is bd-managed), and root-level project documentation.
 
 
 

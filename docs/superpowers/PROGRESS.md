@@ -5,10 +5,12 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
-**Status (2026-08-22):** v0.2.0 spec approved + committed
-(`docs/superpowers/specs/2026-08-22-v0.2.0-design.md`) — next: user spec
-review → `writing-plans`. Beads epic: `yolo-8vl` (spec, version+just, logging,
-12 fixes, 0.3.0 slice). Branch: `v0.2.0_docs`.
+**Status (2026-08-23):** v0.2.0 implementation complete (16 tasks, gate-green),
+0.3.0 slice tracked by `yolo-k98`. Beads epic: `yolo-8vl` (closed). Branch:
+`v0.2.0`. Spec:
+`docs/superpowers/specs/2026-08-22-v0.2.0-design.md`; plan:
+`docs/superpowers/plans/2026-08-22-v0.2.0.md`. The `v0.2.0` tag is pending
+explicit user go-ahead; run `just e2e-live` before the tag.
 
 ## Root causes (archive, v0.1.3)
 
@@ -30,14 +32,14 @@ prompt+model does NOT loop in upstream opencode. Detail: deviations 73–77.
 
 ## Last completed
 
-v0.2.0 spec written + committed (2026-08-22, `v0.2.0_docs`): approved
-section-by-section; ⑦/⑫ upstream parity checks resolved against
-`/tmp/opencode-upstream` during brainstorming; beads epic `yolo-8vl` created
-(spec + 2 streams + 12 fixes + 0.3.0 slice). Also 2026-08-22: beads
-initialized (`a4c27f4`); claude/codex integrations removed — opencode-only
-(`1e4ddd2`); logging investigation (mechanism healthy, 23 points thin by plan;
-seed in DEFERRED.md). (Prior: v0.1.3 released — PR #7 → `main` `1d3eca6` + tag
-+ release; the five root causes are deviations 73–77.)
+v0.2.0 implemented + gate-green (2026-08-23, branch `v0.2.0`): all 16 plan
+tasks done — version wiring + `justfile`, the slog logging rework (run id,
+`YOLO_LOG_LEVEL`, `YOLO_PRINT_LOGS` mirror, new log points), and the 12
+v0.1.2 backlog fixes (①–⑫ + version stream + logging stream). Deviations
+78–88 logged. Epic `yolo-8vl` closed; the 0.3.0 slice is `yolo-k98`. The
+`v0.2.0` tag awaits explicit user go-ahead (run `just e2e-live` first).
+(Prior: v0.2.0 spec written + committed 2026-08-22; v0.1.3 released — PR #7 →
+`main` `1d3eca6` + tag + release; the five root causes are deviations 73–77.)
 
 ## Open items
 
@@ -70,7 +72,8 @@ plain strings (`TrimRight`) BEFORE styling (a styled string's last bytes are `\x
 post-style trim silently misses), and count display widths in runes
 (`utf8.RuneCountInString`) — `·` is 2 bytes, `○` 3 (both 1 column). Both bit T27's two-pane
 column math.
-- e2e/endpoint facts (Task 30): `scripts/e2e-live.sh` validated PASS (exit 0) 2026-08-18
+- e2e/endpoint facts (Task 30): `scripts/e2e-live.sh` (entry point `just e2e-live`,
+script path unchanged) validated PASS (exit 0) 2026-08-18
 BOTH against a mock OpenAI SSE endpoint and the REAL `https://ai.kido.ws/v1` — the spec v1
 dogfood success criterion is met (completed `bash ls /tmp` tool call + text reply; abort
 idle → `aborted:false`, busy → `aborted:true`; SIGTERM → exit 0). `ai.kido.ws` accepts ANY
