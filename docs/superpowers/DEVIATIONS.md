@@ -401,3 +401,10 @@ upstream: `{"x",""}` (1,1)→(0,1), `{"a\n","a"}` (0,1)→(1,1),
 `{"p\nq\nr","q\nr\ns"}` (1,1)→(2,2). Model-visible in the write/edit tool
 meta (added/removed) only for those edge shapes. Resolves per principle 2
 (parity fix; spec §3.3 N).
+105. Plan Task O test/helper would not compile (test-only/low, 2026-08-23):
+both the one-off hash helper and TestGlobSchemaEmittedBytes sliced the
+return of `sha256.Sum256(b)` directly (`sha256.Sum256(b)[:]`) — Go forbids
+slicing an unaddressable array value. Fixed by binding first
+(`sum := sha256.Sum256(b)` then `sum[:]`). Emitted schema bytes, the pin
+value, and the style fix are all as the brief specifies. Resolves per
+principle 5.
