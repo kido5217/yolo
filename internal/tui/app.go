@@ -55,11 +55,12 @@ type App struct {
 	lastErr      string
 	spinIdx      int // footer spinner frame
 	// tea plumbing
-	size     tea.WindowSizeMsg
-	eventCh  chan protocol.Event
-	resyncCh chan struct{} // SSE drop pings from the client
-	stop     context.CancelFunc
-	emitSink func(cmds ...tea.Cmd) // test seam, set from _test.go only
+	size      tea.WindowSizeMsg
+	eventCh   chan protocol.Event
+	resyncCh  chan struct{} // SSE drop pings from the client
+	resyncing bool          // a transient SSE drop's re-hydrate is in flight
+	stop      context.CancelFunc
+	emitSink  func(cmds ...tea.Cmd) // test seam, set from _test.go only
 }
 
 // NewApp builds the root model. A non-empty startSessionID starts on that
@@ -143,7 +144,9 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 	case resyncMsg:
 		// The SSE stream dropped (the client is reconnecting): events
 		// published in the gap are unrecoverable — re-hydrate the current
-		// route over REST and re-arm the resync pump.
+		// route over REST and re-arm the resync pump. The footer shows the
+		// outage window until the re-hydrate completes (concurrency-4).
+		a.resyncing = true
 		a.sess.isDirty = true
 		return tea.Batch(a.hydrateCmd(), a.resyncPump())
 	case spinMsg:
@@ -157,6 +160,10 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 	case HydrateMsg:
 		return a.hydrateCmd()
 	case hydratedMsg:
+		if a.resyncing {
+			a.resyncing = false
+			a.store.Live = true
+		}
 		return a.applyHydrate(m)
 	case catalogMsg:
 		return a.applyCatalog(m)
