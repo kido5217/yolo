@@ -19,9 +19,9 @@ import (
 // Sentinels mapped from HTTP statuses; the server's envelope message is
 // carried in the wrapped error text.
 var (
-	ErrNotFound   = errors.New("not found")
-	ErrBusy       = errors.New("session busy")
-	ErrBadRequest = errors.New("bad request")
+	ErrNotFound   = errors.New("client: not found")
+	ErrBusy       = errors.New("client: session busy")
+	ErrBadRequest = errors.New("client: bad request")
 )
 
 // Service talks to one core server. Dir is the scope directory (abs); ""

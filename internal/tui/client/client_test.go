@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/kido5217/yolo/internal/tui/client"
@@ -78,4 +79,15 @@ func TestClientScopingAndErrors(t *testing.T) {
 			t.Fatalf("GetSession err = %v, want ErrBadRequest", err)
 		}
 	})
+}
+
+// TestSentinelPrefixes pins the "client: " package prefix on the sentinel
+// errors (naming-3, deviation 110): the text is what the user sees in the
+// status line, so origin must survive wrapping.
+func TestSentinelPrefixes(t *testing.T) {
+	for _, e := range []error{client.ErrNotFound, client.ErrBusy, client.ErrBadRequest} {
+		if !strings.HasPrefix(e.Error(), "client: ") {
+			t.Fatalf("sentinel %q lacks the \"client: \" prefix", e.Error())
+		}
+	}
 }

@@ -453,3 +453,14 @@ second return value. Fixed to positional composite rows
 `f, found := …; if !found { … }`. The eight predicate renames, JSON tags,
 and the lowerCamel prefix assertion are as the brief specifies. Resolves
 per principle 5.
+110. client sentinel error text gains the "client: " package prefix
+(render/low, 2026-08-23; the plan assigned this entry the number 96,
+already in use — next free is 110): finding [naming-3] — the sentinel
+messages ("not found", "session busy", "bad request") carried no package
+origin, lost when wrapped, and their text is what the user sees in the
+status line. client.ErrNotFound/ErrBusy/ErrBadRequest now read
+"client: not found" / "client: session busy" / "client: bad request";
+errors.Is matching is value-based and unchanged. The visible
+status-line/toast text changes (e.g. "client: session busy: <server
+message>"). Pinned by client.TestSentinelPrefixes. Resolves per principle
+5 (spec-directed render change).
