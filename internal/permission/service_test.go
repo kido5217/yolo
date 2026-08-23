@@ -273,3 +273,55 @@ func TestDecisionForUsesRequestCfgRules(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// TestResolveSettlesExactlyOnce pins ② double-settle: two concurrent
+// resolve() calls for the same parked request (the Reply "once" vs a
+// ctx-cancel "aborted" — both funnel through resolve) must settle exactly
+// once: one permission.replied event, one row flip. Only the remover
+// settles; the lost claim is a no-op.
+func TestResolveSettlesExactlyOnce(t *testing.T) {
+	e := newEnv(t)
+	if err := e.db.CreateSession(storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Agent: "build", Model: "k"}); err != nil {
+		t.Fatal(err)
+	}
+	sub, cancel := e.bus.Subscribe()
+	defer cancel()
+	req := e.req("per_ds")
+	req.Permission = "custom" // no rule -> parks
+	done := make(chan Decision, 1)
+	go func() {
+		d, err := e.svc.Ask(context.Background(), req)
+		if err == nil {
+			done <- d
+		}
+	}()
+	e.awaitPending(t, 1)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); e.svc.resolve("per_ds", Allow, "once", "once", false) }()
+	go func() { defer wg.Done(); e.svc.resolve("per_ds", Deny, "aborted", "reject", false) }()
+	wg.Wait()
+
+	replied := 0
+	drain := time.After(300 * time.Millisecond)
+drain:
+	for {
+		select {
+		case ev := <-sub:
+			if ev.Type == protocol.EventTypePermissionReplied {
+				replied++
+			}
+		case <-drain:
+			break drain
+		}
+	}
+	if replied != 1 {
+		t.Fatalf("permission.replied events = %d, want exactly 1 (② double-settle)", replied)
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("asker not unblocked by the winning settle")
+	}
+}

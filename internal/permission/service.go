@@ -261,29 +261,29 @@ func (s *Service) resolve(requestID string, d Decision, dbResponse, wireReply st
 	s.mu.Lock()
 	e, ok := s.pending[requestID]
 	delete(s.pending, requestID)
-	var sessionID string
-	if ok {
-		sessionID = e.req.SessionID
-	}
 	s.mu.Unlock()
 
+	// ② double-settle: only the remover settles. A concurrent Reply/ctx-cancel
+	// that lost the claim must not flip the row or emit a second
+	// permission.replied.
+	if !ok {
+		return
+	}
 	if err := s.db.ReplyPermission(requestID, dbResponse); err != nil {
 		if !errors.Is(err, storage.ErrNotFound) {
 			s.lg.Error("persist reply failed", "request_id", requestID, "error", err)
 		}
 	}
 	props := protocol.PermissionRepliedProps{RequestID: requestID, Reply: wireReply, Auto: auto}
-	if sessionID != "" {
-		props.SessionID = sessionID
+	if sid := e.req.SessionID; sid != "" {
+		props.SessionID = sid
 	}
 	if ev, err := protocol.MakeEvent(protocol.EventTypePermissionReplied, props); err != nil {
 		s.lg.Error("event marshal failed", "type", protocol.EventTypePermissionReplied, "error", err)
 	} else {
 		s.bus.Publish(ev)
 	}
-	if ok {
-		s.deliver(e, d)
-	}
+	s.deliver(e, d)
 }
 
 func (s *Service) deliver(e *pendingEntry, d Decision) {
