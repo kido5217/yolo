@@ -94,6 +94,9 @@ Entries live under `superpowers:` skills; invoke a skill **before** acting when 
   spawned subagent — one at a time (core principle 7); if the root is `YOLO`, the
   subagent must be `YOLO` too (core principle 8). The root session only plans,
   dispatches, and reviews. A bead done inline triggers the compaction discipline below.
+- **Subagent thinking level:** dispatch bead subagents with `thinking=medium` —
+  the dispatch prompt states the requirement so the subagent calibrates its
+  reasoning effort accordingly (medium depth, not maximum, not minimal).
 - **Compaction discipline:** after finishing each task/bead that was not delegated to a
   subagent, compact the session (opencode: `/compact`) before starting the next task —
   inline work accumulates root context. Work delegated to a subagent is exempt.
