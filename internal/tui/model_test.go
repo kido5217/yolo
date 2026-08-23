@@ -25,10 +25,10 @@ func pressTab() tea.KeyPressMsg { return tea.KeyPressMsg{Code: '\t'} }
 func pressCtrlP() tea.KeyPressMsg { return tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl} }
 func pressCtrlA() tea.KeyPressMsg { return tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl} }
 
-// tuiProviderFixture mirrors the offline server fixture (provider.
+// providerFixture mirrors the offline server fixture (provider.
 // NewStaticForTest): kido (key-less, Qwen 100k) and opencode (key-required,
 // minimal zen catalog).
-func tuiProviderFixture() []protocol.Provider {
+func providerFixture() []protocol.Provider {
 	return []protocol.Provider{
 		{
 			ID: "kido", Name: "Kido",
@@ -58,8 +58,8 @@ func tuiProviderFixture() []protocol.Provider {
 	}
 }
 
-// tuiAgentFixture mirrors the server baseAgents.
-func tuiAgentFixture() []protocol.Agent {
+// agentFixture mirrors the server baseAgents.
+func agentFixture() []protocol.Agent {
 	return []protocol.Agent{
 		{Name: "build", Description: "The default agent. Executes tools based on configured permissions."},
 		{Name: "plan", Description: "Plan mode. Disallows all edit tools."},
@@ -71,8 +71,8 @@ func tuiAgentFixture() []protocol.Agent {
 func modelFixture() *recApp {
 	a := testApp()
 	a.store.Current = &protocol.Session{ID: "ses_1", Agent: "build", Model: refModel("kido", "q")}
-	a.store.Providers = tuiProviderFixture()
-	a.store.Agents = tuiAgentFixture()
+	a.store.Providers = providerFixture()
+	a.store.Agents = agentFixture()
 	a.store.Config = map[string]any{"model": "kido/q"}
 	a.route = routeSession
 	a.curSessionID = "ses_1"
@@ -373,7 +373,7 @@ func TestModelDialogOpen(t *testing.T) {
 		a.store.Providers = nil
 		a.store.Agents = nil
 		a.openModelDialog()
-		a.applyCatalog(catalogMsg{provs: tuiProviderFixture(), agents: tuiAgentFixture()})
+		a.applyCatalog(catalogMsg{provs: providerFixture(), agents: agentFixture()})
 		if len(a.store.Providers) != 2 || len(a.store.Agents) != 3 {
 			t.Fatalf("store = %d providers / %d agents, want 2 / 3", len(a.store.Providers), len(a.store.Agents))
 		}
@@ -458,8 +458,8 @@ func TestModelDialogPatchPaths(t *testing.T) {
 	}
 	a := newRecApp(c, store.State{
 		Current:   &protocol.Session{ID: ses.ID, Agent: "build", Model: refModel("kido", "q")},
-		Providers: tuiProviderFixture(),
-		Agents:    tuiAgentFixture(),
+		Providers: providerFixture(),
+		Agents:    agentFixture(),
 		Config:    map[string]any{"model": "kido/q"},
 	}, "")
 	a.route = routeSession

@@ -16,12 +16,12 @@ import (
 	"github.com/kido5217/yolo/internal/tui/store"
 )
 
-// agentFixture builds a session-route app with the offline catalog hydrated.
-func agentFixture() *recApp {
+// agentApp builds a session-route app with the offline catalog hydrated.
+func agentApp() *recApp {
 	a := testApp()
 	a.store.Current = &protocol.Session{ID: "ses_1", Agent: "build", Model: refModel("kido", "q")}
-	a.store.Providers = tuiProviderFixture()
-	a.store.Agents = tuiAgentFixture()
+	a.store.Providers = providerFixture()
+	a.store.Agents = agentFixture()
 	a.store.Config = map[string]any{"agent": "build"}
 	a.route = routeSession
 	a.curSessionID = "ses_1"
@@ -30,7 +30,7 @@ func agentFixture() *recApp {
 
 // openAgentAt opens the agent dialog and resets the recorded cmds.
 func openAgentAt() *recApp {
-	a := agentFixture()
+	a := agentApp()
 	a.openAgentDialog()
 	a.Cmds = nil
 	return a
@@ -67,7 +67,7 @@ func TestAgentDialogRender(t *testing.T) {
 	})
 
 	t.Run("no agents renders the loading hint", func(t *testing.T) {
-		a := agentFixture()
+		a := agentApp()
 		a.store.Agents = nil
 		a.openAgentDialog()
 		agentBlock(t, a, "Agents\n  loading…")
@@ -208,7 +208,7 @@ func TestAgentDialogApply(t *testing.T) {
 	})
 
 	t.Run("'a' with no session toasts no-session", func(t *testing.T) {
-		a := agentFixture()
+		a := agentApp()
 		a.route = routeHome
 		a.curSessionID = ""
 		a.store.Current = nil
@@ -228,7 +228,7 @@ func TestAgentDialogApply(t *testing.T) {
 
 func TestAgentDialogOpen(t *testing.T) {
 	t.Run("ctrl+a opens the agent dialog", func(t *testing.T) {
-		a := agentFixture()
+		a := agentApp()
 		a.handleKey(pressCtrlA())
 		d, ok := a.dlg.top()
 		if !ok || d.kind != dlgAgents || a.agentDlg == nil {
@@ -240,7 +240,7 @@ func TestAgentDialogOpen(t *testing.T) {
 	})
 
 	t.Run("/agents opens the agent dialog", func(t *testing.T) {
-		a := agentFixture()
+		a := agentApp()
 		a.runCommand("/agents")
 		d, ok := a.dlg.top()
 		if !ok || d.kind != dlgAgents || a.agentDlg == nil {
@@ -249,7 +249,7 @@ func TestAgentDialogOpen(t *testing.T) {
 	})
 
 	t.Run("ctrl+a is ignored while a dialog is on top", func(t *testing.T) {
-		a := agentFixture()
+		a := agentApp()
 		a.dlg.push(dialog{kind: dlgQuit})
 		a.handleKey(pressCtrlA())
 		d, _ := a.dlg.top()
