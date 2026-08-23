@@ -342,3 +342,12 @@ Resolves per principle 5.
  post-fix. Fix: shorten the TTL (with cleanup restore) before the first
  `gitRepo` call. Test-only; the pinned behavior (a cached "no" expires once
  the TTL passes) is unchanged. Resolves per principle 5.
+101. Plan Task I test code referenced a nonexistent message row (low,
+2026-08-23): the pinned test mints parts with `MessageID: "msg_t"`
+(`const ses, msg = "ses_t", "msg_t"`) but never creates a `msg_t` message
+row; with `_foreign_keys=1` in the DSN the `UpsertPart` insert fails
+(FK `part.message_id REFERENCES message(id)`), so the test could never
+pass pre- or post-fix. Fix: point the parts at the real `msg_a` row
+(one token, `const ses, msg = "ses_t", "msg_a"`). Test-only; the pinned
+contract (same-time_created rows come back in insertion/rowid order) is
+unchanged. Resolves per principle 5.
