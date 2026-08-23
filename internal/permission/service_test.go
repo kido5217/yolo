@@ -3,6 +3,7 @@ package permission
 import (
 	"context"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -225,4 +226,50 @@ func TestRejectCascade(t *testing.T) {
 			t.Fatalf("cascade did not unblock %d", i)
 		}
 	}
+}
+
+// TestDecisionForUsesRequestCfgRules pins ⑧: config rules are a per-request
+// parameter (no shared service state). The same service, two different rule
+// sets in the same request stream — each request is evaluated against its
+// own rules, so a later request cannot bleed into an earlier evaluation.
+func TestDecisionForUsesRequestCfgRules(t *testing.T) {
+	e := newEnv(t)
+	denyRead := []protocol.Rule{{Permission: "read", Pattern: "/a/*", Action: RuleDeny}}
+	allowBash := []protocol.Rule{{Permission: "bash", Pattern: "*", Action: RuleAllow}}
+
+	// Deterministic single-shot checks: each request is evaluated against
+	// its OWN rules (no shared service state to bleed through).
+	reqA := Request{SessionID: "s1", Agent: "build", Permission: "read",
+		Resources: []string{"/a/x.txt"}, CfgRules: denyRead}
+	reqB := Request{SessionID: "s2", Agent: "build", Permission: "bash",
+		Resources: []string{"git *"}, CfgRules: allowBash}
+	if d := e.svc.decisionFor(reqA); d != Deny {
+		t.Fatalf("reqA = %v, want Deny (its own cfg rules)", d)
+	}
+	if d := e.svc.decisionFor(reqB); d != Allow {
+		t.Fatalf("reqB = %v, want Allow (its own cfg rules)", d)
+	}
+
+	// Concurrent (spec: "concurrent sessions with different project rules
+	// -> no cross-contamination"): many evaluations interleave the two rule
+	// sets on the SAME service; each keeps its own verdict. Guards that a
+	// future re-introduction of shared per-request state stays -race clean
+	// and does not change per-request verdicts. Run under -race.
+	var wg sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			if d := e.svc.decisionFor(reqA); d != Deny {
+				t.Errorf("concurrent reqA = %v, want Deny", d)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			if d := e.svc.decisionFor(reqB); d != Allow {
+				t.Errorf("concurrent reqB = %v, want Allow", d)
+			}
+		}()
+	}
+	wg.Wait()
 }

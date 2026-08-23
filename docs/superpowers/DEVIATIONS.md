@@ -164,3 +164,13 @@ overflow path previously returned `PartStream{}, nil`: the round loop
 blocked forever on the nil `Parts` channel (the path was dead since ④ made
 provider 400s decodable) — it now returns a private `errRoundEnded`
 sentinel and the caller ends the turn idle without reading a stream.
+85. ⑧ spec's engine-level concurrent e2e satisfied by the concurrent
+permission-level unit test (low, 2026-08-22): spec §4 ⑧ calls for
+"concurrent sessions with different project rules → no cross-contamination."
+A true concurrent engine e2e would flake: the session harness drives all
+sessions from one shared `fakellm.Driver` whose `Turns` is a mutex-guarded
+FIFO, so two concurrent `Send`s interleave non-deterministically. The
+property is pinned instead by concurrent `TestDecisionForUsesRequestCfgRules`
+(two rule sets interleaved on the same `Service`, each keeps its own verdict,
+`-race` clean); the engine wiring is guarded by the existing engine perm
+tests. Resolves per principle 5 (tests define the contract).

@@ -35,6 +35,7 @@ type Request struct {
 	Meta                        map[string]any
 	PreDecision                 Decision
 	CreatedAt                   int64
+	CfgRules                    []protocol.Rule // the turn's config rules (⑧: no shared state)
 }
 
 type pendingEntry struct {
@@ -50,9 +51,8 @@ type Service struct {
 	lg      *log.Logger // nil = no-op, constructor-carried
 	dataDir string      // plan-matrix dir, process-constant (constructor)
 
-	mu       sync.Mutex
-	pending  map[string]*pendingEntry
-	cfgRules []protocol.Rule
+	mu      sync.Mutex
+	pending map[string]*pendingEntry
 }
 
 // New builds the service. lg may be nil (no-op logging). dataDir is the
@@ -60,14 +60,6 @@ type Service struct {
 func New(db *storage.DB, b *bus.Bus, lg *log.Logger, dataDir string) *Service {
 	return &Service{db: db, bus: b, lg: lg, dataDir: dataDir,
 		pending: map[string]*pendingEntry{}}
-}
-
-// SetConfigRules stores the config permission rules used by DecisionFor
-// between the builtins and the session's always rules.
-func (s *Service) SetConfigRules(rules []protocol.Rule) {
-	s.mu.Lock()
-	s.cfgRules = rules
-	s.mu.Unlock()
 }
 
 // EvaluateRules evaluates builtins + config rules for an action.
@@ -92,9 +84,7 @@ func (s *Service) decisionFor(req Request) Decision {
 	// Unknown (custom) agents fall back to the build matrix via
 	// BuiltinsFor (mirrors the engine's ruleset path).
 	rules := BuiltinsFor(req.Agent, s.dataDir)
-	s.mu.Lock()
-	cfg := s.cfgRules
-	s.mu.Unlock()
+	cfg := req.CfgRules
 	always, err := s.db.AlwaysRules(req.SessionID)
 	if err != nil {
 		// Fail-safe: degrade to no always rules (re-asks at worst).

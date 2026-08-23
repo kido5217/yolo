@@ -427,10 +427,6 @@ func (e *Engine) runTurn(ctx context.Context, t *turn, onDone func(error)) {
 		}
 	}
 	t.cfg = cfg
-	// Always publish this turn's rules (empty when the load failed): a
-	// broken config degrades to no config rules instead of silently
-	// inheriting the previous turn's ruleset.
-	e.perm.SetConfigRules(t.cfgRules)
 
 	for i := 0; i < maxToolRounds; i++ {
 		req, err := e.buildRequest(t)
@@ -1150,6 +1146,7 @@ func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part)
 			Resources: []string{name},
 			CallID:    callID, MessageID: r.id,
 			PreDecision: d, CreatedAt: e.clock(),
+			CfgRules: t.cfgRules,
 		}
 		decision, err := e.perm.Ask(ctx, doomReq)
 		if err != nil {
@@ -1204,6 +1201,7 @@ func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part)
 			Resources: []string{pattern},
 			CallID:    callID, MessageID: r.id,
 			PreDecision: d, CreatedAt: e.clock(),
+			CfgRules: t.cfgRules,
 		}
 		decision, aerr := e.perm.Ask(ctx, extReq)
 		if aerr != nil || decision != permission.Allow {
@@ -1220,6 +1218,7 @@ func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part)
 		Resources: resources, Always: always,
 		CallID: callID, MessageID: r.id,
 		PreDecision: d, CreatedAt: e.clock(),
+		CfgRules: t.cfgRules,
 	}
 	decision, err := e.perm.Ask(ctx, preq)
 	if err != nil {
