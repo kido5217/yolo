@@ -25,6 +25,88 @@ type round struct {
 	msg protocol.Message
 }
 
+// partState owns the id, start time, and accumulated text of one
+// streamed text/reasoning part, plus the publish/upsert effects of
+// each stage: created on its first delta (one message.part.updated),
+// a message.part.delta per delta, and finalized (message.part.updated
+// with an end time, the sole DB upsert) at round end.
+type partState struct {
+	e         *Engine
+	ctx       context.Context
+	sessionID string
+	messageID string
+	id        string
+	start     int64
+	buf       strings.Builder
+}
+
+// Start creates the part on its first delta and publishes the created
+// message.part.updated plus the first message.part.delta.
+func (st *partState) Start(kind, delta string) {
+	st.id = protocol.NewID("prt")
+	st.start = st.e.clock()
+	st.buf.WriteString(delta)
+	p := protocol.Part{
+		ID: st.id, SessionID: st.sessionID, MessageID: st.messageID,
+		Type: kind, Text: st.buf.String(),
+		Time: protocol.PartTime{Start: st.start},
+	}
+	// ⑩: created+delta go to the wire only; Finalize persists.
+	st.e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
+		SessionID: st.sessionID, Part: p, Time: st.e.clock(),
+	})
+	st.e.publish(protocol.EventTypeMessagePartDelta, protocol.MessagePartDeltaProps{
+		SessionID: st.sessionID, MessageID: st.messageID, PartID: st.id, Field: kind, Delta: delta,
+	})
+}
+
+// Delta accumulates the delta and publishes the message.part.delta wire
+// event.
+func (st *partState) Delta(kind, delta string) {
+	// ⑩: no per-delta DB write (O(n²) for long responses); the text
+	// accumulates in st.buf and Finalize is the sole upsert. The
+	// wire (delta event) is unchanged; a crash mid-turn loses the
+	// in-flight text (accepted trade, spec §4).
+	st.buf.WriteString(delta)
+	st.e.publish(protocol.EventTypeMessagePartDelta, protocol.MessagePartDeltaProps{
+		SessionID: st.sessionID, MessageID: st.messageID, PartID: st.id, Field: kind, Delta: delta,
+	})
+}
+
+// Finalize publishes the terminal message.part.updated with an end
+// time and upserts the persisted part. No-op when the part never
+// started.
+func (st *partState) Finalize(kind string) {
+	if st.id == "" {
+		return
+	}
+	p := protocol.Part{
+		ID: st.id, SessionID: st.sessionID, MessageID: st.messageID,
+		Type: kind, Text: st.buf.String(),
+		Time: protocol.PartTime{Start: st.start, End: st.e.clock()},
+	}
+	row, perr := storage.ProtocolToPart(p)
+	if perr != nil {
+		st.e.lg.Error("persist part marshal failed", "part_id", p.ID, "session_id", st.sessionID, "error", perr)
+		return
+	}
+	// Finalization must land even when the turn ctx is cancelled
+	// (abort): a cancelled ctx would drop the terminal part write and
+	// leave the part "running" in the store.
+	if err := st.e.db.UpsertPart(context.WithoutCancel(st.ctx), row); err != nil {
+		st.e.lg.Error("persist part failed", "part_id", p.ID, "session_id", st.sessionID, "error", err)
+	}
+	st.e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
+		SessionID: st.sessionID, Part: p, Time: st.e.clock(),
+	})
+}
+
+// reset clears a finished part's id and buffer.
+func (st *partState) reset() {
+	st.id = ""
+	st.buf.Reset()
+}
+
 // runRound streams one model round into a new assistant message. Part
 // bookkeeping: the current text/reasoning part is created on its first delta
 // (one message.part.updated), upserted per delta with a message.part.delta
@@ -65,7 +147,7 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 	})
 	e.lg.Info("round start", "session_id", t.sessionID, "round", r.id)
 
-	stream, err := e.openStream(roundCtx, t, r, req)
+	stream, err := e.streamWithRetry(roundCtx, t, r, req)
 	if err != nil {
 		if err == errRoundEnded {
 			return false, nil
@@ -73,64 +155,8 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 		return false, err
 	}
 
-	type textState struct {
-		id    string
-		start int64
-		buf   strings.Builder
-	}
-	var textSt, reasonSt textState
-
-	saveDelta := func(st *textState, kind, delta string) {
-		// ⑩: no per-delta DB write (O(n²) for long responses); the text
-		// accumulates in st.buf and finalizePart is the sole upsert. The
-		// wire (delta event) is unchanged; a crash mid-turn loses the
-		// in-flight text (accepted trade, spec §4).
-		st.buf.WriteString(delta)
-		e.publish(protocol.EventTypeMessagePartDelta, protocol.MessagePartDeltaProps{
-			SessionID: t.sessionID, MessageID: r.id, PartID: st.id, Field: kind, Delta: delta,
-		})
-	}
-	startPart := func(st *textState, kind, delta string) {
-		st.id = protocol.NewID("prt")
-		st.start = e.clock()
-		st.buf.WriteString(delta)
-		p := protocol.Part{
-			ID: st.id, SessionID: t.sessionID, MessageID: r.id,
-			Type: kind, Text: st.buf.String(),
-			Time: protocol.PartTime{Start: st.start},
-		}
-		// ⑩: created+delta go to the wire only; finalizePart persists.
-		e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
-			SessionID: t.sessionID, Part: p, Time: e.clock(),
-		})
-		e.publish(protocol.EventTypeMessagePartDelta, protocol.MessagePartDeltaProps{
-			SessionID: t.sessionID, MessageID: r.id, PartID: st.id, Field: kind, Delta: delta,
-		})
-	}
-	finalizePart := func(st *textState, kind string) {
-		if st.id == "" {
-			return
-		}
-		p := protocol.Part{
-			ID: st.id, SessionID: t.sessionID, MessageID: r.id,
-			Type: kind, Text: st.buf.String(),
-			Time: protocol.PartTime{Start: st.start, End: e.clock()},
-		}
-		row, perr := storage.ProtocolToPart(p)
-		if perr != nil {
-			e.lg.Error("persist part marshal failed", "part_id", p.ID, "session_id", t.sessionID, "error", perr)
-			return
-		}
-		// Finalization must land even when the turn ctx is cancelled
-		// (abort): a cancelled ctx would drop the terminal part write and
-		// leave the part "running" in the store.
-		if err := e.db.UpsertPart(context.WithoutCancel(ctx), row); err != nil {
-			e.lg.Error("persist part failed", "part_id", p.ID, "session_id", t.sessionID, "error", err)
-		}
-		e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
-			SessionID: t.sessionID, Part: p, Time: e.clock(),
-		})
-	}
+	textSt := partState{e: e, ctx: ctx, sessionID: t.sessionID, messageID: r.id}
+	reasonSt := partState{e: e, ctx: ctx, sessionID: t.sessionID, messageID: r.id}
 
 	var (
 		usage       *llm.Usage
@@ -145,8 +171,8 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 		if err != nil {
 			// Stream loss (in practice ctx cancel: Abort). Partial text is
 			// kept; the turn ends with the ctx error (log only, non-fatal).
-			finalizePart(&textSt, "text")
-			finalizePart(&reasonSt, "reasoning")
+			textSt.Finalize("text")
+			reasonSt.Finalize("reasoning")
 			e.finishRound(ctx, t, r, usage, finish)
 			return false, err
 		}
@@ -157,8 +183,8 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 			finish = p.Finish
 		}
 		if p.Err != nil {
-			finalizePart(&textSt, "text")
-			finalizePart(&reasonSt, "reasoning")
+			textSt.Finalize("text")
+			reasonSt.Finalize("reasoning")
 			if ctx.Err() != nil {
 				e.finishRound(ctx, t, r, usage, finish)
 				return false, ctx.Err()
@@ -182,30 +208,28 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 				continue
 			}
 			if textSt.id == "" {
-				startPart(&textSt, "text", p.Text)
+				textSt.Start("text", p.Text)
 			} else {
-				saveDelta(&textSt, "text", p.Text)
+				textSt.Delta("text", p.Text)
 			}
 		case "reasoning":
 			if p.Text == "" {
 				continue
 			}
 			if reasonSt.id == "" {
-				startPart(&reasonSt, "reasoning", p.Text)
+				reasonSt.Start("reasoning", p.Text)
 			} else {
-				saveDelta(&reasonSt, "reasoning", p.Text)
+				reasonSt.Delta("reasoning", p.Text)
 			}
 		case "tool":
 			sawToolPart = true
-			finalizePart(&textSt, "text")
-			finalizePart(&reasonSt, "reasoning")
+			textSt.Finalize("text")
+			reasonSt.Finalize("reasoning")
 			// A tool round that continues the text stream after the tool
 			// call starts a NEW text block (fresh part id, upstream parity)
 			// instead of re-using the finalized part's id (troubleshoot-3).
-			textSt.id = ""
-			textSt.buf.Reset()
-			reasonSt.id = ""
-			reasonSt.buf.Reset()
+			textSt.reset()
+			reasonSt.reset()
 			if t.toolCalls >= maxToolSteps {
 				// Step budget exhausted: the remaining calls of this stream
 				// are dropped (not persisted, not executed); the turn ends
@@ -218,8 +242,8 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 			e.executeTool(roundCtx, t, r, p)
 		}
 	}
-	finalizePart(&textSt, "text")
-	finalizePart(&reasonSt, "reasoning")
+	textSt.Finalize("text")
+	reasonSt.Finalize("reasoning")
 	if finish == "" {
 		finish = "stop"
 	}
@@ -238,12 +262,13 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 	return finish == "tool_calls" || sawToolPart, nil
 }
 
-// openStream starts the model stream and retries pre-stream transient
-// failures (429/5xx/net) with backoff while nothing of the round is
-// persisted (emitting session.status retry). Every failure path finalizes
-// the assistant message first; overflow 400s end the round with a synthetic
-// note and no error (the turn ends idle).
-func (e *Engine) openStream(ctx context.Context, t *turn, r *round, req llm.Request) (llm.PartStream, error) {
+// streamWithRetry is the pre-stream retry helper (renamed from
+// openStream): it starts the model stream and retries pre-stream
+// transient failures (429/5xx/net) with backoff while nothing of the
+// round is persisted (emitting session.status retry). Every failure
+// path finalizes the assistant message first; overflow 400s end the
+// round with a synthetic note and no error (the turn ends idle).
+func (e *Engine) streamWithRetry(ctx context.Context, t *turn, r *round, req llm.Request) (llm.PartStream, error) {
 	drv := e.driverFor(t.info.ID, t.model)
 	// One reusable timer for the pre-stream retry backoffs (no fresh
 	// allocation per attempt); the zero timer has already fired, so
