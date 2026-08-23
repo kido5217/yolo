@@ -312,7 +312,7 @@ func (s *Server) handleAbort(w http.ResponseWriter, r *http.Request) {
 	aborted := s.Engine.Abort(row.ID)
 	// settle until the turn reports idle so status reads agree right away
 	deadline := time.Now().Add(2 * time.Second)
-	for s.Engine.Status(row.ID) != protocol.StatusIdle && time.Now().Before(deadline) {
+	for s.Engine.Status(row.ID) != protocol.SessionStatusIdle && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"aborted": aborted})

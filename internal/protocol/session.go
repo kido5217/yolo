@@ -45,9 +45,9 @@ type SessionStatus struct {
 }
 
 const (
-	StatusIdle  = "idle"
-	StatusBusy  = "busy"
-	StatusRetry = "retry"
+	SessionStatusIdle  = "idle"
+	SessionStatusBusy  = "busy"
+	SessionStatusRetry = "retry"
 )
 
 // Todo is one item in a session's todo list (todowrite tool).

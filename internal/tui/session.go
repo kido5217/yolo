@@ -50,7 +50,7 @@ func newSessionModel(w, h int) sessionModel {
 
 func sessionBusy(st *store.Store) bool {
 	switch st.Status.Type {
-	case protocol.StatusBusy, protocol.StatusRetry:
+	case protocol.SessionStatusBusy, protocol.SessionStatusRetry:
 		return true
 	}
 	return false

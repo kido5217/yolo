@@ -150,7 +150,7 @@ func TestDrainCancelsBusyTurnAndClosesListener(t *testing.T) {
 	}
 
 	deadline := time.Now().Add(3 * time.Second)
-	for deps.Engine.Status(ses.ID) != protocol.StatusBusy {
+	for deps.Engine.Status(ses.ID) != protocol.SessionStatusBusy {
 		if time.Now().After(deadline) {
 			t.Fatal("turn never became busy")
 		}
@@ -161,8 +161,8 @@ func TestDrainCancelsBusyTurnAndClosesListener(t *testing.T) {
 	drain(deps, srv)
 	elapsed := time.Since(start)
 
-	if got := deps.Engine.Status(ses.ID); got != protocol.StatusIdle {
-		t.Fatalf("status after drain = %q, want %q", got, protocol.StatusIdle)
+	if got := deps.Engine.Status(ses.ID); got != protocol.SessionStatusIdle {
+		t.Fatalf("status after drain = %q, want %q", got, protocol.SessionStatusIdle)
 	}
 	if conn, err := net.DialTimeout("tcp", ln.String(), 500*time.Millisecond); err == nil {
 		_ = conn.Close()

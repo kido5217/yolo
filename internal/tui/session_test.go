@@ -288,7 +288,7 @@ func TestSessionKeys(t *testing.T) {
 
 	t.Run("esc while busy aborts and stays on session", func(t *testing.T) {
 		a := testSessionApp(sessionFixture())
-		a.store.Status = protocol.SessionStatus{Type: protocol.StatusBusy}
+		a.store.Status = protocol.SessionStatus{Type: protocol.SessionStatusBusy}
 		a.handleKey(press(tea.KeyEscape))
 		if a.route != routeSession || a.curSessionID != "ses_0" {
 			t.Fatalf("route=%v cur=%s, want routeSession/ses_0", a.route, a.curSessionID)

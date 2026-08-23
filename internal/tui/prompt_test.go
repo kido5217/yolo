@@ -273,7 +273,7 @@ func TestPromptSend(t *testing.T) {
 
 	t.Run("busy store: locked toast, no send", func(t *testing.T) {
 		a := testSessionApp(sessionFixture())
-		a.store.Status = protocol.SessionStatus{Type: protocol.StatusBusy}
+		a.store.Status = protocol.SessionStatus{Type: protocol.SessionStatusBusy}
 		typeStr(a, "x")
 		a.handleKey(press(tea.KeyEnter))
 		if len(a.Cmds) != 0 {
@@ -286,7 +286,7 @@ func TestPromptSend(t *testing.T) {
 
 	t.Run("retry store also blocks with the toast", func(t *testing.T) {
 		a := testSessionApp(sessionFixture())
-		a.store.Status = protocol.SessionStatus{Type: protocol.StatusRetry}
+		a.store.Status = protocol.SessionStatus{Type: protocol.SessionStatusRetry}
 		typeStr(a, "x")
 		a.handleKey(press(tea.KeyEnter))
 		if !hasToast(a, "abort or wait (esc aborts)") {

@@ -60,14 +60,14 @@ func TestFooterRender(t *testing.T) {
 		{
 			name:   "session busy",
 			route:  routeSession,
-			mutate: func(s *store.Store) { s.Status = protocol.SessionStatus{Type: protocol.StatusBusy} },
+			mutate: func(s *store.Store) { s.Status = protocol.SessionStatus{Type: protocol.SessionStatusBusy} },
 			want:   "kido/q · build · ↑123 ↓45 · $0.0002 · ● live · ⠋ busy",
 		},
 		{
 			name:  "session retry shows attempt and message",
 			route: routeSession,
 			mutate: func(s *store.Store) {
-				s.Status = protocol.SessionStatus{Type: protocol.StatusRetry, Attempt: 2, Message: "rate limited"}
+				s.Status = protocol.SessionStatus{Type: protocol.SessionStatusRetry, Attempt: 2, Message: "rate limited"}
 			},
 			want: "kido/q · build · ↑123 ↓45 · $0.0002 · ● live · ⠋ retry 2: rate limited",
 		},

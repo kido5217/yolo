@@ -243,9 +243,9 @@ func (e *Engine) Status(sessionID string) string {
 	_, active := e.busy[sessionID]
 	e.mu.Unlock()
 	if active {
-		return protocol.StatusBusy
+		return protocol.SessionStatusBusy
 	}
-	return protocol.StatusIdle
+	return protocol.SessionStatusIdle
 }
 
 // Abort cancels the active turn of the session (and its title side-call).
@@ -521,7 +521,7 @@ func (e *Engine) runTurn(ctx context.Context, t *turn, onDone func(error)) {
 		}
 		e.publish(protocol.EventTypeSessionStatus, protocol.SessionStatusProps{
 			SessionID: t.sessionID,
-			Status:    protocol.SessionStatus{Type: protocol.StatusIdle},
+			Status:    protocol.SessionStatus{Type: protocol.SessionStatusIdle},
 		})
 		e.mu.Lock()
 		delete(e.busy, t.sessionID)
@@ -532,7 +532,7 @@ func (e *Engine) runTurn(ctx context.Context, t *turn, onDone func(error)) {
 	}()
 	e.publish(protocol.EventTypeSessionStatus, protocol.SessionStatusProps{
 		SessionID: t.sessionID,
-		Status:    protocol.SessionStatus{Type: protocol.StatusBusy},
+		Status:    protocol.SessionStatus{Type: protocol.SessionStatusBusy},
 	})
 
 	cfg, cfgErr := e.loadCfg(t.row.ProjectDir)
@@ -1022,7 +1022,7 @@ func (e *Engine) openStream(ctx context.Context, t *turn, r *round, req llm.Requ
 		e.publish(protocol.EventTypeSessionStatus, protocol.SessionStatusProps{
 			SessionID: t.sessionID,
 			Status: protocol.SessionStatus{
-				Type: protocol.StatusRetry, Attempt: attempt,
+				Type: protocol.SessionStatusRetry, Attempt: attempt,
 				Message: sErr.Error(), Next: delay.Milliseconds(),
 			},
 		})

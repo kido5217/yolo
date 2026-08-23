@@ -340,7 +340,7 @@ func waitIdle(t *testing.T, h *harness, ses string, fn func()) {
 	t.Helper()
 	fn()
 	deadline := time.Now().Add(5 * time.Second)
-	for h.eng.Status(ses) == protocol.StatusBusy {
+	for h.eng.Status(ses) == protocol.SessionStatusBusy {
 		if time.Now().After(deadline) {
 			t.Fatal("engine did not go idle")
 		}
@@ -353,7 +353,7 @@ func waitIdle(t *testing.T, h *harness, ses string, fn func()) {
 func waitBusy(t *testing.T, h *harness, ses string) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
-	for h.eng.Status(ses) != protocol.StatusBusy {
+	for h.eng.Status(ses) != protocol.SessionStatusBusy {
 		if time.Now().After(deadline) {
 			t.Fatal("turn did not become busy")
 		}
@@ -465,7 +465,7 @@ func TestSingleTextTurnEndToEnd(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("onDone not called")
 	}
-	if h.eng.Status(ses) != protocol.StatusIdle {
+	if h.eng.Status(ses) != protocol.SessionStatusIdle {
 		t.Fatal("status not idle")
 	}
 	if errMsg != nil {
@@ -533,7 +533,7 @@ func TestSingleTextTurnEndToEnd(t *testing.T) {
 		if e.Type != protocol.EventTypeSessionStatus {
 			return false
 		}
-		return statusType(t, e).Type == protocol.StatusBusy
+		return statusType(t, e).Type == protocol.SessionStatusBusy
 	})
 	h.waitForEvent(t, func(e protocol.Event) bool {
 		if e.Type != protocol.EventTypeMessagePartDelta {
@@ -556,7 +556,7 @@ func TestSingleTextTurnEndToEnd(t *testing.T) {
 		return p.Part.Text == "Hello"
 	})
 	h.waitForEvent(t, func(e protocol.Event) bool {
-		return e.Type == protocol.EventTypeSessionStatus && statusType(t, e).Type == protocol.StatusIdle
+		return e.Type == protocol.EventTypeSessionStatus && statusType(t, e).Type == protocol.SessionStatusIdle
 	})
 	if n := h.eventCount(func(e protocol.Event) bool {
 		if e.Type != protocol.EventTypeMessagePartUpdated {
@@ -698,19 +698,19 @@ func TestShutdownAbortsActiveAndWaits(t *testing.T) {
 	if _, err := h.eng.Send(context.Background(), sesB, "hi", nil); err != nil {
 		t.Fatal(err)
 	}
-	if got := h.eng.Status(sesA); got != protocol.StatusBusy {
+	if got := h.eng.Status(sesA); got != protocol.SessionStatusBusy {
 		t.Fatalf("status(%s) = %s, want busy", sesA, got)
 	}
-	if got := h.eng.Status(sesB); got != protocol.StatusBusy {
+	if got := h.eng.Status(sesB); got != protocol.SessionStatusBusy {
 		t.Fatalf("status(%s) = %s, want busy", sesB, got)
 	}
 
 	h.eng.Shutdown(context.Background())
 
-	if got := h.eng.Status(sesA); got != protocol.StatusIdle {
+	if got := h.eng.Status(sesA); got != protocol.SessionStatusIdle {
 		t.Fatalf("status(%s) = %s, want idle", sesA, got)
 	}
-	if got := h.eng.Status(sesB); got != protocol.StatusIdle {
+	if got := h.eng.Status(sesB); got != protocol.SessionStatusIdle {
 		t.Fatalf("status(%s) = %s, want idle", sesB, got)
 	}
 	// a stream only takes the ctx.Done() branch when its context is
@@ -848,8 +848,8 @@ func TestRunTurnRecoversPanic(t *testing.T) {
 	if doneErr == nil {
 		t.Fatal("turn panic reported success (onDone(nil))")
 	}
-	if got := h.eng.Status(ses); got != protocol.StatusIdle {
-		t.Fatalf("status after recovered panic = %s, want %s", got, protocol.StatusIdle)
+	if got := h.eng.Status(ses); got != protocol.SessionStatusIdle {
+		t.Fatalf("status after recovered panic = %s, want %s", got, protocol.SessionStatusIdle)
 	}
 	// The idle event is the last publish in the turn's defer (same closure
 	// that fires onDone), so wait for the collector goroutine to fold it
@@ -858,13 +858,13 @@ func TestRunTurnRecoversPanic(t *testing.T) {
 		if e.Type != protocol.EventTypeSessionStatus {
 			return false
 		}
-		return statusType(t, e).Type == protocol.StatusIdle
+		return statusType(t, e).Type == protocol.SessionStatusIdle
 	})
 	idles := h.eventCount(func(e protocol.Event) bool {
 		if e.Type != protocol.EventTypeSessionStatus {
 			return false
 		}
-		return statusType(t, e).Type == protocol.StatusIdle
+		return statusType(t, e).Type == protocol.SessionStatusIdle
 	})
 	if idles != 1 {
 		t.Fatalf("idle session.status events = %d, want 1", idles)
@@ -1101,11 +1101,11 @@ func TestCloseWhileBusyAbortsAndSuppresses(t *testing.T) {
 		if err := json.Unmarshal(e.Properties, &p); err != nil {
 			t.Fatal(err)
 		}
-		return p.SessionID == ses && p.Status.Type == protocol.StatusBusy
+		return p.SessionID == ses && p.Status.Type == protocol.SessionStatusBusy
 	})
 	h.eng.Close(ses)
 	deadline := time.Now().Add(5 * time.Second)
-	for h.eng.Status(ses) == protocol.StatusBusy {
+	for h.eng.Status(ses) == protocol.SessionStatusBusy {
 		if time.Now().After(deadline) {
 			t.Fatal("turn still busy after Close (abort not applied)")
 		}
@@ -1154,7 +1154,7 @@ func TestAbortThenNewTurnCompletes(t *testing.T) {
 		t.Fatal("Abort reported no active turn")
 	}
 	deadline := time.Now().Add(5 * time.Second)
-	for h.eng.Status(ses) == protocol.StatusBusy {
+	for h.eng.Status(ses) == protocol.SessionStatusBusy {
 		if time.Now().After(deadline) {
 			t.Fatal("turn 1 did not settle after Abort")
 		}

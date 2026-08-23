@@ -36,10 +36,10 @@ func TestTransientRetrySucceeds(t *testing.T) {
 	// delivery is channel-based and order-preserving, so once the turn's
 	// final idle event is buffered, every earlier event is too.
 	h.waitForEvent(t, func(e protocol.Event) bool {
-		return e.Type == protocol.EventTypeSessionStatus && statusType(t, e).Type == protocol.StatusIdle
+		return e.Type == protocol.EventTypeSessionStatus && statusType(t, e).Type == protocol.SessionStatusIdle
 	})
 	retries := h.eventCount(func(e protocol.Event) bool {
-		return e.Type == protocol.EventTypeSessionStatus && statusType(t, e).Type == protocol.StatusRetry
+		return e.Type == protocol.EventTypeSessionStatus && statusType(t, e).Type == protocol.SessionStatusRetry
 	})
 	if retries != 2 {
 		t.Fatalf("retry events = %d", retries)

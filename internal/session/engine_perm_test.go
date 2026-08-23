@@ -306,7 +306,7 @@ func TestPermissionAbortDuringAskAbortsTool(t *testing.T) {
 		t.Fatalf("Send: %v", sendErr)
 	}
 	deadline := time.Now().Add(5 * time.Second)
-	for h.eng.Status(ses) == protocol.StatusBusy {
+	for h.eng.Status(ses) == protocol.SessionStatusBusy {
 		if time.Now().After(deadline) {
 			t.Fatal("engine did not go idle after abort")
 		}
