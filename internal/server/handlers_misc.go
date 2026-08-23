@@ -104,8 +104,13 @@ func (s *Server) authState(id string, keyRequired bool, store auth.Store, cfg *p
 		return "loaded", "auth.json"
 	}
 	if cfg != nil {
-		if pc, ok := cfg.Provider[id]; ok && pc.APIKey != "" {
-			return "loaded", "config"
+		if pc, ok := cfg.Provider[id]; ok {
+			if pc.APIKey != "" {
+				return "loaded", "config"
+			}
+			if k, ok := pc.Options["apiKey"].(string); ok && k != "" {
+				return "loaded", "config"
+			}
 		}
 	}
 	return "missing", "none"

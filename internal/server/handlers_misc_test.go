@@ -280,3 +280,29 @@ func TestUnknownRoutes404(t *testing.T) {
 		}
 	}
 }
+
+// TestAuthStateOptionsAPIKey pins ⑨: a provider configured with ONLY
+// options.apiKey reports loaded/config in the auth view (parity with
+// auth.ResolveKey's runtime resolution).
+func TestAuthStateOptionsAPIKey(t *testing.T) {
+	t.Parallel()
+	s := testutil.Boot(t)
+	testutil.WriteCfg(t, s.Dir, `{"provider": {"optprov": {"baseURL": "http://x", "options": {"apiKey": "sk-from-options"}, "models": {"m1": {"name": "M1"}}}}}`)
+	resp, b := testutil.Req(t, s, "GET", "/provider/auth", s.Dir, "")
+	if resp.StatusCode != 200 {
+		t.Fatalf("%d %s", resp.StatusCode, b)
+	}
+	var m map[string]struct {
+		KeyRequired bool     `json:"key_required"`
+		Env         []string `json:"env"`
+		Status      string   `json:"status"`
+		Source      string   `json:"source"`
+	}
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
+	got := m["optprov"]
+	if got.Status != "loaded" || got.Source != "config" {
+		t.Fatalf("optprov = %+v, want loaded/config", got)
+	}
+}
