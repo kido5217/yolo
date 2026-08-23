@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
+	"sync"
 	"testing"
 
 	"github.com/kido5217/yolo/internal/protocol"
@@ -304,5 +306,37 @@ func TestAuthStateOptionsAPIKey(t *testing.T) {
 	got := m["optprov"]
 	if got.Status != "loaded" || got.Source != "config" {
 		t.Fatalf("optprov = %+v, want loaded/config", got)
+	}
+}
+
+// TestConcurrentConfigPatchNoLostUpdate pins ③: 50 bursts of two concurrent
+// PATCH /config calls to the SAME project file, each writing a distinct key.
+// With the read->merge->write lock, all 100 keys survive; without it, the
+// interleaved read-modify-write clobbers and keys are lost.
+func TestConcurrentConfigPatchNoLostUpdate(t *testing.T) {
+	t.Parallel()
+	s := testutil.Boot(t)
+	var wg sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		wg.Add(2)
+		go func(k string) { defer wg.Done(); testutil.Req(t, s, "PATCH", "/config", s.Dir, `{"`+k+`":1}`) }("ka" + strconv.Itoa(i))
+		go func(k string) { defer wg.Done(); testutil.Req(t, s, "PATCH", "/config", s.Dir, `{"`+k+`":1}`) }("kb" + strconv.Itoa(i))
+	}
+	wg.Wait()
+	b, err := os.ReadFile(filepath.Join(s.Dir, "yolo.jsonc"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatalf("unmarshal yolo.jsonc: %v (%s)", err, b)
+	}
+	for i := 0; i < 50; i++ {
+		if _, ok := m["ka"+strconv.Itoa(i)]; !ok {
+			t.Fatalf("lost update: missing ka%d (file has %d keys)", i, len(m))
+		}
+		if _, ok := m["kb"+strconv.Itoa(i)]; !ok {
+			t.Fatalf("lost update: missing kb%d (file has %d keys)", i, len(m))
+		}
 	}
 }

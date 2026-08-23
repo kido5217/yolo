@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 
 	"github.com/kido5217/yolo/internal/auth"
 	"github.com/kido5217/yolo/internal/config"
@@ -215,7 +216,14 @@ func (s *Server) handleConfigPatch(w http.ResponseWriter, r *http.Request) {
 // deviation), and returns the merged object. ensureDir creates path's parent
 // directory before writing (used by the global route; project layer sits in
 // the already-existing working directory).
+// configWriteMu serializes the read->merge->write of any yolo.jsonc (project
+// or global) so concurrent PATCHes to the same file cannot lose an update
+// (③). Writes are rare; a single process-wide lock suffices (no per-path map).
+var configWriteMu sync.Mutex
+
 func mergeWriteConfig(path string, partial map[string]any, ensureDir bool) (map[string]any, error) {
+	configWriteMu.Lock()
+	defer configWriteMu.Unlock()
 	existing := map[string]any{}
 	if raw, err := os.ReadFile(path); err == nil {
 		m, uerr := config.UnmarshalJSONC(raw)
