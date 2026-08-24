@@ -76,49 +76,58 @@ func anRequest(req Request) map[string]any {
 	if len(req.Tools) > 0 {
 		tools := []map[string]any{}
 		for _, td := range req.Tools {
-			t := map[string]any{"name": td.Name, "input_schema": json.RawMessage(td.Parameters)}
-			if td.Description != "" {
-				t["description"] = td.Description
-			}
-			tools = append(tools, t)
+			tools = append(tools, anTool(td))
 		}
 		out["tools"] = tools
 	}
 	var system []string
 	var msgs []anMsg
 	for _, m := range req.Messages {
-		switch m.Role {
-		case RoleSystem:
+		if m.Role == RoleSystem {
 			system = append(system, m.Content)
-		case RoleTool:
-			b := anBlock{Type: "tool_result", ToolUseID: m.ToolCallID, Content: m.Content}
-			msgs = append(msgs, anMsg{Role: "user", Content: []anBlock{b}})
-		case RoleAssistant:
-			if len(m.ToolCalls) > 0 {
-				blocks := []anBlock{}
-				if m.Content != "" {
-					blocks = append(blocks, anBlock{Type: "text", Text: m.Content})
-				}
-				for _, tc := range m.ToolCalls {
-					in := json.RawMessage("{}")
-					if len(tc.Args) > 0 {
-						in = json.RawMessage(tc.Args)
-					}
-					blocks = append(blocks, anBlock{Type: "tool_use", ID: tc.ID, Name: tc.Name, Input: in})
-				}
-				msgs = append(msgs, anMsg{Role: "assistant", Content: blocks})
-			} else {
-				msgs = append(msgs, anMsg{Role: "assistant", Content: m.Content})
-			}
-		default:
-			msgs = append(msgs, anMsg{Role: string(m.Role), Content: m.Content})
+			continue
 		}
+		msgs = append(msgs, toAnMsg(m))
 	}
 	out["messages"] = msgs
 	if len(system) > 0 {
 		out["system"] = strings.Join(system, "\n\n")
 	}
 	return out
+}
+
+func toAnMsg(m Message) anMsg {
+	switch m.Role {
+	case RoleTool:
+		b := anBlock{Type: "tool_result", ToolUseID: m.ToolCallID, Content: m.Content}
+		return anMsg{Role: "user", Content: []anBlock{b}}
+	case RoleAssistant:
+		if len(m.ToolCalls) > 0 {
+			blocks := []anBlock{}
+			if m.Content != "" {
+				blocks = append(blocks, anBlock{Type: "text", Text: m.Content})
+			}
+			for _, tc := range m.ToolCalls {
+				in := json.RawMessage("{}")
+				if len(tc.Args) > 0 {
+					in = json.RawMessage(tc.Args)
+				}
+				blocks = append(blocks, anBlock{Type: "tool_use", ID: tc.ID, Name: tc.Name, Input: in})
+			}
+			return anMsg{Role: "assistant", Content: blocks}
+		}
+		return anMsg{Role: "assistant", Content: m.Content}
+	default:
+		return anMsg{Role: string(m.Role), Content: m.Content}
+	}
+}
+
+func anTool(td ToolDef) map[string]any {
+	t := map[string]any{"name": td.Name, "input_schema": json.RawMessage(td.Parameters)}
+	if td.Description != "" {
+		t["description"] = td.Description
+	}
+	return t
 }
 
 // event frames
