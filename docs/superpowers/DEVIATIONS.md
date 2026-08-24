@@ -580,3 +580,28 @@ No behavior/wire/render change; every key sequence, scenario and
 server-side assertion stays identical. Verified: gofmt + `go vet` +
 `go test ./...` green, full-module `go test -race ./...` green,
 `internal/tui` `-race -count=5` green. Resolves per principle 5.
+119. v0.4.0 plan Task 3 edit list vs the Task 4 byte-verbatim grep
+(docs-only/low, 2026-08-24): the v0.4.0 plan contradicted itself —
+Task 3's edit list (four exact edits to the internal DOX chain) omitted
+two `byte-verbatim` package-map lines in `internal/AGENTS.md` (:34,
+:39), while the plan's own Task 4 closeout grep mandated zero
+`byte-verbatim` matches across `internal/` — impossible without changing
+those lines. Resolved per the last-stated call (controller ruling
+recorded in the SDD ledger): the implementer's minimal reword to
+"sha256-pinned" (the restated principle-3 term) was adopted and folded
+into Task 3's commit (`docs: restate internal DOX chain to the v0.4.0
+policy`) via a local-only amend. No test or code impact.
+120. v0.4.0 spec §2.3 pinned-file count vs the actual pre-fix pin surface
+(spec-accuracy/low, 2026-08-24): spec §2.3
+(`docs/superpowers/specs/2026-08-24-v0.4.0-design.md`) asserted "21
+sha256-pinned files" (14 prompt + 7 tool desc, "per-tool
+`TestDescPinned`"); the actual pre-fix pin surface was 15 — a single
+`TestDescPinned` (`internal/tool/read_test.go`) pinned only
+`desc/read.txt`, the other six desc files (embedded package string
+vars, model-visible) were unpinned; principle 3's inherited claim that
+all tool `desc/*.txt` are sha256-guarded was inaccurate for 6 of 7.
+User decision (2026-08-24, final whole-branch review's Important
+finding): add the six missing desc pins on this branch rather than
+reword the docs. `TestDescPinned` is now table-driven with one subtest
+per file; the "21" count and "per-tool `TestDescPinned`" are accurate
+as written.
