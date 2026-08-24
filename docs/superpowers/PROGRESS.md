@@ -5,17 +5,20 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
-**Status (2026-08-24):** v0.3.0 released — merged to `main` (PR #11 Plan 1
-defect slice; PR #12 Plan 2 refactor slice) + tagged `v0.3.0` + GitHub release
-cut. 55-task implementation (39 defect + 16 refactor), gate-green incl. `-race`
-+ `golangci-lint`; `just e2e-live` PASS against the real `https://ai.kido.ws/v1`
-on 2026-08-24 (post Plan 2 merge). Beads: epic `yolo-5hy` and every subtask
-closed. Spec: `docs/superpowers/specs/2026-08-23-v0.3.0-design.md`. The 0.3.0
-deferred backlog (defect slice + 16 `refactor-*`) is fully closed and frozen in
-`docs/superpowers/deferred-archive.md`; `DEFERRED.md` is reset (no open
-items). Next: no open work — `bd ready` is empty until a 0.4.0 scope is defined.
-Since then: profile support (deviation 121, beads `yolo-3pe`) implemented on
-`feat/profiles`, awaiting PR merge.
+**Status (2026-08-24):** v0.4.0 released — direction-change docs (epic
+`yolo-5u1`, branch `v0.4.0_spec`) merged to `main` + config profiles
+(deviation 121, PR #15) + `yolo profile edit` (PR #16) + tagged `v0.4.0`
++ GitHub release cut. Purpose change (docs-only; spec
+`docs/superpowers/specs/2026-08-24-v0.4.0-design.md`, approved
+2026-08-24): the Qwen3.8-27B testing goal is complete (local Qwen 3.8
+tested, stable, optimized); from v0.4.0 the project tests various LLM
+harnesses and frameworks; opencode v1.18.18 is a reference, not a
+contract (deviations on explicit user instruction, logged in
+`DEVIATIONS.md`); the 21 sha256-pinned text files are change gates, not
+upstream locks. Prior release: v0.3.0 (PRs #11/#12, tag `v0.3.0`,
+`just e2e-live` PASS 2026-08-24, epic `yolo-5hy` closed; 0.3.0 backlog
+frozen in `docs/superpowers/deferred-archive.md`, `DEFERRED.md` reset).
+Next: the harness-testing scope is a future spec.
 
 ## Root causes (archive, v0.1.3)
 
@@ -37,6 +40,22 @@ prompt+model does NOT loop in upstream opencode. Detail: deviations 73–77.
 
 ## Last completed
 
+v0.4.0 direction-change docs merged to `main` (2026-08-24, branch
+`v0.4.0_spec`, epic `yolo-5u1`): spec `2026-08-24-v0.4.0-design.md`
+(beads `yolo-5u1.1`), plan `2026-08-24-v0.4.0-direction-change.md`
+(beads `yolo-5u1.3`), restated root `AGENTS.md` (purpose + principles 2–3),
+`README.md` (intro + purpose note), internal DOX chain
+(`internal/AGENTS.md` + `internal/protocol/AGENTS.md`), this record
+(beads `yolo-5u1.2`); deviations 119–120; `TestDescPinned` now pins all
+seven tool desc files. Docs-only scope: purpose change to harness
+testing, opencode demoted to reference, pins as change gates.
+Profile edit (2026-08-24, branch `feat/profile-edit`, beads `yolo-bjp`,
+PR #16): `yolo profile edit <id_or_name> [-n name] [-d description]` —
+change a profile's display name and/or description after creation.
+`config.Edit` (Copy-style single-`yolo.jsonc` rewrite); absent flag keeps,
+empty value clears (`-n ""` → name falls back to id; both empty drops the
+`profile` element); id and active marker untouched; rename to own name =
+no-op, collision with another profile = `ErrNameTaken`.
 Profile support (2026-08-24, branch `feat/profiles`, beads `yolo-3pe`):
 config profiles under `~/.config/yolo/<profile_id>/` with an active
 marker + `yolo profile` CLI + per-run selection (`--profile` flag >
@@ -132,4 +151,15 @@ not a separator. The first command (n=0) masked the group bug because counter==0
 no replay — gap events are unrecoverable, recovery is REST hydration from storage).
 - go-udiff v0.4.1 pinned as the direct line-diff dependency (2026-08-23, 0.3.0 task N,
 deviation 104) — the sole new dependency of 0.3.0 (root AGENTS.md allowlist, proposal #1).
+- v0.4.0 direction change (2026-08-24, user-approved; spec
+  `docs/superpowers/specs/2026-08-24-v0.4.0-design.md`): the original
+  Qwen3.8-27B testing goal is complete (local Qwen 3.8 tested, stable,
+  optimized). From v0.4.0 the project tests various LLM harnesses and
+  frameworks — yolo drives/evaluates other harnesses (the subsystem itself is
+  a future architectural spec). opencode v1.18.18 is a reference, not a
+  contract: yolo may deviate (wire shapes, behavior, pinned text) on explicit
+  user instruction, each deviation logged in `DEVIATIONS.md` with severity.
+  The 21 sha256-pinned files (14 `session/prompt/*.txt` + 7 `tool/desc/*.txt`)
+  record current intended content, not an upstream lock — an intentional
+  change re-baselines the pin in the same commit.
 

@@ -580,4 +580,29 @@ No behavior/wire/render change; every key sequence, scenario and
 server-side assertion stays identical. Verified: gofmt + `go vet` +
 `go test ./...` green, full-module `go test -race ./...` green,
 `internal/tui` `-race -count=5` green. Resolves per principle 5.
+119. v0.4.0 plan Task 3 edit list vs the Task 4 byte-verbatim grep
+(docs-only/low, 2026-08-24): the v0.4.0 plan contradicted itself —
+Task 3's edit list (four exact edits to the internal DOX chain) omitted
+two `byte-verbatim` package-map lines in `internal/AGENTS.md` (:34,
+:39), while the plan's own Task 4 closeout grep mandated zero
+`byte-verbatim` matches across `internal/` — impossible without changing
+those lines. Resolved per the last-stated call (controller ruling
+recorded in the SDD ledger): the implementer's minimal reword to
+"sha256-pinned" (the restated principle-3 term) was adopted and folded
+into Task 3's commit (`docs: restate internal DOX chain to the v0.4.0
+policy`) via a local-only amend. No test or code impact.
+120. v0.4.0 spec §2.3 pinned-file count vs the actual pre-fix pin surface
+(spec-accuracy/low, 2026-08-24): spec §2.3
+(`docs/superpowers/specs/2026-08-24-v0.4.0-design.md`) asserted "21
+sha256-pinned files" (14 prompt + 7 tool desc, "per-tool
+`TestDescPinned`"); the actual pre-fix pin surface was 15 — a single
+`TestDescPinned` (`internal/tool/read_test.go`) pinned only
+`desc/read.txt`, the other six desc files (embedded package string
+vars, model-visible) were unpinned; principle 3's inherited claim that
+all tool `desc/*.txt` are sha256-guarded was inaccurate for 6 of 7.
+User decision (2026-08-24, final whole-branch review's Important
+finding): add the six missing desc pins on this branch rather than
+reword the docs. `TestDescPinned` is now table-driven with one subtest
+per file; the "21" count and "per-tool `TestDescPinned`" are accurate
+as written.
 121. Profile support: global config under `~/.config/yolo/<profile_id>/` with an active marker + `yolo profile` CLI (hard deviation/high, 2026-08-24): user-requested feature with no upstream opencode counterpart (closest prior art, consulted during design: the external `kdcokenny/ocx` profile manager — profile subdirs under the app config root, implicit `default`, per-run override chain; naming model per the Kubernetes identifiers design: user-facing name + system-generated short random id). Design approved in-session 2026-08-24 (beads `yolo-3pe`, branch `feat/profiles`): a profile is a dir named by an auto-generated id (8 lowercase hex, `crypto/rand`, collision-retried; the first-run profile is the literal `default`); display metadata lives in an optional `"profile": {name, description}` element of the profile's own config file (effective name falls back to the id); selection precedence is `--profile` flag (on `yolo` and `yolo serve`) > `YOLO_PROFILE` env > `~/.config/yolo/active` marker > `default` recovery (first run creates root + `default` + marker); CLI `yolo profile list | add [name] [-d DESC] | use <id_or_name> | remove <id_or_name> | copy <src> <name> [-d DESC]`; names are unique (rejected at write time), references resolve id-first then name (a duplicate effective name is an ambiguous error); removing the active profile falls back to the first remaining by name or a recreated `default`; legacy flat files directly in `~/.config/yolo/` are NOT migrated — ignored (user decision); the data dir (auth.json, SQLite, logs, tool output) stays shared across profiles (user decision). Implementation: `internal/config/profile.go` (state/lifecycle), `protocol.Config.Profile` (omitempty — no wire-shape change), profile-aware `Loader.Load` / `Server.globalDir()` / `buildDeps`; `TestGlobalConfig` re-pinned to the profile-dir path. No new dependencies; cobra explicitly deferred (stdlib `flag` retained).
