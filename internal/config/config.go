@@ -79,8 +79,17 @@ type Dirs struct{ Home, Data, Cache string }
 
 var envPat = regexp.MustCompile(`\{env:([A-Za-z_][A-Za-z0-9_]*)\}`)
 
-// Loader owns an env view (nil => os.Environ) and resolves the effective config.
-type Loader struct{ Env map[string]string }
+// ProfileEnvVar selects the profile for this process, below the --profile
+// flag and above the active marker.
+const ProfileEnvVar = "YOLO_PROFILE"
+
+// Loader owns an env view (nil => os.Environ) and resolves the effective
+// config. Profile is the --profile override; empty selects via the
+// YOLO_PROFILE env, then the active marker.
+type Loader struct {
+	Env     map[string]string
+	Profile string
+}
 
 // EnvVal reports whether name is set in the loader's env view.
 func (l Loader) EnvVal(name string) (string, bool) {
@@ -91,13 +100,31 @@ func (l Loader) EnvVal(name string) (string, bool) {
 	return os.LookupEnv(name)
 }
 
-// Load wraps LoadAt with the real global dir and workDir as startDir.
+// selectProfile resolves the profile id for root: the Profile override
+// beats the YOLO_PROFILE env value, which beats the active marker
+// (EnsureActive creates the default profile on a first run).
+func (l Loader) selectProfile(root string) (string, error) {
+	if l.Profile != "" {
+		return Resolve(root, l.Profile)
+	}
+	if v, ok := l.EnvVal(ProfileEnvVar); ok && v != "" {
+		return Resolve(root, v)
+	}
+	return EnsureActive(root)
+}
+
+// Load resolves the active profile in the real global dir, then merges
+// <root>/<profile>/ with the project chain up from workDir.
 func (l Loader) Load(workDir string) (*protocol.Config, error) {
 	g, err := GlobalYoloDir()
 	if err != nil {
 		return nil, err
 	}
-	return l.LoadAt(g, workDir)
+	id, err := l.selectProfile(g)
+	if err != nil {
+		return nil, err
+	}
+	return l.LoadAt(filepath.Join(g, id), workDir)
 }
 
 const (
