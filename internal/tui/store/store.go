@@ -46,111 +46,151 @@ type partState struct {
 func (s *State) Apply(ev protocol.Event) {
 	switch ev.Type {
 	case protocol.EventTypeMessageUpdated:
-		var p protocol.MessageUpdatedProps
-		if json.Unmarshal(ev.Properties, &p) != nil || !s.isCurrent(p.SessionID) {
-			return
-		}
-		s.upsertMessage(p.Info)
+		s.applyMessageUpdated(ev)
 	case protocol.EventTypeMessagePartUpdated:
-		var p protocol.MessagePartUpdatedProps
-		if json.Unmarshal(ev.Properties, &p) != nil || !s.isCurrent(p.Part.SessionID) {
-			return
-		}
-		s.upsertPart(p.Part)
+		s.applyMessagePartUpdated(ev)
 	case protocol.EventTypeMessagePartDelta:
-		var p protocol.MessagePartDeltaProps
-		if json.Unmarshal(ev.Properties, &p) != nil || !s.isCurrent(p.SessionID) {
-			return
-		}
-		s.applyDelta(p)
+		s.applyMessagePartDelta(ev)
 	case protocol.EventTypeMessageRemoved:
-		var p protocol.MessageRemovedProps
-		if json.Unmarshal(ev.Properties, &p) != nil || !s.isCurrent(p.SessionID) {
-			return
-		}
-		kept := make([]protocol.MessageWithParts, 0, len(s.Messages))
-		for _, m := range s.Messages {
-			if m.Info.ID != p.MessageID {
-				kept = append(kept, m)
-			}
-		}
-		s.Messages = kept
-		// The removal shifts message positions: re-derive the index.
-		s.rebuildPartIndex()
+		s.applyMessageRemoved(ev)
 	case protocol.EventTypeMessagePartRemoved:
-		var p protocol.MessagePartRemovedProps
-		if json.Unmarshal(ev.Properties, &p) != nil || !s.isCurrent(p.SessionID) {
-			return
-		}
-		for i := range s.Messages {
-			if s.Messages[i].Info.ID != p.MessageID {
-				continue
-			}
-			kept := make([]protocol.Part, 0, len(s.Messages[i].Parts))
-			for _, pr := range s.Messages[i].Parts {
-				if pr.ID != p.PartID {
-					kept = append(kept, pr)
-				}
-			}
-			s.Messages[i].Parts = kept
-		}
-		// The removal shifts part positions within the message.
-		s.rebuildPartIndex()
+		s.applyMessagePartRemoved(ev)
 	case protocol.EventTypeSessionUpdated:
-		var p protocol.SessionUpdatedProps
-		if json.Unmarshal(ev.Properties, &p) != nil {
-			return
-		}
-		s.upsertSession(p.Info)
-		if s.isCurrent(p.Info.ID) {
-			cp := p.Info
-			s.Current = &cp
-		}
+		s.applySessionUpdated(ev)
 	case protocol.EventTypeSessionDeleted:
-		var p protocol.SessionDeletedProps
-		if json.Unmarshal(ev.Properties, &p) != nil {
-			return
-		}
-		kept := make([]protocol.Session, 0, len(s.Sessions))
-		for _, se := range s.Sessions {
-			if se.ID != p.SessionID {
-				kept = append(kept, se)
-			}
-		}
-		s.Sessions = kept
-		if s.isCurrent(p.SessionID) {
-			s.Current = nil
-		}
+		s.applySessionDeleted(ev)
 	case protocol.EventTypeSessionStatus:
-		var p protocol.SessionStatusProps
-		if json.Unmarshal(ev.Properties, &p) != nil || !s.isCurrent(p.SessionID) {
-			return
-		}
-		s.Status = p.Status
+		s.applySessionStatus(ev)
 	case protocol.EventTypePermissionAsked:
-		var p protocol.PermissionAskedProps
-		if json.Unmarshal(ev.Properties, &p) != nil {
-			return
-		}
-		for _, q := range s.Pending {
-			if q.ID == p.ID {
-				return
-			}
-		}
-		s.Pending = append(s.Pending, p)
+		s.applyPermissionAsked(ev)
 	case protocol.EventTypePermissionReplied:
-		var p protocol.PermissionRepliedProps
-		if json.Unmarshal(ev.Properties, &p) != nil {
-			return
+		s.applyPermissionReplied(ev)
+	}
+}
+
+func (s *State) applyMessageUpdated(ev protocol.Event) {
+	var p protocol.MessageUpdatedProps
+	if json.Unmarshal(ev.Properties, &p) != nil || !s.isCurrent(p.SessionID) {
+		return
+	}
+	s.upsertMessage(p.Info)
+}
+
+func (s *State) applyMessagePartUpdated(ev protocol.Event) {
+	var p protocol.MessagePartUpdatedProps
+	if json.Unmarshal(ev.Properties, &p) != nil || !s.isCurrent(p.Part.SessionID) {
+		return
+	}
+	s.upsertPart(p.Part)
+}
+
+func (s *State) applyMessagePartDelta(ev protocol.Event) {
+	var p protocol.MessagePartDeltaProps
+	if json.Unmarshal(ev.Properties, &p) != nil || !s.isCurrent(p.SessionID) {
+		return
+	}
+	s.applyDelta(p)
+}
+
+func (s *State) applyMessageRemoved(ev protocol.Event) {
+	var p protocol.MessageRemovedProps
+	if json.Unmarshal(ev.Properties, &p) != nil || !s.isCurrent(p.SessionID) {
+		return
+	}
+	kept := make([]protocol.MessageWithParts, 0, len(s.Messages))
+	for _, m := range s.Messages {
+		if m.Info.ID != p.MessageID {
+			kept = append(kept, m)
 		}
-		kept := make([]protocol.PermissionAskedProps, 0, len(s.Pending))
-		for _, q := range s.Pending {
-			if q.ID != p.RequestID {
-				kept = append(kept, q)
+	}
+	s.Messages = kept
+	// The removal shifts message positions: re-derive the index.
+	s.rebuildPartIndex()
+}
+
+func (s *State) applyMessagePartRemoved(ev protocol.Event) {
+	var p protocol.MessagePartRemovedProps
+	if json.Unmarshal(ev.Properties, &p) != nil || !s.isCurrent(p.SessionID) {
+		return
+	}
+	for i := range s.Messages {
+		if s.Messages[i].Info.ID != p.MessageID {
+			continue
+		}
+		kept := make([]protocol.Part, 0, len(s.Messages[i].Parts))
+		for _, pr := range s.Messages[i].Parts {
+			if pr.ID != p.PartID {
+				kept = append(kept, pr)
 			}
 		}
-		s.Pending = kept
+		s.Messages[i].Parts = kept
 	}
+	// The removal shifts part positions within the message.
+	s.rebuildPartIndex()
+}
+
+func (s *State) applySessionUpdated(ev protocol.Event) {
+	var p protocol.SessionUpdatedProps
+	if json.Unmarshal(ev.Properties, &p) != nil {
+		return
+	}
+	s.upsertSession(p.Info)
+	if s.isCurrent(p.Info.ID) {
+		cp := p.Info
+		s.Current = &cp
+	}
+}
+
+func (s *State) applySessionDeleted(ev protocol.Event) {
+	var p protocol.SessionDeletedProps
+	if json.Unmarshal(ev.Properties, &p) != nil {
+		return
+	}
+	kept := make([]protocol.Session, 0, len(s.Sessions))
+	for _, se := range s.Sessions {
+		if se.ID != p.SessionID {
+			kept = append(kept, se)
+		}
+	}
+	s.Sessions = kept
+	if s.isCurrent(p.SessionID) {
+		s.Current = nil
+	}
+}
+
+func (s *State) applySessionStatus(ev protocol.Event) {
+	var p protocol.SessionStatusProps
+	if json.Unmarshal(ev.Properties, &p) != nil || !s.isCurrent(p.SessionID) {
+		return
+	}
+	s.Status = p.Status
+}
+
+func (s *State) applyPermissionAsked(ev protocol.Event) {
+	var p protocol.PermissionAskedProps
+	if json.Unmarshal(ev.Properties, &p) != nil {
+		return
+	}
+	for _, q := range s.Pending {
+		if q.ID == p.ID {
+			return
+		}
+	}
+	s.Pending = append(s.Pending, p)
+}
+
+func (s *State) applyPermissionReplied(ev protocol.Event) {
+	var p protocol.PermissionRepliedProps
+	if json.Unmarshal(ev.Properties, &p) != nil {
+		return
+	}
+	kept := make([]protocol.PermissionAskedProps, 0, len(s.Pending))
+	for _, q := range s.Pending {
+		if q.ID != p.RequestID {
+			kept = append(kept, q)
+		}
+	}
+	s.Pending = kept
 }
 
 func (s *State) isCurrent(sessionID string) bool {
