@@ -5,24 +5,15 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
-**Status (2026-08-24):** v0.2.0 released — merged to `main` + tagged `v0.2.0` +
-release cut. 16-task implementation, gate-green; `just e2e-live` PASS against
-the real `https://ai.kido.ws/v1` on 2026-08-23 (pre-tag). Beads: epic
-`yolo-8vl` and every subtask closed. Spec:
-`docs/superpowers/specs/2026-08-22-v0.2.0-design.md`; plan:
-`docs/superpowers/plans/2026-08-22-v0.2.0.md`. 0.3.0 is in progress: Plan 1
-(defect slice) merged to main (PR #11, `8c3f11c`); Plan 2 (refactor slice)
-is complete on branch `v0.3.0-plan-2` (no upstream): spec
-`docs/superpowers/specs/2026-08-23-v0.3.0-design.md`. **Plan 1 (defect slice)
-complete 2026-08-24** — all 39 tasks closed (beads `yolo-5hy.1.1`–`.39`,
-sub-epic `yolo-5hy.1` closed). **Plan 2 (refactor slice) complete
-2026-08-24** — all 16 tasks closed (beads `yolo-5hy.2.1`–`.16`, sub-epic
-`yolo-5hy.2` closed); close-out gate green (`go vet ./...` + `go test ./...`
-+ `go test -race ./...` + `gofmt -l .` + `golangci-lint run ./...`). `v0.3.0-plan-2` pushed and **PR #12 open**
-(2026-08-24). Next: user merge PR #12 → user-run `just e2e-live`
-re-validation → tag `v0.3.0` (tag only with explicit user go-ahead);
-release epic `yolo-5hy` stays open until the tag. The 0.3.0 deferred
-backlog lives in `docs/superpowers/DEFERRED.md`.
+**Status (2026-08-24):** v0.3.0 released — merged to `main` (PR #11 Plan 1
+defect slice; PR #12 Plan 2 refactor slice) + tagged `v0.3.0` + GitHub release
+cut. 55-task implementation (39 defect + 16 refactor), gate-green incl. `-race`
++ `golangci-lint`; `just e2e-live` PASS against the real `https://ai.kido.ws/v1`
+on 2026-08-24 (post Plan 2 merge). Beads: epic `yolo-5hy` and every subtask
+closed. Spec: `docs/superpowers/specs/2026-08-23-v0.3.0-design.md`. The 0.3.0
+deferred backlog (defect slice + 16 `refactor-*`) is fully closed and frozen in
+`docs/superpowers/deferred-archive.md`; `DEFERRED.md` is reset (no open
+items). Next: no open work — `bd ready` is empty until a 0.4.0 scope is defined.
 
 ## Root causes (archive, v0.1.3)
 
