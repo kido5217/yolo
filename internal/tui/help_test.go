@@ -35,7 +35,7 @@ func openHelp(t *testing.T) *recApp {
 }
 
 func TestHelpDialogText(t *testing.T) {
-	got := stripANSI(openHelp(t).dlgView())
+	got := stripANSI(openHelp(t).dlgView(80))
 	if got != wantHelp {
 		t.Fatalf("help dialog mismatch:\ngot:\n%q\nwant:\n%q", got, wantHelp)
 	}
@@ -54,7 +54,7 @@ func TestHelpAnyKeyCloses(t *testing.T) {
 func TestQuitConfirmTextAndKeys(t *testing.T) {
 	a := testApp()
 	a.dlg.push(dialog{kind: dlgQuit})
-	if got := stripANSI(a.dlgView()); got != "quit? [Y/n]" {
+	if got := stripANSI(a.dlgView(80)); got != "quit? [Y/n]" {
 		t.Fatalf("quit dialog = %q, want %q", got, "quit? [Y/n]")
 	}
 	cmds := a.handleKey(press('y'))

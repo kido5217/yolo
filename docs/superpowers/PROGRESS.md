@@ -5,16 +5,20 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
-**Status (2026-08-24):** v0.4.1 released — v0.4.0 post-release review
-fixes (PR #18, branch `code_review`; bead `yolo-lkh`) merged to `main` +
-tagged `v0.4.1` + GitHub release cut: corrupt profile configs no longer
-break `List`/name-based ops (id fallback, blank metadata), `buildDeps`
+**Status (2026-08-24):** v0.4.2 released — TUI word-wrap fixes (PR #19,
+branch `many_words`; beads `yolo-0ca` + `yolo-ukc`) merged to `main` +
+tagged `v0.4.2` + GitHub release cut: transcript lines word-wrap at the
+viewport width (`wrapLine`; re-wrap on resize), every below-viewport
+surface (toasts, permission overlay, slash menu, model/agent dialogs,
+home rows, error line, help line) wraps at the terminal width, and the
+prompt line fits (`SetWidth(w-3)` — prompt(2)+cursor(1) overhead).
+Prior release: v0.4.1 (PR #18, branch `code_review`, bead `yolo-lkh`):
+corrupt profile configs no longer break `List`/name-based ops, `buildDeps`
 pins the loader to the RESOLVED profile id, `FakeFromEnv` follows
-`env nil = real env`, README notes the ignored pre-v0.4.0 flat files and
-the `--profile` flag. Prior release: v0.4.0 (direction-change docs +
-config profiles, deviation 121, PRs #14–#17, tag `v0.4.0`); v0.3.0
-(PR #11/#12, tag `v0.3.0`, epic `yolo-5hy` closed; 0.3.0 backlog frozen
-in `docs/superpowers/deferred-archive.md`, `DEFERRED.md` reset).
+`env nil = real env`. v0.4.0 (direction-change docs + config profiles,
+deviation 121, PRs #14–#17, tag `v0.4.0`); v0.3.0 (PR #11/#12, tag
+`v0.3.0`, epic `yolo-5hy` closed; 0.3.0 backlog frozen in
+`docs/superpowers/deferred-archive.md`, `DEFERRED.md` reset).
 Next: the harness-testing scope is a future spec.
 
 ## Root causes (archive, v0.1.3)
@@ -109,6 +113,28 @@ the scripted fake driver; zen fixture gate = 57 models (42 openai + 15 anthropic
 7 google excluded).
 - TUI import rule: non-test files under `internal/tui/` import only `internal/protocol` +
 `internal/tui/*`; `_test.go` may use `internal/server/testutil` (escape hatch).
+- TUI transcript word-wrap (2026-08-24, bead `yolo-0ca`): the bubbles
+viewport hard-CLIPS over-width lines and the TUI binds no horizontal
+scroll, so pre-wrap the transcript lost everything past the right edge
+(unreadable; upstream ink word-wraps). `wrapLine` (`internal/tui/wrap.go`)
+word-wraps at the viewport width (word boundaries, over-long tokens
+hard-split, CJK/emoji = 2 columns, tab = separator, plain text only);
+styled lines wrap before styling (`toolRowLine` returns style + plain);
+`WindowSizeMsg` re-wraps via `sess.isDirty`. Tests: `TestWrapLine`,
+`TestRenderMessagesWrapsLongLines`, `TestTUILongReplyWraps` (the last word
+of a 1000-word single-line fake reply reaches the screen).
+- TUI below-viewport surface wrap (2026-08-24, bead `yolo-ukc`): toasts,
+the permission overlay, the slash menu, the model/agent dialogs (rows AND
+hint lines, via `dimWrapped`), the home session rows and the `!` error line
+all wrap at the terminal width (`App.termWidth()`, fallback 80) with the
+same `wrapLine`; the session route's viewport height counts the wrapped
+help line's real line count. The model dialog's cell hangs at the left-pane
+column (`modelRow`); the left pane alone ≥ width degenerates to full-width
+cell lines. Footer, divider and the locked quit/help dialogs stay
+single-line. Prompt width arithmetic: bubbles v2 textinput `View` =
+prompt(2) + `SetWidth` + cursor(1), so `WindowSizeMsg` sets `SetWidth(w-3)`
+(pre-fix `w-2` left the prompt line 1 column past the edge). Tests:
+`internal/tui/overflow_test.go` (7 wrap tests incl. the composed-frame fit).
 - v1 behavior pins: keymap is pgup/pgdn scroll + `\`+enter newline (noted in /help; spec's
 ↑/↓ viewport scroll replaced); JSONC comments are NOT preserved when a config PATCH
 rewrites `yolo.jsonc`.

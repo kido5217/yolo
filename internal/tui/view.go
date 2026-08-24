@@ -23,15 +23,16 @@ func (a *App) View() tea.View {
 // overlay is rendered once per frame and passed pre-built to the route
 // (the session route needs it both for line counting and composition).
 func (a *App) view() string {
-	perm := a.permissionView()
-	toasts := a.toastsView()
-	dlg := a.dlgView()
-	menu := a.prompt.menuView(a.store.Commands)
+	w := a.termWidth()
+	perm := a.permissionView(w)
+	toasts := a.toastsView(w)
+	dlg := a.dlgView(w)
+	menu := a.prompt.menuView(a.store.Commands, w)
 	var b strings.Builder
 	if a.route == routeSession {
 		b.WriteString(a.viewSession(menu, perm, toasts, dlg))
 	} else {
-		b.WriteString(a.home.render(&a.store))
+		b.WriteString(a.home.render(&a.store, w))
 	}
 	if menu != "" {
 		b.WriteString("\n" + menu)
@@ -47,7 +48,13 @@ func (a *App) view() string {
 		b.WriteString("\n" + dlg)
 	}
 	if a.lastErr != "" {
-		b.WriteString("\n" + errRed.Render("! "+a.lastErr))
+		b.WriteByte('\n')
+		for i, l := range strings.Split(wrapLine("! "+a.lastErr, w), "\n") {
+			if i > 0 {
+				b.WriteByte('\n')
+			}
+			b.WriteString(errRed.Render(l))
+		}
 	}
 	b.WriteString("\n" + a.footerView())
 	return b.String()
@@ -78,7 +85,10 @@ func (a *App) viewSession(menu, perm, toasts, dlg string) string {
 	if menu != "" {
 		menuLines = 1 + strings.Count(menu, "\n")
 	}
-	h := a.size.Height - 3 - 1 - 1 - menuLines - overlays
+	// The help line may wrap on narrow terminals; the viewport height must
+	// count its real line count so the frame stays within the terminal.
+	help := strings.Split(wrapLine(sessionHelp, w), "\n")
+	h := a.size.Height - 1 - 1 - len(help) - 1 - 1 - menuLines - overlays
 	if h < 1 {
 		h = 1
 	}
@@ -87,8 +97,12 @@ func (a *App) viewSession(menu, perm, toasts, dlg string) string {
 	if a.store.Current != nil {
 		t = a.store.Current.Title
 	}
-	return title.Render(t) +
+	var b strings.Builder
+	b.WriteString(title.Render(t) +
 		"\n" + a.sess.vm.View() +
-		"\n" + dividerLineRendered +
-		"\n" + sessionHelpRendered
+		"\n" + dividerLineRendered)
+	for _, l := range help {
+		b.WriteString("\n" + dim.Render(l))
+	}
+	return b.String()
 }

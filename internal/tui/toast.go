@@ -67,8 +67,10 @@ func (a *App) removeToast(id int) {
 	}
 }
 
-// toastsView renders the block above the footer, newest line on top.
-func (a *App) toastsView() string {
+// toastsView renders the block above the footer, newest line on top. Each
+// message word-wraps at the terminal width (a toast can carry a long error
+// string; the frame budget counts the wrapped lines dynamically).
+func (a *App) toastsView(w int) string {
 	if len(a.toasts) == 0 {
 		return ""
 	}
@@ -77,7 +79,12 @@ func (a *App) toastsView() string {
 		if i != len(a.toasts)-1 {
 			b.WriteByte('\n')
 		}
-		b.WriteString(errRed.Render("\u2022 " + a.toasts[i].msg))
+		for j, l := range strings.Split(wrapLine("\u2022 "+a.toasts[i].msg, w), "\n") {
+			if j > 0 {
+				b.WriteByte('\n')
+			}
+			b.WriteString(errRed.Render(l))
+		}
 	}
 	return b.String()
 }

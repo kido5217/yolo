@@ -96,8 +96,10 @@ func (h *homeModel) moveCursor(s *store.State, d int) {
 
 const helpText = "\u2191/\u2193 move \u00B7 enter open \u00B7 n new \u00B7 /help"
 
-// render produces the locked home layout for the store.
-func (h *homeModel) render(s *store.State) string {
+// render produces the locked home layout for the store. Session rows
+// word-wrap at the terminal width (titles are LLM-generated); the cursor
+// stays one stop per session — continuation lines align under the content.
+func (h *homeModel) render(s *store.State, w int) string {
 	h.clampCursor(s)
 	rows := h.visible(s)
 	var b strings.Builder
@@ -105,23 +107,50 @@ func (h *homeModel) render(s *store.State) string {
 	b.WriteByte('\n')
 	b.WriteString(divider.Render(dividerLine()))
 	b.WriteByte('\n')
-	b.WriteString(h.renderRow(0, "New session"))
+	b.WriteString(h.renderRow(0, "New session", w))
 	b.WriteByte('\n')
 	for i, se := range rows {
-		b.WriteString(h.renderRow(i+1, lineContent(se, h.now())))
+		b.WriteString(h.renderRow(i+1, lineContent(se, h.now()), w))
 		b.WriteByte('\n')
 	}
 	b.WriteString(divider.Render(dividerLine()))
 	b.WriteByte('\n')
-	b.WriteString(dim.Render(helpText))
+	b.WriteString(dimWrapped(helpText, w))
 	return b.String()
 }
 
-func (h *homeModel) renderRow(line int, content string) string {
+func (h *homeModel) renderRow(line int, content string, w int) string {
 	if line == h.cursor {
-		return cursor.Render("  \u25B8 " + content)
+		return homeRow("  \u25B8 "+content, 4, w, cursor.Render)
 	}
-	return "  " + content
+	return homeRow("  "+content, 2, w, nil)
+}
+
+// homeRow word-wraps the prefixed row (style nil = plain); continuation
+// lines are indented to align under the content (ind columns, capped so the
+// line still fits).
+func homeRow(s string, ind, w int, style func(...string) string) string {
+	lines := strings.Split(wrapLine(s, w), "\n")
+	var b strings.Builder
+	for i, l := range lines {
+		if i > 0 {
+			n := ind
+			if runeWidth(l)+n > w {
+				n = w - runeWidth(l)
+				if n < 0 {
+					n = 0
+				}
+			}
+			l = strings.Repeat(" ", n) + l
+			b.WriteByte('\n')
+		}
+		if style == nil {
+			b.WriteString(l)
+		} else {
+			b.WriteString(style(l))
+		}
+	}
+	return b.String()
 }
 
 // handleHomeKey dispatches home-route keys: up/down wrap, enter opens or

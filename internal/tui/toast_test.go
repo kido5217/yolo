@@ -26,7 +26,7 @@ func TestToastQueueCapAndOrder(t *testing.T) {
 	if got := len(a.toasts); got != 3 {
 		t.Fatalf("toasts = %d, want 3 (queue cap)", got)
 	}
-	lines := strings.Split(strings.TrimSpace(stripANSI(a.toastsView())), "\n")
+	lines := strings.Split(strings.TrimSpace(stripANSI(a.toastsView(80))), "\n")
 	if len(lines) != 3 {
 		t.Fatalf("toast lines = %d, want 3: %q", len(lines), lines)
 	}

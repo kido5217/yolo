@@ -45,7 +45,7 @@ func permApp() *recApp {
 func TestPermissionRender(t *testing.T) {
 	t.Run("full props with always suggestions and tool ref", func(t *testing.T) {
 		a := permApp()
-		got := stripANSI(a.permissionView())
+		got := stripANSI(a.permissionView(80))
 		want := "permission · bash\n" +
 			"  patterns: ls *\n" +
 			"  Always: ls, dir/*\n" +
@@ -59,7 +59,7 @@ func TestPermissionRender(t *testing.T) {
 	t.Run("empty always omits the line", func(t *testing.T) {
 		a := permApp()
 		a.store.Pending[0].Always = nil
-		got := stripANSI(a.permissionView())
+		got := stripANSI(a.permissionView(80))
 		if strings.Contains(got, "Always:") {
 			t.Errorf("Always line must be omitted when empty:\n%q", got)
 		}
@@ -71,7 +71,7 @@ func TestPermissionRender(t *testing.T) {
 	t.Run("missing tool ref omits the line", func(t *testing.T) {
 		a := permApp()
 		a.store.Pending[0].Tool = nil
-		got := stripANSI(a.permissionView())
+		got := stripANSI(a.permissionView(80))
 		if strings.Contains(got, "tool call:") {
 			t.Errorf("tool call line must be omitted when ref is nil:\n%q", got)
 		}
@@ -80,7 +80,7 @@ func TestPermissionRender(t *testing.T) {
 	t.Run("short callID is not truncated", func(t *testing.T) {
 		a := permApp()
 		a.store.Pending[0].Tool = &protocol.PermissionToolRef{MessageID: "msg_9", CallID: "call_1"}
-		if got := stripANSI(a.permissionView()); !strings.Contains(got, "  tool call: msg_9/call_1") {
+		if got := stripANSI(a.permissionView(80)); !strings.Contains(got, "  tool call: msg_9/call_1") {
 			t.Errorf("short callID line missing:\n%q", got)
 		}
 	})
@@ -88,7 +88,7 @@ func TestPermissionRender(t *testing.T) {
 	t.Run("multiple patterns are comma joined", func(t *testing.T) {
 		a := permApp()
 		a.store.Pending[0].Patterns = []string{"ls *", "cat *"}
-		if got := stripANSI(a.permissionView()); !strings.Contains(got, "  patterns: ls *, cat *") {
+		if got := stripANSI(a.permissionView(80)); !strings.Contains(got, "  patterns: ls *, cat *") {
 			t.Errorf("combined patterns line missing:\n%q", got)
 		}
 	})
@@ -96,7 +96,7 @@ func TestPermissionRender(t *testing.T) {
 	t.Run("empty pending renders nothing", func(t *testing.T) {
 		a := permApp()
 		a.store.Pending = nil
-		if got := a.permissionView(); got != "" {
+		if got := a.permissionView(80); got != "" {
 			t.Errorf("expected empty view, got %q", got)
 		}
 	})

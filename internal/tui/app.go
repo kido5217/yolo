@@ -71,7 +71,9 @@ func NewApp(c *client.Service, s store.State, startSessionID string) *App {
 		stop:     cancel,
 	}
 	in := textinput.New()
-	in.SetWidth(78)
+	// textinput's View is prompt(2) + width + cursor(1): size the value
+	// area so the whole line fits the 80-column default terminal.
+	in.SetWidth(77)
 	st := in.Styles()
 	st.Cursor.Blink = false
 	in.SetStyles(st)
@@ -86,6 +88,15 @@ func NewApp(c *client.Service, s store.State, startSessionID string) *App {
 
 // Close stops the SSE pump. Call it once the program exits.
 func (a *App) Close() { a.stop() }
+
+// termWidth is the terminal width with the pre-WindowSizeMsg fallback (the
+// session route uses the same 80 for the viewport).
+func (a *App) termWidth() int {
+	if a.size.Width < 1 {
+		return 80
+	}
+	return a.size.Width
+}
 
 // Init hydrates the starting route and arms the SSE + resync pumps.
 func (a *App) Init() tea.Cmd {
@@ -115,9 +126,14 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 	switch m := msg.(type) {
 	case tea.WindowSizeMsg:
 		a.size = m
-		if m.Width > 2 {
-			a.prompt.input.SetWidth(m.Width - 2)
+		// textinput's View is prompt(2) + width + cursor(1): subtract all
+		// three so the prompt line never exceeds the terminal width.
+		if m.Width > 3 {
+			a.prompt.input.SetWidth(m.Width - 3)
 		}
+		// The transcript is word-wrapped at the viewport width: re-wrap on
+		// resize instead of clipping at the stale width.
+		a.sess.isDirty = true
 		return nil
 	case EventMsg:
 		a.store.Live = true
