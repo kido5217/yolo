@@ -1,8 +1,10 @@
 # Deferred backlog archive — v0.1.2 review slice (frozen 2026-08-24)
 
-Every item below is CLOSED (fixed in 0.2.0 or 0.3.0 Plan 1, or verified
-stale/resolved). The open 0.3.0 work list (the 16 `refactor-*` rows, Plan 2)
-lives in `DEFERRED.md`. Source: v0.1.2 review waves (generated 2026-08-22);
+Every item below is CLOSED (fixed in 0.2.0, or 0.3.0 Plan 1 / Plan 2, or
+verified stale/resolved) — including the 16 `refactor-*` rows (wave 8),
+completed in 0.3.0 Plan 2 (PR #12, 2026-08-24); the 0.3.0 backlog is fully
+closed and `DEFERRED.md` is reset. Source: v0.1.2 review waves (generated
+2026-08-22);
 beads epics `yolo-8vl` (0.2.0) and `yolo-5hy` (0.3.0). Fix commits: the
 dispositions below name them; `git log --oneline` is the archive.
 
@@ -161,4 +163,26 @@ picked (no spec/plan yet by design).
   `Logger.write` has a nil-receiver guard, so a nil `Deps.Log` may already be a
   safe no-op and the finding may be stale).
 - Constraints: zero telemetry (local file only, nothing remote); no new deps
-  (stdlib logger stays); unit tests never hit the network (fake driver for engine e2e).
+   (stdlib logger stays); unit tests never hit the network (fake driver for engine e2e).
+
+## Refactor backlog (wave 8 — 0.3.0 Plan 2) — closed 2026-08-24 (PR #12)
+
+The 16 `refactor-*` rows (assessment-only wave 8) were completed in 0.3.0 Plan
+2. Full assessments: `reviews/v0.1.2/08-refactoring-backlog.md`. Dispositions:
+
+- [refactor-1] internal/session/engine.go — `refactor: split engine.go into lifecycle, history, tool, title, round`
+- [refactor-2] internal/session/engine.go — `refactor: extract partState and streamWithRetry from runRound`
+- [refactor-3] internal/session/engine.go — `refactor: extract toolCall and gate helpers from executeTool`
+- [refactor-4] internal/llm (openai/anthropic) — `refactor: share the SSE pump as sseLoop in internal/llm`
+- [refactor-5] internal/tui/app.go — `refactor: split app.go into hydrate, dialog, keys, commands, view`
+- [refactor-6] internal/session/engine.go — `refactor: extract pure mapHistory from messagesFor`
+- [refactor-7] internal/session/engine_test.go — `refactor: split the engine test harness into harness_test.go`
+- [refactor-8] internal/server/contract_test.go — `refactor: split contract_test.go into four suite files`
+- [refactor-9] internal/server/handlers_misc.go — `refactor: split handlers_misc into config, provider, catalog, permission`
+- [refactor-10] internal/tui/store/store.go — `refactor: per-event methods on the store fold (Apply dispatch-only)`
+- [refactor-11] internal/tool/read.go — `refactor: extract renderFileBody and displayMeta from readTool.Run`
+- [refactor-12] internal/tool/shell.go — `refactor: extract execTimeout from Shell.Exec (markerCmd single-source)`
+- [refactor-13] cmd/yolo/main.go — `refactor: move buildDeps and wiring into cmd/yolo/deps.go`
+- [refactor-14] internal/storage/dao.go — `refactor: split dao.go into per-entity files plus part_convert`
+- [refactor-15] internal/tui/app.go — `refactor: dialog stack items own their picker payload`
+- [refactor-16] internal/llm/anthropic.go — `refactor: extract toAnMsg and anTool builders from anRequest`

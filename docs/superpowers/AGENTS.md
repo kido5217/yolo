@@ -10,7 +10,7 @@ epic; `bd ready`) — the resume rail is beads → active spec/plan →
 ## Ownership
 
 `PROGRESS.md`, `DEVIATIONS.md`, `DEFERRED.md`, `plans/`, `specs/`,
-`reviews/`, `deviations-archive-v0.1.0.md`, `deferred-archive-v0.1.2.md`.
+`reviews/`, `deviations-archive-v0.1.0.md`, `deferred-archive.md`.
 
 ## Local Contracts
 
@@ -25,7 +25,7 @@ epic; `bd ready`) — the resume rail is beads → active spec/plan →
 - Layout: `plans/<date>-<topic>.md` = dated implementation plans (one
   active, named in the beads epic); `specs/<date>-<topic>-design.md` =
   approved designs; `DEFERRED.md` = living 0.3.0 work list (OPEN items only;
-  closed v0.1.2-review findings frozen in `deferred-archive-v0.1.2.md`);
+  closed v0.1.2-review findings frozen in `deferred-archive.md`);
   `reviews/<version>/` = per-wave review findings (e.g. `v0.1.2/`).
 - Subagents strictly one at a time (root principle 7).
 
