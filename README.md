@@ -38,8 +38,23 @@ SIGINT/SIGTERM (TUI or `serve`) triggers a graceful drain — in-flight turns ar
 
 JSONC, merged deterministically (innermost wins; `instructions` concatenates). `{env:NAME}` and whole-string env names are substituted.
 
-- **Global**: `~/.config/yolo/yolo.jsonc` (file precedence in `~/.config/yolo/`: `config.json` → `yolo.json` → `yolo.jsonc`)
+- **Global**: `~/.config/yolo/<profile_id>/yolo.jsonc` (file precedence in the profile dir: `config.json` → `yolo.json` → `yolo.jsonc`)
 - **Project**: `yolo.jsonc` (or `yolo.json`) in the working directory and each ancestor up to `/`, innermost last, plus `<workDir>/.yolo/yolo.jsonc` as the innermost override
+
+### Profiles
+
+Global config is partitioned into profiles — one dir per profile under `~/.config/yolo/`, the active one recorded in `~/.config/yolo/active`. A first run creates the `default` profile. Each profile's config may carry an optional `"profile": { "name", "description" }` element (the name is used by the CLI; it falls back to the profile id).
+
+Selection precedence: `--profile <id_or_name>` flag > `YOLO_PROFILE` env var > active profile > `default`.
+
+```sh
+yolo profile list                  # list profiles (* = active)
+yolo profile add work -d "laptop"  # create (auto id; name + optional description)
+yolo profile use work              # set the active profile
+yolo profile edit work -n work2    # change name and/or description (-d)
+yolo profile copy work work-home   # duplicate a profile under a new id
+yolo profile remove work           # delete (active falls back to the next one)
+```
 
 ### Fields (minimal)
 
@@ -104,7 +119,7 @@ The builtin `kido` provider (default) points at `https://ai.kido.ws/v1` with mod
   models.json        # cached Zen model catalog (opencode provider)
 ```
 
-Global config lives in `~/.config/yolo/yolo.jsonc` (XDG: honor `XDG_CONFIG_HOME`; `XDG_DATA_HOME` / `XDG_CACHE_HOME` shift the data and cache roots).
+Global config lives in `~/.config/yolo/<profile_id>/yolo.jsonc` (the active profile is recorded in `~/.config/yolo/active`; see Profiles above). XDG: honor `XDG_CONFIG_HOME`; `XDG_DATA_HOME` / `XDG_CACHE_HOME` shift the data and cache roots (shared across profiles).
 
 ## Tests
 

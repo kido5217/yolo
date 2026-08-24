@@ -5,18 +5,20 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
-**Status (2026-08-24):** v0.4.0 direction-change docs complete on branch
-`v0.4.0_spec` (epic `yolo-5u1`), awaiting PR merge to `main`. Spec:
-`docs/superpowers/specs/2026-08-24-v0.4.0-design.md` (approved 2026-08-24).
-Scope was docs only: the Qwen3.8-27B testing goal is complete (local Qwen 3.8
+**Status (2026-08-24):** v0.4.0 released — direction-change docs (epic
+`yolo-5u1`, branch `v0.4.0_spec`) merged to `main` + config profiles
+(deviation 121, PR #15) + `yolo profile edit` (PR #16) + tagged `v0.4.0`
++ GitHub release cut. Purpose change (docs-only; spec
+`docs/superpowers/specs/2026-08-24-v0.4.0-design.md`, approved
+2026-08-24): the Qwen3.8-27B testing goal is complete (local Qwen 3.8
 tested, stable, optimized); from v0.4.0 the project tests various LLM
-harnesses and frameworks; opencode v1.18.18 is a reference, not a contract
-(deviations on explicit user instruction, logged in `DEVIATIONS.md`); the 21
-sha256-pinned text files are change gates, not upstream locks. Last release:
-v0.3.0 (PRs #11/#12, tag `v0.3.0`, `just e2e-live` PASS 2026-08-24, epic
-`yolo-5hy` closed; 0.3.0 backlog frozen in
-`docs/superpowers/deferred-archive.md`, `DEFERRED.md` reset). Next: user merge
-of the v0.4.0 PR; the harness-testing scope is a future spec.
+harnesses and frameworks; opencode v1.18.18 is a reference, not a
+contract (deviations on explicit user instruction, logged in
+`DEVIATIONS.md`); the 21 sha256-pinned text files are change gates, not
+upstream locks. Prior release: v0.3.0 (PRs #11/#12, tag `v0.3.0`,
+`just e2e-live` PASS 2026-08-24, epic `yolo-5hy` closed; 0.3.0 backlog
+frozen in `docs/superpowers/deferred-archive.md`, `DEFERRED.md` reset).
+Next: the harness-testing scope is a future spec.
 
 ## Root causes (archive, v0.1.3)
 
@@ -38,12 +40,30 @@ prompt+model does NOT loop in upstream opencode. Detail: deviations 73–77.
 
 ## Last completed
 
-v0.4.0 direction-change docs complete (2026-08-24, branch `v0.4.0_spec`):
-spec `2026-08-24-v0.4.0-design.md` (beads `yolo-5u1.1`), plan
-`2026-08-24-v0.4.0-direction-change.md` (beads `yolo-5u1.3`), restated root
-`AGENTS.md` (purpose + principles 2–3), `README.md` (intro + purpose note),
-internal DOX chain (`internal/AGENTS.md` + `internal/protocol/AGENTS.md`),
-this record (beads `yolo-5u1.2`). Next: PR to `main` (user merge).
+v0.4.0 direction-change docs merged to `main` (2026-08-24, branch
+`v0.4.0_spec`, epic `yolo-5u1`): spec `2026-08-24-v0.4.0-design.md`
+(beads `yolo-5u1.1`), plan `2026-08-24-v0.4.0-direction-change.md`
+(beads `yolo-5u1.3`), restated root `AGENTS.md` (purpose + principles 2–3),
+`README.md` (intro + purpose note), internal DOX chain
+(`internal/AGENTS.md` + `internal/protocol/AGENTS.md`), this record
+(beads `yolo-5u1.2`); deviations 119–120; `TestDescPinned` now pins all
+seven tool desc files. Docs-only scope: purpose change to harness
+testing, opencode demoted to reference, pins as change gates.
+Profile edit (2026-08-24, branch `feat/profile-edit`, beads `yolo-bjp`,
+PR #16): `yolo profile edit <id_or_name> [-n name] [-d description]` —
+change a profile's display name and/or description after creation.
+`config.Edit` (Copy-style single-`yolo.jsonc` rewrite); absent flag keeps,
+empty value clears (`-n ""` → name falls back to id; both empty drops the
+`profile` element); id and active marker untouched; rename to own name =
+no-op, collision with another profile = `ErrNameTaken`.
+Profile support (2026-08-24, branch `feat/profiles`, beads `yolo-3pe`):
+config profiles under `~/.config/yolo/<profile_id>/` with an active
+marker + `yolo profile` CLI + per-run selection (`--profile` flag >
+`YOLO_PROFILE` env > marker > `default` recovery). Deviation 121 (hard
+deviation/high, no upstream counterpart). Implementation:
+`internal/config/profile.go`, `protocol.Config.Profile`, profile-aware
+`Loader.Load` / `Server.globalDir()` / `buildDeps`. Gate green
+(`go vet` + `go test ./...` + `gofmt`).
 0.3.0 Plan 2 (refactor slice) complete (2026-08-24, branch
 `v0.3.0-plan-2`): all 16 wave-8 refactors closed as beads
 `yolo-5hy.2.1`–`.16` (engine test-harness + engine 4-way split + runRound/
@@ -78,6 +98,15 @@ is `*` deny; `write`+`edit` both map to permission `edit`.
 `tidwall/jsonc` v0.3.3; dev-only `teatest/v2` v2.0.0-20260816001655-68d539dca504.
 - Module `github.com/kido5217/yolo`, Go ≥ 1.25 (installed 1.26.7).
 - Single deliberate wire deviation: `x-yolo-directory` header.
+- Config profiles (2026-08-24, deviation 121, beads `yolo-3pe`): global
+config lives at `~/.config/yolo/<profile_id>/` (precedence `config.json`
+< `yolo.json` < `yolo.jsonc`); id auto-generated 8-hex (first-run literal
+`default`); `~/.config/yolo/active` = active marker; selection =
+`--profile` flag > `YOLO_PROFILE` env > marker > `default` recovery;
+`yolo profile list|add [name] [-d DESC]|use|edit REF [-n NAME]
+[-d DESC]|remove|copy SRC NAME [-d DESC]`;
+name unique + id-then-name resolution (dup name = ambiguous error); legacy
+flat files ignored; data dir shared.
 - Test gating: unit tests never hit network; `YOLO_LLM=fake` (+ `YOLO_FAKE_SCRIPT`) selects
 the scripted fake driver; zen fixture gate = 57 models (42 openai + 15 anthropic,
 7 google excluded).

@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -151,12 +152,30 @@ func authPath(d config.Dirs) (string, error) {
 	return filepath.Join(d.Data, "auth.json"), nil
 }
 
-// globalDir is <Dirs.Home>/yolo; zero Home falls back to the real XDG home.
+// globalDir is <Dirs.Home>/yolo/<profile>: Dirs.Profile when set (the
+// process-selected profile), otherwise the active marker, ensured per
+// request. Zero Home falls back to the real XDG home.
 func (s *Server) globalDir() (string, error) {
+	var root string
+	var err error
 	if s.Dirs.Home == "" {
-		return config.GlobalYoloDir()
+		root, err = config.GlobalYoloDir()
+	} else {
+		root = filepath.Join(s.Dirs.Home, "yolo")
 	}
-	return filepath.Join(s.Dirs.Home, "yolo"), nil
+	if err != nil {
+		return "", err
+	}
+	id := s.Dirs.Profile
+	if id == "" {
+		id, err = config.EnsureActive(root)
+	} else if st, serr := os.Stat(filepath.Join(root, id)); serr != nil || !st.IsDir() {
+		err = fmt.Errorf("%w: %s", config.ErrNotFound, id)
+	}
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, id), nil
 }
 
 // Start listens on addr (":0" = ephemeral) and serves in a goroutine.

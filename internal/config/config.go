@@ -74,13 +74,29 @@ func CacheYoloDir() (string, error) {
 	return filepath.Join(c, "yolo"), nil
 }
 
-// Dirs carries the three XDG roots; zero value = real XDG. Server/test injection.
-type Dirs struct{ Home, Data, Cache string }
+// Dirs carries the three XDG roots and the resolved profile id; zero
+// value = real XDG + marker-resolved profile. Server/test injection.
+type Dirs struct {
+	Home, Data, Cache string
+	// Profile is the process-selected profile id (from the --profile flag
+	// or YOLO_PROFILE). Empty: the server resolves the active marker per
+	// request (creating the default profile on a first run).
+	Profile string
+}
 
 var envPat = regexp.MustCompile(`\{env:([A-Za-z_][A-Za-z0-9_]*)\}`)
 
-// Loader owns an env view (nil => os.Environ) and resolves the effective config.
-type Loader struct{ Env map[string]string }
+// ProfileEnvVar selects the profile for this process, below the --profile
+// flag and above the active marker.
+const ProfileEnvVar = "YOLO_PROFILE"
+
+// Loader owns an env view (nil => os.Environ) and resolves the effective
+// config. Profile is the --profile override; empty selects via the
+// YOLO_PROFILE env, then the active marker.
+type Loader struct {
+	Env     map[string]string
+	Profile string
+}
 
 // EnvVal reports whether name is set in the loader's env view.
 func (l Loader) EnvVal(name string) (string, bool) {
@@ -91,13 +107,24 @@ func (l Loader) EnvVal(name string) (string, bool) {
 	return os.LookupEnv(name)
 }
 
-// Load wraps LoadAt with the real global dir and workDir as startDir.
+// selectProfile resolves the profile id for root via ProcessProfile with
+// the loader's own env view.
+func (l Loader) selectProfile(root string) (string, error) {
+	return ProcessProfile(root, l.Profile, l.Env)
+}
+
+// Load resolves the active profile in the real global dir, then merges
+// <root>/<profile>/ with the project chain up from workDir.
 func (l Loader) Load(workDir string) (*protocol.Config, error) {
 	g, err := GlobalYoloDir()
 	if err != nil {
 		return nil, err
 	}
-	return l.LoadAt(g, workDir)
+	id, err := l.selectProfile(g)
+	if err != nil {
+		return nil, err
+	}
+	return l.LoadAt(filepath.Join(g, id), workDir)
 }
 
 const (
