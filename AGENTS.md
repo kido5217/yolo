@@ -12,13 +12,13 @@ Read it before acting. Task state: beads (`bd ready`). Verified facts:
 - Single binary: starts the core HTTP server (REST + SSE) **in-process**, then runs the bubbletea v2 TUI which talks to it **only** via the wire contract.
 - Core layering: `protocol` (wire DTOs, single source of truth) → `server` → `session` (agent loop) → `llm` / `provider` / `tool` / `permission` / `config` / `auth` / `storage` / `bus`.
 - **Dependency policy — allowlist + agent-proposable.** Runtime deps are pinned
-  at exact versions. Allowlist: `charm.land/bubbletea/v2` v2.0.8,
-  `charm.land/lipgloss/v2` v2.0.6, `charm.land/bubbles/v2` v2.1.1,
-  `modernc.org/sqlite` v1.56.0 (pure Go, no cgo), `tidwall/jsonc` v0.3.3,
+  at exact versions. Allowlist: `charm.land/bubbletea/v2` v2.0.9,
+  `charm.land/lipgloss/v2` v2.0.6, `charm.land/bubbles/v2` v2.2.1,
+  `modernc.org/sqlite` v1.57.0 (pure Go, no cgo), `tidwall/jsonc` v0.3.3,
   `github.com/aymanbagabas/go-udiff` v0.4.1 (proposal #1, user-approved
   2026-08-23 — the Myers line diff); dev-only
   `github.com/charmbracelet/x/exp/teatest/v2`
-  v2.0.0-20260816001655-68d539dca504. Anything outside the allowlist requires
+   v2.0.0-20260823001701-96af6d2cb5f6. Anything outside the allowlist requires
   an agent **dep proposal** (in the task's spec/plan or beads issue) BEFORE any
   `go get`/`go mod tidy`: module + exact version; evidence from **extensive web
   search** — the agent MUST treat its own memory as outdated: maintenance

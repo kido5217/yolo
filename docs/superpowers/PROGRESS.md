@@ -5,13 +5,14 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
-**Status (2026-08-24):** v0.4.2 released — TUI word-wrap fixes (PR #19,
-branch `many_words`; beads `yolo-0ca` + `yolo-ukc`) merged to `main` +
-tagged `v0.4.2` + GitHub release cut: transcript lines word-wrap at the
-viewport width (`wrapLine`; re-wrap on resize), every below-viewport
-surface (toasts, permission overlay, slash menu, model/agent dialogs,
-home rows, error line, help line) wraps at the terminal width, and the
-prompt line fits (`SetWidth(w-3)` — prompt(2)+cursor(1) overhead).
+**Status (2026-08-24):** v0.4.3 released — allowlisted dependency bump
+(PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
++ GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,
+modernc.org/sqlite v1.57.0, teatest v2.0.0-20260823001701 (dev);
+no code/wire changes, gate green. Prior release: v0.4.2 (PR #19, branch
+`many_words`, beads `yolo-0ca` + `yolo-ukc`): transcript + every
+below-viewport surface word-wraps at the terminal width (`wrapLine`;
+`SetWidth(w-3)` prompt fix).
 Prior release: v0.4.1 (PR #18, branch `code_review`, bead `yolo-lkh`):
 corrupt profile configs no longer break `List`/name-based ops, `buildDeps`
 pins the loader to the RESOLVED profile id, `FakeFromEnv` follows
@@ -94,9 +95,11 @@ deviations 73–77. Detail in `git log --oneline`.)
 `agent/agent.ts` (build/plan/yolo verbatim, Task 10).
 - Doom loop = sliding 3-identical window; wildcard-deny hides tool iff last matching rule
 is `*` deny; `write`+`edit` both map to permission `edit`.
-- Pinned deps: `charm.land/bubbletea/v2` v2.0.8, `charm.land/lipgloss/v2` v2.0.6,
-`charm.land/bubbles/v2` v2.1.1, `modernc.org/sqlite` v1.56.0 (pure Go, no cgo),
-`tidwall/jsonc` v0.3.3; dev-only `teatest/v2` v2.0.0-20260816001655-68d539dca504.
+ - Pinned deps (2026-08-24 update, all allowlisted, gate green):
+ `charm.land/bubbletea/v2` v2.0.9, `charm.land/lipgloss/v2` v2.0.6,
+ `charm.land/bubbles/v2` v2.2.1, `modernc.org/sqlite` v1.57.0 (pure Go, no
+ cgo), `tidwall/jsonc` v0.3.3; dev-only `teatest/v2`
+ v2.0.0-20260823001701-96af6d2cb5f6.
 - Module `github.com/kido5217/yolo`, Go ≥ 1.25 (installed 1.26.7).
 - Single deliberate wire deviation: `x-yolo-directory` header.
 - Config profiles (2026-08-24, deviation 121, beads `yolo-3pe`): global
