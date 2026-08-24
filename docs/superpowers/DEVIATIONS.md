@@ -534,3 +534,21 @@ behavior change, pins green UNMODIFIED (engine_test.go +
 engine_perm_test.go). The same gate's `grep -rn openStream` → 0 check
 caught a stale doc ref in engine.go:30 left behind by the R2 split;
 fixed in the same commit as this entry. Resolves per principle 5.
+117. Plan 2 R16 (refactor-15) payload ownership vs the
+"tests UNMODIFIED" pin (test-only/low, 2026-08-24): the R16
+spec notes pin app_test.go/model_test.go/agent_test.go as
+green UNMODIFIED, but those suites reference the App-owned
+modelDlg/agentDlg fields directly (41 field reads/asserts,
+e.g. `a.modelDlg.selProv`, `a.agentDlg.hasSubChoice`), so the
+field removal required by the plan's own Steps 3/4 (App loses
+the two fields; `grep a.modelDlg|a.agentDlg` over
+`internal/tui/*.go` → 0 matches, tests included) could not
+compile without rewriting those references. Resolution:
+mechanical rewrite to item access — field reads become the
+new `dialogStack.model()`/`agent()` accessors in the tests
+and `top().model`/`top().agent` where the top item is already
+in hand; every assertion, key sequence and expectation stays
+semantically identical, and the teatest scenarios
+(`TestTUIModelDialog`/`TestTUIAgentDialog`) are byte-for-byte
+untouched. No behavior/wire/render change. Resolves per
+principle 5.

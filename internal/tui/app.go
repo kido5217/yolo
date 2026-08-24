@@ -39,8 +39,6 @@ type App struct {
 	sess         sessionModel
 	prompt       promptModel
 	dlg          dialogStack
-	modelDlg     *modelDlg
-	agentDlg     *agentDlg
 	toasts       []toast
 	toastSeq     int
 	toastCmds    []tea.Cmd

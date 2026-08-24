@@ -30,7 +30,13 @@ const (
 	dlgAgents
 )
 
-type dialog struct{ kind dialogKind }
+// dialog is a stack item; the picker dialogs (model/agent) carry their live
+// state as the item's payload, so pop drops state with the item.
+type dialog struct {
+	kind  dialogKind
+	model *modelDlg
+	agent *agentDlg
+}
 
 type dialogStack struct{ items []dialog }
 
@@ -51,6 +57,27 @@ func (d *dialogStack) top() (dialog, bool) {
 }
 
 func (d dialogStack) empty() bool { return len(d.items) == 0 }
+
+// model returns the open model picker's payload (the openers refuse to stack
+// a second one, so at most one item carries it).
+func (d *dialogStack) model() *modelDlg {
+	for i := range d.items {
+		if d.items[i].model != nil {
+			return d.items[i].model
+		}
+	}
+	return nil
+}
+
+// agent returns the open agent picker's payload (same invariant as model).
+func (d *dialogStack) agent() *agentDlg {
+	for i := range d.items {
+		if d.items[i].agent != nil {
+			return d.items[i].agent
+		}
+	}
+	return nil
+}
 
 // Static frame parts render once at package init instead of on every frame:
 // the styles involved (title, dim, divider) set no width, border, padding,
@@ -92,15 +119,15 @@ func (d dialogStack) view() string {
 }
 
 // dlgView renders the top dialog: the model/agent pickers carry their state
-// on the app, the rest render from the stack alone.
+// on the stack item, the rest render from the stack alone.
 func (a *App) dlgView() string {
 	switch d, ok := a.dlg.top(); {
 	case !ok:
 		return ""
-	case d.kind == dlgModel && a.modelDlg != nil:
-		return a.modelDlg.view(&a.store)
-	case d.kind == dlgAgents && a.agentDlg != nil:
-		return a.agentDlg.view(&a.store)
+	case d.kind == dlgModel && d.model != nil:
+		return d.model.view(&a.store)
+	case d.kind == dlgAgents && d.agent != nil:
+		return d.agent.view(&a.store)
 	}
 	return a.dlg.view()
 }
@@ -121,17 +148,17 @@ func (a *App) handleDialogKey(d dialog, k tea.KeyPressMsg) []tea.Cmd {
 	}
 	switch d.kind {
 	case dlgModel:
-		if a.modelDlg == nil {
+		if d.model == nil {
 			a.dlg.pop()
 			return nil
 		}
-		return a.modelDlg.handleKey(a, k)
+		return d.model.handleKey(a, k)
 	case dlgAgents:
-		if a.agentDlg == nil {
+		if d.agent == nil {
 			a.dlg.pop()
 			return nil
 		}
-		return a.agentDlg.handleKey(a, k)
+		return d.agent.handleKey(a, k)
 	}
 	a.dlg.pop() // dlgHelp: any key closes
 	return nil
@@ -260,25 +287,24 @@ var (
 	choiceDef    = key.NewBinding(key.WithKeys("b"))
 )
 
-// openModelDialog pushes the model dialog, seeds its selection from the
-// session (or config) model, and fetches the catalog.
+// openModelDialog pushes the model dialog with its payload, seeds its
+// selection from the session (or config) model, and fetches the catalog.
 func (a *App) openModelDialog() []tea.Cmd {
-	a.modelDlg = &modelDlg{}
+	mdl := &modelDlg{}
+	a.dlg.push(dialog{kind: dlgModel, model: mdl})
 	a.syncModelSel()
-	a.dlg.push(dialog{kind: dlgModel})
 	return a.emit(a.fetchCatalogCmd())
 }
 
-// closeModelDialog pops the dialog and drops its state.
+// closeModelDialog pops the dialog; the payload dies with the item.
 func (a *App) closeModelDialog() {
 	a.dlg.pop()
-	a.modelDlg = nil
 }
 
 // syncModelSel points the dialog at the session model, falling back to the
 // config model; nil-safe when the catalog is not hydrated yet.
 func (a *App) syncModelSel() {
-	m := a.modelDlg
+	m := a.dlg.model()
 	if m == nil {
 		return
 	}
@@ -543,19 +569,18 @@ type agentDlg struct {
 	hasSubChoice bool
 }
 
-// openAgentDialog pushes the agent dialog, seeds its selection from the
-// session (or config) agent, and fetches the catalog.
+// openAgentDialog pushes the agent dialog with its payload, seeds its
+// selection from the session (or config) agent, and fetches the catalog.
 func (a *App) openAgentDialog() []tea.Cmd {
-	a.agentDlg = &agentDlg{}
+	agd := &agentDlg{}
+	a.dlg.push(dialog{kind: dlgAgents, agent: agd})
 	a.syncAgentSel()
-	a.dlg.push(dialog{kind: dlgAgents})
 	return a.emit(a.fetchCatalogCmd())
 }
 
-// closeAgentDialog pops the dialog and drops its state.
+// closeAgentDialog pops the dialog; the payload dies with the item.
 func (a *App) closeAgentDialog() {
 	a.dlg.pop()
-	a.agentDlg = nil
 }
 
 // currentAgentName is the session agent, falling back to the config agent.
@@ -572,7 +597,7 @@ func currentAgentName(st *store.State) string {
 // syncAgentSel points the dialog at the current agent; nil-safe when the
 // catalog is not hydrated yet.
 func (a *App) syncAgentSel() {
-	ag := a.agentDlg
+	ag := a.dlg.agent()
 	if ag == nil {
 		return
 	}
