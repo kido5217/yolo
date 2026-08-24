@@ -15,9 +15,11 @@ message, part, provider, session DTOs + `protocol_test.go`.
 
 - Wire shapes are defined only here: `server` emits them, `internal/tui`
   consumes them; no other package defines or remarshal wire structs.
-- The mirror is verbatim except the single intentional deviation (root
+- The mirror is verbatim except the standing baseline deviation (root
   principle 2): scoping header is `x-yolo-directory` (upstream:
-  `x-opencode-directory`).
+  `x-opencode-directory`). Further upstream deviations are possible only on
+  explicit user instruction (root principle 2), each logged in
+  `docs/superpowers/DEVIATIONS.md`.
 - Telemetry surfaces skipped, not deferred (root principle 1): no
   `experimental.openTelemetry` or telemetry-identity fields in the config
   DTOs.

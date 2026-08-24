@@ -2,8 +2,10 @@
 
 ## Purpose
 
-Core layer of the single binary: everything the TUI consumes, faithful port of
-opencode v1.18.18 core.
+Core layer of the single binary: everything the TUI consumes. Built as a
+faithful port of opencode v1.18.18 core; since v0.4.0 opencode is a reference,
+not a contract (root principle 2; spec
+`docs/superpowers/specs/2026-08-24-v0.4.0-design.md`).
 
 ## Ownership
 
@@ -11,7 +13,7 @@ The 14 packages under `internal/`: `protocol`, `server`, `session`, `llm`,
 `provider`, `tool`, `permission`, `config`, `auth`, `storage`, `bus`, `glob`,
 `log`, `tui`.
 
-Cross-cutting principles (zero telemetry, verbatim pins, TUI purity) stay
+Cross-cutting principles (zero telemetry, pinned text, TUI purity) stay
 owned by the root AGENTS.md; this doc owns the package map and per-boundary
 contracts.
 
@@ -29,12 +31,12 @@ contracts.
     `scope_test.go` — the upstream mirror check), `testdata/`, `testutil/`
     (blackbox harness = the TUI test escape hatch)
   - `session` — `engine.go` agent loop, lifecycle, `policy.go`, `prompt/`
-    (14 byte-verbatim pinned prompt files)
+    (14 sha256-pinned prompt files)
   - `llm` — openai + anthropic drivers, `fake/` scripted driver (`YOLO_LLM=fake`),
     `testdata/`
   - `provider` — provider catalog: `zen.go`, `kido.go`, `seams.go`
   - `tool` — bash/edit/glob/grep/read/write/todowrite; `desc/*.txt`
-    byte-verbatim pinned descriptions. Truncated bash runs store the FULL
+    sha256-pinned descriptions. Truncated bash runs store the FULL
     output at `<data>/tool-output/tool_<id>` and the model-visible text
     carries the upstream marker (bash.go `WriteFullOutput`); startup
     sweeps it (`CleanOutputDir`, 7-day retention)
@@ -48,7 +50,9 @@ contracts.
   field anywhere in these packages; the config schema omits
   `experimental.openTelemetry` by design.
 - Pinned text (root principle 3): `session/prompt/*.txt` + `tool/desc/*.txt`
-  are sha256-pinned by tests — never rewrap or reword.
+  are sha256-pinned by tests — the pins record current intended content, not
+  an upstream lock; an intentional change re-baselines the pin in the same
+  commit.
 
 ## Work Guidance
 
@@ -70,5 +74,5 @@ contracts.
 
 ## Child DOX Index
 
-- `protocol/AGENTS.md` — wire contract ownership + the one intentional deviation
+- `protocol/AGENTS.md` — wire contract ownership + the standing baseline deviation
 - `tui/AGENTS.md` — pure-client TUI: import purity (enforced), teatest/lipgloss mechanics
