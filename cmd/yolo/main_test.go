@@ -1170,3 +1170,125 @@ func TestProfileCmd(t *testing.T) {
 		}
 	})
 }
+
+// TestProfileEditCmd pins the yolo profile edit surface: -n/-d flag
+// presence semantics (absent != empty: an empty value clears the field),
+// id and name references, the usage/not-found/name-taken exits, and the
+// list output after an edit. State is isolated to a temp XDG config dir;
+// stdout/stderr are swapped per case.
+func TestProfileEditCmd(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+
+	runEdit := func(t *testing.T, args ...string) (int, string, string) {
+		t.Helper()
+		oldOut, oldErr := os.Stdout, os.Stderr
+		t.Cleanup(func() { os.Stdout, os.Stderr = oldOut, oldErr })
+		outR, outW, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		errR, errW, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		os.Stdout, os.Stderr = outW, errW
+		code := profileCmd(args)
+		_ = outW.Close()
+		_ = errW.Close()
+		outB, _ := io.ReadAll(outR)
+		errB, _ := io.ReadAll(errR)
+		return code, string(outB), string(errB)
+	}
+
+	var id string
+
+	t.Run("seed: add work with description", func(t *testing.T) {
+		code, out, errOut := runEdit(t, "add", "work", "-d", "work laptop")
+		if code != 0 {
+			t.Fatalf("add code = %d stderr = %q", code, errOut)
+		}
+		m := regexp.MustCompile(`^([0-9a-f]{8})  work$`).FindStringSubmatch(strings.TrimSpace(out))
+		if m == nil {
+			t.Fatalf("add output = %q, want '<id>  work'", out)
+		}
+		id = m[1]
+	})
+
+	t.Run("edit by id sets name and description", func(t *testing.T) {
+		code, out, errOut := runEdit(t, "edit", id, "-n", "work2", "-d", "renamed desc")
+		if code != 0 {
+			t.Fatalf("code = %d stderr = %q", code, errOut)
+		}
+		if strings.TrimSpace(out) != id+"  work2" {
+			t.Fatalf("edit output = %q, want %q", out, id+"  work2")
+		}
+		_, listOut, _ := runEdit(t, "list")
+		if !strings.Contains(listOut, "work2  renamed desc") {
+			t.Fatalf("list missing name + description:\n%s", listOut)
+		}
+	})
+
+	t.Run("edit by name reference", func(t *testing.T) {
+		code, out, errOut := runEdit(t, "edit", "work2", "-n", "work3")
+		if code != 0 {
+			t.Fatalf("code = %d stderr = %q", code, errOut)
+		}
+		if strings.TrimSpace(out) != id+"  work3" {
+			t.Fatalf("edit output = %q, want %q", out, id+"  work3")
+		}
+		_, listOut, _ := runEdit(t, "list")
+		if !strings.Contains(listOut, "work3  renamed desc") {
+			t.Fatalf("list missing name with kept description:\n%s", listOut)
+		}
+	})
+
+	t.Run("edit with no flags: usage, exit 2", func(t *testing.T) {
+		code, _, errOut := runEdit(t, "edit", "work3")
+		if code != 2 || !strings.Contains(errOut, "Usage:") {
+			t.Fatalf("code = %d stderr = %q, want usage + exit 2", code, errOut)
+		}
+	})
+
+	t.Run("edit nonexistent: exit 1 with not-found hint", func(t *testing.T) {
+		code, _, errOut := runEdit(t, "edit", "nope", "-n", "x")
+		if code != 1 || !strings.Contains(errOut, "not found") {
+			t.Fatalf("code = %d stderr = %q", code, errOut)
+		}
+		if !strings.Contains(errOut, "available") {
+			t.Fatalf("stderr missing available-profiles hint:\n%s", errOut)
+		}
+	})
+
+	t.Run("edit name taken by another profile: exit 1", func(t *testing.T) {
+		code, _, errOut := runEdit(t, "add", "other")
+		if code != 0 {
+			t.Fatalf("seed add code = %d stderr = %q", code, errOut)
+		}
+		code, _, errOut = runEdit(t, "edit", "work3", "-n", "other")
+		if code != 1 || !strings.Contains(errOut, "already in use") {
+			t.Fatalf("code = %d stderr = %q, want name-taken error", code, errOut)
+		}
+	})
+
+	t.Run("equals-forms --name=X and --description=Y", func(t *testing.T) {
+		code, out, errOut := runEdit(t, "edit", "work3", "--name=final", "--description=final desc")
+		if code != 0 {
+			t.Fatalf("code = %d stderr = %q", code, errOut)
+		}
+		if strings.TrimSpace(out) != id+"  final" {
+			t.Fatalf("edit output = %q, want %q", out, id+"  final")
+		}
+		_, listOut, _ := runEdit(t, "list")
+		if !strings.Contains(listOut, "final  final desc") {
+			t.Fatalf("list missing name + description:\n%s", listOut)
+		}
+	})
+
+	t.Run("extra positional: usage, exit 2", func(t *testing.T) {
+		code, _, errOut := runEdit(t, "edit", "final", "extra")
+		if code != 2 || !strings.Contains(errOut, "Usage:") {
+			t.Fatalf("code = %d stderr = %q, want usage + exit 2", code, errOut)
+		}
+	})
+}

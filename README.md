@@ -49,6 +49,7 @@ Selection precedence: `--profile <id_or_name>` flag > `YOLO_PROFILE` env var > a
 yolo profile list                  # list profiles (* = active)
 yolo profile add work -d "laptop"  # create (auto id; name + optional description)
 yolo profile use work              # set the active profile
+yolo profile edit work -n work2    # change name and/or description (-d)
 yolo profile copy work work-home   # duplicate a profile under a new id
 yolo profile remove work           # delete (active falls back to the next one)
 ```
