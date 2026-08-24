@@ -593,27 +593,6 @@ func (e *Engine) buildRequest(ctx context.Context, t *turn) (llm.Request, error)
 	}, nil
 }
 
-// messagesFor maps the persisted history onto the LLM request.
-//
-// LOCKED mapping (plan Task 16):
-//   - system prompt entries lead as separate RoleSystem messages;
-//   - user messages join their text parts with "\n"; plan reminders attach to
-//     the LAST user message;
-//   - assistant messages carry text only (reasoning excluded) plus ToolCalls
-//     derived from their completed/error tool parts (Args = persisted state
-//     input);
-//   - every tool part produces one RoleTool message right after its assistant
-//     (completed -> output, error -> error text);
-//   - empty assistant messages are skipped;
-//   - the request mirrors the persisted history 1:1 (upstream
-//     message-v2.toModelMessagesEffect): a tool round ends with the TOOL
-//     result — the user message is NEVER re-appended (deviation 77: the
-//     plan's re-append made the model see its instruction re-issued every
-//     round, which looped weak models into re-running tools).
-//
-// loadHistory builds the turn's system prompts and the full in-memory
-// history snapshot once (⑪). messagesFor maps this snapshot; the mapping is
-// unchanged (LOCKED).
 func (e *Engine) loadHistory(ctx context.Context, t *turn) ([]string, []protocol.MessageWithParts, error) {
 	sys, err := BuildSystemPrompt(t.row.ProjectDir, t.model, t.model.ID, t.info.ID)
 	if err != nil {

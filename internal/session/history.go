@@ -8,19 +8,40 @@ import (
 	"github.com/kido5217/yolo/internal/protocol"
 )
 
-func (e *Engine) messagesFor(t *turn) ([]llm.Message, error) {
-	out := make([]llm.Message, 0, len(t.sys)+8)
-	for _, s := range t.sys {
+// messagesFor maps the persisted history onto the LLM request.
+//
+// LOCKED mapping (plan Task 16):
+//   - system prompt entries lead as separate RoleSystem messages;
+//   - user messages join their text parts with "\n"; plan reminders attach to
+//     the LAST user message;
+//   - assistant messages carry text only (reasoning excluded) plus ToolCalls
+//     derived from their completed/error tool parts (Args = persisted state
+//     input);
+//   - every tool part produces one RoleTool message right after its assistant
+//     (completed -> output, error -> error text);
+//   - empty assistant messages are skipped;
+//   - the request mirrors the persisted history 1:1 (upstream
+//     message-v2.toModelMessagesEffect): a tool round ends with the TOOL
+//     result — the user message is NEVER re-appended (deviation 77: the
+//     plan's re-append made the model see its instruction re-issued every
+//     round, which looped weak models into re-running tools).
+//
+// loadHistory builds the turn's system prompts and the full in-memory
+// history snapshot once (⑪). messagesFor maps this snapshot; the mapping is
+// unchanged (LOCKED).
+func mapHistory(hist []protocol.MessageWithParts, agent string, sys []string) []llm.Message {
+	out := make([]llm.Message, 0, len(sys)+8)
+	for _, s := range sys {
 		out = append(out, llm.Message{Role: llm.RoleSystem, Content: s})
 	}
 	lastUserIdx := -1
-	for i := range t.hist {
-		if t.hist[i].Info.Role == "user" {
+	for i := range hist {
+		if hist[i].Info.Role == "user" {
 			lastUserIdx = i
 		}
 	}
-	reminders := PlanReminders(t.hist, t.agent)
-	for i, mw := range t.hist {
+	reminders := PlanReminders(hist, agent)
+	for i, mw := range hist {
 		switch mw.Info.Role {
 		case "user":
 			content := joinTextParts(mw.Parts)
@@ -59,7 +80,11 @@ func (e *Engine) messagesFor(t *turn) ([]llm.Message, error) {
 			}
 		}
 	}
-	return out, nil
+	return out
+}
+
+func (e *Engine) messagesFor(t *turn) ([]llm.Message, error) {
+	return mapHistory(t.hist, t.agent, t.sys), nil
 }
 
 func joinTextParts(parts []protocol.Part) string {
