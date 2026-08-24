@@ -166,7 +166,14 @@ func (readTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 	}
 
 	last := offset + len(rawLines) - 1
-	next := last + 1
+	text, meta := renderFileBody(fp, rawLines, offset, last, count, cut, more, lim.MaxBytes)
+	return Output{Title: title, Text: text, Meta: meta}, nil
+}
+
+// renderFileBody turns the read window into the model-visible file text
+// (the <path>/<type>/<content> block incl. the window/cap trailer) and its
+// meta map, in one place.
+func renderFileBody(fp string, rawLines []string, offset, last, count int, cut, more bool, maxBytes int) (string, map[string]any) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "<path>%s</path>\n<type>file</type>\n<content>\n", fp)
 	for i, line := range rawLines {
@@ -175,9 +182,10 @@ func (readTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 			b.WriteByte('\n')
 		}
 	}
+	next := last + 1
 	switch {
 	case cut:
-		fmt.Fprintf(&b, "\n\n(Output capped at %dKB. Showing lines %d-%d. Use offset=%d to continue.)", lim.MaxBytes/1024, offset, last, next)
+		fmt.Fprintf(&b, "\n\n(Output capped at %dKB. Showing lines %d-%d. Use offset=%d to continue.)", maxBytes/1024, offset, last, next)
 	case more:
 		fmt.Fprintf(&b, "\n\n(Showing lines %d-%d of %d. Use offset=%d to continue.)", offset, last, count, next)
 	default:
@@ -185,24 +193,30 @@ func (readTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 	}
 	b.WriteString("\n</content>")
 
-	preview := rawLines
+	meta := displayMeta(rawLines, cut || more, map[string]any{
+		"type":       "file",
+		"path":       fp,
+		"text":       strings.Join(rawLines, "\n"),
+		"lineStart":  offset,
+		"lineEnd":    last,
+		"totalLines": count,
+		"truncated":  cut || more,
+	})
+	return b.String(), meta
+}
+
+// displayMeta builds the shared meta map: the 20-line preview, the truncated
+// flag, and the per-kind display map.
+func displayMeta(previewLines []string, truncated bool, display map[string]any) map[string]any {
+	preview := previewLines
 	if len(preview) > 20 {
 		preview = preview[:20]
 	}
-	meta := map[string]any{
+	return map[string]any{
 		"preview":   strings.Join(preview, "\n"),
-		"truncated": cut || more,
-		"display": map[string]any{
-			"type":       "file",
-			"path":       fp,
-			"text":       strings.Join(rawLines, "\n"),
-			"lineStart":  offset,
-			"lineEnd":    last,
-			"totalLines": count,
-			"truncated":  cut || more,
-		},
+		"truncated": truncated,
+		"display":   display,
 	}
-	return Output{Title: title, Text: b.String(), Meta: meta}, nil
 }
 
 // readTitle mirrors upstream path.relative(worktree, filepath).
@@ -327,22 +341,14 @@ func readDirListing(base, fp string, offset, limit int) (Output, error) {
 	}
 	out = append(out, "</entries>")
 
-	preview := sliced
-	if len(preview) > 20 {
-		preview = preview[:20]
-	}
-	meta := map[string]any{
-		"preview":   strings.Join(preview, "\n"),
-		"truncated": truncated,
-		"display": map[string]any{
-			"type":         "directory",
-			"path":         fp,
-			"entries":      sliced,
-			"offset":       offset,
-			"totalEntries": len(names),
-			"truncated":    truncated,
-		},
-	}
+	meta := displayMeta(sliced, truncated, map[string]any{
+		"type":         "directory",
+		"path":         fp,
+		"entries":      sliced,
+		"offset":       offset,
+		"totalEntries": len(names),
+		"truncated":    truncated,
+	})
 	return Output{Title: readTitle(base, fp), Text: strings.Join(out, "\n"), Meta: meta}, nil
 }
 
