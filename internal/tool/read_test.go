@@ -241,11 +241,30 @@ func TestReadSchema(t *testing.T) {
 	}
 }
 
+// TestDescPinned pins each tool desc file's sha256; the pins record current
+// intended content (change gates, root principle 3), not an upstream lock.
 func TestDescPinned(t *testing.T) {
 	t.Parallel()
-	// sha256 of upstream v1.18.18 packages/opencode/src/tool/read.txt
-	if !sha256Ok(t, "desc/read.txt", []byte(readDesc), "98ee843341c2dab2227add0019e48d4b2f0f00f9b042b853d1ee52bb34e6363d") {
-		t.Fatal("desc drifted")
+	cases := []struct {
+		file string
+		desc string
+		want string
+	}{
+		{file: "desc/bash.txt", desc: bashDesc, want: "5f45f41bbd0ed41f5764d9e7eaf4716a26219e0fa81d2ae83b1aebcd8eb6cf88"},
+		{file: "desc/edit.txt", desc: editDesc, want: "4426ccf60241fe41d01bbafc1e7450ea6538003f9fca863ab0210492a74647f8"},
+		{file: "desc/glob.txt", desc: globDesc, want: "50b2d2c41d4b8d0286ab4542c6ec882421ac4ae5c0567ad213c3668ed973ed9a"},
+		{file: "desc/grep.txt", desc: grepDesc, want: "97fa2a9929353d20d3418041aae53ffea3aaf63e9a6e2fdc8cff6db61c3f4c5e"},
+		{file: "desc/read.txt", desc: readDesc, want: "98ee843341c2dab2227add0019e48d4b2f0f00f9b042b853d1ee52bb34e6363d"},
+		{file: "desc/todowrite.txt", desc: todoWriteDesc, want: "f214ea20cd870a9837cb30dd993aefbe5abe6d9e3319b47672c529961ba0c3ad"},
+		{file: "desc/write.txt", desc: writeDesc, want: "8b7197b6e3a8ec1d129eeb6b82608e4cab759bfcc60ba890ecf36322a6e45180"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.file, func(t *testing.T) {
+			t.Parallel()
+			if !sha256Ok(t, tc.file, []byte(tc.desc), tc.want) {
+				t.Fatal("desc drifted")
+			}
+		})
 	}
 }
 
