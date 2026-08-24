@@ -23,6 +23,7 @@ go build -o yolo ./cmd/yolo   # plain build (no version stamp)
 yolo                 # TUI (in-process server on an ephemeral localhost port)
 yolo <sessionID>     # TUI, resume an existing session
 yolo --dir DIR       # start in a specific project directory
+yolo --profile NAME  # run under a profile (id or name; see Profiles)
 yolo serve           # core server only (default http://127.0.0.1:4096)
 yolo serve --addr 127.0.0.1:0
 yolo auth list       # list stored credentials
@@ -46,6 +47,8 @@ JSONC, merged deterministically (innermost wins; `instructions` concatenates). `
 Global config is partitioned into profiles — one dir per profile under `~/.config/yolo/`, the active one recorded in `~/.config/yolo/active`. A first run creates the `default` profile. Each profile's config may carry an optional `"profile": { "name", "description" }` element (the name is used by the CLI; it falls back to the profile id).
 
 Selection precedence: `--profile <id_or_name>` flag > `YOLO_PROFILE` env var > active profile > `default`.
+
+Profiles are a v0.4.0 introduction: pre-v0.4.0 flat global files (`~/.config/yolo/yolo.jsonc`, `yolo.json`, `config.json`) are **not migrated and are ignored** — move them into a profile dir to keep them applying.
 
 ```sh
 yolo profile list                  # list profiles (* = active)

@@ -163,3 +163,13 @@ deviation 104) — the sole new dependency of 0.3.0 (root AGENTS.md allowlist, p
   record current intended content, not an upstream lock — an intentional
   change re-baselines the pin in the same commit.
 
+- v0.4.0 post-release code review (2026-08-24, range a2379c1..9c37870, all
+  findings fixed on branch code_review): a corrupt sibling profile config
+  no longer breaks `List`/name-based `Resolve`/`Add`/`Remove` (id fallback,
+  blank metadata); `buildDeps` pins the loader to the RESOLVED profile id
+  and `FakeFromEnv` follows the `env nil = real env` convention (a bare
+  nil map is not the real env); README documents the ignored pre-v0.4.0
+  flat files and the `--profile` flag. User accepted beads-only tracking
+  (no dated spec/plan) as sufficient for bounded features such as the
+  profiles work (deviation 121); the spec-first workflow rule still
+  applies to architectural work.
