@@ -20,7 +20,16 @@ pins the loader to the RESOLVED profile id, `FakeFromEnv` follows
 deviation 121, PRs #14–#17, tag `v0.4.0`); v0.3.0 (PR #11/#12, tag
 `v0.3.0`, epic `yolo-5hy` closed; 0.3.0 backlog frozen in
 `docs/superpowers/deferred-archive.md`, `DEFERRED.md` reset).
-Next: the harness-testing scope is a future spec.
+TUI parity design approved (2026-08-24, spec
+`2026-08-24-opencode-tui-parity-design.md`, epic `yolo-oae`): full copy of
+opencode's TUI (style, design, colors) — scope TUI-only contract-backed,
+strict-copy bar; 33 themes + theme engine, glamour v2.0.1 transcript
+rendering, huh v2.0.3 field dialogs + ported select, sahilm/fuzzy v0.1.3,
+command palette, which-key + configurable keymap, prompt
+history/frecency/autocomplete, home/session completion, parity audit vs
+upstream pty captures; 9 slices `yolo-oae.1`–`.9` (S0 ready), plan pending.
+Next: TUI parity implementation plan (writing-plans), then execute S0.
+The harness-testing scope remains a future spec.
 
 ## Root causes (archive, v0.1.3)
 
