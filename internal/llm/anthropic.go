@@ -1,7 +1,6 @@
 package llm
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -239,36 +238,7 @@ func (a *Anthropic) anReadSSE(ctx context.Context, body io.ReadCloser, ch chan P
 		}
 	}
 
-	// Byte-based line reading: the payload is assembled as []byte and
-	// handed to json.Unmarshal directly, with the same parse semantics as
-	// the string join (per-value trim, multi-data join with '\n').
-	rd := bufio.NewReader(body)
-	var dataVals [][]byte
-	for {
-		line, err := rd.ReadBytes('\n')
-		if len(line) > 0 {
-			line = bytes.TrimRight(line, "\r\n")
-			switch {
-			case len(line) == 0:
-				if len(dataVals) > 0 {
-					process(joinDataLines(dataVals))
-					dataVals = nil
-				}
-			case bytes.HasPrefix(line, sseDataPrefix):
-				dataVals = append(dataVals, bytes.TrimSpace(line[len(sseDataPrefix):]))
-			}
-		}
-		if err != nil {
-			if !errors.Is(err, io.EOF) {
-				readErr = err
-			}
-			break
-		}
-		if finished {
-			break
-		}
-	}
-	finish()
+	sseLoop(body, process, func(err error) { readErr = err }, false, func() bool { return finished }, finish)
 }
 
 func anFinish(reason string) string {
