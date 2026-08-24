@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -324,4 +325,41 @@ func TestSessionKeys(t *testing.T) {
 			t.Fatal("follow must resume at bottom after pgdn")
 		}
 	})
+}
+
+// TestRenderMessagesWrapsLongLines: a single line longer than the viewport
+// width must be word-wrapped — every rendered line fits the width and no
+// word is lost (the pre-wrap build clipped the over-width line at the edge,
+// leaving the tail unreachable: no horizontal scroll is bound).
+func TestRenderMessagesWrapsLongLines(t *testing.T) {
+	s := store.State{Current: &protocol.Session{ID: "ses_0"}}
+	s.Messages = []protocol.MessageWithParts{
+		{
+			Info:  protocol.Message{ID: "m1", Role: "user"},
+			Parts: []protocol.Part{{ID: "p1", Type: "text", Text: "print me 1000 words about anime"}},
+		},
+		{
+			Info: protocol.Message{ID: "m2", Role: "assistant"},
+			Parts: []protocol.Part{{
+				ID: "p2", Type: "text",
+				Text: "one two three four five six seven eight nine ten",
+			}},
+		},
+	}
+	// w must be >= the locked 28-rune divider.
+	const w = 30
+	got := stripANSI(renderMessages(&s, nil, w))
+	want := "User: print me 1000 words\n" +
+		"about anime\n" +
+		dividerLine() + "\n" +
+		"one two three four five six\n" +
+		"seven eight nine ten"
+	if got != want {
+		t.Fatalf("renderMessages mismatch:\ngot:\n%q\nwant:\n%q", got, want)
+	}
+	for _, l := range strings.Split(got, "\n") {
+		if len([]rune(l)) > w {
+			t.Errorf("line wider than %d: %q", w, l)
+		}
+	}
 }

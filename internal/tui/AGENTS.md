@@ -9,8 +9,8 @@ server over the wire contract only — it never reaches into core internals.
 
 Everything under `internal/tui/`: the app and its concern files (app,
 hydrate, dialog, keys, commands, view, footer, home, permission, prompt,
-session, style, toast), `client/` (HTTP + SSE client, backoff), `store/`
-(display state), `imports_test.go`, and the teatest suites.
+session, style, toast, wrap), `client/` (HTTP + SSE client, backoff),
+`store/` (display state), `imports_test.go`, and the teatest suites.
 
 ## Local Contracts
 
@@ -21,6 +21,14 @@ session, style, toast), `client/` (HTTP + SSE client, backoff), `store/`
   `internal/llm` / `internal/llm/fake` (scripted fake turns).
 - V1 behavior pins (PROGRESS.md "Key verified facts"): keymap is pgup/pgdn
   scroll + `\`+enter newline (noted in /help).
+- Transcript word-wrap (yolo-0ca): `renderMessages` wraps every transcript
+  line at the viewport width via `wrapLine` (wrap.go) — word boundaries,
+  over-long tokens hard-split, CJK/emoji count 2 columns, tab = word
+  separator, plain text ONLY. Styled lines wrap BEFORE styling
+  (`toolRowLine` returns the style + plain text; `writeStyled` re-renders
+  each wrapped line). The viewport's hard clip is a backstop, never the
+  content strategy (no horizontal scroll is bound — clipped text would be
+  unreadable). `WindowSizeMsg` sets `sess.isDirty` so a resize re-wraps.
 - SSE drop contract (v0.1.3): `client.Events` returns `(events, resync)` —
   every dropped `/event` connection pings resync (the bus has no replay, so
   gap events are unrecoverable); the app re-hydrates the current route on

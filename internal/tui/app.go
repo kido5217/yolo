@@ -118,6 +118,9 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 		if m.Width > 2 {
 			a.prompt.input.SetWidth(m.Width - 2)
 		}
+		// The transcript is word-wrapped at the viewport width: re-wrap on
+		// resize instead of clipping at the stale width.
+		a.sess.isDirty = true
 		return nil
 	case EventMsg:
 		a.store.Live = true

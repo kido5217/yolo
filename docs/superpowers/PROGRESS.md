@@ -109,6 +109,16 @@ the scripted fake driver; zen fixture gate = 57 models (42 openai + 15 anthropic
 7 google excluded).
 - TUI import rule: non-test files under `internal/tui/` import only `internal/protocol` +
 `internal/tui/*`; `_test.go` may use `internal/server/testutil` (escape hatch).
+- TUI transcript word-wrap (2026-08-24, bead `yolo-0ca`): the bubbles
+viewport hard-CLIPS over-width lines and the TUI binds no horizontal
+scroll, so pre-wrap the transcript lost everything past the right edge
+(unreadable; upstream ink word-wraps). `wrapLine` (`internal/tui/wrap.go`)
+word-wraps at the viewport width (word boundaries, over-long tokens
+hard-split, CJK/emoji = 2 columns, tab = separator, plain text only);
+styled lines wrap before styling (`toolRowLine` returns style + plain);
+`WindowSizeMsg` re-wraps via `sess.isDirty`. Tests: `TestWrapLine`,
+`TestRenderMessagesWrapsLongLines`, `TestTUILongReplyWraps` (the last word
+of a 1000-word single-line fake reply reaches the screen).
 - v1 behavior pins: keymap is pgup/pgdn scroll + `\`+enter newline (noted in /help; spec's
 ↑/↓ viewport scroll replaced); JSONC comments are NOT preserved when a config PATCH
 rewrites `yolo.jsonc`.

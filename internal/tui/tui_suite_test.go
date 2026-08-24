@@ -3,6 +3,7 @@ package tui
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -266,6 +267,52 @@ func TestTUIDialogs(t *testing.T) {
 		last = i
 	}
 
+	tm.Send(press('y'))
+	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
+}
+
+// TestTUILongReplyWraps: a 1000-word single-line reply must be word-wrapped
+// at the terminal width. The last word is only visible once the line wraps
+// (the pre-wrap build clipped the line at the edge and no horizontal scroll
+// exists, so w1000 never reached the screen); the viewport content must hold
+// the full text with every line within the terminal width.
+func TestTUILongReplyWraps(t *testing.T) {
+	words := make([]string, 1000)
+	for i := range words {
+		words[i] = fmt.Sprintf("w%04d", i+1)
+	}
+	long := strings.Join(words, " ")
+	drv := fake.New(fake.Turn{Parts: []llm.Part{{Kind: "text", Text: long, Finish: "stop"}}})
+	ts := testutil.BootWithDriver(t, drv)
+	c := client.New(ts.URL, ts.Dir)
+	a := newRecApp(c, store.State{}, "")
+	t.Cleanup(a.Close)
+	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
+
+	teatest.WaitFor(t, tm.Output(), hasLine("Yolo"), teatest.WithDuration(5*time.Second))
+	tm.Send(press('n'))
+	teatest.WaitFor(t, tm.Output(), hasLine("esc abort/back"), teatest.WithDuration(5*time.Second))
+	suiteType(tm, "print 1000 words")
+	tm.Send(press(tea.KeyEnter))
+
+	teatest.WaitFor(t, tm.Output(), hasLine("w1000"), teatest.WithDuration(10*time.Second))
+
+	var widest int
+	for _, l := range strings.Split(a.sess.content, "\n") {
+		if w := len([]rune(l)); w > widest {
+			widest = w
+		}
+	}
+	if widest > 80 {
+		t.Fatalf("transcript content has lines wider than the terminal: %d > 80", widest)
+	}
+	// Wrapping reflows the text across lines; after re-joining the newlines
+	// the full single-line text must be back (no word lost or clipped).
+	if !strings.Contains(strings.ReplaceAll(a.sess.content, "\n", " "), long) {
+		t.Fatal("transcript content lost text (clipped instead of wrapped)")
+	}
+
+	tm.Send(ctrlCKey)
 	tm.Send(press('y'))
 	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 }

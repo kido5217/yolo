@@ -8,6 +8,7 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/tui/store"
@@ -93,9 +94,9 @@ func renderMessages(st *store.State, expanded map[string]bool, w int) string {
 	blocks := make([]string, 0, len(st.Messages))
 	for _, m := range st.Messages {
 		if m.Info.Role == "user" {
-			blocks = append(blocks, renderUser(m))
+			blocks = append(blocks, renderUser(m, w))
 		} else {
-			blocks = append(blocks, renderAssistant(m, expanded))
+			blocks = append(blocks, renderAssistant(m, expanded, w))
 		}
 	}
 	if len(blocks) == 0 {
@@ -112,7 +113,7 @@ func renderMessages(st *store.State, expanded map[string]bool, w int) string {
 	return b.String()
 }
 
-func renderUser(m protocol.MessageWithParts) string {
+func renderUser(m protocol.MessageWithParts, w int) string {
 	var texts []string
 	for _, p := range m.Parts {
 		if p.Type == "text" && p.Text != "" {
@@ -122,21 +123,41 @@ func renderUser(m protocol.MessageWithParts) string {
 	if len(texts) == 0 {
 		return "User:"
 	}
-	if len(texts) > 1 {
-		return "User: " + strings.Join(texts, "\n")
+	var b strings.Builder
+	lines := strings.Split(strings.Join(texts, "\n"), "\n")
+	for i, l := range lines {
+		if i == 0 {
+			l = "User: " + l
+		}
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(wrapLine(l, w))
 	}
-	return "User: " + texts[0]
+	return b.String()
 }
 
-func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool) string {
+func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool, w int) string {
 	var b strings.Builder
 	first := true
-	writeLine := func(s string) {
+	writeRaw := func(s string) {
 		if !first {
 			b.WriteByte('\n')
 		}
 		b.WriteString(s)
 		first = false
+	}
+	// writePlain word-wraps plain text at the viewport width (styled strings
+	// must never reach wrapLine: it does not parse ANSI escapes).
+	writePlain := func(s string) {
+		for _, l := range strings.Split(wrapLine(s, w), "\n") {
+			writeRaw(l)
+		}
+	}
+	writeStyled := func(sty lipgloss.Style, s string) {
+		for _, l := range strings.Split(wrapLine(s, w), "\n") {
+			writeRaw(sty.Render(l))
+		}
 	}
 	for _, p := range m.Parts {
 		switch p.Type {
@@ -144,26 +165,24 @@ func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool) stri
 			if p.Text == "" {
 				continue
 			}
-			lines := strings.Split(p.Text, "\n")
-			writeLine(lines[0])
-			for _, l := range lines[1:] {
-				writeLine(l)
+			for _, l := range strings.Split(p.Text, "\n") {
+				writePlain(l)
 			}
 		case "reasoning":
 			if expanded[p.ID] && p.Text != "" {
-				writeLine(dim.Render("\u25BE think"))
+				writeStyled(dim, "\u25BE think")
 				for _, l := range strings.Split(p.Text, "\n") {
-					writeLine(dim.Render("  " + l))
+					writeStyled(dim, "  "+l)
 				}
 			} else {
-				writeLine(dim.Render("\u25B8 think"))
+				writeStyled(dim, "\u25B8 think")
 			}
 		case "tool":
-			row, ok := toolRowLine(p)
+			sty, row, ok := toolRowLine(p)
 			if !ok {
 				continue
 			}
-			writeLine(row)
+			writeStyled(sty, row)
 			switch {
 			case expanded[p.ID] && p.State != nil:
 				block := tailLines(p.State.Output, 40)
@@ -174,28 +193,29 @@ func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool) stri
 					continue
 				}
 				for _, l := range strings.Split(block, "\n") {
-					writeLine("  " + l)
+					writePlain("  " + l)
 				}
 			case p.Tool == "bash" && p.State != nil && p.State.Status == "completed":
 				// Inline preview (upstream parity): a completed bash part
 				// shows the 10-line head of its output without alt+e.
 				if block := headPreview(p.State.Output, 10); block != "" {
 					for _, l := range strings.Split(block, "\n") {
-						writeLine("  " + l)
+						writePlain("  " + l)
 					}
 				}
 			}
 		}
 	}
 	if m.Info.Error != nil {
-		writeLine(errRed.Render("! " + m.Info.Error.Message))
+		writeStyled(errRed, "! "+m.Info.Error.Message)
 	}
 	return b.String()
 }
 
 // toolRowLine renders the locked tool row: "✓ <tool> <title>" completed,
 // "▶ <tool> <title>" running, "✗ <tool> <error>" error (first error line).
-func toolRowLine(p protocol.Part) (string, bool) {
+// The caller applies the style per wrapped line (the row may wrap).
+func toolRowLine(p protocol.Part) (lipgloss.Style, string, bool) {
 	st := p.State
 	status := "running"
 	title := ""
@@ -208,7 +228,7 @@ func toolRowLine(p protocol.Part) (string, bool) {
 	}
 	switch status {
 	case "completed":
-		return okGreen.Render("\u2713 " + p.Tool + " " + title), true
+		return okGreen, "\u2713 " + p.Tool + " " + title, true
 	case "error":
 		errText := ""
 		if st != nil {
@@ -220,9 +240,9 @@ func toolRowLine(p protocol.Part) (string, bool) {
 		if errText == "" {
 			errText = title
 		}
-		return errRed.Render("\u2717 " + p.Tool + " " + errText), true
+		return errRed, "\u2717 " + p.Tool + " " + errText, true
 	default:
-		return toolRow.Render("\u25B6 " + p.Tool + " " + title), true
+		return toolRow, "\u25B6 " + p.Tool + " " + title, true
 	}
 }
 
