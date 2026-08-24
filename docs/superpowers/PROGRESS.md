@@ -14,6 +14,8 @@ closed. Spec: `docs/superpowers/specs/2026-08-23-v0.3.0-design.md`. The 0.3.0
 deferred backlog (defect slice + 16 `refactor-*`) is fully closed and frozen in
 `docs/superpowers/deferred-archive.md`; `DEFERRED.md` is reset (no open
 items). Next: no open work — `bd ready` is empty until a 0.4.0 scope is defined.
+Since then: profile support (deviation 121, beads `yolo-3pe`) implemented on
+`feat/profiles`, awaiting PR merge.
 
 ## Root causes (archive, v0.1.3)
 
@@ -35,6 +37,14 @@ prompt+model does NOT loop in upstream opencode. Detail: deviations 73–77.
 
 ## Last completed
 
+Profile support (2026-08-24, branch `feat/profiles`, beads `yolo-3pe`):
+config profiles under `~/.config/yolo/<profile_id>/` with an active
+marker + `yolo profile` CLI + per-run selection (`--profile` flag >
+`YOLO_PROFILE` env > marker > `default` recovery). Deviation 121 (hard
+deviation/high, no upstream counterpart). Implementation:
+`internal/config/profile.go`, `protocol.Config.Profile`, profile-aware
+`Loader.Load` / `Server.globalDir()` / `buildDeps`. Gate green
+(`go vet` + `go test ./...` + `gofmt`).
 0.3.0 Plan 2 (refactor slice) complete (2026-08-24, branch
 `v0.3.0-plan-2`): all 16 wave-8 refactors closed as beads
 `yolo-5hy.2.1`–`.16` (engine test-harness + engine 4-way split + runRound/
@@ -69,6 +79,14 @@ is `*` deny; `write`+`edit` both map to permission `edit`.
 `tidwall/jsonc` v0.3.3; dev-only `teatest/v2` v2.0.0-20260816001655-68d539dca504.
 - Module `github.com/kido5217/yolo`, Go ≥ 1.25 (installed 1.26.7).
 - Single deliberate wire deviation: `x-yolo-directory` header.
+- Config profiles (2026-08-24, deviation 121, beads `yolo-3pe`): global
+config lives at `~/.config/yolo/<profile_id>/` (precedence `config.json`
+< `yolo.json` < `yolo.jsonc`); id auto-generated 8-hex (first-run literal
+`default`); `~/.config/yolo/active` = active marker; selection =
+`--profile` flag > `YOLO_PROFILE` env > marker > `default` recovery;
+`yolo profile list|add [name] [-d DESC]|use|remove|copy SRC NAME [-d DESC]`;
+name unique + id-then-name resolution (dup name = ambiguous error); legacy
+flat files ignored; data dir shared.
 - Test gating: unit tests never hit network; `YOLO_LLM=fake` (+ `YOLO_FAKE_SCRIPT`) selects
 the scripted fake driver; zen fixture gate = 57 models (42 openai + 15 anthropic,
 7 google excluded).
