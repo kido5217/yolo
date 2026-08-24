@@ -94,9 +94,11 @@ deviations 73–77. Detail in `git log --oneline`.)
 `agent/agent.ts` (build/plan/yolo verbatim, Task 10).
 - Doom loop = sliding 3-identical window; wildcard-deny hides tool iff last matching rule
 is `*` deny; `write`+`edit` both map to permission `edit`.
-- Pinned deps: `charm.land/bubbletea/v2` v2.0.8, `charm.land/lipgloss/v2` v2.0.6,
-`charm.land/bubbles/v2` v2.1.1, `modernc.org/sqlite` v1.56.0 (pure Go, no cgo),
-`tidwall/jsonc` v0.3.3; dev-only `teatest/v2` v2.0.0-20260816001655-68d539dca504.
+ - Pinned deps (2026-08-24 update, all allowlisted, gate green):
+ `charm.land/bubbletea/v2` v2.0.9, `charm.land/lipgloss/v2` v2.0.6,
+ `charm.land/bubbles/v2` v2.2.1, `modernc.org/sqlite` v1.57.0 (pure Go, no
+ cgo), `tidwall/jsonc` v0.3.3; dev-only `teatest/v2`
+ v2.0.0-20260823001701-96af6d2cb5f6.
 - Module `github.com/kido5217/yolo`, Go ≥ 1.25 (installed 1.26.7).
 - Single deliberate wire deviation: `x-yolo-directory` header.
 - Config profiles (2026-08-24, deviation 121, beads `yolo-3pe`): global
