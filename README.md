@@ -1,8 +1,10 @@
 # yolo
 
-A faithful Go port of [opencode](https://github.com/anomalyco/opencode) **v1.18.18** — TUI + core server only (web/desktop/slack/console dropped). Single binary: it starts the core HTTP server (REST + SSE) in-process, then runs a bubbletea TUI which talks to it **only** through the wire contract (`internal/protocol`), so the REST/SSE surface stays verifiable against opencode's OpenAPI contract. One deliberate wire deviation: the scoping header is `x-yolo-directory` (upstream: `x-opencode-directory`).
+A Go TUI + core-server harness in the lineage of [opencode](https://github.com/anomalyco/opencode) **v1.18.18** — TUI + core server only (web/desktop/slack/console dropped). Single binary: it starts the core HTTP server (REST + SSE) in-process, then runs a bubbletea TUI which talks to it **only** through the wire contract (`internal/protocol`), so the REST/SSE baseline stays verifiable against opencode's OpenAPI contract. Standing baseline wire deviation: the scoping header is `x-yolo-directory` (upstream: `x-opencode-directory`).
 
 yolo contains **zero telemetry**: it runs on your machine, sends nothing anywhere, and the ported config schema has no telemetry surface.
+
+**Purpose (v0.4.0+).** yolo began as a faithful port of opencode to test the capabilities of **Qwen3.8-27B** on a single RTX 5090 behind `https://ai.kido.ws/v1` — that goal is complete (stable, optimized). From v0.4.0 the project tests various LLM harnesses and frameworks. opencode remains a reference for how things should be done, not a binding contract: yolo may deviate from upstream on explicit instruction (deviations logged in `docs/superpowers/DEVIATIONS.md`). Direction spec: `docs/superpowers/specs/2026-08-24-v0.4.0-design.md`.
 
 ## Prerequisites
 
