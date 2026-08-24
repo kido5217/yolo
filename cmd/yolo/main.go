@@ -93,7 +93,7 @@ Usage:
   yolo [<sessionID>] [--dir DIR] [--profile ID]   start the TUI (optionally resume a session)
   yolo serve [--addr ADDR] [--profile ID]         run the core server only (default http://127.0.0.1:4096)
   yolo auth <subcommand>           manage credentials (list | add <provider> [key] | remove <provider>)
-  yolo profile <subcommand>        manage config profiles (list | add [name] [-d DESC] | use ID | remove ID | copy SRC NAME [-d DESC])
+  yolo profile <subcommand>        manage config profiles (list | add [name] [-d DESC] | use ID | edit ID [-n NAME] [-d DESC] | remove ID | copy SRC NAME [-d DESC])
   yolo [-v|--version]              print version (same as: yolo version)
   yolo help                        this help
 

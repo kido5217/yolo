@@ -211,6 +211,37 @@ func TestList(t *testing.T) {
 	}
 }
 
+// TestListToleratesCorruptConfig pins that a profile whose global config
+// fails to parse still lists (id fallback, blank description) instead of
+// failing the whole listing.
+func TestListToleratesCorruptConfig(t *testing.T) {
+	root := t.TempDir()
+	seedProfile(t, root, "11111111", map[string]string{
+		"yolo.jsonc": `{"profile":{"name":"work","description":"work laptop"}}`,
+	})
+	seedProfile(t, root, "22222222", map[string]string{
+		"yolo.jsonc": `{"profile":{"name":`, // corrupt: truncated JSONC
+	})
+
+	profiles, err := config.List(root)
+	if err != nil {
+		t.Fatalf("List: %v, want nil (a corrupt config must not fail the listing)", err)
+	}
+	if len(profiles) != 2 {
+		t.Fatalf("List = %d profiles, want 2: %+v", len(profiles), profiles)
+	}
+	got := map[string]config.Profile{}
+	for _, p := range profiles {
+		got[p.ID] = p
+	}
+	if p := got["22222222"]; p.Name != "22222222" || p.Description != "" {
+		t.Fatalf("corrupt profile 22222222 = %+v, want id fallback + blank description", p)
+	}
+	if p := got["11111111"]; p.Name != "work" || p.Description != "work laptop" {
+		t.Fatalf("healthy profile 11111111 = %+v, want name work + description", p)
+	}
+}
+
 func TestResolve(t *testing.T) {
 	root := t.TempDir()
 	seedProfile(t, root, "11111111", map[string]string{
@@ -277,6 +308,23 @@ func TestResolve(t *testing.T) {
 	t.Run("missing root is not found", func(t *testing.T) {
 		if _, err := config.Resolve(filepath.Join(t.TempDir(), "nope"), "x"); !errors.Is(err, config.ErrNotFound) {
 			t.Fatalf("Resolve err = %v, want ErrNotFound", err)
+		}
+	})
+
+	t.Run("corrupt sibling does not block name resolution", func(t *testing.T) {
+		r2 := t.TempDir()
+		seedProfile(t, r2, "11111111", map[string]string{
+			"yolo.jsonc": `{"profile":{"name":"work"}}`,
+		})
+		seedProfile(t, r2, "22222222", map[string]string{
+			"yolo.jsonc": `{"profile":{"name":`, // corrupt sibling
+		})
+		id, err := config.Resolve(r2, "work")
+		if err != nil {
+			t.Fatalf("Resolve(work) = %v, want nil (corrupt sibling must not block)", err)
+		}
+		if id != "11111111" {
+			t.Fatalf("Resolve(work) = %q, want 11111111", id)
 		}
 	})
 }
@@ -349,6 +397,20 @@ func TestAdd(t *testing.T) {
 			t.Fatalf("name = %q, want fallback to id", p.Name)
 		}
 	})
+
+	t.Run("corrupt sibling does not block add", func(t *testing.T) {
+		root := t.TempDir()
+		seedProfile(t, root, "22222222", map[string]string{
+			"yolo.jsonc": `{"profile":{"name":`, // corrupt sibling
+		})
+		p, err := config.Add(root, "home", "")
+		if err != nil {
+			t.Fatalf("Add: %v, want nil (name check must tolerate a corrupt sibling)", err)
+		}
+		if p.Name != "home" {
+			t.Fatalf("Add = %+v, want name home", p)
+		}
+	})
 }
 
 func TestRemove(t *testing.T) {
@@ -407,6 +469,19 @@ func TestRemove(t *testing.T) {
 		}
 		if got := readMarker(t, root); got != "22222222" {
 			t.Fatalf("marker = %q, want 22222222 (untouched)", got)
+		}
+	})
+
+	t.Run("removing active with corrupt sibling succeeds and falls back", func(t *testing.T) {
+		root := t.TempDir()
+		seedProfile(t, root, "11111111", map[string]string{"yolo.jsonc": `{"profile":{"name":"alpha"}}`})
+		seedProfile(t, root, "22222222", map[string]string{"yolo.jsonc": `{"profile":{"name":`}) // corrupt
+		writeMarker(t, root, "11111111")
+		if err := config.Remove(root, "11111111"); err != nil {
+			t.Fatalf("Remove: %v, want nil (corrupt sibling must not block the fallback list)", err)
+		}
+		if got := readMarker(t, root); got != "22222222" {
+			t.Fatalf("marker = %q, want 22222222 (first remaining by name)", got)
 		}
 	})
 }

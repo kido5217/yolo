@@ -44,7 +44,9 @@ contracts.
   - `config` — profile-aware global config (`~/.config/yolo/<profile_id>/`
     load/PATCH, JSONC) + profile lifecycle/selection (`profile.go`: id gen,
     active marker, `list`/`add`/`use`/`edit`/`remove`/`copy`, `ProcessProfile`
-    precedence flag > `YOLO_PROFILE` > marker) — deviation 121
+    precedence flag > `YOLO_PROFILE` > marker; a corrupt profile config
+    never fails `List`/name matching — id fallback, blank metadata) —
+    deviation 121
   - `auth` — key resolution: env → auth.json → config
   - `storage` — SQLite DAOs + migrations (`modernc.org/sqlite`, pure Go, no cgo)
   - `bus` — event bus

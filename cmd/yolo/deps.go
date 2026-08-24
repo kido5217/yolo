@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/kido5217/yolo/internal/bus"
 	"github.com/kido5217/yolo/internal/config"
@@ -27,7 +26,6 @@ import (
 // YOLO_FAKE_SCRIPT) selects the scripted fake driver + static catalog so
 // the suite never hits the network; any other env runs the live registry.
 func buildDeps(workDir, profile string) (*server.Deps, func(), error) {
-	loader := config.Loader{Profile: profile} // nil Env view = real env
 	homeDir, err := config.Home()
 	if err != nil {
 		return nil, nil, err
@@ -75,13 +73,16 @@ func buildDeps(workDir, profile string) (*server.Deps, func(), error) {
 		closeDB()
 		return fail(err)
 	}
-	profileID, err := config.ProcessProfile(globalDir, profile, envMap())
+	profileID, err := config.ProcessProfile(globalDir, profile, nil) // nil env = real env
 	if err != nil {
 		closeDB()
 		return fail(err)
 	}
 	profileDir := filepath.Join(globalDir, profileID)
 	logger.Info("profile selected", "id", profileID, "dir", profileDir)
+	// The loader is pinned to the RESOLVED id (not the raw flag) so any
+	// Load() it performs re-resolves deterministically to this profile.
+	loader := config.Loader{Profile: profileID} // nil Env view = real env
 
 	deps := &server.Deps{
 		DB:     db,
@@ -101,7 +102,7 @@ func buildDeps(workDir, profile string) (*server.Deps, func(), error) {
 		return fail(err)
 	}
 
-	fake, err := server.FakeFromEnv(envMap())
+	fake, err := server.FakeFromEnv(nil) // nil env = real env
 	if err != nil {
 		closeDB()
 		return fail(err)
@@ -139,14 +140,4 @@ func openDB(path string) (*storage.DB, error) {
 		return nil, err
 	}
 	return storage.Open(path)
-}
-
-func envMap() map[string]string {
-	env := map[string]string{}
-	for _, kv := range os.Environ() {
-		if i := strings.IndexByte(kv, '='); i > 0 {
-			env[kv[:i]] = kv[i+1:]
-		}
-	}
-	return env
 }

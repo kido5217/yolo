@@ -126,7 +126,10 @@ func EnsureActive(root string) (string, error) {
 
 // List returns every profile under root sorted by effective name (then id),
 // with metadata from each profile's merged global config. A missing root is
-// an empty list; the active marker is not a profile.
+// an empty list; the active marker is not a profile. A profile whose config
+// fails to load still lists — with its id as the name and a blank
+// description — so one corrupt profile can never break the listing (or the
+// name checks built on it).
 func List(root string) ([]Profile, error) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
@@ -142,7 +145,8 @@ func List(root string) ([]Profile, error) {
 		}
 		cfg, err := LoadGlobal(filepath.Join(root, e.Name()))
 		if err != nil {
-			return nil, fmt.Errorf("profile %s: %w", e.Name(), err)
+			out = append(out, Profile{ID: e.Name(), Name: e.Name()})
+			continue
 		}
 		name, desc := e.Name(), ""
 		if cfg.Profile != nil {
@@ -164,7 +168,9 @@ func List(root string) ([]Profile, error) {
 
 // Resolve maps a profile reference to an id: an exact id (directory name)
 // match wins; otherwise an exact effective-name match (a name shared by
-// several profiles is ErrAmbiguous, none is ErrNotFound).
+// several profiles is ErrAmbiguous, none is ErrNotFound). A profile whose
+// config fails to load is skipped in name matching — its id still matches
+// exactly, and a corrupt sibling can never block a healthy one.
 func Resolve(root, ref string) (string, error) {
 	if ref == "" {
 		return "", fmt.Errorf("%w: empty reference", ErrNotFound)
@@ -188,7 +194,7 @@ func Resolve(root, ref string) (string, error) {
 		}
 		cfg, err := LoadGlobal(filepath.Join(root, e.Name()))
 		if err != nil {
-			return "", fmt.Errorf("profile %s: %w", e.Name(), err)
+			continue
 		}
 		if cfg.Profile != nil && cfg.Profile.Name == ref {
 			matches = append(matches, e.Name())
