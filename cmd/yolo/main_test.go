@@ -46,6 +46,9 @@ func TestHelpListsSubcommands(t *testing.T) {
 			t.Fatalf("help output missing %q:\n%s", want, out)
 		}
 	}
+	if !strings.Contains(string(out), "edit ID") {
+		t.Fatalf("help output missing the profile edit subcommand:\n%s", out)
+	}
 }
 
 func buildBinary(t *testing.T) string {
@@ -163,6 +166,9 @@ func TestBuildDepsProfileSelection(t *testing.T) {
 	}
 
 	t.Run("no flag or env: active marker", func(t *testing.T) {
+		// Pin the env explicitly: an inherited YOLO_PROFILE must not leak
+		// into this subtest (t.Setenv restores it when the subtest ends).
+		t.Setenv("YOLO_PROFILE", "")
 		got, err := selectProfile(t, "")
 		if err != nil {
 			t.Fatalf("buildDeps: %v", err)

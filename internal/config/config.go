@@ -78,9 +78,11 @@ func CacheYoloDir() (string, error) {
 // value = real XDG + marker-resolved profile. Server/test injection.
 type Dirs struct {
 	Home, Data, Cache string
-	// Profile is the process-selected profile id (from the --profile flag
-	// or YOLO_PROFILE). Empty: the server resolves the active marker per
-	// request (creating the default profile on a first run).
+	// Profile is the process-selected profile id; the CLI pins it at
+	// startup (after resolving --profile > YOLO_PROFILE > active marker).
+	// Empty only in the testutil harness: the server then resolves the
+	// active marker per request (creating the default profile on a first
+	// run).
 	Profile string
 }
 
