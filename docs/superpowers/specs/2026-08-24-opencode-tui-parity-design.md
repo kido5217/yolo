@@ -245,7 +245,7 @@ message.
 | **S0** | theme engine (Section 3) + app-shell restyle | none |
 | **S1** | transcript: glamour renderer from theme, reasoning/tool/error restyle, re-render benchmark | glamour v2.0.1 |
 | **S2** | dialog system: modal stack + huh fields + select port + permission/model/agent restyle | huh v2.0.3, sahilm/fuzzy v0.1.3 |
-| **S3** | remaining dialogs: session-list, session-rename, session-delete-failed, status, help, retry-action, theme-list (engine + KV wiring) | — |
+| **S3** | remaining dialogs: session-list, session-rename, session-delete-failed, provider, status, help, retry-action, theme-list (engine + KV wiring) | — |
 | **S4** | keymap registry + keybinds config schema + command palette + which-key | — |
 | **S5** | prompt completion: history, frecency, @-autocomplete + terminal bell | — |
 | **S6** | home completion: tips (+sha256 pin), footer hints, session-destination, startup loading | — |
@@ -279,14 +279,17 @@ navigation, fuzzy filter + tests · 6) select: categories/groups +
 per-option details + tests · 7) select: actions + footer hints + scroll
 acceleration + tests · 8) permission dialog restyle + tests · 9) model
 dialog restyle (on select) + tests · 10) agent dialog restyle + tests.
+(Bead 4 builds the themed huh input *field*; the session-rename dialog
+that uses it lands in S3.)
 
-**S3–S8 grain:** S3 ≈ 7–8 beads (one per dialog; theme-list = 2) · S4 ≈ 6
-(registry ×2, keybinds config, palette ×2, which-key ×2) · S5 ≈ 6–7
-(history ×2, frecency, autocomplete ×2, bell) · S6 ≈ 5 (logo/startup,
-tips ×2 + pin, destination, footer) · S7 ≈ 4 (sidebar ×2, dialog-message,
-footer detail) · S8 ≈ 5 (mock-SSE server, pty-capture script, diff sweep,
-deviation-log + re-baseline, close-out). **Total ≈ 55–60 task beads +
-9 slice beads + 1 epic.**
+**S3–S8 grain:** S3 ≈ 9 beads (one per dialog — session-list,
+session-rename, session-delete-failed, provider, status, help,
+retry-action; theme-list = 2) · S4 ≈ 7 (registry ×2, keybinds config,
+palette ×2, which-key ×2) · S5 ≈ 6 (history ×2, frecency, autocomplete ×2,
+bell) · S6 ≈ 5 (logo/startup, tips ×2 + pin, destination, footer) · S7 ≈ 4
+(sidebar ×2, dialog-message, footer detail) · S8 ≈ 5 (mock-SSE server,
+pty-capture script, diff sweep, deviation-log + re-baseline, close-out).
+**Total ≈ 65 task beads + 9 slice beads + 1 epic.**
 
 ## 9. Risks & open items
 
