@@ -5,16 +5,20 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
-**Status (2026-08-24):** v0.4.1 released — v0.4.0 post-release review
-fixes (PR #18, branch `code_review`; bead `yolo-lkh`) merged to `main` +
-tagged `v0.4.1` + GitHub release cut: corrupt profile configs no longer
-break `List`/name-based ops (id fallback, blank metadata), `buildDeps`
+**Status (2026-08-24):** v0.4.2 released — TUI word-wrap fixes (PR #19,
+branch `many_words`; beads `yolo-0ca` + `yolo-ukc`) merged to `main` +
+tagged `v0.4.2` + GitHub release cut: transcript lines word-wrap at the
+viewport width (`wrapLine`; re-wrap on resize), every below-viewport
+surface (toasts, permission overlay, slash menu, model/agent dialogs,
+home rows, error line, help line) wraps at the terminal width, and the
+prompt line fits (`SetWidth(w-3)` — prompt(2)+cursor(1) overhead).
+Prior release: v0.4.1 (PR #18, branch `code_review`, bead `yolo-lkh`):
+corrupt profile configs no longer break `List`/name-based ops, `buildDeps`
 pins the loader to the RESOLVED profile id, `FakeFromEnv` follows
-`env nil = real env`, README notes the ignored pre-v0.4.0 flat files and
-the `--profile` flag. Prior release: v0.4.0 (direction-change docs +
-config profiles, deviation 121, PRs #14–#17, tag `v0.4.0`); v0.3.0
-(PR #11/#12, tag `v0.3.0`, epic `yolo-5hy` closed; 0.3.0 backlog frozen
-in `docs/superpowers/deferred-archive.md`, `DEFERRED.md` reset).
+`env nil = real env`. v0.4.0 (direction-change docs + config profiles,
+deviation 121, PRs #14–#17, tag `v0.4.0`); v0.3.0 (PR #11/#12, tag
+`v0.3.0`, epic `yolo-5hy` closed; 0.3.0 backlog frozen in
+`docs/superpowers/deferred-archive.md`, `DEFERRED.md` reset).
 Next: the harness-testing scope is a future spec.
 
 ## Root causes (archive, v0.1.3)
