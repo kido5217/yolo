@@ -53,7 +53,8 @@ func TestHomeRendersListAndNewSession(t *testing.T) {
 
 	tm.Send(tui.HydrateMsg{})
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return bytes.Contains(b, []byte("Hello \u00B7 kido/q"))
+		s := stripANSITest(b)
+		return strings.Contains(s, "Hello \u00B7 kido/q")
 	}, teatest.WithDuration(5*time.Second))
 
 	// The output stream is consumed by the WaitFor calls above (v2 teatest);
@@ -169,7 +170,8 @@ func TestPromptSendAndSlashMenu(t *testing.T) {
 	typeIn(tm, "hello")
 	tm.Send(keyMsg(tea.KeyEnter))
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return bytes.Contains(b, []byte("User: hello"))
+		s := stripANSITest(b)
+		return strings.Contains(s, "User:") && strings.Contains(s, "hello")
 	}, teatest.WithDuration(5*time.Second))
 
 	found := false
@@ -228,13 +230,15 @@ func TestPromptSendWhileBusyToasts(t *testing.T) {
 	typeIn(tm, "first")
 	tm.Send(keyMsg(tea.KeyEnter))
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return bytes.Contains(b, []byte("User: first"))
+		s := stripANSITest(b)
+		return strings.Contains(s, "User:") && strings.Contains(s, "first")
 	}, teatest.WithDuration(5*time.Second))
 
 	typeIn(tm, "second")
 	tm.Send(keyMsg(tea.KeyEnter))
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return bytes.Contains(b, []byte("abort or wait (esc aborts)"))
+		s := stripANSITest(b)
+		return strings.Contains(s, "abort or wait (esc aborts)")
 	}, teatest.WithDuration(5*time.Second))
 
 	_ = tm.Quit()

@@ -52,8 +52,10 @@ builders, server contract-suite + handler splits, storage per-entity DAOs,
 cmd/yolo deps.go, store per-event Apply, app.go 5-way split, read tool
 extracts, Shell execTimeout + markerCmd, dialog payload ownership),
 DEFERRED.md dispositions landed, close-out gate green incl. `-race` +
-`golangci-lint`. Deviations 116–117 logged (runRound line target vs named
-extracts; R16 test-reference rewrite vs "UNMODIFIED" pin).
+`golangci-lint`. Deviations 116–118 logged (runRound line target vs named
+extracts; R16 test-reference rewrite vs "UNMODIFIED" pin; TUI prompt-suite
+`-race` flake — brittle contiguous-substring WaitFors hardened to
+strip-SGR + independent tokens).
 0.3.0 Plan 1 (defect slice) complete (2026-08-24, branch `v0.3.0`): all 39
 plan tasks closed as beads `yolo-5hy.1.1`–`.39` (engine lifecycle, storage,
 tools, server, TUI, CLI/e2e, naming V1–V8, two hermetic benchmarks),

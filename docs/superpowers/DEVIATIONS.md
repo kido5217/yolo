@@ -552,3 +552,31 @@ semantically identical, and the teatest scenarios
 (`TestTUIModelDialog`/`TestTUIAgentDialog`) are byte-for-byte
 untouched. No behavior/wire/render change. Resolves per
 principle 5.
+118. Plan 2 close-out -race gate vs brittle contiguous-substring
+WaitFors in the TUI prompt suites (test-only/low, 2026-08-24): the
+close-out's `go test -race ./...` is timing-sensitive in
+`TestPromptSendAndSlashMenu` — its render-sync gate at app_test.go:172
+waited for the literal contiguous bytes `"User: hello"`, but the TUI
+renders the transcript incrementally: under the race detector's
+slowdown the footer (`● live`) or the fake driver's reply (`ok-1`)
+updates in the same frame and its CSI cursor-jump sequences
+(`\x1b[24;36H`, `\x1b[7G`) land between `User:` and `hello`, so the
+contiguous substring never appears in a single WaitFor slice. The
+interleaving is load-dependent: non-`-race` and isolated `-race` runs
+pass, but it failed once during the full-module `-race` run and passed
+5/5 in isolation. The test's real contract (the user message landing on
+the server, asserted via `testutil.LastMessages` at app_test.go:175-188)
+is untouched. Fix: follow the file's own established idiom
+(`TestSessionStreamingViewport` app_test.go:123-126,
+`permission_test.go:232`) — strip SGR via `stripANSITest`, then match
+the label and text as INDEPENDENT tokens
+(`strings.Contains(s,"User:") && strings.Contains(s,"hello"|"first")`),
+which is robust to the CSI interleaving (each token is contiguous and
+present). The same hardening (strip SGR, keep the single-span phrase) is
+applied to the sibling brittle WaitFors in the same file: `"User:
+first"` (app_test.go:231, identical transcript mechanism), `"Hello ·
+kido/q"` (:56) and the busy toast `"abort or wait (esc aborts)"` (:237).
+No behavior/wire/render change; every key sequence, scenario and
+server-side assertion stays identical. Verified: gofmt + `go vet` +
+`go test ./...` green, full-module `go test -race ./...` green,
+`internal/tui` `-race -count=5` green. Resolves per principle 5.
