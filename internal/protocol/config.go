@@ -24,7 +24,15 @@ type CustomAgent struct {
 	Permission  map[string]any `json:"permission,omitempty"`
 }
 
+// Profile is the optional "profile" element of a profile's config file:
+// display metadata for the profile directory (see config.List).
+type Profile struct {
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
 type Config struct {
+	Profile      *Profile                  `json:"profile,omitempty"`
 	Model        string                    `json:"model,omitempty"`
 	Agent        string                    `json:"agent,omitempty"`
 	Provider     map[string]ProviderConfig `json:"provider,omitempty"`

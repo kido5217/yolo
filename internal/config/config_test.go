@@ -118,3 +118,98 @@ func TestMalformedJSONIsError(t *testing.T) {
 		t.Fatal("expected error for malformed JSON")
 	}
 }
+
+// seedProfileRoot builds a <configHome>/yolo profile root: one dir per
+// model value plus an optional legacy flat file, with the given marker.
+func seedProfileRoot(t *testing.T, configHome, marker string, profiles map[string]string) {
+	t.Helper()
+	for id, model := range profiles {
+		write(t, filepath.Join(configHome, "yolo", id, "yolo.jsonc"), `{"model":"`+model+`"}`)
+	}
+	if marker != "" {
+		write(t, filepath.Join(configHome, "yolo", "active"), marker+"\n")
+	}
+}
+
+func TestLoaderLoadProfileResolution(t *testing.T) {
+	work := t.TempDir()
+
+	t.Run("active marker selects the profile dir, legacy flat files are ignored", func(t *testing.T) {
+		home := t.TempDir()
+		seedProfileRoot(t, home, "work", map[string]string{
+			"default": "m-default",
+			"work":    "m-work",
+		})
+		write(t, filepath.Join(home, "yolo", "yolo.jsonc"), `{"model":"m-legacy"}`)
+		t.Setenv("XDG_CONFIG_HOME", home)
+		cfg, err := config.Loader{}.Load(work)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.Model != "m-work" {
+			t.Fatalf("model = %q, want m-work (marker profile; legacy must be ignored)", cfg.Model)
+		}
+	})
+
+	t.Run("YOLO_PROFILE env overrides the marker", func(t *testing.T) {
+		home := t.TempDir()
+		seedProfileRoot(t, home, "work", map[string]string{
+			"work":  "m-work",
+			"other": "m-other",
+		})
+		t.Setenv("XDG_CONFIG_HOME", home)
+		cfg, err := config.Loader{Env: map[string]string{"YOLO_PROFILE": "other"}}.Load(work)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.Model != "m-other" {
+			t.Fatalf("model = %q, want m-other (env override)", cfg.Model)
+		}
+	})
+
+	t.Run("Loader.Profile override beats env and marker", func(t *testing.T) {
+		home := t.TempDir()
+		seedProfileRoot(t, home, "work", map[string]string{
+			"work":  "m-work",
+			"third": "m-third",
+		})
+		t.Setenv("XDG_CONFIG_HOME", home)
+		l := config.Loader{Profile: "third", Env: map[string]string{"YOLO_PROFILE": "work"}}
+		cfg, err := l.Load(work)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.Model != "m-third" {
+			t.Fatalf("model = %q, want m-third (flag override)", cfg.Model)
+		}
+	})
+
+	t.Run("first run creates the default profile and loads it", func(t *testing.T) {
+		home := t.TempDir() // no yolo dir yet
+		t.Setenv("XDG_CONFIG_HOME", home)
+		cfg, err := config.Loader{}.Load(work)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.Model != "" {
+			t.Fatalf("model = %q, want empty (fresh default profile)", cfg.Model)
+		}
+		if _, err := os.Stat(filepath.Join(home, "yolo", "default")); err != nil {
+			t.Fatalf("first run must create the default profile: %v", err)
+		}
+	})
+
+	t.Run("override naming a missing profile is an error", func(t *testing.T) {
+		home := t.TempDir()
+		seedProfileRoot(t, home, "default", map[string]string{"default": "m-default"})
+		t.Setenv("XDG_CONFIG_HOME", home)
+		l := config.Loader{Profile: "nope"}
+		if _, err := l.Load(work); err == nil {
+			t.Fatal("Load with missing override: want error, got nil")
+		}
+		l = config.Loader{Env: map[string]string{"YOLO_PROFILE": "nope"}}
+		if _, err := l.Load(work); err == nil {
+			t.Fatal("Load with missing env profile: want error, got nil")
+		}
+	})
+}
