@@ -124,7 +124,8 @@ func TestGlobalConfig(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Fatalf("%d %s", resp.StatusCode, b)
 	}
-	f := filepath.Join(s.Home, "yolo", "yolo.jsonc")
+	// the global file lives in the active (default) profile dir
+	f := filepath.Join(s.Home, "yolo", "default", "yolo.jsonc")
 	raw, err := os.ReadFile(f)
 	if err != nil {
 		t.Fatalf("global file: %v", err)
@@ -143,6 +144,54 @@ func TestGlobalConfig(t *testing.T) {
 	}
 	if cfg["model"] != "kido/other" {
 		t.Fatalf("precedence broken: %v", cfg["model"])
+	}
+}
+
+// TestGlobalConfigActiveProfile pins the profile-aware global config dir:
+// /global/config reads and writes <home>/yolo/<active>/ following the
+// active marker, and legacy flat files at <home>/yolo/ are ignored.
+func TestGlobalConfigActiveProfile(t *testing.T) {
+	t.Parallel()
+	s := testutil.Boot(t)
+	home := s.Home
+	writeProfile := func(id, content string) {
+		t.Helper()
+		p := filepath.Join(home, "yolo", id, "yolo.jsonc")
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeProfile("default", `{"model":"m-default"}`)
+	writeProfile("alt", `{"model":"m-alt"}`)
+	if err := os.WriteFile(filepath.Join(home, "yolo", "active"), []byte("alt\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "yolo", "yolo.jsonc"), []byte(`{"model":"m-legacy"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, b := testutil.Req(t, s, "GET", "/global/config", "", "")
+	var cfg map[string]any
+	if err := json.Unmarshal(b, &cfg); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
+	if cfg["model"] != "m-alt" {
+		t.Fatalf("GET /global/config model = %v, want m-alt (active profile; legacy flat file ignored)", cfg["model"])
+	}
+
+	resp, b := testutil.Req(t, s, "PATCH", "/global/config", "", `{"model": "m-patched"}`)
+	if resp.StatusCode != 200 {
+		t.Fatalf("%d %s", resp.StatusCode, b)
+	}
+	raw, err := os.ReadFile(filepath.Join(home, "yolo", "alt", "yolo.jsonc"))
+	if err != nil {
+		t.Fatalf("patch must land in the active profile dir: %v", err)
+	}
+	if !bytes.Contains(raw, []byte(`"m-patched"`)) {
+		t.Fatalf("active profile file = %s", raw)
 	}
 }
 

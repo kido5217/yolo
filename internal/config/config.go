@@ -74,8 +74,15 @@ func CacheYoloDir() (string, error) {
 	return filepath.Join(c, "yolo"), nil
 }
 
-// Dirs carries the three XDG roots; zero value = real XDG. Server/test injection.
-type Dirs struct{ Home, Data, Cache string }
+// Dirs carries the three XDG roots and the resolved profile id; zero
+// value = real XDG + marker-resolved profile. Server/test injection.
+type Dirs struct {
+	Home, Data, Cache string
+	// Profile is the process-selected profile id (from the --profile flag
+	// or YOLO_PROFILE). Empty: the server resolves the active marker per
+	// request (creating the default profile on a first run).
+	Profile string
+}
 
 var envPat = regexp.MustCompile(`\{env:([A-Za-z_][A-Za-z0-9_]*)\}`)
 
