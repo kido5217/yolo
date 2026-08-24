@@ -10,15 +10,19 @@ release cut. 16-task implementation, gate-green; `just e2e-live` PASS against
 the real `https://ai.kido.ws/v1` on 2026-08-23 (pre-tag). Beads: epic
 `yolo-8vl` and every subtask closed. Spec:
 `docs/superpowers/specs/2026-08-22-v0.2.0-design.md`; plan:
-`docs/superpowers/plans/2026-08-22-v0.2.0.md`. 0.3.0 is in progress on branch
-`v0.3.0` (no upstream): spec
+`docs/superpowers/plans/2026-08-22-v0.2.0.md`. 0.3.0 is in progress: Plan 1
+(defect slice) merged to main (PR #11, `8c3f11c`); Plan 2 (refactor slice)
+is complete on branch `v0.3.0-plan-2` (no upstream): spec
 `docs/superpowers/specs/2026-08-23-v0.3.0-design.md`. **Plan 1 (defect slice)
 complete 2026-08-24** — all 39 tasks closed (beads `yolo-5hy.1.1`–`.39`,
-sub-epic `yolo-5hy.1` closed); close-out gate green (`go vet ./...` +
-`go test ./...` + `go test -race ./...` + `gofmt -l .` + `golangci-lint run
-./...`). Next: Plan 2 (refactor slice, 16 tasks, spec §4) — its sub-epic is
-created when Plan 2 starts; release epic `yolo-5hy` stays open. The 0.3.0
-deferred backlog lives in `docs/superpowers/DEFERRED.md`.
+sub-epic `yolo-5hy.1` closed). **Plan 2 (refactor slice) complete
+2026-08-24** — all 16 tasks closed (beads `yolo-5hy.2.1`–`.16`, sub-epic
+`yolo-5hy.2` closed); close-out gate green (`go vet ./...` + `go test ./...`
++ `go test -race ./...` + `gofmt -l .` + `golangci-lint run ./...`). Next:
+push `v0.3.0-plan-2` → PR → user merge → user-run `just e2e-live`
+re-validation → tag `v0.3.0` (tag only with explicit user go-ahead); release
+epic `yolo-5hy` stays open. The 0.3.0 deferred backlog lives in
+`docs/superpowers/DEFERRED.md`.
 
 ## Root causes (archive, v0.1.3)
 
@@ -40,6 +44,16 @@ prompt+model does NOT loop in upstream opencode. Detail: deviations 73–77.
 
 ## Last completed
 
+0.3.0 Plan 2 (refactor slice) complete (2026-08-24, branch
+`v0.3.0-plan-2`): all 16 wave-8 refactors closed as beads
+`yolo-5hy.2.1`–`.16` (engine test-harness + engine 4-way split + runRound/
+executeTool extracts, pure mapHistory, shared llm sseLoop + anRequest
+builders, server contract-suite + handler splits, storage per-entity DAOs,
+cmd/yolo deps.go, store per-event Apply, app.go 5-way split, read tool
+extracts, Shell execTimeout + markerCmd, dialog payload ownership),
+DEFERRED.md dispositions landed, close-out gate green incl. `-race` +
+`golangci-lint`. Deviations 116–117 logged (runRound line target vs named
+extracts; R16 test-reference rewrite vs "UNMODIFIED" pin).
 0.3.0 Plan 1 (defect slice) complete (2026-08-24, branch `v0.3.0`): all 39
 plan tasks closed as beads `yolo-5hy.1.1`–`.39` (engine lifecycle, storage,
 tools, server, TUI, CLI/e2e, naming V1–V8, two hermetic benchmarks),
