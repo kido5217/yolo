@@ -101,7 +101,7 @@ func TestHomeRenderLockedLayout(t *testing.T) {
 		"  old \u00B7 kido/q \u00B7 4d\n" +
 		div + "\n" +
 		"\u2191/\u2193 move \u00B7 enter open \u00B7 n new \u00B7 /help"
-	got := stripANSI(a.home.render(&a.store))
+	got := stripANSI(a.home.render(&a.store, 80))
 	if got != want {
 		t.Errorf("render mismatch:\ngot:\n%q\nwant:\n%q", got, want)
 	}

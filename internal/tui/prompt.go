@@ -66,7 +66,9 @@ func (pm *promptModel) menuItems(cmds []protocol.Command) []protocol.Command {
 	return out
 }
 
-func (pm *promptModel) menuView(cmds []protocol.Command) string {
+// menuView renders the filtered slash menu; each item word-wraps at the
+// terminal width (custom command descriptions can be long).
+func (pm *promptModel) menuView(cmds []protocol.Command, w int) string {
 	items := pm.menuItems(cmds)
 	if items == nil {
 		return ""
@@ -76,16 +78,19 @@ func (pm *promptModel) menuView(cmds []protocol.Command) string {
 	}
 	var b strings.Builder
 	for i, c := range items {
-		line := "  " + c.Name + "  " + c.Description
-		if i == pm.sel {
-			line = cursor.Render(line)
-		} else {
-			line = dim.Render(line)
-		}
 		if i > 0 {
 			b.WriteByte('\n')
 		}
-		b.WriteString(line)
+		sty := dim
+		if i == pm.sel {
+			sty = cursor
+		}
+		for j, l := range strings.Split(wrapLine("  "+c.Name+"  "+c.Description, w), "\n") {
+			if j > 0 {
+				b.WriteByte('\n')
+			}
+			b.WriteString(sty.Render(l))
+		}
 	}
 	return b.String()
 }

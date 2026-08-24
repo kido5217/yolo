@@ -7,6 +7,7 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/kido5217/yolo/internal/protocol"
 )
@@ -19,23 +20,49 @@ var (
 
 // permissionView renders the pending-ask overlay from the store (shown while
 // Store.Pending is non-empty, above the prompt): the first parked ask only.
-func (a *App) permissionView() string {
+// Each line word-wraps at the terminal width (patterns carry full command
+// strings).
+func (a *App) permissionView(w int) string {
 	if len(a.store.Pending) == 0 {
 		return ""
 	}
 	p := a.store.Pending[0]
-	lines := []string{
-		title.Render("permission · " + p.Permission),
-		dim.Render("  patterns: " + strings.Join(p.Patterns, ", ")),
+	rows := []struct {
+		sty   lipgloss.Style
+		plain string
+	}{
+		{title, "permission · " + p.Permission},
+		{dim, "  patterns: " + strings.Join(p.Patterns, ", ")},
 	}
 	if len(p.Always) > 0 {
-		lines = append(lines, dim.Render("  Always: "+strings.Join(p.Always, ", ")))
+		rows = append(rows, struct {
+			sty   lipgloss.Style
+			plain string
+		}{dim, "  Always: " + strings.Join(p.Always, ", ")})
 	}
 	if p.Tool != nil && p.Tool.CallID != "" {
-		lines = append(lines, dim.Render("  tool call: "+p.Tool.MessageID+"/"+short6(p.Tool.CallID)))
+		rows = append(rows, struct {
+			sty   lipgloss.Style
+			plain string
+		}{dim, "  tool call: " + p.Tool.MessageID + "/" + short6(p.Tool.CallID)})
 	}
-	lines = append(lines, dim.Render("  [1] once  [2] always  [3] reject"))
-	return strings.Join(lines, "\n")
+	rows = append(rows, struct {
+		sty   lipgloss.Style
+		plain string
+	}{dim, "  [1] once  [2] always  [3] reject"})
+	var b strings.Builder
+	for i, r := range rows {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		for j, l := range strings.Split(wrapLine(r.plain, w), "\n") {
+			if j > 0 {
+				b.WriteByte('\n')
+			}
+			b.WriteString(r.sty.Render(l))
+		}
+	}
+	return b.String()
 }
 
 // short6 truncates an ID to its first 6 runes for the tool-call ref line.

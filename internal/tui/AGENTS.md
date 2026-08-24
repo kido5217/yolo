@@ -29,6 +29,17 @@ session, style, toast, wrap), `client/` (HTTP + SSE client, backoff),
   each wrapped line). The viewport's hard clip is a backstop, never the
   content strategy (no horizontal scroll is bound — clipped text would be
   unreadable). `WindowSizeMsg` sets `sess.isDirty` so a resize re-wraps.
+- Below-viewport surface wrap (yolo-ukc): every non-transcript text surface
+  wraps at the terminal width (`App.termWidth()`, fallback 80) with the same
+  `wrapLine` — toasts, permission overlay, slash menu, model/agent dialogs
+  (rows AND hint lines via `dimWrapped`), home session rows, the `!` error
+  line; each renderer takes a `w` param from `App.view()`. The session
+  route counts the wrapped help line's real line count in the viewport
+  height budget. The model dialog cell hangs at the left-pane column
+  (`modelRow`); when the left pane alone ≥ width, cell lines go full width.
+  Footer, divider and the locked quit/help dialogs stay single-line.
+  Prompt line: bubbles v2 textinput `View` = prompt(2) + `SetWidth` +
+  cursor(1) — `WindowSizeMsg` sets `SetWidth(w-3)` so the line fits.
 - SSE drop contract (v0.1.3): `client.Events` returns `(events, resync)` —
   every dropped `/event` connection pings resync (the bus has no replay, so
   gap events are unrecoverable); the app re-hydrates the current route on

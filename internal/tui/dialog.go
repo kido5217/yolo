@@ -10,6 +10,7 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/tui/store"
@@ -87,7 +88,6 @@ func (d *dialogStack) agent() *agentDlg {
 // viewSession is the only dynamic render left.
 var (
 	dividerLineRendered = divider.Render(dividerLine())
-	sessionHelpRendered = dim.Render(sessionHelp)
 	quitDialogRendered  = title.Render("quit? [Y/n]")
 	helpDialogRendered  = title.Render("Help") +
 		"\n" + dim.Render("  | Key | Action |") +
@@ -119,15 +119,17 @@ func (d dialogStack) view() string {
 }
 
 // dlgView renders the top dialog: the model/agent pickers carry their state
-// on the stack item, the rest render from the stack alone.
-func (a *App) dlgView() string {
+// on the stack item, the rest render from the stack alone. The pickers
+// word-wrap their rows at the terminal width; the locked quit/help blocks
+// stay as-is (short fixed text).
+func (a *App) dlgView(w int) string {
 	switch d, ok := a.dlg.top(); {
 	case !ok:
 		return ""
 	case d.kind == dlgModel && d.model != nil:
-		return d.model.view(&a.store)
+		return d.model.view(&a.store, w)
 	case d.kind == dlgAgents && d.agent != nil:
-		return d.agent.view(&a.store)
+		return d.agent.view(&a.store, w)
 	}
 	return a.dlg.view()
 }
@@ -462,8 +464,9 @@ func (m *modelDlg) modelCount(st *store.State) int {
 
 // view renders the two panes: provider rows (auth dot + status), the selected
 // provider's models in the right pane, the subchoice overlay and the keymap
-// hint.
-func (m *modelDlg) view(st *store.State) string {
+// hint. Rows word-wrap at the terminal width; wrapped continuations hang at
+// the cell column.
+func (m *modelDlg) view(st *store.State, w int) string {
 	var b strings.Builder
 	b.WriteString(title.Render("Model") + "\n")
 	provs := st.Providers
@@ -492,40 +495,102 @@ func (m *modelDlg) view(st *store.State) string {
 	leftCol += 2
 	rows := make([]string, 0, len(provs)+len(models))
 	for i, p := range provs {
-		sPlain, sStyled := providerStatus(p.Auth)
+		sPlain, sStyle := providerStatus(p.Auth)
 		name := "  " + p.Name + "  "
-		row := name + sStyled + strings.Repeat(" ", leftCol-len(name)-utf8.RuneCountInString(sPlain))
+		left := name + sPlain + strings.Repeat(" ", leftCol-len(name)-utf8.RuneCountInString(sPlain))
+		rowSty := dim
+		if i == m.selProv {
+			rowSty = cursor
+		}
 		switch {
 		case i == m.selProv && len(models) > 0:
 			// The cell follows the pad, so no trailing spaces to trim.
-			row = cursor.Render(row + m.modelCell(st, curProv, models, 0))
+			cell, cellSty := m.modelCell(st, curProv, models, 0)
+			rows = append(rows, modelRow(styleSegment(left, len(name), len(name)+len(sPlain), sStyle, rowSty), leftCol, cell, cellSty, w))
 		default:
 			// Trim before styling: the style's trailing SGR reset would
 			// otherwise survive TrimRight as a visible trailing space.
-			row = strings.TrimRight(row, " ")
-			if i == m.selProv {
-				row = cursor.Render(row)
-			} else {
-				row = dim.Render(row)
-			}
+			rows = append(rows, rowSty.Render(strings.TrimRight(left, " ")))
 		}
-		rows = append(rows, row)
 		if i == m.selProv {
 			for j := 1; j < len(models); j++ {
-				rows = append(rows, strings.Repeat(" ", leftCol)+m.modelCell(st, curProv, models, j))
+				cell, cellSty := m.modelCell(st, curProv, models, j)
+				rows = append(rows, modelRow(strings.Repeat(" ", leftCol), leftCol, cell, cellSty, w))
 			}
 		}
 	}
 	b.WriteString(strings.Join(rows, "\n"))
 	if m.hasSubChoice {
-		b.WriteString("\n" + dim.Render("  [a] this session  [b] set default"))
+		b.WriteString("\n" + dimWrapped("  [a] this session  [b] set default", w))
 	}
-	b.WriteString("\n" + dim.Render("  \u2191/\u2193 move \u00B7 tab pane \u00B7 enter set \u00B7 esc close"))
+	b.WriteString("\n" + dimWrapped("  \u2191/\u2193 move \u00B7 tab pane \u00B7 enter set \u00B7 esc close", w))
 	return b.String()
 }
 
-// modelCell renders one right-pane model row (default marker, context, cost).
-func (m *modelDlg) modelCell(st *store.State, p protocol.Provider, models []protocol.Model, j int) string {
+// dimWrapped word-wraps a plain line at w and renders each visual line dim.
+func dimWrapped(s string, w int) string {
+	var b strings.Builder
+	for i, l := range strings.Split(wrapLine(s, w), "\n") {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(dim.Render(l))
+	}
+	return b.String()
+}
+
+// modelRow renders the left part and the model cell on one line, word-wrapping
+// at the terminal width; continuation lines hang at the cell column (leftCol,
+// capped so they still fit).
+func modelRow(left string, leftCol int, cell string, cellSty lipgloss.Style, w int) string {
+	if runeWidth(left)+runeWidth(cell) <= w {
+		return left + cellSty.Render(cell)
+	}
+	// Degenerate: the left pane alone fills the line (terminal narrower than
+	// the pane). The cell moves to its own lines at the full width.
+	if runeWidth(left) >= w {
+		var b strings.Builder
+		b.WriteString(left)
+		for _, seg := range strings.Split(wrapLine(cell, w), "\n") {
+			b.WriteString("\n" + cellSty.Render(seg))
+		}
+		return b.String()
+	}
+	hang := leftCol
+	if hang > w-1 {
+		hang = w - 1
+	}
+	if hang < 0 {
+		hang = 0
+	}
+	avail := w - hang
+	if avail < 1 {
+		avail = 1
+	}
+	var b strings.Builder
+	for k, seg := range strings.Split(wrapLine(cell, avail), "\n") {
+		if k == 0 {
+			b.WriteString(left)
+		} else {
+			b.WriteString("\n" + strings.Repeat(" ", hang))
+		}
+		b.WriteString(cellSty.Render(seg))
+	}
+	return b.String()
+}
+
+// styleSegment applies segStyle to s[a:b] and rowSty to the rest.
+func styleSegment(s string, a, b int, segStyle, rowSty lipgloss.Style) string {
+	if a == 0 && b == len(s) {
+		return segStyle.Render(s)
+	}
+	return rowSty.Render(s[:a]) + segStyle.Render(s[a:b]) + rowSty.Render(s[b:])
+}
+
+// modelCell renders one right-pane model row (default marker, context, cost)
+// as plain text plus its style (a row may wrap, so the style is applied per
+// visual line).
+func (m *modelDlg) modelCell(st *store.State, p protocol.Provider, models []protocol.Model, j int) (string, lipgloss.Style) {
 	mm := models[j]
 	cell := mm.Name
 	if modelIsCurrent(st, p, mm) {
@@ -533,20 +598,21 @@ func (m *modelDlg) modelCell(st *store.State, p protocol.Provider, models []prot
 	}
 	cell += "  " + fmtCtx(mm.Limit.Context) + " ctx  " + usd(mm.Cost.Input) + "/" + usd(mm.Cost.Output)
 	if j == m.selModel {
-		return cursor.Render(cell)
+		return cell, cursor
 	}
-	return dim.Render(cell)
+	return cell, dim
 }
 
-// providerStatus maps the wire auth state to the locked dot + label.
-func providerStatus(auth *protocol.ProviderAuth) (plain, styled string) {
+// providerStatus maps the wire auth state to the locked dot + label (plain
+// text plus its style; the row may wrap, so the style is applied per segment).
+func providerStatus(auth *protocol.ProviderAuth) (string, lipgloss.Style) {
 	switch {
 	case auth != nil && auth.Status == "loaded":
-		return "● loaded", okGreen.Render("● loaded")
+		return "● loaded", okGreen
 	case auth != nil && auth.RequiresKey && auth.Status == "missing":
-		return "○ missing", errRed.Render("○ missing")
+		return "○ missing", errRed
 	default:
-		return "· not-required", dim.Render("· not-required")
+		return "· not-required", dim
 	}
 }
 
@@ -662,7 +728,9 @@ func (m *agentDlg) handleKey(a *App, k tea.KeyPressMsg) []tea.Cmd {
 }
 
 // view renders the agent list, the subchoice overlay and the keymap hint.
-func (m *agentDlg) view(st *store.State) string {
+// Each agent row word-wraps at the terminal width (descriptions can be
+// long); the selection style stays on the row's first visual line.
+func (m *agentDlg) view(st *store.State, w int) string {
 	var b strings.Builder
 	b.WriteString(title.Render("Agents") + "\n")
 	if len(st.Agents) == 0 {
@@ -683,16 +751,22 @@ func (m *agentDlg) view(st *store.State) string {
 			line += "  " + x.Description
 		}
 		line = strings.TrimRight(line, " ")
+		sty := dim
 		if i == m.sel {
-			rows = append(rows, cursor.Render(line))
-		} else {
-			rows = append(rows, dim.Render(line))
+			sty = cursor
+		}
+		for j, l := range strings.Split(wrapLine(line, w), "\n") {
+			if j > 0 {
+				rows = append(rows, dim.Render(l))
+			} else {
+				rows = append(rows, sty.Render(l))
+			}
 		}
 	}
 	b.WriteString(strings.Join(rows, "\n"))
 	if m.hasSubChoice {
-		b.WriteString("\n" + dim.Render("  [a] this session  [b] set default"))
+		b.WriteString("\n" + dimWrapped("  [a] this session  [b] set default", w))
 	}
-	b.WriteString("\n" + dim.Render("  \u2191/\u2193 move \u00B7 enter set \u00B7 esc close"))
+	b.WriteString("\n" + dimWrapped("  \u2191/\u2193 move \u00B7 enter set \u00B7 esc close", w))
 	return b.String()
 }

@@ -119,6 +119,18 @@ styled lines wrap before styling (`toolRowLine` returns style + plain);
 `WindowSizeMsg` re-wraps via `sess.isDirty`. Tests: `TestWrapLine`,
 `TestRenderMessagesWrapsLongLines`, `TestTUILongReplyWraps` (the last word
 of a 1000-word single-line fake reply reaches the screen).
+- TUI below-viewport surface wrap (2026-08-24, bead `yolo-ukc`): toasts,
+the permission overlay, the slash menu, the model/agent dialogs (rows AND
+hint lines, via `dimWrapped`), the home session rows and the `!` error line
+all wrap at the terminal width (`App.termWidth()`, fallback 80) with the
+same `wrapLine`; the session route's viewport height counts the wrapped
+help line's real line count. The model dialog's cell hangs at the left-pane
+column (`modelRow`); the left pane alone ≥ width degenerates to full-width
+cell lines. Footer, divider and the locked quit/help dialogs stay
+single-line. Prompt width arithmetic: bubbles v2 textinput `View` =
+prompt(2) + `SetWidth` + cursor(1), so `WindowSizeMsg` sets `SetWidth(w-3)`
+(pre-fix `w-2` left the prompt line 1 column past the edge). Tests:
+`internal/tui/overflow_test.go` (7 wrap tests incl. the composed-frame fit).
 - v1 behavior pins: keymap is pgup/pgdn scroll + `\`+enter newline (noted in /help; spec's
 ↑/↓ viewport scroll replaced); JSONC comments are NOT preserved when a config PATCH
 rewrites `yolo.jsonc`.
