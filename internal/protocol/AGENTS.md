@@ -32,7 +32,8 @@ message, part, provider, session DTOs + `protocol_test.go`.
 ## Verification
 
 - Root gate: `go vet ./... && go test ./...`. Cross-package mirror check
-  lives in `internal/server/contract_test.go`.
+  lives in the `internal/server` wire-contract suites (`golden_test.go`,
+  `sse_ordering_test.go`, `fake_env_e2e_test.go`, `scope_test.go`).
 
 ## Child DOX Index
 

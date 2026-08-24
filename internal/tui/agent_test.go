@@ -38,7 +38,7 @@ func openAgentAt() *recApp {
 
 func agentBlock(t *testing.T, a *recApp, want string) {
 	t.Helper()
-	if got := stripANSI(a.agentDlg.view(&a.store)); got != want {
+	if got := stripANSI(a.dlg.agent().view(&a.store)); got != want {
 		t.Errorf("agent dialog mismatch:\ngot:\n%q\nwant:\n%q", got, want)
 	}
 }
@@ -77,29 +77,29 @@ func TestAgentDialogRender(t *testing.T) {
 func TestAgentDialogKeys(t *testing.T) {
 	t.Run("down/up move with wraparound", func(t *testing.T) {
 		a := openAgentAt()
-		if got := a.agentDlg.sel; got != 0 {
+		if got := a.dlg.agent().sel; got != 0 {
 			t.Fatalf("initial sel = %d, want 0 (session agent build)", got)
 		}
 		a.handleKey(press(tea.KeyDown))
 		a.handleKey(press(tea.KeyDown))
-		if got := a.agentDlg.sel; got != 2 {
+		if got := a.dlg.agent().sel; got != 2 {
 			t.Fatalf("after two downs sel = %d, want 2 (yolo)", got)
 		}
 		a.handleKey(press(tea.KeyUp))
 		a.handleKey(press(tea.KeyUp))
 		a.handleKey(press(tea.KeyUp)) // wraps to the last agent
-		if got := a.agentDlg.sel; got != 2 {
+		if got := a.dlg.agent().sel; got != 2 {
 			t.Fatalf("after wrap sel = %d, want 2", got)
 		}
 	})
 
 	t.Run("enter opens the subchoice", func(t *testing.T) {
 		a := openAgentAt()
-		if a.agentDlg.hasSubChoice {
+		if a.dlg.agent().hasSubChoice {
 			t.Fatal("subchoice must start closed")
 		}
 		a.handleKey(press(tea.KeyEnter))
-		if !a.agentDlg.hasSubChoice {
+		if !a.dlg.agent().hasSubChoice {
 			t.Fatal("enter must open the subchoice")
 		}
 	})
@@ -129,13 +129,13 @@ func TestAgentDialogKeys(t *testing.T) {
 		a := openAgentAt()
 		a.handleKey(press(tea.KeyEnter))
 		a.handleKey(press(tea.KeyEscape))
-		if a.agentDlg.hasSubChoice || a.dlg.empty() {
+		if a.dlg.agent().hasSubChoice || a.dlg.empty() {
 			t.Fatalf(
 				"after esc: subChoice=%v dlg=%v, want subchoice closed and dialog open",
-				a.agentDlg.hasSubChoice, a.dlg.empty())
+				a.dlg.agent().hasSubChoice, a.dlg.empty())
 		}
 		a.handleKey(press(tea.KeyEscape))
-		if !a.dlg.empty() || a.agentDlg != nil {
+		if !a.dlg.empty() || a.dlg.agent() != nil {
 			t.Fatal("after second esc the dialog must be gone")
 		}
 	})
@@ -164,7 +164,7 @@ func TestAgentDialogApply(t *testing.T) {
 		}
 		a.applyDlgPatch(dlgPatchMsg{field: "agent", value: "yolo",
 			sess: &protocol.Session{ID: "ses_1", Agent: "yolo", Model: refModel("kido", "q")}})
-		if !a.dlg.empty() || a.agentDlg != nil {
+		if !a.dlg.empty() || a.dlg.agent() != nil {
 			t.Fatal("dialog must close after a successful session patch")
 		}
 		if !hasToast(a, "agent set: yolo") {
@@ -231,8 +231,8 @@ func TestAgentDialogOpen(t *testing.T) {
 		a := agentApp()
 		a.handleKey(pressCtrlA())
 		d, ok := a.dlg.top()
-		if !ok || d.kind != dlgAgents || a.agentDlg == nil {
-			t.Fatalf("after ctrl+a: top=%+v agentDlg=%v, want the agent dialog", d, a.agentDlg)
+		if !ok || d.kind != dlgAgents || d.agent == nil {
+			t.Fatalf("after ctrl+a: top=%+v agentDlg=%v, want the agent dialog", d, d.agent)
 		}
 		if len(a.Cmds) != 1 {
 			t.Fatalf("ctrl+a emitted %d cmds, want the catalog fetch", len(a.Cmds))
@@ -243,8 +243,8 @@ func TestAgentDialogOpen(t *testing.T) {
 		a := agentApp()
 		a.runCommand("/agents")
 		d, ok := a.dlg.top()
-		if !ok || d.kind != dlgAgents || a.agentDlg == nil {
-			t.Fatalf("after /agents: top=%+v agentDlg=%v, want the agent dialog", d, a.agentDlg)
+		if !ok || d.kind != dlgAgents || d.agent == nil {
+			t.Fatalf("after /agents: top=%+v agentDlg=%v, want the agent dialog", d, d.agent)
 		}
 	})
 
@@ -253,8 +253,8 @@ func TestAgentDialogOpen(t *testing.T) {
 		a.dlg.push(dialog{kind: dlgQuit})
 		a.handleKey(pressCtrlA())
 		d, _ := a.dlg.top()
-		if d.kind != dlgQuit || a.agentDlg != nil {
-			t.Fatalf("ctrl+a must not stack dialogs: top=%+v agentDlg=%v", d, a.agentDlg)
+		if d.kind != dlgQuit || a.dlg.agent() != nil {
+			t.Fatalf("ctrl+a must not stack dialogs: top=%+v agentDlg=%v", d, a.dlg.agent())
 		}
 	})
 }

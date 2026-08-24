@@ -85,12 +85,21 @@ func (s *Shell) Close() error {
 	return nil
 }
 
+// Pinned protocol: the marker line echoes the previous command's exit
+// code and the new cwd (base64, unwrapped). The reader accepts a line
+// matching endMarkerRe only when the captured counter is n; the emitted
+// form therefore has no separator before $? and the regex captures the
+// code then the base64 cwd. (Plan pin line 2739.)
+func markerCmd(n int) string {
+	return fmt.Sprintf("echo __YOLO_END_%d_$?_$(pwd | base64 -w0)", n)
+}
+
 // Exec runs one command in the persistent shell and returns its exit code
 // and the combined stdout+stderr output (empty output stays empty; the
 // caller formats it). timeoutMS <= 0 disables the timer. onLine, if
 // non-nil, is invoked for every non-marker line as it is read. A shell
 // killed by timeout/abort (or dead for any other reason) is respawned on
-// the next call.
+// the next call. The wait/timer/reap logic lives in execTimeout.
 func (s *Shell) Exec(ctx context.Context, command string, timeoutMS int, onLine func(line string)) (exitCode int, out string, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -103,12 +112,7 @@ func (s *Shell) Exec(ctx context.Context, command string, timeoutMS int, onLine 
 	proc := s.proc
 	n := s.nextMarker
 	s.nextMarker++
-	// Pinned protocol: the marker line echoes the previous command's exit
-	// code and the new cwd (base64, unwrapped). The reader accepts a line
-	// matching endMarkerRe only when the captured counter is n; the emitted
-	// form therefore has no separator before $? and the regex captures the
-	// code then the base64 cwd. (Plan pin line 2739.)
-	marker := fmt.Sprintf("echo __YOLO_END_%d_$?_$(pwd | base64 -w0)", n)
+	marker := markerCmd(n)
 	markerN := strconv.Itoa(n)
 
 	if _, err := io.WriteString(proc.stdin, command+"\n"+marker+"\n"); err != nil {
@@ -117,6 +121,16 @@ func (s *Shell) Exec(ctx context.Context, command string, timeoutMS int, onLine 
 		return 0, "", fmt.Errorf("shell: command process died: %w", err)
 	}
 
+	return s.execTimeout(ctx, proc, markerN, timeoutMS, onLine)
+}
+
+// execTimeout waits for the command already written by Exec to finish,
+// enforcing the optional per-command timer (timeoutMS <= 0 disables it)
+// and ctx cancellation, and returns the exit code and accumulated output.
+// It assumes the lock is HELD and the command already written; on timeout,
+// abort, or process death it detaches the proc (s.proc = nil + reapProc)
+// so the next Exec respawns.
+func (s *Shell) execTimeout(ctx context.Context, proc *shellProc, markerN string, timeoutMS int, onLine func(line string)) (int, string, error) {
 	lines := proc.lines
 	var buf strings.Builder
 	var timer <-chan time.Time

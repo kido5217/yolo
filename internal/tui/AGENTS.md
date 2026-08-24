@@ -7,9 +7,10 @@ server over the wire contract only — it never reaches into core internals.
 
 ## Ownership
 
-Everything under `internal/tui/`: app/model/panes, `client/` (HTTP + SSE
-client, backoff), `store/` (display state), `imports_test.go`, and the
-teatest suites.
+Everything under `internal/tui/`: the app and its concern files (app,
+hydrate, dialog, keys, commands, view, footer, home, permission, prompt,
+session, style, toast), `client/` (HTTP + SSE client, backoff), `store/`
+(display state), `imports_test.go`, and the teatest suites.
 
 ## Local Contracts
 
@@ -23,7 +24,7 @@ teatest suites.
 - SSE drop contract (v0.1.3): `client.Events` returns `(events, resync)` —
   every dropped `/event` connection pings resync (the bus has no replay, so
   gap events are unrecoverable); the app re-hydrates the current route on
-  `resyncMsg` (app.go) and re-arms `resyncPump`. Never make reconnects
+   `resyncMsg` (hydrate.go) and re-arms `resyncPump`. Never make reconnects
   silent again (the pre-v0.1.3 silent reconnect left the footer stuck on
   `busy` and the transcript stale).
 - Completed `bash` tool parts render an inline output preview (10-line head,

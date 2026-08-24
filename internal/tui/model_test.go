@@ -89,7 +89,7 @@ func openModelAt() *recApp {
 
 func modelBlock(t *testing.T, a *recApp, want string) {
 	t.Helper()
-	if got := stripANSI(a.modelDlg.view(&a.store)); got != want {
+	if got := stripANSI(a.dlg.model().view(&a.store)); got != want {
 		t.Errorf("model dialog mismatch:\ngot:\n%q\nwant:\n%q", got, want)
 	}
 }
@@ -150,19 +150,19 @@ func TestModelDialogRender(t *testing.T) {
 func TestModelDialogKeys(t *testing.T) {
 	t.Run("down/up move the provider with wraparound", func(t *testing.T) {
 		a := openModelAt()
-		if got := a.modelDlg.selProv; got != 0 {
+		if got := a.dlg.model().selProv; got != 0 {
 			t.Fatalf("initial selProv = %d, want 0 (current model's provider)", got)
 		}
 		a.handleKey(press(tea.KeyDown))
-		if got := a.modelDlg.selProv; got != 1 {
+		if got := a.dlg.model().selProv; got != 1 {
 			t.Fatalf("after down selProv = %d, want 1", got)
 		}
 		a.handleKey(press(tea.KeyUp))
-		if got := a.modelDlg.selProv; got != 0 {
+		if got := a.dlg.model().selProv; got != 0 {
 			t.Fatalf("after up selProv = %d, want 0", got)
 		}
 		a.handleKey(press(tea.KeyUp)) // wraps to the last provider
-		if got := a.modelDlg.selProv; got != 1 {
+		if got := a.dlg.model().selProv; got != 1 {
 			t.Fatalf("after wrap selProv = %d, want 1", got)
 		}
 	})
@@ -170,12 +170,12 @@ func TestModelDialogKeys(t *testing.T) {
 	t.Run("tab toggles the focused pane", func(t *testing.T) {
 		a := openModelAt()
 		a.handleKey(pressTab())
-		if a.modelDlg.pane != paneModels {
-			t.Fatalf("after tab pane = %d, want models", a.modelDlg.pane)
+		if a.dlg.model().pane != paneModels {
+			t.Fatalf("after tab pane = %d, want models", a.dlg.model().pane)
 		}
 		a.handleKey(pressTab())
-		if a.modelDlg.pane != paneProviders {
-			t.Fatalf("after second tab pane = %d, want providers", a.modelDlg.pane)
+		if a.dlg.model().pane != paneProviders {
+			t.Fatalf("after second tab pane = %d, want providers", a.dlg.model().pane)
 		}
 	})
 
@@ -184,11 +184,11 @@ func TestModelDialogKeys(t *testing.T) {
 		a.handleKey(press(tea.KeyDown)) // opencode
 		a.handleKey(pressTab())
 		a.handleKey(press(tea.KeyDown))
-		if got := a.modelDlg.selModel; got != 1 {
+		if got := a.dlg.model().selModel; got != 1 {
 			t.Fatalf("after down selModel = %d, want 1 (gpt-5-nano)", got)
 		}
 		a.handleKey(press(tea.KeyDown)) // wraps to the first model
-		if got := a.modelDlg.selModel; got != 0 {
+		if got := a.dlg.model().selModel; got != 0 {
 			t.Fatalf("after wrap selModel = %d, want 0", got)
 		}
 	})
@@ -196,12 +196,12 @@ func TestModelDialogKeys(t *testing.T) {
 	t.Run("enter opens the subchoice only on the models pane", func(t *testing.T) {
 		a := openModelAt()
 		a.handleKey(press(tea.KeyEnter)) // providers pane: no subchoice
-		if a.modelDlg.hasSubChoice {
+		if a.dlg.model().hasSubChoice {
 			t.Fatal("enter on the providers pane must not open the subchoice")
 		}
 		a.handleKey(pressTab())
 		a.handleKey(press(tea.KeyEnter))
-		if !a.modelDlg.hasSubChoice {
+		if !a.dlg.model().hasSubChoice {
 			t.Fatal("enter on the models pane must open the subchoice")
 		}
 	})
@@ -234,13 +234,13 @@ func TestModelDialogKeys(t *testing.T) {
 		a.handleKey(pressTab())
 		a.handleKey(press(tea.KeyEnter))
 		a.handleKey(press(tea.KeyEscape))
-		if a.modelDlg.hasSubChoice || a.dlg.empty() {
+		if a.dlg.model().hasSubChoice || a.dlg.empty() {
 			t.Fatalf(
 				"after esc: subChoice=%v dlg=%v, want subchoice closed and dialog open",
-				a.modelDlg.hasSubChoice, a.dlg.empty())
+				a.dlg.model().hasSubChoice, a.dlg.empty())
 		}
 		a.handleKey(press(tea.KeyEscape))
-		if !a.dlg.empty() || a.modelDlg != nil {
+		if !a.dlg.empty() || a.dlg.model() != nil {
 			t.Fatal("after second esc the dialog must be gone")
 		}
 	})
@@ -270,7 +270,7 @@ func TestModelDialogApply(t *testing.T) {
 		}
 		a.applyDlgPatch(dlgPatchMsg{field: "model", value: "opencode/gpt-5-nano",
 			sess: &protocol.Session{ID: "ses_1", Agent: "build", Model: refModel("opencode", "gpt-5-nano")}})
-		if !a.dlg.empty() || a.modelDlg != nil {
+		if !a.dlg.empty() || a.dlg.model() != nil {
 			t.Fatal("dialog must close after a successful session patch")
 		}
 		if !hasToast(a, "model set: opencode/gpt-5-nano") {
@@ -341,8 +341,8 @@ func TestModelDialogOpen(t *testing.T) {
 		a := modelFixture()
 		a.handleKey(pressCtrlP())
 		d, ok := a.dlg.top()
-		if !ok || d.kind != dlgModel || a.modelDlg == nil {
-			t.Fatalf("after ctrl+p: top=%+v modelDlg=%v, want the model dialog", d, a.modelDlg)
+		if !ok || d.kind != dlgModel || d.model == nil {
+			t.Fatalf("after ctrl+p: top=%+v modelDlg=%v, want the model dialog", d, d.model)
 		}
 		if len(a.Cmds) != 1 {
 			t.Fatalf("ctrl+p emitted %d cmds, want the catalog fetch", len(a.Cmds))
@@ -353,8 +353,8 @@ func TestModelDialogOpen(t *testing.T) {
 		a := modelFixture()
 		a.runCommand("/model")
 		d, ok := a.dlg.top()
-		if !ok || d.kind != dlgModel || a.modelDlg == nil {
-			t.Fatalf("after /model: top=%+v modelDlg=%v, want the model dialog", d, a.modelDlg)
+		if !ok || d.kind != dlgModel || d.model == nil {
+			t.Fatalf("after /model: top=%+v modelDlg=%v, want the model dialog", d, d.model)
 		}
 	})
 
@@ -363,8 +363,8 @@ func TestModelDialogOpen(t *testing.T) {
 		a.dlg.push(dialog{kind: dlgQuit})
 		a.handleKey(pressCtrlP())
 		d, _ := a.dlg.top()
-		if d.kind != dlgQuit || a.modelDlg != nil {
-			t.Fatalf("ctrl+p must not stack dialogs: top=%+v modelDlg=%v", d, a.modelDlg)
+		if d.kind != dlgQuit || a.dlg.model() != nil {
+			t.Fatalf("ctrl+p must not stack dialogs: top=%+v modelDlg=%v", d, a.dlg.model())
 		}
 	})
 
@@ -377,8 +377,8 @@ func TestModelDialogOpen(t *testing.T) {
 		if len(a.store.Providers) != 2 || len(a.store.Agents) != 3 {
 			t.Fatalf("store = %d providers / %d agents, want 2 / 3", len(a.store.Providers), len(a.store.Agents))
 		}
-		if a.modelDlg.selProv != 0 {
-			t.Fatalf("after catalog selProv = %d, want 0 (config model kido/q)", a.modelDlg.selProv)
+		if a.dlg.model().selProv != 0 {
+			t.Fatalf("after catalog selProv = %d, want 0 (config model kido/q)", a.dlg.model().selProv)
 		}
 	})
 

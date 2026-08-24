@@ -10,15 +10,19 @@ release cut. 16-task implementation, gate-green; `just e2e-live` PASS against
 the real `https://ai.kido.ws/v1` on 2026-08-23 (pre-tag). Beads: epic
 `yolo-8vl` and every subtask closed. Spec:
 `docs/superpowers/specs/2026-08-22-v0.2.0-design.md`; plan:
-`docs/superpowers/plans/2026-08-22-v0.2.0.md`. 0.3.0 is in progress on branch
-`v0.3.0` (no upstream): spec
+`docs/superpowers/plans/2026-08-22-v0.2.0.md`. 0.3.0 is in progress: Plan 1
+(defect slice) merged to main (PR #11, `8c3f11c`); Plan 2 (refactor slice)
+is complete on branch `v0.3.0-plan-2` (no upstream): spec
 `docs/superpowers/specs/2026-08-23-v0.3.0-design.md`. **Plan 1 (defect slice)
 complete 2026-08-24** — all 39 tasks closed (beads `yolo-5hy.1.1`–`.39`,
-sub-epic `yolo-5hy.1` closed); close-out gate green (`go vet ./...` +
-`go test ./...` + `go test -race ./...` + `gofmt -l .` + `golangci-lint run
-./...`). Next: Plan 2 (refactor slice, 16 tasks, spec §4) — its sub-epic is
-created when Plan 2 starts; release epic `yolo-5hy` stays open. The 0.3.0
-deferred backlog lives in `docs/superpowers/DEFERRED.md`.
+sub-epic `yolo-5hy.1` closed). **Plan 2 (refactor slice) complete
+2026-08-24** — all 16 tasks closed (beads `yolo-5hy.2.1`–`.16`, sub-epic
+`yolo-5hy.2` closed); close-out gate green (`go vet ./...` + `go test ./...`
++ `go test -race ./...` + `gofmt -l .` + `golangci-lint run ./...`). `v0.3.0-plan-2` pushed and **PR #12 open**
+(2026-08-24). Next: user merge PR #12 → user-run `just e2e-live`
+re-validation → tag `v0.3.0` (tag only with explicit user go-ahead);
+release epic `yolo-5hy` stays open until the tag. The 0.3.0 deferred
+backlog lives in `docs/superpowers/DEFERRED.md`.
 
 ## Root causes (archive, v0.1.3)
 
@@ -40,6 +44,18 @@ prompt+model does NOT loop in upstream opencode. Detail: deviations 73–77.
 
 ## Last completed
 
+0.3.0 Plan 2 (refactor slice) complete (2026-08-24, branch
+`v0.3.0-plan-2`): all 16 wave-8 refactors closed as beads
+`yolo-5hy.2.1`–`.16` (engine test-harness + engine 4-way split + runRound/
+executeTool extracts, pure mapHistory, shared llm sseLoop + anRequest
+builders, server contract-suite + handler splits, storage per-entity DAOs,
+cmd/yolo deps.go, store per-event Apply, app.go 5-way split, read tool
+extracts, Shell execTimeout + markerCmd, dialog payload ownership),
+DEFERRED.md dispositions landed, close-out gate green incl. `-race` +
+`golangci-lint`. Deviations 116–118 logged (runRound line target vs named
+extracts; R16 test-reference rewrite vs "UNMODIFIED" pin; TUI prompt-suite
+`-race` flake — brittle contiguous-substring WaitFors hardened to
+strip-SGR + independent tokens).
 0.3.0 Plan 1 (defect slice) complete (2026-08-24, branch `v0.3.0`): all 39
 plan tasks closed as beads `yolo-5hy.1.1`–`.39` (engine lifecycle, storage,
 tools, server, TUI, CLI/e2e, naming V1–V8, two hermetic benchmarks),
@@ -51,13 +67,6 @@ tasks, spec §4).
 e2e-live` PASS pre-tag, epic `yolo-8vl` closed; v0.1.3 released — PR #7,
 deviations 73–77. Detail in `git log --oneline`.)
 
-## Open items
-
-- [x] Version wiring — spec'd in v0.2.0 design §2 (ldflags + VCS stamping +
-  justfile); tracked as bead `yolo-2bf`.
-- [x] All 15 waves full-coverage (wave-1 skipped chunks backfilled — deviation 67; no
-  residual `COVERAGE: skipped` notes)
-
 ## Key verified facts (so they don't get re-litigated)
 
 - Permission engine = port of `packages/opencode/src/permission/index.ts` + matrices in
@@ -67,7 +76,7 @@ is `*` deny; `write`+`edit` both map to permission `edit`.
 - Pinned deps: `charm.land/bubbletea/v2` v2.0.8, `charm.land/lipgloss/v2` v2.0.6,
 `charm.land/bubbles/v2` v2.1.1, `modernc.org/sqlite` v1.56.0 (pure Go, no cgo),
 `tidwall/jsonc` v0.3.3; dev-only `teatest/v2` v2.0.0-20260816001655-68d539dca504.
-- Module `github.com/kido5217/yolo`, Go ≥ 1.25 (installed 1.26.5).
+- Module `github.com/kido5217/yolo`, Go ≥ 1.25 (installed 1.26.7).
 - Single deliberate wire deviation: `x-yolo-directory` header.
 - Test gating: unit tests never hit network; `YOLO_LLM=fake` (+ `YOLO_FAKE_SCRIPT`) selects
 the scripted fake driver; zen fixture gate = 57 models (42 openai + 15 anthropic,
@@ -82,17 +91,16 @@ plain strings (`TrimRight`) BEFORE styling (a styled string's last bytes are `\x
 post-style trim silently misses), and count display widths in runes
 (`utf8.RuneCountInString`) — `·` is 2 bytes, `○` 3 (both 1 column). Both bit T27's two-pane
 column math.
-- e2e/endpoint facts (Task 30): `scripts/e2e-live.sh` (entry point `just e2e-live`,
-script path unchanged) validated PASS (exit 0) 2026-08-18
-BOTH against a mock OpenAI SSE endpoint and the REAL `https://ai.kido.ws/v1`,
-and re-validated PASS on 2026-08-23 before the v0.2.0 tag — the spec v1
-dogfood success criterion is met (completed `bash ls /tmp` tool call + text reply; abort
-idle → `aborted:false`, busy → `aborted:true`; SIGTERM → exit 0). `ai.kido.ws` accepts ANY
-bearer token (private endpoint; no auth.json on this host — key order env → auth.json →
-config). `GET /global/health` → `{"status":"ok"}`; `/session/{id}/message` rows =
-`{"info":{role,error:{type},...},"parts":[...]}` (jq: `.info.role`). Script mechanics:
-`req()` must set globals (never run inside `$(…)` — subshell loses `HTTP_STATUS`); boot
-from the scratch project dir (deviation 65).
+- e2e/endpoint facts: `scripts/e2e-live.sh` (entry point `just e2e-live`),
+  validated PASS against the REAL `https://ai.kido.ws/v1` on 2026-08-24
+  (post Plan 1 merge; the pre-tag re-validation of spec §5) — success shape:
+  completed bash tool call + text reply; abort idle → `aborted:false`, busy
+  → `aborted:true`; SIGTERM → exit 0. `ai.kido.ws` accepts ANY bearer token
+  (private endpoint — key order env → auth.json → config).
+  `GET /global/health` → `{"status":"ok"}`; `/session/{id}/message` rows =
+  `{"info":{role,error:{type},...},"parts":[...]}` (jq: `.info.role`). Script
+  mechanics: `req()` must set globals (never run inside `$(…)` — subshell
+  loses `HTTP_STATUS`); boot from the scratch project dir (deviation 65).
 - teatest v2 output mechanics (bit T28's suites): (a) each `WaitFor` drains the SHARED
 output buffer — consecutive `WaitFor`s observe DISJOINT slices, so a multi-token terminal
 state must be ONE merged condition, never two sequential waits (an idle app emits no new
