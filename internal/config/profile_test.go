@@ -482,3 +482,226 @@ func TestCopy(t *testing.T) {
 		}
 	})
 }
+
+func TestProfileEdit(t *testing.T) {
+	tests := []struct {
+		name     string
+		id       string
+		seed     bool
+		files    map[string]string
+		other    map[string]map[string]string
+		nameArg  string
+		descArg  string
+		hasName  bool
+		hasDesc  bool
+		wantName string
+		wantDesc string
+		wantErr  error
+	}{
+		{
+			name:     "set both name and description",
+			id:       "11111111",
+			seed:     true,
+			files:    map[string]string{"yolo.jsonc": `{"profile":{"name":"old","description":"old desc"},"model":"kido/q"}`},
+			nameArg:  "new",
+			descArg:  "new desc",
+			hasName:  true,
+			hasDesc:  true,
+			wantName: "new",
+			wantDesc: "new desc",
+		},
+		{
+			name:     "set name only keeps the description",
+			id:       "22222222",
+			seed:     true,
+			files:    map[string]string{"yolo.jsonc": `{"profile":{"name":"old","description":"kept"}}`},
+			nameArg:  "renamed",
+			hasName:  true,
+			wantName: "renamed",
+			wantDesc: "kept",
+		},
+		{
+			name:     "set description only on a profile without a profile element",
+			id:       "33333333",
+			seed:     true,
+			descArg:  "just desc",
+			hasDesc:  true,
+			wantName: "33333333",
+			wantDesc: "just desc",
+		},
+		{
+			name:     "rename to self is a successful no-op",
+			id:       "44444444",
+			seed:     true,
+			files:    map[string]string{"yolo.jsonc": `{"profile":{"name":"same","description":"d"}}`},
+			nameArg:  "same",
+			hasName:  true,
+			wantName: "same",
+			wantDesc: "d",
+		},
+		{
+			name:    "name taken by another profile",
+			id:      "55555555",
+			seed:    true,
+			files:   map[string]string{"yolo.jsonc": `{"profile":{"name":"mine"}}`},
+			other:   map[string]map[string]string{"66666666": {"yolo.jsonc": `{"profile":{"name":"taken"}}`}},
+			nameArg: "taken",
+			hasName: true,
+			wantErr: config.ErrNameTaken,
+		},
+		{
+			name:     "clearing the name falls back to the id",
+			id:       "77777777",
+			seed:     true,
+			files:    map[string]string{"yolo.jsonc": `{"profile":{"name":"gone","description":"kept"}}`},
+			nameArg:  "",
+			hasName:  true,
+			wantName: "77777777",
+			wantDesc: "kept",
+		},
+		{
+			name:     "clearing the description",
+			id:       "88888888",
+			seed:     true,
+			files:    map[string]string{"yolo.jsonc": `{"profile":{"name":"keep","description":"bye"}}`},
+			descArg:  "",
+			hasDesc:  true,
+			wantName: "keep",
+			wantDesc: "",
+		},
+		{
+			name:     "clearing both",
+			id:       "99999999",
+			seed:     true,
+			files:    map[string]string{"yolo.jsonc": `{"profile":{"name":"gone","description":"bye"}}`},
+			nameArg:  "",
+			descArg:  "",
+			hasName:  true,
+			hasDesc:  true,
+			wantName: "99999999",
+			wantDesc: "",
+		},
+		{
+			name:    "nonexistent id",
+			id:      "00000000",
+			nameArg: "x",
+			hasName: true,
+			wantErr: config.ErrNotFound,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			if tc.seed {
+				seedProfile(t, root, tc.id, tc.files)
+			}
+			for oid, ofiles := range tc.other {
+				seedProfile(t, root, oid, ofiles)
+			}
+			p, err := config.Edit(root, tc.id, tc.nameArg, tc.descArg, tc.hasName, tc.hasDesc)
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("Edit err = %v, want %v", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Edit: %v", err)
+			}
+			if p.ID != tc.id {
+				t.Fatalf("Edit id = %q, want %q", p.ID, tc.id)
+			}
+			if p.Name != tc.wantName || p.Description != tc.wantDesc {
+				t.Fatalf("Edit = %+v, want name %q description %q", p, tc.wantName, tc.wantDesc)
+			}
+		})
+	}
+
+	t.Run("clearing both drops the profile element from yolo.jsonc", func(t *testing.T) {
+		root := t.TempDir()
+		seedProfile(t, root, "11111111", map[string]string{
+			"yolo.jsonc": `{"profile":{"name":"gone","description":"bye"},"model":"kido/q"}`,
+		})
+		if _, err := config.Edit(root, "11111111", "", "", true, true); err != nil {
+			t.Fatalf("Edit: %v", err)
+		}
+		b, err := os.ReadFile(filepath.Join(root, "11111111", "yolo.jsonc"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var m map[string]any
+		if err := json.Unmarshal(b, &m); err != nil {
+			t.Fatalf("yolo.jsonc: %v: %s", err, b)
+		}
+		if _, ok := m["profile"]; ok {
+			t.Fatalf("profile element still present: %s", b)
+		}
+		if m["model"] != "kido/q" {
+			t.Fatalf("model = %v, want kido/q (unrelated fields survive)", m["model"])
+		}
+		profiles, err := config.List(root)
+		if err != nil {
+			t.Fatalf("List: %v", err)
+		}
+		if len(profiles) != 1 {
+			t.Fatalf("List = %d profiles, want 1: %+v", len(profiles), profiles)
+		}
+		if p := profiles[0]; p.ID != "11111111" || p.Name != "11111111" || p.Description != "" {
+			t.Fatalf("List profile = %+v, want id fallback + empty description", p)
+		}
+	})
+
+	t.Run("setting both keeps unrelated config fields", func(t *testing.T) {
+		root := t.TempDir()
+		seedProfile(t, root, "11111111", map[string]string{
+			"yolo.jsonc": `{"profile":{"name":"old","description":"old"},"model":"kido/q"}`,
+		})
+		if _, err := config.Edit(root, "11111111", "new", "new desc", true, true); err != nil {
+			t.Fatalf("Edit: %v", err)
+		}
+		cfg, err := config.LoadGlobal(filepath.Join(root, "11111111"))
+		if err != nil {
+			t.Fatalf("LoadGlobal: %v", err)
+		}
+		if cfg.Model != "kido/q" {
+			t.Fatalf("model = %q, want kido/q (survives the edit)", cfg.Model)
+		}
+		if cfg.Profile == nil || cfg.Profile.Name != "new" || cfg.Profile.Description != "new desc" {
+			t.Fatalf("profile element = %+v, want name new + description new desc", cfg.Profile)
+		}
+	})
+
+	t.Run("id directory name is unchanged by a name change", func(t *testing.T) {
+		root := t.TempDir()
+		seedProfile(t, root, "11111111", map[string]string{
+			"yolo.jsonc": `{"profile":{"name":"old"}}`,
+		})
+		if _, err := config.Edit(root, "11111111", "new", "", true, false); err != nil {
+			t.Fatalf("Edit: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(root, "11111111")); err != nil {
+			t.Fatalf("original dir 11111111 gone: %v", err)
+		}
+		profiles, err := config.List(root)
+		if err != nil {
+			t.Fatalf("List: %v", err)
+		}
+		if len(profiles) != 1 || profiles[0].ID != "11111111" {
+			t.Fatalf("List = %+v, want the same id", profiles)
+		}
+	})
+
+	t.Run("editing the active profile leaves the marker", func(t *testing.T) {
+		root := t.TempDir()
+		seedProfile(t, root, "11111111", map[string]string{
+			"yolo.jsonc": `{"profile":{"name":"old"}}`,
+		})
+		writeMarker(t, root, "11111111")
+		if _, err := config.Edit(root, "11111111", "new", "", true, false); err != nil {
+			t.Fatalf("Edit: %v", err)
+		}
+		if got := readMarker(t, root); got != "11111111" {
+			t.Fatalf("marker = %q, want 11111111 (untouched)", got)
+		}
+	})
+}

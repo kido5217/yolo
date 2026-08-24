@@ -84,7 +84,8 @@ config lives at `~/.config/yolo/<profile_id>/` (precedence `config.json`
 < `yolo.json` < `yolo.jsonc`); id auto-generated 8-hex (first-run literal
 `default`); `~/.config/yolo/active` = active marker; selection =
 `--profile` flag > `YOLO_PROFILE` env > marker > `default` recovery;
-`yolo profile list|add [name] [-d DESC]|use|remove|copy SRC NAME [-d DESC]`;
+`yolo profile list|add [name] [-d DESC]|use|edit REF [-n NAME]
+[-d DESC]|remove|copy SRC NAME [-d DESC]`;
 name unique + id-then-name resolution (dup name = ambiguous error); legacy
 flat files ignored; data dir shared.
 - Test gating: unit tests never hit network; `YOLO_LLM=fake` (+ `YOLO_FAKE_SCRIPT`) selects

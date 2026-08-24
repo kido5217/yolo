@@ -320,6 +320,58 @@ func Copy(root, srcID, name, description string) (Profile, error) {
 	return Profile{ID: id, Name: name, Description: desc}, nil
 }
 
+// Edit changes the display name and/or description of an existing profile.
+// hasName/hasDesc report which flag was given (absent != empty: an empty
+// value clears the field). Renaming to one's own current effective name is
+// a successful no-op; a name matching another profile's effective name is
+// ErrNameTaken. When the resulting element has both fields empty, the
+// "profile" element is dropped from the config. The config is rewritten as
+// a single yolo.jsonc (same write pattern as Copy); the id (directory name)
+// and the active marker are never touched.
+func Edit(root, id, name, description string, hasName, hasDesc bool) (Profile, error) {
+	if err := checkProfileDir(root, id); err != nil {
+		return Profile{}, err
+	}
+	name = strings.TrimSpace(name)
+	description = strings.TrimSpace(description)
+	if hasName && name != "" {
+		if err := checkNameFreeFor(root, name, id); err != nil {
+			return Profile{}, err
+		}
+	}
+	cfg, err := LoadGlobal(filepath.Join(root, id))
+	if err != nil {
+		return Profile{}, err
+	}
+	prof := &protocol.Profile{}
+	if cfg.Profile != nil {
+		*prof = *cfg.Profile
+	}
+	if hasName {
+		prof.Name = name
+	}
+	if hasDesc {
+		prof.Description = description
+	}
+	if prof.Name == "" && prof.Description == "" {
+		cfg.Profile = nil
+	} else {
+		cfg.Profile = prof
+	}
+	b, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return Profile{}, err
+	}
+	if err := os.WriteFile(filepath.Join(root, id, yoloFileJSONC), append(b, '\n'), 0o644); err != nil {
+		return Profile{}, err
+	}
+	effective := id
+	if prof.Name != "" {
+		effective = prof.Name
+	}
+	return Profile{ID: id, Name: effective, Description: prof.Description}, nil
+}
+
 // checkProfileDir reports ErrNotFound (wrapped) when <root>/<id> is not a
 // profile directory.
 func checkProfileDir(root, id string) error {
@@ -339,6 +391,12 @@ func checkProfileDir(root, id string) error {
 // checkNameFree reports ErrNameTaken (wrapped) when name (non-empty) equals
 // an existing profile's effective name.
 func checkNameFree(root, name string) error {
+	return checkNameFreeFor(root, name, "")
+}
+
+// checkNameFreeFor is checkNameFree with the profile selfID skipped (a
+// rename to one's own effective name is a no-op, not a collision).
+func checkNameFreeFor(root, name, selfID string) error {
 	if name == "" {
 		return nil
 	}
@@ -347,6 +405,9 @@ func checkNameFree(root, name string) error {
 		return err
 	}
 	for _, p := range profiles {
+		if p.ID == selfID {
+			continue
+		}
 		if p.Name == name {
 			return fmt.Errorf("%w: %s", ErrNameTaken, name)
 		}

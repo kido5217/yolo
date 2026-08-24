@@ -398,7 +398,7 @@ func authCmd(args []string) int {
 }
 
 func profileUsage() int {
-	fmt.Fprintln(os.Stderr, "Usage:\n  yolo profile list\n  yolo profile add [name] [-d description]\n  yolo profile use <id_or_name>\n  yolo profile remove <id_or_name>\n  yolo profile copy <src> <name> [-d description]")
+	fmt.Fprintln(os.Stderr, "Usage:\n  yolo profile list\n  yolo profile add [name] [-d description]\n  yolo profile use <id_or_name>\n  yolo profile edit <id_or_name> [-n name] [-d description]\n  yolo profile remove <id_or_name>\n  yolo profile copy <src> <name> [-d description]")
 	return 2
 }
 
@@ -456,6 +456,37 @@ func pullDescFlags(args []string) (pos []string, desc string) {
 		}
 	}
 	return pos, desc
+}
+
+// pullEditFlags extracts the -n/--name and -d/--description flags from args
+// (any position: -n X, --name X, --name=X, -d X, --description X,
+// --description=X) and returns the positional args plus the flag values with
+// their presence: absent != empty (an empty value clears the field), which
+// pullDescFlags cannot express.
+func pullEditFlags(args []string) (pos []string, name, desc string, hasName, hasDesc bool) {
+	pos = make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "-n" || a == "--name":
+			if i+1 < len(args) {
+				name, hasName = args[i+1], true
+				i++
+			}
+		case strings.HasPrefix(a, "--name="):
+			name, hasName = strings.TrimPrefix(a, "--name="), true
+		case a == "-d" || a == "--description":
+			if i+1 < len(args) {
+				desc, hasDesc = args[i+1], true
+				i++
+			}
+		case strings.HasPrefix(a, "--description="):
+			desc, hasDesc = strings.TrimPrefix(a, "--description="), true
+		default:
+			pos = append(pos, a)
+		}
+	}
+	return pos, name, desc, hasName, hasDesc
 }
 
 func profileCmd(args []string) int {
@@ -530,6 +561,26 @@ func profileCmd(args []string) int {
 			return 1
 		}
 		fmt.Println(id)
+		return 0
+	case "edit":
+		pos, name, desc, hasName, hasDesc := pullEditFlags(rest)
+		if len(pos) > 1 {
+			fmt.Fprintf(os.Stderr, "yolo profile edit: unexpected argument %q\n", pos[1])
+			return profileUsage()
+		}
+		if len(pos) != 1 || (!hasName && !hasDesc) {
+			return profileUsage()
+		}
+		id, ok := resolveProfile("edit", root, pos[0])
+		if !ok {
+			return 1
+		}
+		p, err := config.Edit(root, id, name, desc, hasName, hasDesc)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "yolo profile edit: %v\n", err)
+			return 1
+		}
+		fmt.Printf("%s  %s\n", p.ID, p.Name)
 		return 0
 	case "remove":
 		if len(rest) < 1 || len(rest) > 1 {
