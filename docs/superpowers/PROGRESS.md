@@ -5,15 +5,18 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
-**Status (2026-08-24):** v0.3.0 released — merged to `main` (PR #11 Plan 1
-defect slice; PR #12 Plan 2 refactor slice) + tagged `v0.3.0` + GitHub release
-cut. 55-task implementation (39 defect + 16 refactor), gate-green incl. `-race`
-+ `golangci-lint`; `just e2e-live` PASS against the real `https://ai.kido.ws/v1`
-on 2026-08-24 (post Plan 2 merge). Beads: epic `yolo-5hy` and every subtask
-closed. Spec: `docs/superpowers/specs/2026-08-23-v0.3.0-design.md`. The 0.3.0
-deferred backlog (defect slice + 16 `refactor-*`) is fully closed and frozen in
-`docs/superpowers/deferred-archive.md`; `DEFERRED.md` is reset (no open
-items). Next: no open work — `bd ready` is empty until a 0.4.0 scope is defined.
+**Status (2026-08-24):** v0.4.0 direction-change docs complete on branch
+`v0.4.0_spec` (epic `yolo-5u1`), awaiting PR merge to `main`. Spec:
+`docs/superpowers/specs/2026-08-24-v0.4.0-design.md` (approved 2026-08-24).
+Scope was docs only: the Qwen3.8-27B testing goal is complete (local Qwen 3.8
+tested, stable, optimized); from v0.4.0 the project tests various LLM
+harnesses and frameworks; opencode v1.18.18 is a reference, not a contract
+(deviations on explicit user instruction, logged in `DEVIATIONS.md`); the 21
+sha256-pinned text files are change gates, not upstream locks. Last release:
+v0.3.0 (PRs #11/#12, tag `v0.3.0`, `just e2e-live` PASS 2026-08-24, epic
+`yolo-5hy` closed; 0.3.0 backlog frozen in
+`docs/superpowers/deferred-archive.md`, `DEFERRED.md` reset). Next: user merge
+of the v0.4.0 PR; the harness-testing scope is a future spec.
 
 ## Root causes (archive, v0.1.3)
 
@@ -35,6 +38,12 @@ prompt+model does NOT loop in upstream opencode. Detail: deviations 73–77.
 
 ## Last completed
 
+v0.4.0 direction-change docs complete (2026-08-24, branch `v0.4.0_spec`):
+spec `2026-08-24-v0.4.0-design.md` (beads `yolo-5u1.1`), plan
+`2026-08-24-v0.4.0-direction-change.md` (beads `yolo-5u1.3`), restated root
+`AGENTS.md` (purpose + principles 2–3), `README.md` (intro + purpose note),
+internal DOX chain (`internal/AGENTS.md` + `internal/protocol/AGENTS.md`),
+this record (beads `yolo-5u1.2`). Next: PR to `main` (user merge).
 0.3.0 Plan 2 (refactor slice) complete (2026-08-24, branch
 `v0.3.0-plan-2`): all 16 wave-8 refactors closed as beads
 `yolo-5hy.2.1`–`.16` (engine test-harness + engine 4-way split + runRound/
@@ -113,4 +122,15 @@ not a separator. The first command (n=0) masked the group bug because counter==0
 no replay — gap events are unrecoverable, recovery is REST hydration from storage).
 - go-udiff v0.4.1 pinned as the direct line-diff dependency (2026-08-23, 0.3.0 task N,
 deviation 104) — the sole new dependency of 0.3.0 (root AGENTS.md allowlist, proposal #1).
+- v0.4.0 direction change (2026-08-24, user-approved; spec
+  `docs/superpowers/specs/2026-08-24-v0.4.0-design.md`): the original
+  Qwen3.8-27B testing goal is complete (local Qwen 3.8 tested, stable,
+  optimized). From v0.4.0 the project tests various LLM harnesses and
+  frameworks — yolo drives/evaluates other harnesses (the subsystem itself is
+  a future architectural spec). opencode v1.18.18 is a reference, not a
+  contract: yolo may deviate (wire shapes, behavior, pinned text) on explicit
+  user instruction, each deviation logged in `DEVIATIONS.md` with severity.
+  The 21 sha256-pinned files (14 `session/prompt/*.txt` + 7 `tool/desc/*.txt`)
+  record current intended content, not an upstream lock — an intentional
+  change re-baselines the pin in the same commit.
 
