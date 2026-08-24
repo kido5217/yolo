@@ -5,13 +5,14 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
-**Status (2026-08-24):** v0.4.2 released — TUI word-wrap fixes (PR #19,
-branch `many_words`; beads `yolo-0ca` + `yolo-ukc`) merged to `main` +
-tagged `v0.4.2` + GitHub release cut: transcript lines word-wrap at the
-viewport width (`wrapLine`; re-wrap on resize), every below-viewport
-surface (toasts, permission overlay, slash menu, model/agent dialogs,
-home rows, error line, help line) wraps at the terminal width, and the
-prompt line fits (`SetWidth(w-3)` — prompt(2)+cursor(1) overhead).
+**Status (2026-08-24):** v0.4.3 released — allowlisted dependency bump
+(PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
++ GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,
+modernc.org/sqlite v1.57.0, teatest v2.0.0-20260823001701 (dev);
+no code/wire changes, gate green. Prior release: v0.4.2 (PR #19, branch
+`many_words`, beads `yolo-0ca` + `yolo-ukc`): transcript + every
+below-viewport surface word-wraps at the terminal width (`wrapLine`;
+`SetWidth(w-3)` prompt fix).
 Prior release: v0.4.1 (PR #18, branch `code_review`, bead `yolo-lkh`):
 corrupt profile configs no longer break `List`/name-based ops, `buildDeps`
 pins the loader to the RESOLVED profile id, `FakeFromEnv` follows
