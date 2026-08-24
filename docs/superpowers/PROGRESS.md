@@ -18,11 +18,11 @@ complete 2026-08-24** — all 39 tasks closed (beads `yolo-5hy.1.1`–`.39`,
 sub-epic `yolo-5hy.1` closed). **Plan 2 (refactor slice) complete
 2026-08-24** — all 16 tasks closed (beads `yolo-5hy.2.1`–`.16`, sub-epic
 `yolo-5hy.2` closed); close-out gate green (`go vet ./...` + `go test ./...`
-+ `go test -race ./...` + `gofmt -l .` + `golangci-lint run ./...`). Next:
-push `v0.3.0-plan-2` → PR → user merge → user-run `just e2e-live`
-re-validation → tag `v0.3.0` (tag only with explicit user go-ahead); release
-epic `yolo-5hy` stays open. The 0.3.0 deferred backlog lives in
-`docs/superpowers/DEFERRED.md`.
++ `go test -race ./...` + `gofmt -l .` + `golangci-lint run ./...`). `v0.3.0-plan-2` pushed and **PR #12 open**
+(2026-08-24). Next: user merge PR #12 → user-run `just e2e-live`
+re-validation → tag `v0.3.0` (tag only with explicit user go-ahead);
+release epic `yolo-5hy` stays open until the tag. The 0.3.0 deferred
+backlog lives in `docs/superpowers/DEFERRED.md`.
 
 ## Root causes (archive, v0.1.3)
 
