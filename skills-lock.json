@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "charm-stack": {
+      "source": "yurifrl/cly",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/charm-stack/SKILL.md",
+      "computedHash": "85e82b2652f7aabd89e90a7f4a2ff33be74d801193c055858981f708575145e5"
+    },
     "golang-benchmark": {
       "source": "samber/cc-skills-golang",
       "sourceType": "github",
