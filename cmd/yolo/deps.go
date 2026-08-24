@@ -19,13 +19,15 @@ import (
 	"github.com/kido5217/yolo/internal/tool"
 )
 
-// buildDeps assembles the full core stack for workDir: config loader (real
-// XDG env), storage DB, bus, permission service, provider registry, tools
-// and the session engine. YOLO_LLM=fake (with YOLO_FAKE_SCRIPT) selects the
-// scripted fake driver + static catalog so the suite never hits the
-// network; any other env runs the live registry.
-func buildDeps(workDir string) (*server.Deps, func(), error) {
-	loader := config.Loader{} // nil Env view = real process environment
+// buildDeps assembles the full core stack for workDir under the given
+// profile selection: profile is the --profile flag (id or name); empty
+// falls back to the YOLO_PROFILE env, then the active marker. Config
+// loader (real XDG env), storage DB, bus, permission service, provider
+// registry, tools and the session engine. YOLO_LLM=fake (with
+// YOLO_FAKE_SCRIPT) selects the scripted fake driver + static catalog so
+// the suite never hits the network; any other env runs the live registry.
+func buildDeps(workDir, profile string) (*server.Deps, func(), error) {
+	loader := config.Loader{Profile: profile} // nil Env view = real env
 	homeDir, err := config.Home()
 	if err != nil {
 		return nil, nil, err
@@ -64,6 +66,23 @@ func buildDeps(workDir string) (*server.Deps, func(), error) {
 	}
 
 	b := bus.New()
+
+	// Profile selection (flag > YOLO_PROFILE env > active marker; a first
+	// run creates the default profile) is fixed for the process; the
+	// server serves the global config from this one profile dir.
+	globalDir, err := config.GlobalYoloDir()
+	if err != nil {
+		closeDB()
+		return fail(err)
+	}
+	profileID, err := config.ProcessProfile(globalDir, profile, envMap())
+	if err != nil {
+		closeDB()
+		return fail(err)
+	}
+	profileDir := filepath.Join(globalDir, profileID)
+	logger.Info("profile selected", "id", profileID, "dir", profileDir)
+
 	deps := &server.Deps{
 		DB:     db,
 		Bus:    b,
@@ -72,16 +91,11 @@ func buildDeps(workDir string) (*server.Deps, func(), error) {
 		Log:    logger,
 		// Dirs are resolved above: the server never re-resolves XDG itself
 		// (a broken home is a buildDeps error, not a per-request 500).
-		Dirs:    config.Dirs{Home: homeDir, Data: dataDir, Cache: cacheDir},
+		Dirs:    config.Dirs{Home: homeDir, Data: dataDir, Cache: cacheDir, Profile: profileID},
 		WorkDir: workDir,
 	}
 
-	globalDir, err := config.GlobalYoloDir()
-	if err != nil {
-		closeDB()
-		return fail(err)
-	}
-	cfg, err := loader.LoadAt(globalDir, workDir)
+	cfg, err := loader.LoadAt(profileDir, workDir)
 	if err != nil {
 		closeDB()
 		return fail(err)
@@ -108,7 +122,7 @@ func buildDeps(workDir string) (*server.Deps, func(), error) {
 		DB: db, Bus: deps.Bus, Prov: deps.Prov, Perm: deps.Perm,
 		Tools: tool.Registry(), DataDir: dataDir, Log: logger,
 		Cfg: func(dir string) (*protocol.Config, error) {
-			return loader.LoadAt(globalDir, dir)
+			return loader.LoadAt(profileDir, dir)
 		},
 		Drivers: drivers,
 	})

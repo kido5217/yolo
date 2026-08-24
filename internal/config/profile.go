@@ -42,6 +42,27 @@ type Profile struct {
 	Description string
 }
 
+// ProcessProfile resolves the profile id for a process against root: the
+// flag reference (id or name) beats the YOLO_PROFILE env value (env nil =
+// os environment), which beats the active marker (EnsureActive creates the
+// default profile on a first run).
+func ProcessProfile(root, flag string, env map[string]string) (string, error) {
+	if flag != "" {
+		return Resolve(root, flag)
+	}
+	envVal := func(name string) (string, bool) {
+		if env != nil {
+			v, ok := env[name]
+			return v, ok
+		}
+		return os.LookupEnv(name)
+	}
+	if v, ok := envVal(ProfileEnvVar); ok && v != "" {
+		return Resolve(root, v)
+	}
+	return EnsureActive(root)
+}
+
 // GenerateID returns a fresh profile id: 8 lowercase hex chars from
 // crypto/rand (Kubernetes-style short random suffix).
 func GenerateID() (string, error) {

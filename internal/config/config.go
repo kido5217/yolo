@@ -107,17 +107,10 @@ func (l Loader) EnvVal(name string) (string, bool) {
 	return os.LookupEnv(name)
 }
 
-// selectProfile resolves the profile id for root: the Profile override
-// beats the YOLO_PROFILE env value, which beats the active marker
-// (EnsureActive creates the default profile on a first run).
+// selectProfile resolves the profile id for root via ProcessProfile with
+// the loader's own env view.
 func (l Loader) selectProfile(root string) (string, error) {
-	if l.Profile != "" {
-		return Resolve(root, l.Profile)
-	}
-	if v, ok := l.EnvVal(ProfileEnvVar); ok && v != "" {
-		return Resolve(root, v)
-	}
-	return EnsureActive(root)
+	return ProcessProfile(root, l.Profile, l.Env)
 }
 
 // Load resolves the active profile in the real global dir, then merges

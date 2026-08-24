@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"testing"
@@ -39,7 +41,7 @@ func TestHelpListsSubcommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("help exit err: %v\n%s", err, out)
 	}
-	for _, want := range []string{"serve", "auth", "version", "help"} {
+	for _, want := range []string{"serve", "auth", "profile", "version", "help"} {
 		if !strings.Contains(string(out), want) {
 			t.Fatalf("help output missing %q:\n%s", want, out)
 		}
@@ -101,11 +103,115 @@ func buildStack(t *testing.T) (*server.Deps, func()) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
 	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
-	deps, closeDB, err := buildDeps(workDir)
+	deps, closeDB, err := buildDeps(workDir, "")
 	if err != nil {
 		t.Fatalf("buildDeps: %v", err)
 	}
 	return deps, closeDB
+}
+
+// seedProfileRootForCmd builds <configHome>/yolo with one profile dir per
+// model value plus the given active marker ("" = no marker).
+func seedProfileRootForCmd(t *testing.T, configHome, marker string, models map[string]string) {
+	t.Helper()
+	for id, model := range models {
+		p := filepath.Join(configHome, "yolo", id, "yolo.jsonc")
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(`{"model":"`+model+`"}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if marker != "" {
+		p := filepath.Join(configHome, "yolo", "active")
+		if err := os.WriteFile(p, []byte(marker+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// TestBuildDepsProfileSelection pins the process profile precedence in
+// buildDeps: the --profile flag beats the YOLO_PROFILE env, which beats
+// the active marker; a first run (no root) creates the default profile.
+func TestBuildDepsProfileSelection(t *testing.T) {
+	root := t.TempDir()
+	workDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
+	script := filepath.Join(root, "script.json")
+	if err := os.WriteFile(script,
+		[]byte(`[{"parts":[{"kind":"text","text":"ok","finish":"stop","usage":{"input":1,"output":1}}]}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("YOLO_LLM", "fake")
+	t.Setenv("YOLO_FAKE_SCRIPT", script)
+	seedProfileRootForCmd(t, filepath.Join(root, "config"), "work", map[string]string{
+		"default": "m-default",
+		"work":    "m-work",
+	})
+
+	selectProfile := func(t *testing.T, flag string) (string, error) {
+		t.Helper()
+		deps, closeDB, err := buildDeps(workDir, flag)
+		if err != nil {
+			return "", err
+		}
+		defer closeDB()
+		return deps.Dirs.Profile, nil
+	}
+
+	t.Run("no flag or env: active marker", func(t *testing.T) {
+		got, err := selectProfile(t, "")
+		if err != nil {
+			t.Fatalf("buildDeps: %v", err)
+		}
+		if got != "work" {
+			t.Fatalf("profile = %q, want work (marker)", got)
+		}
+	})
+	t.Run("env overrides the marker", func(t *testing.T) {
+		t.Setenv("YOLO_PROFILE", "default")
+		got, err := selectProfile(t, "")
+		if err != nil {
+			t.Fatalf("buildDeps: %v", err)
+		}
+		if got != "default" {
+			t.Fatalf("profile = %q, want default (env)", got)
+		}
+	})
+	t.Run("flag beats env and marker", func(t *testing.T) {
+		t.Setenv("YOLO_PROFILE", "default")
+		got, err := selectProfile(t, "work")
+		if err != nil {
+			t.Fatalf("buildDeps: %v", err)
+		}
+		if got != "work" {
+			t.Fatalf("profile = %q, want work (flag)", got)
+		}
+	})
+	t.Run("name references resolve to ids", func(t *testing.T) {
+		p := filepath.Join(root, "config", "yolo", "aaaa1111", "yolo.jsonc")
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(`{"profile":{"name":"home-office"},"model":"m-home"}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		got, err := selectProfile(t, "home-office")
+		if err != nil {
+			t.Fatalf("buildDeps: %v", err)
+		}
+		if got != "aaaa1111" {
+			t.Fatalf("profile = %q, want aaaa1111 (resolved by name)", got)
+		}
+	})
+	t.Run("missing profile: error", func(t *testing.T) {
+		if _, err := selectProfile(t, "nope"); err == nil {
+			t.Fatal("buildDeps with missing profile: want error, got nil")
+		}
+	})
 }
 
 // TestTuiExitMapping pins the TUI process-exit contract: a program killed by
@@ -866,4 +972,201 @@ func TestRejectUnexpectedPositionals(t *testing.T) {
 	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 2 {
 		t.Fatalf("serve junk exit = %v, want exit code 2 (pre-fix: it starts serving and is killed by the watchdog)", err)
 	}
+}
+
+// TestProfileCmd pins the yolo profile CLI surface: subcommand dispatch,
+// usage and exit codes, add/use/remove/copy semantics, and the list output
+// (active marker, id + name + description columns). State is isolated to a
+// temp XDG config dir; stdout/stderr are swapped per case.
+func TestProfileCmd(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+
+	runProfile := func(t *testing.T, args ...string) (int, string, string) {
+		t.Helper()
+		oldOut, oldErr := os.Stdout, os.Stderr
+		t.Cleanup(func() { os.Stdout, os.Stderr = oldOut, oldErr })
+		outR, outW, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		errR, errW, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		os.Stdout, os.Stderr = outW, errW
+		code := profileCmd(args)
+		_ = outW.Close()
+		_ = errW.Close()
+		outB, _ := io.ReadAll(outR)
+		errB, _ := io.ReadAll(errR)
+		return code, string(outB), string(errB)
+	}
+
+	t.Run("no subcommand: usage, exit 2", func(t *testing.T) {
+		code, _, errOut := runProfile(t)
+		if code != 2 || !strings.Contains(errOut, "Usage:") {
+			t.Fatalf("code = %d stderr = %q, want usage + exit 2", code, errOut)
+		}
+	})
+
+	t.Run("unknown subcommand: usage, exit 2", func(t *testing.T) {
+		code, _, errOut := runProfile(t, "bogus")
+		if code != 2 || !strings.Contains(errOut, "Usage:") {
+			t.Fatalf("code = %d stderr = %q, want usage + exit 2", code, errOut)
+		}
+	})
+
+	t.Run("list on fresh root creates and shows default", func(t *testing.T) {
+		code, out, _ := runProfile(t, "list")
+		if code != 0 {
+			t.Fatalf("code = %d", code)
+		}
+		if !strings.Contains(out, "* default  default") {
+			t.Fatalf("list = %q, want * default  default", out)
+		}
+	})
+
+	t.Run("add with name and description", func(t *testing.T) {
+		code, out, errOut := runProfile(t, "add", "work", "-d", "work laptop")
+		if code != 0 {
+			t.Fatalf("code = %d stderr = %q", code, errOut)
+		}
+		if !regexp.MustCompile(`^[0-9a-f]{8}  work$`).MatchString(strings.TrimSpace(out)) {
+			t.Fatalf("add output = %q, want '<id>  work'", out)
+		}
+		_, listOut, _ := runProfile(t, "list")
+		if !strings.Contains(listOut, "work  work laptop") {
+			t.Fatalf("list missing name + description:\n%s", listOut)
+		}
+	})
+
+	t.Run("add duplicate name: exit 1", func(t *testing.T) {
+		code, _, errOut := runProfile(t, "add", "work")
+		if code != 1 || !strings.Contains(errOut, "already in use") {
+			t.Fatalf("code = %d stderr = %q, want name-taken error", code, errOut)
+		}
+	})
+
+	t.Run("use by name switches the active profile", func(t *testing.T) {
+		code, out, errOut := runProfile(t, "use", "work")
+		if code != 0 {
+			t.Fatalf("code = %d stderr = %q", code, errOut)
+		}
+		if !regexp.MustCompile(`^[0-9a-f]{8}$`).MatchString(strings.TrimSpace(out)) {
+			t.Fatalf("use output = %q, want the resolved id", out)
+		}
+		_, listOut, _ := runProfile(t, "list")
+		for _, line := range strings.Split(listOut, "\n") {
+			if strings.Contains(line, "work") && !strings.HasPrefix(line, "* ") {
+				t.Fatalf("work profile not marked active:\n%s", listOut)
+			}
+		}
+		if !strings.Contains(listOut, "* ") {
+			t.Fatalf("no active marker in list:\n%s", listOut)
+		}
+	})
+
+	t.Run("use missing profile: exit 1 with available list", func(t *testing.T) {
+		code, _, errOut := runProfile(t, "use", "nope")
+		if code != 1 || !strings.Contains(errOut, "not found") {
+			t.Fatalf("code = %d stderr = %q", code, errOut)
+		}
+		if !strings.Contains(errOut, "available") {
+			t.Fatalf("stderr missing available-profiles hint:\n%s", errOut)
+		}
+	})
+
+	t.Run("copy creates a new profile with the given name", func(t *testing.T) {
+		code, out, errOut := runProfile(t, "copy", "work", "work-home", "-d", "home copy")
+		if code != 0 {
+			t.Fatalf("code = %d stderr = %q", code, errOut)
+		}
+		if !strings.Contains(strings.TrimSpace(out), "work-home") {
+			t.Fatalf("copy output = %q, want the new name", out)
+		}
+		// seed a model into the source profile, then verify the copy
+		// carries it over
+		profRoot := filepath.Join(root, "config", "yolo")
+		entries, err := os.ReadDir(profRoot)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			p := filepath.Join(profRoot, e.Name(), "yolo.jsonc")
+			b, err := os.ReadFile(p)
+			if err != nil || !strings.Contains(string(b), `"work"`) {
+				continue
+			}
+			var m map[string]any
+			if err := json.Unmarshal(b, &m); err != nil {
+				t.Fatal(err)
+			}
+			m["model"] = "m-work"
+			b, _ = json.Marshal(m)
+			if err := os.WriteFile(p, b, 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		_, _, _ = runProfile(t, "copy", "work", "work-2")
+		found := false
+		entries, err = os.ReadDir(profRoot)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			b, err := os.ReadFile(filepath.Join(profRoot, e.Name(), "yolo.jsonc"))
+			if err != nil {
+				continue
+			}
+			if strings.Contains(string(b), `"work-2"`) && strings.Contains(string(b), `"m-work"`) {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatal("no profile dir holds the copy (name work-2 + source model m-work)")
+		}
+	})
+
+	t.Run("copy name colliding with source: exit 1", func(t *testing.T) {
+		code, _, errOut := runProfile(t, "copy", "work", "work")
+		if code != 1 || !strings.Contains(errOut, "already in use") {
+			t.Fatalf("code = %d stderr = %q, want name-taken error", code, errOut)
+		}
+	})
+
+	t.Run("copy with missing source: exit 1", func(t *testing.T) {
+		code, _, errOut := runProfile(t, "copy", "nope", "x")
+		if code != 1 || !strings.Contains(errOut, "not found") {
+			t.Fatalf("code = %d stderr = %q", code, errOut)
+		}
+	})
+
+	t.Run("remove the active profile falls back to the remaining one", func(t *testing.T) {
+		_, _, _ = runProfile(t, "add", "personal")
+		code, _, errOut := runProfile(t, "remove", "work")
+		if code != 0 {
+			t.Fatalf("code = %d stderr = %q", code, errOut)
+		}
+		_, listOut, _ := runProfile(t, "list")
+		if !strings.Contains(listOut, "* default  default") && !strings.Contains(listOut, "* personal  personal") {
+			t.Fatalf("active marker not on a remaining profile:\n%s", listOut)
+		}
+		if strings.Contains(listOut, "  work  ") {
+			t.Fatalf("work profile still listed:\n%s", listOut)
+		}
+	})
+
+	t.Run("remove missing profile: exit 1", func(t *testing.T) {
+		code, _, errOut := runProfile(t, "remove", "nope")
+		if code != 1 || !strings.Contains(errOut, "not found") {
+			t.Fatalf("code = %d stderr = %q", code, errOut)
+		}
+	})
 }

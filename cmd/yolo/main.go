@@ -23,6 +23,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kido5217/yolo/internal/auth"
+	"github.com/kido5217/yolo/internal/config"
 	"github.com/kido5217/yolo/internal/log"
 	"github.com/kido5217/yolo/internal/server"
 	"github.com/kido5217/yolo/internal/tui"
@@ -75,6 +76,8 @@ func run(args []string) int {
 		return serveCmd(args[1:])
 	case "auth":
 		return authCmd(args[1:])
+	case "profile":
+		return profileCmd(args[1:])
 	case "version":
 		printVersion()
 		return 0
@@ -87,11 +90,15 @@ func usage(w io.Writer) {
 	fmt.Fprint(w, `yolo — Go port of opencode (v1.18.18 wire contract)
 
 Usage:
-  yolo [<sessionID>] [--dir DIR]   start the TUI (optionally resume a session)
-  yolo serve [--addr ADDR]         run the core server only (default http://127.0.0.1:4096)
+  yolo [<sessionID>] [--dir DIR] [--profile ID]   start the TUI (optionally resume a session)
+  yolo serve [--addr ADDR] [--profile ID]         run the core server only (default http://127.0.0.1:4096)
   yolo auth <subcommand>           manage credentials (list | add <provider> [key] | remove <provider>)
+  yolo profile <subcommand>        manage config profiles (list | add [name] [-d DESC] | use ID | remove ID | copy SRC NAME [-d DESC])
   yolo [-v|--version]              print version (same as: yolo version)
   yolo help                        this help
+
+--profile selects the config profile by id or name (default: YOLO_PROFILE
+env, then the active profile set with yolo profile use).
 `)
 }
 
@@ -124,6 +131,7 @@ func tuiCmd(args []string) int {
 	fs := flag.NewFlagSet("yolo", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	dir := fs.String("dir", "", "project directory (default CWD)")
+	profile := fs.String("profile", "", "config profile to use (id or name; default: YOLO_PROFILE env, then the active profile)")
 	if err := fs.Parse(args); err != nil {
 		usage(os.Stderr)
 		return 2
@@ -141,7 +149,7 @@ func tuiCmd(args []string) int {
 		fmt.Fprintf(os.Stderr, "yolo: %v\n", err)
 		return 2
 	}
-	deps, closeDB, err := buildDeps(wd)
+	deps, closeDB, err := buildDeps(wd, *profile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "yolo: %v\n", err)
 		return 1
@@ -243,6 +251,7 @@ func armForceKill(lg *log.Logger, stop <-chan os.Signal, cancel context.CancelFu
 func serveCmd(args []string) int {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	addr := fs.String("addr", "127.0.0.1:4096", "listen address")
+	profile := fs.String("profile", "", "config profile to use (id or name; default: YOLO_PROFILE env, then the active profile)")
 	showVer := fs.Bool("v", false, "print version and exit")
 	showVerLong := fs.Bool("version", false, "print version and exit")
 	// ExitOnError: Parse prints and os.Exit's on bad flags, never returns
@@ -262,7 +271,7 @@ func serveCmd(args []string) int {
 		fmt.Fprintf(os.Stderr, "yolo serve: %v\n", err)
 		return 1
 	}
-	deps, closeDB, err := buildDeps(wd)
+	deps, closeDB, err := buildDeps(wd, *profile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "yolo serve: %v\n", err)
 		return 1
@@ -385,5 +394,181 @@ func authCmd(args []string) int {
 		return 0
 	default:
 		return authUsage()
+	}
+}
+
+func profileUsage() int {
+	fmt.Fprintln(os.Stderr, "Usage:\n  yolo profile list\n  yolo profile add [name] [-d description]\n  yolo profile use <id_or_name>\n  yolo profile remove <id_or_name>\n  yolo profile copy <src> <name> [-d description]")
+	return 2
+}
+
+// profileRoot returns the global profile root (<XDG config>/yolo) and
+// ensures the active profile exists (first run creates the default).
+func profileRoot() (string, error) {
+	root, err := config.GlobalYoloDir()
+	if err != nil {
+		return "", err
+	}
+	if _, err := config.EnsureActive(root); err != nil {
+		return "", err
+	}
+	return root, nil
+}
+
+// resolveProfile maps a CLI id_or_name reference to a profile id, printing
+// a not-found hint (with the available profiles) on failure.
+func resolveProfile(cmd, root, ref string) (string, bool) {
+	id, err := config.Resolve(root, ref)
+	if err == nil {
+		return id, true
+	}
+	if errors.Is(err, config.ErrNotFound) {
+		avail, _ := config.List(root)
+		names := make([]string, 0, len(avail))
+		for _, p := range avail {
+			names = append(names, p.ID+" ("+p.Name+")")
+		}
+		fmt.Fprintf(os.Stderr, "yolo profile %s: profile %q not found (available: %s)\n", cmd, ref, strings.Join(names, ", "))
+	} else {
+		fmt.Fprintf(os.Stderr, "yolo profile %s: %v\n", cmd, err)
+	}
+	return "", false
+}
+
+// pullDescFlags extracts the -d/--description flag from args (any position:
+// -d X, --description X, --description=X) and returns the positional args
+// plus the description value. The stdlib flag package stops at the first
+// positional, which would forbid `profile add work -d "..."`.
+func pullDescFlags(args []string) (pos []string, desc string) {
+	pos = make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "-d" || a == "--description":
+			if i+1 < len(args) {
+				desc = args[i+1]
+				i++
+			}
+		case strings.HasPrefix(a, "--description="):
+			desc = strings.TrimPrefix(a, "--description=")
+		default:
+			pos = append(pos, a)
+		}
+	}
+	return pos, desc
+}
+
+func profileCmd(args []string) int {
+	if len(args) == 0 {
+		return profileUsage()
+	}
+	sub, rest := args[0], args[1:]
+	root, err := profileRoot()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "yolo profile: %v\n", err)
+		return 1
+	}
+
+	switch sub {
+	case "list":
+		if len(rest) != 0 {
+			fmt.Fprintf(os.Stderr, "yolo profile list: unexpected argument %q\n", rest[0])
+			return profileUsage()
+		}
+		profiles, err := config.List(root)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "profile list:", err)
+			return 1
+		}
+		active, _ := config.ActiveID(root)
+		if len(profiles) == 0 {
+			fmt.Println("no profiles")
+			return 0
+		}
+		for _, p := range profiles {
+			mark := "  "
+			if p.ID == active {
+				mark = "* "
+			}
+			line := mark + p.ID + "  " + p.Name
+			if p.Description != "" {
+				line += "  " + p.Description
+			}
+			fmt.Println(line)
+		}
+		return 0
+	case "add":
+		pos, desc := pullDescFlags(rest)
+		if len(pos) > 1 {
+			fmt.Fprintf(os.Stderr, "yolo profile add: unexpected argument %q\n", pos[1])
+			return profileUsage()
+		}
+		name := ""
+		if len(pos) == 1 {
+			name = pos[0]
+		}
+		p, err := config.Add(root, name, desc)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "yolo profile add: %v\n", err)
+			return 1
+		}
+		fmt.Printf("%s  %s\n", p.ID, p.Name)
+		return 0
+	case "use":
+		if len(rest) < 1 || len(rest) > 1 {
+			if len(rest) > 1 {
+				fmt.Fprintf(os.Stderr, "yolo profile use: unexpected argument %q\n", rest[1])
+			}
+			return profileUsage()
+		}
+		id, ok := resolveProfile("use", root, rest[0])
+		if !ok {
+			return 1
+		}
+		if err := config.SetActive(root, id); err != nil {
+			fmt.Fprintf(os.Stderr, "yolo profile use: %v\n", err)
+			return 1
+		}
+		fmt.Println(id)
+		return 0
+	case "remove":
+		if len(rest) < 1 || len(rest) > 1 {
+			if len(rest) > 1 {
+				fmt.Fprintf(os.Stderr, "yolo profile remove: unexpected argument %q\n", rest[1])
+			}
+			return profileUsage()
+		}
+		id, ok := resolveProfile("remove", root, rest[0])
+		if !ok {
+			return 1
+		}
+		if err := config.Remove(root, id); err != nil {
+			fmt.Fprintf(os.Stderr, "yolo profile remove: %v\n", err)
+			return 1
+		}
+		fmt.Println(id)
+		return 0
+	case "copy":
+		pos, desc := pullDescFlags(rest)
+		if len(pos) < 2 {
+			return profileUsage()
+		}
+		if len(pos) > 2 {
+			fmt.Fprintf(os.Stderr, "yolo profile copy: unexpected argument %q\n", pos[2])
+			return profileUsage()
+		}
+		srcID, ok := resolveProfile("copy", root, pos[0])
+		if !ok {
+			return 1
+		}
+		p, err := config.Copy(root, srcID, pos[1], desc)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "yolo profile copy: %v\n", err)
+			return 1
+		}
+		fmt.Printf("%s  %s\n", p.ID, p.Name)
+		return 0
+	default:
+		return profileUsage()
 	}
 }
