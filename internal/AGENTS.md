@@ -24,8 +24,10 @@ contracts.
 - Package map:
   - `protocol` — wire DTOs only (agent, command, config, errors, event, id,
     message, part, provider, session)
-  - `server` — REST handlers, SSE stream, `contract_test.go` (mirror check),
-    `testdata/`, `testutil/` (blackbox harness = the TUI test escape hatch)
+  - `server` — REST handlers, SSE stream, wire-contract suites
+    (`golden_test.go` / `sse_ordering_test.go` / `fake_env_e2e_test.go` /
+    `scope_test.go` — the upstream mirror check), `testdata/`, `testutil/`
+    (blackbox harness = the TUI test escape hatch)
   - `session` — `engine.go` agent loop, lifecycle, `policy.go`, `prompt/`
     (14 byte-verbatim pinned prompt files)
   - `llm` — openai + anthropic drivers, `fake/` scripted driver (`YOLO_LLM=fake`),
