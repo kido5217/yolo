@@ -6,3 +6,7 @@
 *.db
 .beads-credential-key
 .beads/proxieddb/
+# Local bd audit trail (append-only, rewritten on each mutation; Dolt is the
+# source of truth — see 86c9a82). Not committed: repo is public and it carries
+# the actor name.
+.beads/interactions.jsonl
