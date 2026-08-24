@@ -202,6 +202,10 @@ Default section order:
   lives in `AGENTS.md`; the only managed block is `bd setup opencode` (do not
   hand-edit its markers). The project beads skill at `.agents/skills/beads/`
   is bd-managed and stays.
+- TUI work: follow the project `charm-stack` skill
+  (`.agents/skills/charm-stack/`) for Bubbletea/Bubbles/Lipgloss/Huh
+  patterns; its v1 import paths are illustrative — the allowlist's
+  `charm.land/*` v2 line wins.
 
 ## Child DOX Index
 
