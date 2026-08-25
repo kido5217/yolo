@@ -10,7 +10,11 @@ server over the wire contract only — it never reaches into core internals.
 Everything under `internal/tui/`: the app and its concern files (app,
 hydrate, dialog, keys, commands, view, footer, home, permission, prompt,
 session, style, toast, wrap), `client/` (HTTP + SSE client, backoff),
-`store/` (display state), `imports_test.go`, and the teatest suites.
+`store/` (display state), `theme/` (theme engine — 33 embedded upstream
+themes, resolution, system-theme generation, OSC palette detection, custom
+discovery, selection chain over the TUI-local KV file; TUI-local by root
+principle 4, all filesystem paths injected by cmd/yolo), `imports_test.go`,
+and the teatest suites.
 
 ## Local Contracts
 
@@ -69,8 +73,15 @@ session, style, toast, wrap), `client/` (HTTP + SSE client, backoff),
   input: `TrimRight` padded plain strings BEFORE styling (a post-style trim
   silently misses), and count display widths in runes
   (`utf8.RuneCountInString`) — `·` is 2 bytes/1 col, `○` 3 bytes/1 col.
-- New code: `golang-naming` + `golang-code-style`; suites follow
-  `tui_suite_test.go`.
+- Golang skills (full table in root AGENTS.md "Golang skills") — invoke the
+  relevant one(s) per task. Always pair `golang-naming` + `golang-code-style`
+  for new code. The TUI-relevant set: `golang-testing` (teatest suites,
+  table-driven), `golang-concurrency` (the event loop, SSE resync pump,
+  goroutine hygiene), `golang-safety` (store state, slice/append aliasing),
+  `golang-data-structures` (wrap/transcript buffers). TUI patterns follow the
+  project `charm-stack` skill (Bubbletea/Bubbles/Lipgloss; its v1 import
+  paths are illustrative — the allowlist's `charm.land/*` v2 line wins);
+  suites follow `tui_suite_test.go`.
 
 ## Verification
 

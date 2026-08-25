@@ -61,9 +61,18 @@ contracts.
 
 ## Work Guidance
 
-- New code: invoke `golang-naming` + `golang-code-style` (always as a pair);
-  llm paths test against the fake driver; storage uses parameterized queries
-  (golang-database); errors wrapped with `%w` (golang-error-handling).
+- Golang skills (full table in root AGENTS.md "Golang skills") — invoke the
+  relevant one(s) per task: `golang-naming` + `golang-code-style` (always
+  paired) for new code; `golang-error-handling` (wrapping `%w`, logging);
+  `golang-testing` (table-driven, fake driver, goleak); `golang-concurrency`
+  (engine turn loop, bus, SSE pump); `golang-database` (storage DAOs —
+  parameterized queries only); `golang-security` (auth, config, injection);
+  `golang-troubleshooting` (bugs/crashes/deadlocks — root cause first);
+  `golang-safety` (defensive review); `golang-design-patterns` (interfaces,
+  DI, lifecycle); `golang-data-structures` / `golang-performance` /
+  `golang-benchmark` (hot paths); `golang-refactoring` (large restructures).
+  llm paths always test against the fake driver. `golang-cli` covers `cmd/`
+  (root-owned subtree).
 - embed quirk (root "Commands & verification"): `import _ "embed"` pattern —
   see `internal/tool/read.go`.
 - Dependency policy (root "Project"): allowlist + agent-proposable — a new
