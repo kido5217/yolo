@@ -8,6 +8,7 @@ require (
 	charm.land/lipgloss/v2 v2.0.6
 	github.com/aymanbagabas/go-udiff v0.4.1
 	github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20260823001701-96af6d2cb5f6
+	github.com/charmbracelet/x/term v0.2.2
 	github.com/tidwall/jsonc v0.3.3
 	modernc.org/sqlite v1.57.0
 )
@@ -18,7 +19,6 @@ require (
 	github.com/charmbracelet/ultraviolet v0.0.0-20260811164956-006e29f97886 // indirect
 	github.com/charmbracelet/x/ansi v0.11.8 // indirect
 	github.com/charmbracelet/x/exp/golden v0.0.0-20251109135125-8916d276318f // indirect
-	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/charmbracelet/x/termios v0.1.1 // indirect
 	github.com/charmbracelet/x/windows v0.2.2 // indirect
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
