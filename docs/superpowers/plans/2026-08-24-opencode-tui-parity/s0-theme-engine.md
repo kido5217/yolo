@@ -213,8 +213,6 @@ Expected: all green; gofmt prints nothing.
 git add internal/tui/theme/
 git commit -m "feat: embed 33 upstream theme JSONs + ThemeJson model"
 bd close yolo-oae.1.1 --reason "33 assets embedded verbatim (sha256-verified), ThemeJson + parse tests green" --json
-git add .beads/
-git commit -m "chore: beads export (yolo-oae.1.1 closed)"
 ```
 
 **STOP** — report gate, commit, `git status`; wait for go-ahead.
@@ -851,8 +849,6 @@ side, NEVER edit the golden to match a wrong port.
 git add internal/tui/theme/ scripts/tui-theme-golden.mjs
 git commit -m "feat: port resolveTheme + 33x2 golden matrix"
 bd close yolo-oae.1.2 --reason "resolveTheme port verified bit-for-bit vs the node oracle (33x2 golden + edge cases)" --json
-git add .beads/
-git commit -m "chore: beads export (yolo-oae.1.2 closed)"
 ```
 
 **STOP** — report gate, commit, `git status`; wait for go-ahead.
@@ -1144,8 +1140,6 @@ Expected: all green; gofmt prints nothing.
 git add internal/tui/theme/
 git commit -m "feat: Theme struct + lipgloss style accessors"
 bd close yolo-oae.1.3 --reason "57 token accessors + SelectedForeground port + alpha semantics tested" --json
-git add .beads/
-git commit -m "chore: beads export (yolo-oae.1.3 closed)"
 ```
 
 **STOP** — report gate, commit, `git status`; wait for go-ahead.
@@ -1472,8 +1466,6 @@ Expected: all green; gofmt prints nothing.
 git add internal/tui/theme/
 git commit -m "feat: port generateSystem (terminal palette to theme)"
 bd close yolo-oae.1.4 --reason "generateSystem + grays/muted/tint + terminalMode verified vs the node oracle (4 fixtures x 2)" --json
-git add .beads/
-git commit -m "chore: beads export (yolo-oae.1.4 closed)"
 ```
 
 **STOP** — report gate, commit, `git status`; wait for go-ahead.
@@ -1794,8 +1786,6 @@ git add internal/tui/theme/ go.mod go.sum docs/superpowers/DEVIATIONS.md
 git commit -m "feat: OSC 11/10/4 terminal palette detection"
 bd close yolo-oae.1.5 --reason "OSC probe + 16/9 query port (hermetic tests incl. rgb: scaling, partial idle, legacy-tmux wrap) + x/term promotion" --json
 bd close <dep-proposal-bead-id> --reason "approved + landed (direct require v0.2.2, zero new modules)" --json
-git add .beads/
-git commit -m "chore: beads export (yolo-oae.1.5 closed)"
 ```
 
 **STOP** — report gate, commit, `git status`; wait for go-ahead.
@@ -2105,8 +2095,6 @@ Expected: all green; gofmt prints nothing.
 git add internal/tui/theme/
 git commit -m "feat: custom theme discovery (.yolo walk) + SIGUSR2 refresh"
 bd close yolo-oae.1.6 --reason "ThemeDirs + Discover (global-first walk, later-wins, dotfile+symlink, corrupt=hard-error, raw values) + SIGUSR2 watcher; hermetic tests green" --json
-git add .beads/
-git commit -m "chore: beads export (yolo-oae.1.6 closed)"
 ```
 
 **STOP** — report gate, commit, `git status`; wait for go-ahead.
@@ -3680,8 +3668,6 @@ Expected: all green — including the re-baselined `internal/config` suite, the
 git add internal/tui/theme/kv.go internal/tui/theme/engine.go internal/tui/theme/kv_test.go internal/tui/theme/engine_test.go internal/protocol/config.go internal/config/config_test.go internal/tui/app.go internal/tui/rec_test.go internal/tui/app_test.go cmd/yolo/main.go docs/superpowers/DEVIATIONS.md
 git commit -m "feat: theme selection chain (config > KV > default) + TUI KV"
 bd close yolo-oae.1.7 --reason "KV file (ordered/atomic/flock, ??-get, nil-delete) + Engine (config>KV>default chain, mode lock, single-probe system theme, 250/1000ms refresh) + config.theme wire change (deviation 123) + single-probe scoping (deviation 124) + app wiring; hermetic tests green" --json
-git add .beads/
-git commit -m "chore: beads export (yolo-oae.1.7 closed)"
 ```
 
 **STOP** — report gate, commit, `git status`; wait for go-ahead.
@@ -4136,8 +4122,6 @@ Expected: all green — including `TestImportsDirection` (logo.go's `internal/tu
 git add internal/tui/logo.go internal/tui/logo_test.go internal/tui/home_theme_test.go internal/tui/home.go internal/tui/view.go internal/tui/style.go internal/tui/home_test.go internal/tui/overflow_test.go internal/tui/app_test.go internal/tui/tui_suite_test.go internal/tui/AGENTS.md
 git commit -m "feat: shell restyle - upstream logo + border tokens"
 bd close yolo-oae.1.8 --reason "upstream logo (strict copy, sha256 pin) + home borderSubtle divider + teatest SGR goldens (ANSI256 244/255/235/238/237 + bold); zero-Theme degrades to the plain logo" --json
-git add .beads/
-git commit -m "chore: beads export (yolo-oae.1.8 closed)"
 ```
 
 **STOP** — report gate, commit, `git status`; wait for go-ahead.
@@ -4746,8 +4730,6 @@ Expected: all green — including `TestImportsDirection` (home.go's new `charm.l
 git add internal/tui/home.go internal/tui/footer.go internal/tui/style.go internal/tui/view.go internal/tui/dialog.go internal/tui/permission.go internal/tui/session.go internal/tui/prompt.go internal/tui/home_theme_test.go internal/tui/session_test.go internal/tui/session_bench_test.go internal/tui/overflow_test.go internal/tui/agent_test.go internal/tui/model_test.go internal/tui/AGENTS.md
 git commit -m "feat: shell restyle - home list + footer theme tokens"
 bd close yolo-oae.1.9 --reason "home rows restyled with the selection tokens (primary bg + selectedForeground, title bold, meta dimmed) + segment-preserving wrap; the dim static removed (all surfaces on textMuted); footer themed; teatest SGR goldens (232/216/255/244 + the ▸ merged bold+fg+bg CSI)" --json
-git add .beads/
-git commit -m "chore: beads export (yolo-oae.1.9 closed)"
 ```
 
 **STOP** — report gate, commit, `git status`; wait for go-ahead.
@@ -5233,8 +5215,6 @@ Expected: all green — including `TestImportsDirection` (the new `internal/tui/
 git add internal/tui/session.go internal/tui/footer.go internal/tui/view.go internal/tui/toast.go internal/tui/app.go internal/tui/home.go internal/tui/prompt.go internal/tui/dialog.go internal/tui/style.go internal/tui/session_theme_test.go internal/tui/tui_suite_test.go internal/tui/AGENTS.md
 git commit -m "feat: shell restyle - session chrome theme tokens"
 bd close yolo-oae.1.10 --reason "session chrome on theme tokens: tool rows (textMuted/text/error), ! line + toasts (error), footer conn (success/error), prompt cursor (text, upstream cursorColor=theme.text), cursorStyle helper; style.go down to title+divider; teatest SGR goldens (244/246/114/255)" --json
-git add .beads/
-git commit -m "chore: beads export (yolo-oae.1.10 closed)"
 ```
 
 **STOP** — report gate, commit, `git status`; wait for go-ahead.
@@ -5311,15 +5291,13 @@ git add docs/superpowers/DEVIATIONS.md docs/superpowers/PROGRESS.md
 git commit -m "docs: checkpoint — S0 done, next is S1 detail pass"
 ```
 
-- [ ] **Step 7: Close the slice bead + export**
+- [ ] **Step 7: Close the slice bead**
 
 ```sh
 bd close yolo-oae.1 --reason "all 10 child beads closed, gate green, deviations 122-125 logged" --json
-git add .beads/
-git commit -m "chore: beads export (yolo-oae.1 closed)"
 ```
 
-**Handoff:** report the gate result, the two commits, and `git status`. The
+**Handoff:** report the gate result, the checkpoint commit, and `git status`. The
 next step — the S1 detail pass (one subagent, `thinking=high`, per the Slice
 Detail Protocol; its own bead, `docs: TUI parity plan — detail S1 tasks`) —
 starts ONLY on explicit user go-ahead.

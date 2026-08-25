@@ -78,7 +78,6 @@ forced DEVIATIONS.md entries this slice named (with severity, same-commit
 rule — root principle 2); (4) PROGRESS.md one-line status pointer;
 (5) commit `docs: checkpoint — S8 done, epic close pending user go-ahead`;
 (6) `bd close yolo-oae.9 --reason "all 5 child beads closed, gate green,
-parity sweep logged" --json` + the beads-export commit
-`chore: beads export (yolo-oae.9 closed)`. The epic close (`bd close
+parity sweep logged" --json``. The epic close (`bd close
 yolo-oae`) and any tag are S8.5 scope — ONLY on explicit user go-ahead
 (root: tags only with explicit user go-ahead; semantic versioning).

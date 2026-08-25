@@ -75,5 +75,4 @@ session footer segments (model/agent/tokens/cost/spinner/connection);
 severity, same-commit rule — root principle 2); (4) PROGRESS.md one-line
 status pointer; (5) commit
 `docs: checkpoint — S7 done, next is S8 detail pass`; (6)
-`bd close yolo-oae.8 --reason "all 4 child beads closed, gate green" --json`
-+ the beads-export commit `chore: beads export (yolo-oae.8 closed)`.
+`bd close yolo-oae.8 --reason "all 4 child beads closed, gate green" --json`.

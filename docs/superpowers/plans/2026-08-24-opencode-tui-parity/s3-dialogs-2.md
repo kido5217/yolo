@@ -83,5 +83,4 @@ new keybinds); (3) append any forced DEVIATIONS.md entries this slice named
 (with severity, same-commit rule — root principle 2); (4) PROGRESS.md
 one-line status pointer; (5) commit
 `docs: checkpoint — S3 done, next is S4 detail pass`; (6)
-`bd close yolo-oae.4 --reason "all 9 child beads closed, gate green" --json`
-+ the beads-export commit `chore: beads export (yolo-oae.4 closed)`.
+`bd close yolo-oae.4 --reason "all 9 child beads closed, gate green" --json`.

@@ -82,5 +82,4 @@ root principle 2; spec §4: the transcript-fixture pty diff runs before the
 slice closes — gaps become per-element `StyleConfig` overrides or a logged
 custom renderer); (4) PROGRESS.md one-line status pointer; (5) commit
 `docs: checkpoint — S1 done, next is S2 detail pass`; (6)
-`bd close yolo-oae.2 --reason "all 9 child beads closed, gate green" --json`
-+ the beads-export commit `chore: beads export (yolo-oae.2 closed)`.
+`bd close yolo-oae.2 --reason "all 9 child beads closed, gate green" --json`.

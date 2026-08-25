@@ -78,5 +78,4 @@ from the upstream borderless pills, so per-dialog deviations are expected
 and unrecognizable dialogs get hand-rolled versions, logged); (4)
 PROGRESS.md one-line status pointer; (5) commit
 `docs: checkpoint — S2 done, next is S3 detail pass`; (6)
-`bd close yolo-oae.3 --reason "all 10 child beads closed, gate green" --json`
-+ the beads-export commit `chore: beads export (yolo-oae.3 closed)`.
+`bd close yolo-oae.3 --reason "all 10 child beads closed, gate green" --json`.

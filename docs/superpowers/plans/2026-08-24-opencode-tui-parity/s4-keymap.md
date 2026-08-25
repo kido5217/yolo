@@ -69,5 +69,4 @@ rule — root principle 2; spec §9 risk 5: the fuzzy ranking order is checked
 in the S8 diff, small scoring tweak if visibly off); (4) PROGRESS.md
 one-line status pointer; (5) commit
 `docs: checkpoint — S4 done, next is S5 detail pass`; (6)
-`bd close yolo-oae.5 --reason "all 7 child beads closed, gate green" --json`
-+ the beads-export commit `chore: beads export (yolo-oae.5 closed)`.
+`bd close yolo-oae.5 --reason "all 7 child beads closed, gate green" --json`.

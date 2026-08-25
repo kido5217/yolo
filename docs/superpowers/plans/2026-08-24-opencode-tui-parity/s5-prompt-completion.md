@@ -71,5 +71,4 @@ shape: (1) module gate `go vet ./... && go test ./...` + `gofmt -l .` empty
 severity, same-commit rule — root principle 2); (4) PROGRESS.md one-line
 status pointer; (5) commit
 `docs: checkpoint — S5 done, next is S6 detail pass`; (6)
-`bd close yolo-oae.6 --reason "all 6 child beads closed, gate green" --json`
-+ the beads-export commit `chore: beads export (yolo-oae.6 closed)`.
+`bd close yolo-oae.6 --reason "all 6 child beads closed, gate green" --json`.

@@ -104,10 +104,10 @@ without explicit user go-ahead (branch → commit → push → PR → user merge
 entry where the task names one), then **STOP**: report the gate result, the
 commit, and `git status`; wait for go-ahead. Beads: claim the task's bead at
 task start (`bd update <id> --claim --json`), close it at the stop point
-(`bd close <id> --reason "..." --json`), then commit the `.beads/` export diff
-(`issues.jsonl`, `interactions.jsonl`) as a separate
-`chore: beads export (<id> closed)` commit — the pinned task message stays
-untouched. The Dolt DB itself is never git-committed.
+(`bd close <id> --reason "..." --json`). Bead state syncs through Dolt —
+the jsonl exports are gitignored/removed (repo convention since
+`86c9a82 chore: remove passive bd jsonl exports`), so there is NO per-task
+beads-export git commit; the Dolt DB itself is never git-committed.
 
 ## Bead model (spec §8 — binding)
 
