@@ -5,7 +5,14 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
-**Status (2026-08-24):** v0.4.3 released — allowlisted dependency bump
+**Status (2026-08-25):** TUI parity plan landed on `new_tui` (epic
+`yolo-oae`): directory `plans/2026-08-24-opencode-tui-parity/` —
+`plan.md` (binding 65-bead inventory + Slice Detail Protocol),
+`s0-theme-engine.md` (S0.1–S0.10 full 5-step TDD + slice gate — the
+active slice), 8 slice briefs (S1–S8, each gated on its own detail
+pass); full-plan review passed (4 defects fixed). NEXT: user go-ahead
+→ create the 10 S0 task beads under `yolo-oae.1`, execute Task S0.1.
+Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
 (PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
 + GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,
 modernc.org/sqlite v1.57.0, teatest v2.0.0-20260823001701 (dev);
@@ -34,7 +41,6 @@ branch `new_tui`): directory `plans/2026-08-24-opencode-tui-parity/` —
 slice) + 8 slice briefs (S1–S8, each gated on its own detail pass before
 execution). Deviations 122–125 pre-drafted in the plan (logged in-commit at
 execution time). Execution starts on user go-ahead.
-Next: TUI parity implementation plan (writing-plans), then execute S0.
 The harness-testing scope remains a future spec.
 
 ## Root causes (archive, v0.1.3)
