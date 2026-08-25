@@ -63,11 +63,12 @@ function resolveTheme(theme, mode) {
 // (overlay.r - base.r) * alpha, then Math.round(r * 255)) so JS/Go results
 // are bit-identical (same IEEE 754 ops).
 const tint = (base, overlay, alpha) => [
-  Math.round((base[0] / 255 + (overlay[0] / 255 - base[0] / 255) * alpha) * 255),
-  Math.round((base[1] / 255 + (overlay[1] / 255 - base[1] / 255) * alpha) * 255),
-  Math.round((base[2] / 255 + (overlay[2] / 255 - base[2] / 255) * alpha) * 255),
+  toByte(Math.round((base[0] / 255 + (overlay[0] / 255 - base[0] / 255) * alpha) * 255)),
+  toByte(Math.round((base[1] / 255 + (overlay[1] / 255 - base[1] / 255) * alpha) * 255)),
+  toByte(Math.round((base[2] / 255 + (overlay[2] / 255 - base[2] / 255) * alpha) * 255)),
   255,
 ];
+const nf = (v) => (Number.isFinite(v) ? Math.floor(v) : 0);
 function generateGrayScale(bg, isDark) {
   const grays = {};
   const bgR = bg[0], bgG = bg[1], bgB = bg[2];
@@ -94,7 +95,7 @@ function generateGrayScale(bg, isDark) {
         newR = Math.max(bgR * ratio, 0); newG = Math.max(bgG * ratio, 0); newB = Math.max(bgB * ratio, 0);
       }
     }
-    grays[i] = [Math.floor(newR), Math.floor(newG), Math.floor(newB), 255];
+    grays[i] = [nf(newR), nf(newG), nf(newB), 255];
   }
   return grays;
 }
@@ -150,7 +151,7 @@ function terminalMode(colors) {
   const bg = colors.defaultBackground;
   if (!bg) return undefined;
   const [r, g, b] = hexToRgb(bg);
-  return 0.299 * r + 0.587 * g + 0.114 * b > 0.5 ? "light" : "dark";
+  return 0.299 * (r / 255) + 0.587 * (g / 255) + 0.114 * (b / 255) > 0.5 ? "light" : "dark";
 }
 
 // --- main ---
@@ -178,10 +179,10 @@ console.log(`wrote internal/tui/theme/testdata/theme-golden.json (${Object.keys(
 const XTERM = ["#000000", "#800000", "#008000", "#808000", "#000080", "#800080", "#008080", "#c0c0c0", "#808080", "#ff0000", "#00ff00", "#ffff00", "#0000ff", "#ff00ff", "#00ffff", "#ffffff"];
 const LIGHT16 = ["#000000", "#7f0000", "#007f00", "#7f7f00", "#00007f", "#7f007f", "#007f7f", "#e5e5e5", "#e5e5e5", "#ff0000", "#00ff00", "#ffff00", "#5c5cff", "#ff00ff", "#00ffff", "#ffffff"];
 const FIXTURES = {
-  "black": { palette: XTERM, defaultBackground: "#000000", defaultForeground: "#ffffff" },
-  "mid-dark": { palette: XTERM, defaultBackground: "#1e1e1e", defaultForeground: "#d4d4d4" },
-  "white": { palette: LIGHT16, defaultBackground: "#ffffff", defaultForeground: "#000000" },
-  "mid-light": { palette: LIGHT16, defaultBackground: "#f0f0f0", defaultForeground: "#1a1a1a" },
+  "black": { palette: XTERM, defaultBackground: hexToRgb("#000000"), defaultForeground: hexToRgb("#ffffff") },
+  "mid-dark": { palette: XTERM, defaultBackground: hexToRgb("#1e1e1e"), defaultForeground: hexToRgb("#d4d4d4") },
+  "white": { palette: LIGHT16, defaultBackground: hexToRgb("#ffffff"), defaultForeground: hexToRgb("#000000") },
+  "mid-light": { palette: LIGHT16, defaultBackground: hexToRgb("#f0f0f0"), defaultForeground: hexToRgb("#1a1a1a") },
 };
 const sysOut = {};
 for (const [name, colors] of Object.entries(FIXTURES)) {
