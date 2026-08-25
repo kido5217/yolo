@@ -35,16 +35,17 @@ func toHex8(r, g, b, hex6 string) string {
 
 // scaleComponent is the port of scaleComponent (terminal-palette.ts:10060):
 // a hex component scaled to 8 bits (round(val / maxIn * 255), integer).
+// uint64 throughout so 8-digit (32-bit) components cannot overflow.
 func scaleComponent(comp string) string {
 	if len(comp) == 0 || len(comp) > 8 {
 		return "00"
 	}
-	val, err := strconv.ParseUint(comp, 16, 32)
+	val, err := strconv.ParseUint(comp, 16, 64)
 	if err != nil {
 		return "00"
 	}
-	maxIn := uint32(1)<<(4*len(comp)) - 1
-	return fmt.Sprintf("%02x", (uint32(val)*255+maxIn/2)/maxIn)
+	maxIn := uint64(1)<<(4*len(comp)) - 1
+	return fmt.Sprintf("%02x", (val*255+maxIn/2)/maxIn)
 }
 
 // wrapForTmux is the port of wrapForTmux (terminal-palette.ts:10072):
@@ -118,7 +119,9 @@ func newIdle(d time.Duration) chan struct{} {
 // DetectPalette ports TerminalPalette.detect: (1) the OSC 4;0 support probe,
 // (2) the 16 palette + 9 special-color queries with per-group idle timers,
 // the hard timeout, and the 8192/4096 buffer cap. in/out are injected; the
-// TTY preconditions are the caller's job (DetectStd).
+// TTY preconditions are the caller's job (DetectStd). The caller must ensure
+// in eventually returns EOF or an error, otherwise its reader goroutine
+// lingers in the read.
 func DetectPalette(in io.Reader, out io.Writer, opts PaletteOptions) (TerminalColors, bool) {
 	opts.fill()
 	ch := make(chan readEvent, 8)
@@ -318,44 +321,31 @@ queryLoop:
 	return colors, true
 }
 
-// isCharDevice reports whether f is a character device (a real TTY).
-func isCharDevice(f *os.File) bool {
-	st, err := f.Stat()
-	if err != nil {
-		return false
-	}
-	return st.Mode()&os.ModeCharDevice != 0
-}
-
-// DetectStd is the raw-mode /dev/tty wrapper: stdin+stdout both char devices
-// → use os.Stdin as-is; otherwise /dev/tty in raw mode (x/term). Input is
-// pumped through a pipe so ctx cancellation closes it early; LegacyTmux is
-// detected from the environment (TMUX set && TMUX_PANE unset).
+// DetectStd probes via an owned /dev/tty in raw mode (x/term): the fd is
+// restored and closed on exit, so no reader lingers. No controlling
+// terminal (open fails) → (TerminalColors{}, false) — no system theme
+// (spec §3 fallback), no probe attempt, no goroutines. Input is pumped
+// through a pipe so ctx cancellation closes it early; LegacyTmux is detected
+// from the environment (TMUX set && TMUX_PANE unset).
 func DetectStd(ctx context.Context) (TerminalColors, bool) {
 	opts := PaletteOptions{LegacyTmux: os.Getenv("TMUX") != "" && os.Getenv("TMUX_PANE") == ""}
-	var src *os.File
-	if isCharDevice(os.Stdin) && isCharDevice(os.Stdout) {
-		src = os.Stdin
-	} else {
-		f, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
-		if err != nil {
-			return TerminalColors{}, false
-		}
-		defer f.Close()
-		state, err := term.MakeRaw(uintptr(f.Fd()))
-		if err != nil {
-			return TerminalColors{}, false
-		}
-		defer term.Restore(uintptr(f.Fd()), state)
-		src = f
+	f, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+	if err != nil {
+		return TerminalColors{}, false
 	}
+	defer f.Close()
+	state, err := term.MakeRaw(uintptr(f.Fd()))
+	if err != nil {
+		return TerminalColors{}, false
+	}
+	defer term.Restore(uintptr(f.Fd()), state)
 	pr, pw := io.Pipe()
 	done := make(chan struct{})
 	go func() {
 		defer pw.Close()
 		buf := make([]byte, 4096)
 		for {
-			n, err := src.Read(buf)
+			n, err := f.Read(buf)
 			if n > 0 {
 				if _, werr := pw.Write(buf[:n]); werr != nil {
 					return
