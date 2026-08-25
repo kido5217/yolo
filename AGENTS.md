@@ -16,7 +16,10 @@ Read it before acting. Task state: beads (`bd ready`). Verified facts:
   `charm.land/lipgloss/v2` v2.0.6, `charm.land/bubbles/v2` v2.2.1,
   `modernc.org/sqlite` v1.57.0 (pure Go, no cgo), `tidwall/jsonc` v0.3.3,
   `github.com/aymanbagabas/go-udiff` v0.4.1 (proposal #1, user-approved
-  2026-08-23 — the Myers line diff); dev-only
+  2026-08-23 — the Myers line diff), `github.com/charmbracelet/x/term`
+  v0.2.2 (promotion, user-approved 2026-08-25, bead `yolo-oae.1.11` —
+  raw-mode tty for OSC palette detection; zero new modules, already in
+  the graph via bubbletea v2); dev-only
   `github.com/charmbracelet/x/exp/teatest/v2`
    v2.0.0-20260823001701-96af6d2cb5f6. Anything outside the allowlist requires
   an agent **dep proposal** (in the task's spec/plan or beads issue) BEFORE any

@@ -5,13 +5,14 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
-**Status (2026-08-25):** TUI parity plan landed on `new_tui` (epic
-`yolo-oae`): directory `plans/2026-08-24-opencode-tui-parity/` —
-`plan.md` (binding 65-bead inventory + Slice Detail Protocol),
-`s0-theme-engine.md` (S0.1–S0.10 full 5-step TDD + slice gate — the
-active slice), 8 slice briefs (S1–S8, each gated on its own detail
-pass); full-plan review passed (4 defects fixed). NEXT: user go-ahead
-→ create the 10 S0 task beads under `yolo-oae.1`, execute Task S0.1.
+**Status (2026-08-25):** TUI parity slice S0 (theme engine) in progress
+on `new_tui` (epic `yolo-oae`): Tasks S0.1–S0.5 complete (commits
+`c9364ed`→`8619252`; deviations 122–129), S0.6–S0.10 + slice gate remain
+(beads under `yolo-oae.1`; plan
+`plans/2026-08-24-opencode-tui-parity/s0-theme-engine.md`). NEXT: user
+go-ahead → execute Task S0.6 (custom theme discovery + SIGUSR2 refresh);
+no approval gates left before the slice gate except none (the x/term
+promotion gate was S0.5's and is spent).
 Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
 (PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
 + GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,
@@ -63,6 +64,14 @@ prompt+model does NOT loop in upstream opencode. Detail: deviations 73–77.
 
 ## Last completed
 
+Slice S0 tasks 1–5 (2026-08-25, branch `new_tui`, epic `yolo-oae`, beads
+`yolo-oae.1.1`–`.5` closed; every task reviewed clean): theme-engine
+foundation — S0.1 embed 33 upstream theme JSONs + `ThemeJson` model
+(`c9364ed`); S0.2 `resolveTheme` + 33×2 golden matrix + node oracle
+(`6622f7d`); S0.3 `Theme` struct + 51 lipgloss style accessors
+(`48bf062`); S0.4 `generateSystem` port — grays/muted/tint/terminalMode
+(`9bdaab7`); S0.5 OSC 11/10/4 palette detection + `DetectStd` + x/term
+promotion (`7de800a`, fix round `8619252`). Deviations 122–129.
 v0.4.0 direction-change docs merged to `main` (2026-08-24, branch
 `v0.4.0_spec`, epic `yolo-5u1`): spec `2026-08-24-v0.4.0-design.md`
 (beads `yolo-5u1.1`), plan `2026-08-24-v0.4.0-direction-change.md`
@@ -217,6 +226,39 @@ deviation 104) — the sole new dependency of 0.3.0 (root AGENTS.md allowlist, p
   and `FakeFromEnv` follows the `env nil = real env` convention (a bare
   nil map is not the real env); README documents the ignored pre-v0.4.0
   flat files and the `--profile` flag. User accepted beads-only tracking
-  (no dated spec/plan) as sufficient for bounded features such as the
-  profiles work (deviation 121); the spec-first workflow rule still
-  applies to architectural work.
+   (no dated spec/plan) as sufficient for bounded features such as the
+   profiles work (deviation 121); the spec-first workflow rule still
+   applies to architectural work.
+- Theme engine S0.1–S0.5 (2026-08-25, slice S0, branch `new_tui`):
+  `internal/tui/theme` is a strict-copy port of the upstream opencode
+  theme engine — the FLOAT operation order is binding (`Tint` blends in
+  0–1; grays/muted do 0–255 floor/min/max) or the goldens drift. Golden
+  harness: `scripts/tui-theme-golden.mjs` (node oracle) +
+  `testdata/{theme,system,terminal-mode}-golden.json`; S0.4 fixed three
+  oracle bugs and regenerated (0–1 terminalMode scale — #7f7f7f is
+  "dark"; hexToRgb fixture plumbing; NaN collapse upstream does at
+  `RGBA.fromInts` construction — `uint8(NaN)=0` on x86_64, e.g.
+  `system.black.light` diff line-number bgs `#001200ff`/`#120000ff`,
+  NOT `#000000ff`). OSC detection: single-buffer demux stores the
+  probe's OSC 4;0 answer as `Palette[0]` first-wins (test-pinned,
+  deviation 129 note — indistinguishable on real terminals; only
+  `palette[0]` PRESENCE gates system-theme eligibility in S0.7);
+  `DetectStd` probes via an owned `/dev/tty` in raw mode ONLY (deviation
+  129) — no controlling terminal → `(zero, false)`, no system theme
+  (spec §3); timeouts spec-pinned 100/100/100 ms vs upstream 300/300/5 s
+  (deviation 128; `PaletteOptions` overridable). Follow-up bead
+  `yolo-oae.1.12` (P1, blocked by S0.7): on Linux `close()` does not
+  wake a kernel-blocked tty read — the probe pump can linger until the
+  next input and discard it; fix (poll-with-timeout pump / inline
+  reads) lands with S0.7's wiring.
+- Dep promotion (2026-08-25, bead `yolo-oae.1.11`, user-approved
+  proposal): `github.com/charmbracelet/x/term` v0.2.2 promoted indirect →
+  direct (raw-mode tty for OSC palette detection); ZERO new modules —
+  already in the module graph via bubbletea v2; now on the root
+  AGENTS.md allowlist.
+- Deviation renumbering (slice S0, supersedes the plan's 122–125 map):
+  the log now runs 122–129 (122/123 S0.2, 124 S0.3, 125/126 S0.4,
+  127/128/129 S0.5); remaining plan entries keep their TEXT with shifted
+  numbers: S0.7 config.theme wire → 130, S0.7 single-probe scoping → 131,
+  slice-gate SGR quantization → 132 (cross-refs: S0.7 step 5,
+  `config_test.go` comment, S0.10 DOX bullet, slice gate steps 4/5/7).
