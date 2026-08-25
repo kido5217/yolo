@@ -27,7 +27,13 @@ strict-copy bar; 33 themes + theme engine, glamour v2.0.1 transcript
 rendering, huh v2.0.3 field dialogs + ported select, sahilm/fuzzy v0.1.3,
 command palette, which-key + configurable keymap, prompt
 history/frecency/autocomplete, home/session completion, parity audit vs
-upstream pty captures; 9 slices `yolo-oae.1`–`.9` (S0 ready), plan pending.
+upstream pty captures; 9 slices `yolo-oae.1`–`.9`. Plan done (2026-08-25,
+branch `new_tui`): directory `plans/2026-08-24-opencode-tui-parity/` —
+`plan.md` (binding 65-bead inventory + Slice Detail Protocol) +
+`s0-theme-engine.md` (S0.1–S0.10 full 5-step TDD + slice gate — the active
+slice) + 8 slice briefs (S1–S8, each gated on its own detail pass before
+execution). Deviations 122–125 pre-drafted in the plan (logged in-commit at
+execution time). Execution starts on user go-ahead.
 Next: TUI parity implementation plan (writing-plans), then execute S0.
 The harness-testing scope remains a future spec.
 
