@@ -8,6 +8,7 @@ import (
 
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/tui/store"
+	"github.com/kido5217/yolo/internal/tui/theme"
 )
 
 // benchStore builds a session transcript of n assistant messages, each with
@@ -113,7 +114,7 @@ func BenchmarkRenderMessages(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				sink = renderMessages(st, exp, 80)
+				sink = renderMessages(st, exp, 80, theme.Theme{})
 			}
 			if sink == "" {
 				b.Fatal("renderMessages returned empty output")

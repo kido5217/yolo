@@ -7,6 +7,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 
 	"github.com/kido5217/yolo/internal/protocol"
+	"github.com/kido5217/yolo/internal/tui/theme"
 )
 
 // promptModel is the always-focused single-line input with the slash command
@@ -68,20 +69,21 @@ func (pm *promptModel) menuItems(cmds []protocol.Command) []protocol.Command {
 
 // menuView renders the filtered slash menu; each item word-wraps at the
 // terminal width (custom command descriptions can be long).
-func (pm *promptModel) menuView(cmds []protocol.Command, w int) string {
+func (pm *promptModel) menuView(cmds []protocol.Command, w int, th theme.Theme) string {
 	items := pm.menuItems(cmds)
 	if items == nil {
 		return ""
 	}
 	if len(items) == 0 {
-		return dim.Render("  no match")
+		return th.TextMuted().Render("  no match")
 	}
+	muted := th.TextMuted()
 	var b strings.Builder
 	for i, c := range items {
 		if i > 0 {
 			b.WriteByte('\n')
 		}
-		sty := dim
+		sty := muted
 		if i == pm.sel {
 			sty = cursor
 		}

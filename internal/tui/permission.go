@@ -27,29 +27,30 @@ func (a *App) permissionView(w int) string {
 		return ""
 	}
 	p := a.store.Pending[0]
+	muted := a.theme.TextMuted()
 	rows := []struct {
 		sty   lipgloss.Style
 		plain string
 	}{
 		{title, "permission · " + p.Permission},
-		{dim, "  patterns: " + strings.Join(p.Patterns, ", ")},
+		{muted, "  patterns: " + strings.Join(p.Patterns, ", ")},
 	}
 	if len(p.Always) > 0 {
 		rows = append(rows, struct {
 			sty   lipgloss.Style
 			plain string
-		}{dim, "  Always: " + strings.Join(p.Always, ", ")})
+		}{muted, "  Always: " + strings.Join(p.Always, ", ")})
 	}
 	if p.Tool != nil && p.Tool.CallID != "" {
 		rows = append(rows, struct {
 			sty   lipgloss.Style
 			plain string
-		}{dim, "  tool call: " + p.Tool.MessageID + "/" + short6(p.Tool.CallID)})
+		}{muted, "  tool call: " + p.Tool.MessageID + "/" + short6(p.Tool.CallID)})
 	}
 	rows = append(rows, struct {
 		sty   lipgloss.Style
 		plain string
-	}{dim, "  [1] once  [2] always  [3] reject"})
+	}{muted, "  [1] once  [2] always  [3] reject"})
 	var b strings.Builder
 	for i, r := range rows {
 		if i > 0 {

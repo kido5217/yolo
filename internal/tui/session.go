@@ -12,6 +12,7 @@ import (
 
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/tui/store"
+	"github.com/kido5217/yolo/internal/tui/theme"
 )
 
 // sessionModel holds session-route state: the transcript viewport, the
@@ -66,14 +67,14 @@ const sessionHelp = "pgup/pgdn scroll \u00B7 alt+e expand \u00B7 alt+t think \u0
 // The transcript re-renders only when dirty (store mutation or expand
 // toggle); frames that only advance the footer spinner or report a status
 // tick reuse the existing viewport content instead of rebuilding it.
-func (sm *sessionModel) sync(st *store.State, w, h int) {
+func (sm *sessionModel) sync(st *store.State, w, h int, th theme.Theme) {
 	if sm.vm.Width() != w || sm.vm.Height() != h {
 		sm.vm.SetWidth(w)
 		sm.vm.SetHeight(h)
 	}
 	if sm.isDirty {
 		sm.isDirty = false
-		content := renderMessages(st, sm.expanded, w)
+		content := renderMessages(st, sm.expanded, w, th)
 		if content != sm.content {
 			sm.content = content
 			sm.vm.SetContent(content)
@@ -90,13 +91,13 @@ func (sm *sessionModel) sync(st *store.State, w, h int) {
 // every message after the first, and message errors as a red "! message" line.
 // expanded maps partID to the parts whose I/O block or reasoning text is
 // shown.
-func renderMessages(st *store.State, expanded map[string]bool, w int) string {
+func renderMessages(st *store.State, expanded map[string]bool, w int, th theme.Theme) string {
 	blocks := make([]string, 0, len(st.Messages))
 	for _, m := range st.Messages {
 		if m.Info.Role == "user" {
 			blocks = append(blocks, renderUser(m, w))
 		} else {
-			blocks = append(blocks, renderAssistant(m, expanded, w))
+			blocks = append(blocks, renderAssistant(m, expanded, w, th))
 		}
 	}
 	if len(blocks) == 0 {
@@ -137,7 +138,8 @@ func renderUser(m protocol.MessageWithParts, w int) string {
 	return b.String()
 }
 
-func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool, w int) string {
+func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool, w int, th theme.Theme) string {
+	muted := th.TextMuted()
 	var b strings.Builder
 	first := true
 	writeRaw := func(s string) {
@@ -170,12 +172,12 @@ func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool, w in
 			}
 		case "reasoning":
 			if expanded[p.ID] && p.Text != "" {
-				writeStyled(dim, "\u25BE think")
+				writeStyled(muted, "\u25BE think")
 				for _, l := range strings.Split(p.Text, "\n") {
-					writeStyled(dim, "  "+l)
+					writeStyled(muted, "  "+l)
 				}
 			} else {
-				writeStyled(dim, "\u25B8 think")
+				writeStyled(muted, "\u25B8 think")
 			}
 		case "tool":
 			sty, row, ok := toolRowLine(p)

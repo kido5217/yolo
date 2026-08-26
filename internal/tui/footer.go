@@ -73,22 +73,24 @@ func (a *App) footerView() string {
 			agent = "default"
 		}
 	}
-	segs := []string{
+	muted := a.theme.TextMuted()
+	main := muted.Render(strings.Join([]string{
 		model,
 		agent,
 		"↑" + strconv.FormatInt(tokens.Input, 10) + " ↓" + strconv.FormatInt(tokens.Output, 10),
 		fmt.Sprintf("$%.4f", cost),
-	}
+	}, " · "))
+	parts := []string{main}
 	switch {
 	case a.resyncing:
-		segs = append(segs, errRed.Render("◌ reconnecting"))
+		parts = append(parts, errRed.Render("◌ reconnecting"))
 	case a.store.Live:
-		segs = append(segs, okGreen.Render("● live"))
+		parts = append(parts, okGreen.Render("● live"))
 	default:
-		segs = append(segs, errRed.Render("○ off"))
+		parts = append(parts, errRed.Render("○ off"))
 	}
 	if seg := a.statusSeg(); seg != "" {
-		segs = append(segs, seg)
+		parts = append(parts, muted.Render(seg))
 	}
-	return strings.Join(segs, " · ")
+	return strings.Join(parts, " · ")
 }

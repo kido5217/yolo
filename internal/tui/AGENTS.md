@@ -37,7 +37,11 @@ and the teatest suites.
   wraps at the terminal width (`App.termWidth()`, fallback 80) with the same
   `wrapLine` — toasts, permission overlay, slash menu, model/agent dialogs
   (rows AND hint lines via `dimWrapped`), home session rows, the `!` error
-  line; each renderer takes a `w` param from `App.view()`. The home logo
+  line; each renderer takes a `w` param from `App.view()`. Home session rows
+  wrap as tagged segments (`rowLines` re-derives the title/` · meta` split
+  per visual line, S0.9); the selected row's background paints every
+  rendered line's content only — no background on the plain indent or the
+  empty tail beyond the content. The home logo
   (S0.8) is the one exception: a fixed 39-column glyph block that never
   wraps or shrinks (the upstream look) — terminals under 39 columns clip
   it in the alt-screen frame. The session

@@ -9,6 +9,7 @@ import (
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/tui/client"
 	"github.com/kido5217/yolo/internal/tui/store"
+	"github.com/kido5217/yolo/internal/tui/theme"
 )
 
 // sessionFixture is the T24 render fixture: one user message plus one
@@ -194,7 +195,7 @@ func TestRenderMessages(t *testing.T) {
 			if tt.mutate != nil {
 				tt.mutate(&s)
 			}
-			got := stripANSI(renderMessages(&s, tt.expanded, 80))
+			got := stripANSI(renderMessages(&s, tt.expanded, 80, theme.Theme{}))
 			if got != tt.want {
 				t.Errorf("renderMessages mismatch:\ngot:\n%q\nwant:\n%q", got, tt.want)
 			}
@@ -233,7 +234,7 @@ func TestRenderMessagesTitleFallbacks(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := stripANSI(renderMessages(&tt.s, nil, 80))
+			got := stripANSI(renderMessages(&tt.s, nil, 80, theme.Theme{}))
 			if got != tt.want {
 				t.Errorf("renderMessages = %q, want %q", got, tt.want)
 			}
@@ -348,7 +349,7 @@ func TestRenderMessagesWrapsLongLines(t *testing.T) {
 	}
 	// w must be >= the locked 28-rune divider.
 	const w = 30
-	got := stripANSI(renderMessages(&s, nil, w))
+	got := stripANSI(renderMessages(&s, nil, w, theme.Theme{}))
 	want := "User: print me 1000 words\n" +
 		"about anime\n" +
 		dividerLine() + "\n" +

@@ -7,6 +7,7 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/tui/store"
@@ -61,12 +62,15 @@ func relTime(then, now int64) string {
 	}
 }
 
-func lineContent(s protocol.Session, now int64) string {
-	c := s.Title
+// lineParts splits a session row into its title and the metadata tail
+// (" · provider/model · relTime", dimmed like upstream's per-row footer);
+// title+meta is byte-identical to the old lineContent output.
+func lineParts(s protocol.Session, now int64) (title, meta string) {
+	title = s.Title
 	if s.Model != nil {
-		c += " \u00B7 " + s.Model.ProviderID + "/" + s.Model.ID
+		meta += " \u00B7 " + s.Model.ProviderID + "/" + s.Model.ID
 	}
-	return c + " \u00B7 " + relTime(s.Time.Updated, now)
+	return title, meta + " \u00B7 " + relTime(s.Time.Updated, now)
 }
 
 // visible returns the sessions home renders.
@@ -97,61 +101,214 @@ func (h *homeModel) moveCursor(s *store.State, d int) {
 
 const helpText = "\u2191/\u2193 move \u00B7 enter open \u00B7 n new \u00B7 /help"
 
-// render produces the locked home layout for the store: the 4-line
-// upstream logo (S0.8 — replaces the old title + top divider), the
-// session rows word-wrapped at the terminal width (the cursor stays one
-// stop per session — continuation lines align under the content), the
-// theme borderSubtle divider and the dim help line.
+// render produces the locked home layout for the store: the 4-line upstream
+// logo (S0.8), the session rows word-wrapped at the terminal width (the
+// cursor stays one stop per session — continuation lines align under the
+// content), the theme borderSubtle divider and the dimmed help line.
 func (h *homeModel) render(s *store.State, w int, th theme.Theme) string {
 	h.clampCursor(s)
 	rows := h.visible(s)
 	var b strings.Builder
 	b.WriteString(renderLogo(th))
 	b.WriteByte('\n')
-	b.WriteString(h.renderRow(0, "New session", w))
+	b.WriteString(h.renderRow(0, "New session", "", w, th))
 	b.WriteByte('\n')
 	for i, se := range rows {
-		b.WriteString(h.renderRow(i+1, lineContent(se, h.now()), w))
+		title, meta := lineParts(se, h.now())
+		b.WriteString(h.renderRow(i+1, title, meta, w, th))
 		b.WriteByte('\n')
 	}
 	b.WriteString(th.BorderSubtle().Render(dividerLine()))
 	b.WriteByte('\n')
-	b.WriteString(dimWrapped(helpText, w))
+	b.WriteString(dimWrapped(th, helpText, w))
 	return b.String()
 }
 
-func (h *homeModel) renderRow(line int, content string, w int) string {
-	if line == h.cursor {
-		return homeRow("  \u25B8 "+content, 4, w, cursor.Render)
-	}
-	return homeRow("  "+content, 2, w, nil)
+// rowLead splits the row prefix into its leading-space lead (rendered
+// plain) and the styled body ("  ▸ " is two plain spaces + the ▸ run).
+func rowLead(prefix string) (lead, body string) {
+	body = strings.TrimLeft(prefix, " \t")
+	return prefix[:len(prefix)-len(body)], body
 }
 
-// homeRow word-wraps the prefixed row (style nil = plain); continuation
-// lines are indented to align under the content (ind columns, capped so the
-// line still fits).
-func homeRow(s string, ind, w int, style func(...string) string) string {
-	lines := strings.Split(wrapLine(s, w), "\n")
+// rowLine is one visual line of a wrapped home row, split into its styled
+// runs: cur the "▸" run (cursor rows, first line only), title the title run
+// (its trailing join space when the line continues into the meta), meta the
+// " · provider/model · relTime" tail.
+type rowLine struct {
+	cur   string
+	title string
+	meta  string
+}
+
+// wTag is one word of a home row tagged with its run: 0 prefix (the "▸"
+// body), 1 title, 2 meta.
+type wTag struct {
+	word string
+	seg  int
+}
+
+// rowLines wraps the plain home row (prefix + title + meta) at w with the
+// same word-wrap contract as wrapLine (word boundaries, over-long tokens
+// hard-split at the width, single-space rejoin) and re-derives the
+// title/meta split per visual line. A row that fits is returned verbatim as
+// one line (internal spacing preserved).
+func rowLines(prefix, title, meta string, w int) []rowLine {
+	lead, body := rowLead(prefix)
+	plain := prefix + title + meta
+	if w < 1 || plain == "" {
+		return []rowLine{{cur: body, title: title, meta: meta}}
+	}
+	var words []wTag
+	add := func(s string, seg int) {
+		for _, f := range strings.Fields(s) {
+			words = append(words, wTag{f, seg})
+		}
+	}
+	add(body, 0)
+	add(title, 1)
+	add(meta, 2)
+	effW := w - runeWidth(lead)
+	if effW < 1 {
+		effW = 1
+	}
+	var (
+		lines []rowLine
+		cur   []wTag
+		curW  int
+	)
+	flush := func() {
+		if len(cur) == 0 {
+			return
+		}
+		lines = append(lines, joinRowLine(cur))
+		cur, curW = cur[:0], 0
+	}
+	for _, wd := range words {
+		fw := runeWidth(wd.word)
+		if fw > effW {
+			flush()
+			for rest := wd.word; len(rest) > 0; {
+				chunk, r := cutWidth(rest, effW)
+				lines = append(lines, joinRowLine([]wTag{{chunk, wd.seg}}))
+				rest = r
+			}
+			continue
+		}
+		switch {
+		case len(cur) == 0:
+			cur, curW = append(cur, wd), fw
+		case curW+1+fw <= effW:
+			cur, curW = append(cur, wd), curW+1+fw
+		default:
+			flush()
+			cur, curW = append(cur, wd), fw
+		}
+	}
+	flush()
+	return lines
+}
+
+// joinRowLine joins the tagged words of one visual line into its styled
+// runs; a join space belongs to the PRECEDING word's run (a run's trailing
+// space is where the next run starts on the same line; a line-boundary
+// boundary drops it, as wrapLine drops leading spaces on continuation
+// lines).
+func joinRowLine(ws []wTag) rowLine {
+	var l rowLine
+	for i, wd := range ws {
+		var p *string
+		switch wd.seg {
+		case 0:
+			p = &l.cur
+		case 1:
+			p = &l.title
+		default:
+			p = &l.meta
+		}
+		*p += wd.word
+		if i < len(ws)-1 {
+			*p += " "
+		}
+	}
+	return l
+}
+
+// renderRow renders one home row (line 0 is the "New session" row). The
+// cursor row is the SELECTED row (upstream dialog-select active row): every
+// rendered line is painted with the selection background (theme primary —
+// upstream `option.bg ?? theme.primary`) and the text in
+// SelectedForeground; the "▸" cursor run and the title run are bold
+// (upstream bolds the active title), the metadata tail is not (upstream's
+// dimmed description/footer runs). The background covers each rendered
+// line's content only — no background on the plain indent or the empty
+// tail beyond the content. Other rows: the title in the theme text token,
+// the metadata tail in textMuted, no background. A zero Theme (nil-engine
+// runs, S0.7) degrades: the cursor row keeps the static cursor bold on the
+// "▸" run with plain content, every other row plain — never a panic.
+func (h *homeModel) renderRow(line int, title, meta string, w int, th theme.Theme) string {
+	cursor := line == h.cursor
+	prefix := "  "
+	if cursor {
+		prefix = "  \u25B8 "
+	}
+	lead, _ := rowLead(prefix)
+	lines := rowLines(prefix, title, meta, w)
+	ind := 2
+	if cursor {
+		ind = 4
+	}
 	var b strings.Builder
 	for i, l := range lines {
 		if i > 0 {
 			n := ind
-			if runeWidth(l)+n > w {
-				n = w - runeWidth(l)
+			if ww := runeWidth(l.cur) + runeWidth(l.title) + runeWidth(l.meta); ww+n > w {
+				n = w - ww
 				if n < 0 {
 					n = 0
 				}
 			}
-			l = strings.Repeat(" ", n) + l
 			b.WriteByte('\n')
-		}
-		if style == nil {
-			b.WriteString(l)
+			b.WriteString(strings.Repeat(" ", n))
 		} else {
-			b.WriteString(style(l))
+			b.WriteString(lead)
 		}
+		writeRowLine(&b, l, cursor, th)
 	}
 	return b.String()
+}
+
+// writeRowLine renders one visual line's styled runs (see renderRow).
+func writeRowLine(b *strings.Builder, l rowLine, selected bool, th theme.Theme) {
+	if !selected {
+		if l.title != "" {
+			b.WriteString(th.Text().Render(l.title))
+		}
+		if l.meta != "" {
+			b.WriteString(th.TextMuted().Render(l.meta))
+		}
+		return
+	}
+	bg, ok := th.Color("primary")
+	if !ok {
+		// zero Theme: the static cursor bold (S0.10's) + plain content
+		if l.cur != "" {
+			b.WriteString(cursor.Render(l.cur))
+		}
+		b.WriteString(l.title + l.meta)
+		return
+	}
+	sel := th.SelectedForeground()
+	fg := lipgloss.Color(sel.Hex()[:7])
+	bgStyle := lipgloss.Color(bg.Hex()[:7])
+	head := lipgloss.NewStyle().Foreground(fg).Background(bgStyle).Bold(true)
+	tail := lipgloss.NewStyle().Foreground(fg).Background(bgStyle)
+	if l.cur != "" || l.title != "" {
+		b.WriteString(head.Render(l.cur + l.title))
+	}
+	if l.meta != "" {
+		b.WriteString(tail.Render(l.meta))
+	}
 }
 
 // handleHomeKey dispatches home-route keys: up/down wrap, enter opens or

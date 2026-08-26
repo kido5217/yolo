@@ -38,7 +38,7 @@ func openAgentAt() *recApp {
 
 func agentBlock(t *testing.T, a *recApp, want string) {
 	t.Helper()
-	if got := stripANSI(a.dlg.agent().view(&a.store, 80)); got != want {
+	if got := stripANSI(a.dlg.agent().view(&a.store, 80, a.theme)); got != want {
 		t.Errorf("agent dialog mismatch:\ngot:\n%q\nwant:\n%q", got, want)
 	}
 }

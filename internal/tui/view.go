@@ -27,7 +27,7 @@ func (a *App) view() string {
 	perm := a.permissionView(w)
 	toasts := a.toastsView(w)
 	dlg := a.dlgView(w)
-	menu := a.prompt.menuView(a.store.Commands, w)
+	menu := a.prompt.menuView(a.store.Commands, w, a.theme)
 	var b strings.Builder
 	if a.route == routeSession {
 		b.WriteString(a.viewSession(menu, perm, toasts, dlg))
@@ -92,7 +92,7 @@ func (a *App) viewSession(menu, perm, toasts, dlg string) string {
 	if h < 1 {
 		h = 1
 	}
-	a.sess.sync(&a.store, w, h)
+	a.sess.sync(&a.store, w, h, a.theme)
 	t := "session"
 	if a.store.Current != nil {
 		t = a.store.Current.Title
@@ -102,7 +102,7 @@ func (a *App) viewSession(menu, perm, toasts, dlg string) string {
 		"\n" + a.sess.vm.View() +
 		"\n" + dividerLineRendered)
 	for _, l := range help {
-		b.WriteString("\n" + dim.Render(l))
+		b.WriteString("\n" + a.theme.TextMuted().Render(l))
 	}
 	return b.String()
 }

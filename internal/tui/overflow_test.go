@@ -50,7 +50,7 @@ func TestMenuViewWraps(t *testing.T) {
 	a.prompt.input.SetValue("/q")
 	long := strings.Repeat("quits the running app ", 5)
 	cmds := []protocol.Command{{Name: "/quit", Description: long}}
-	got := stripANSI(a.prompt.menuView(cmds, 20))
+	got := stripANSI(a.prompt.menuView(cmds, 20, a.theme))
 	fitsWidth(t, got, 20)
 	// Wrapping collapses the double-space separator into one.
 	if !strings.Contains(rejoined(got), "/quit "+strings.TrimRight(long, " ")) {
@@ -72,7 +72,7 @@ func TestAgentDlgViewWraps(t *testing.T) {
 	a := openAgentAt()
 	long := strings.Repeat("permits tools without prompts ", 6)
 	a.store.Agents = []protocol.Agent{{Name: "build", Description: long}}
-	got := stripANSI(a.dlg.agent().view(&a.store, 20))
+	got := stripANSI(a.dlg.agent().view(&a.store, 20, a.theme))
 	fitsWidth(t, got, 20)
 	// Whitespace-normalized: wrapping collapses the double-space separator
 	// and indents continuation lines.
@@ -86,7 +86,7 @@ func TestModelDlgViewWraps(t *testing.T) {
 	a := openModelAt()
 	a.dlg.model().selProv = 1 // select the 2-model provider for cell coverage
 	// The fixture rows (27-col left pane + model cell) exceed 40 columns.
-	got := stripANSI(a.dlg.model().view(&a.store, 40))
+	got := stripANSI(a.dlg.model().view(&a.store, 40, a.theme))
 	fitsWidth(t, got, 40)
 	// Whitespace-normalized containment: wrapping inserts line breaks and
 	// hanging indents between the original words.

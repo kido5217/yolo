@@ -14,6 +14,7 @@ import (
 
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/tui/store"
+	"github.com/kido5217/yolo/internal/tui/theme"
 )
 
 var (
@@ -81,30 +82,37 @@ func (d *dialogStack) agent() *agentDlg {
 }
 
 // Static frame parts render once at package init instead of on every frame:
-// the styles involved (title, dim, divider) set no width, border, padding,
-// or alignment, and lipgloss v2 Style.Render is a pure function of the style
+// the styles involved (title, divider) set no width, border, padding, or
+// alignment, and lipgloss v2 Style.Render is a pure function of the style
 // and the input (SGR output derives from the color type, no terminal state),
 // so the results are process-constants. The session-title line in
 // viewSession is the only dynamic render left.
 var (
 	dividerLineRendered = divider.Render(dividerLine())
 	quitDialogRendered  = title.Render("quit? [Y/n]")
-	helpDialogRendered  = title.Render("Help") +
-		"\n" + dim.Render("  | Key | Action |") +
-		"\n" + dim.Render("  |---|---|") +
-		"\n" + dim.Render("  | enter | send prompt |") +
-		"\n" + dim.Render("  | esc | abort turn (busy) / close dialog |") +
-		"\n" + dim.Render("  | ctrl+c | quit (confirm) |") +
-		"\n" + dim.Render("  | ctrl+p | model dialog |") +
-		"\n" + dim.Render("  | ctrl+a | agent dialog |") +
-		"\n" + dim.Render("  | / | command menu |") +
-		"\n" + dim.Render("  | pgup/pgdn | viewport scroll |") +
-		"\n" + dim.Render("  | 1/2/3 | permission reply |") +
-		"\n" + dim.Render("  | alt+e / alt+t | expand tool part / toggle reasoning |") +
-		"\n" + dim.Render("  pgup/pgdn scroll \u00B7 \\+enter newline")
 )
 
-func (d dialogStack) view() string {
+// helpDialog renders the locked help block in the theme's textMuted token
+// (S0.9: the static dim was removed — the block is short, the per-frame
+// render is negligible).
+func helpDialog(th theme.Theme) string {
+	muted := th.TextMuted()
+	return title.Render("Help") +
+		"\n" + muted.Render("  | Key | Action |") +
+		"\n" + muted.Render("  |---|---|") +
+		"\n" + muted.Render("  | enter | send prompt |") +
+		"\n" + muted.Render("  | esc | abort turn (busy) / close dialog |") +
+		"\n" + muted.Render("  | ctrl+c | quit (confirm) |") +
+		"\n" + muted.Render("  | ctrl+p | model dialog |") +
+		"\n" + muted.Render("  | ctrl+a | agent dialog |") +
+		"\n" + muted.Render("  | / | command menu |") +
+		"\n" + muted.Render("  | pgup/pgdn | viewport scroll |") +
+		"\n" + muted.Render("  | 1/2/3 | permission reply |") +
+		"\n" + muted.Render("  | alt+e / alt+t | expand tool part / toggle reasoning |") +
+		"\n" + muted.Render("  pgup/pgdn scroll \u00B7 \\+enter newline")
+}
+
+func (d dialogStack) view(th theme.Theme) string {
 	top, ok := d.top()
 	if !ok {
 		return ""
@@ -113,7 +121,7 @@ func (d dialogStack) view() string {
 	case dlgQuit:
 		return quitDialogRendered
 	case dlgHelp:
-		return helpDialogRendered
+		return helpDialog(th)
 	}
 	return ""
 }
@@ -127,11 +135,11 @@ func (a *App) dlgView(w int) string {
 	case !ok:
 		return ""
 	case d.kind == dlgModel && d.model != nil:
-		return d.model.view(&a.store, w)
+		return d.model.view(&a.store, w, a.theme)
 	case d.kind == dlgAgents && d.agent != nil:
-		return d.agent.view(&a.store, w)
+		return d.agent.view(&a.store, w, a.theme)
 	}
-	return a.dlg.view()
+	return a.dlg.view(a.theme)
 }
 
 func (a *App) handleDialogKey(d dialog, k tea.KeyPressMsg) []tea.Cmd {
@@ -466,12 +474,12 @@ func (m *modelDlg) modelCount(st *store.State) int {
 // provider's models in the right pane, the subchoice overlay and the keymap
 // hint. Rows word-wrap at the terminal width; wrapped continuations hang at
 // the cell column.
-func (m *modelDlg) view(st *store.State, w int) string {
+func (m *modelDlg) view(st *store.State, w int, th theme.Theme) string {
 	var b strings.Builder
 	b.WriteString(title.Render("Model") + "\n")
 	provs := st.Providers
 	if len(provs) == 0 {
-		b.WriteString(dim.Render("  loading…"))
+		b.WriteString(th.TextMuted().Render("  loading…"))
 		return b.String()
 	}
 	if m.selProv >= len(provs) {
@@ -487,7 +495,7 @@ func (m *modelDlg) view(st *store.State, w int) string {
 	}
 	leftCol := 0
 	for _, p := range provs {
-		sPlain, _ := providerStatus(p.Auth)
+		sPlain, _ := providerStatus(th, p.Auth)
 		if l := len("  "+p.Name+"  ") + utf8.RuneCountInString(sPlain); l > leftCol {
 			leftCol = l
 		}
@@ -495,17 +503,17 @@ func (m *modelDlg) view(st *store.State, w int) string {
 	leftCol += 2
 	rows := make([]string, 0, len(provs)+len(models))
 	for i, p := range provs {
-		sPlain, sStyle := providerStatus(p.Auth)
+		sPlain, sStyle := providerStatus(th, p.Auth)
 		name := "  " + p.Name + "  "
 		left := name + sPlain + strings.Repeat(" ", leftCol-len(name)-utf8.RuneCountInString(sPlain))
-		rowSty := dim
+		rowSty := th.TextMuted()
 		if i == m.selProv {
 			rowSty = cursor
 		}
 		switch {
 		case i == m.selProv && len(models) > 0:
 			// The cell follows the pad, so no trailing spaces to trim.
-			cell, cellSty := m.modelCell(st, curProv, models, 0)
+			cell, cellSty := m.modelCell(th, st, curProv, models, 0)
 			rows = append(rows, modelRow(styleSegment(left, len(name), len(name)+len(sPlain), sStyle, rowSty), leftCol, cell, cellSty, w))
 		default:
 			// Trim before styling: the style's trailing SGR reset would
@@ -514,27 +522,29 @@ func (m *modelDlg) view(st *store.State, w int) string {
 		}
 		if i == m.selProv {
 			for j := 1; j < len(models); j++ {
-				cell, cellSty := m.modelCell(st, curProv, models, j)
+				cell, cellSty := m.modelCell(th, st, curProv, models, j)
 				rows = append(rows, modelRow(strings.Repeat(" ", leftCol), leftCol, cell, cellSty, w))
 			}
 		}
 	}
 	b.WriteString(strings.Join(rows, "\n"))
 	if m.hasSubChoice {
-		b.WriteString("\n" + dimWrapped("  [a] this session  [b] set default", w))
+		b.WriteString("\n" + dimWrapped(th, "  [a] this session  [b] set default", w))
 	}
-	b.WriteString("\n" + dimWrapped("  \u2191/\u2193 move \u00B7 tab pane \u00B7 enter set \u00B7 esc close", w))
+	b.WriteString("\n" + dimWrapped(th, "  \u2191/\u2193 move \u00B7 tab pane \u00B7 enter set \u00B7 esc close", w))
 	return b.String()
 }
 
-// dimWrapped word-wraps a plain line at w and renders each visual line dim.
-func dimWrapped(s string, w int) string {
+// dimWrapped word-wraps a plain line at w and renders each visual line in
+// the theme's textMuted token (the static dim was removed in S0.9).
+func dimWrapped(th theme.Theme, s string, w int) string {
+	muted := th.TextMuted()
 	var b strings.Builder
 	for i, l := range strings.Split(wrapLine(s, w), "\n") {
 		if i > 0 {
 			b.WriteByte('\n')
 		}
-		b.WriteString(dim.Render(l))
+		b.WriteString(muted.Render(l))
 	}
 	return b.String()
 }
@@ -590,7 +600,7 @@ func styleSegment(s string, a, b int, segStyle, rowSty lipgloss.Style) string {
 // modelCell renders one right-pane model row (default marker, context, cost)
 // as plain text plus its style (a row may wrap, so the style is applied per
 // visual line).
-func (m *modelDlg) modelCell(st *store.State, p protocol.Provider, models []protocol.Model, j int) (string, lipgloss.Style) {
+func (m *modelDlg) modelCell(th theme.Theme, st *store.State, p protocol.Provider, models []protocol.Model, j int) (string, lipgloss.Style) {
 	mm := models[j]
 	cell := mm.Name
 	if modelIsCurrent(st, p, mm) {
@@ -600,19 +610,19 @@ func (m *modelDlg) modelCell(st *store.State, p protocol.Provider, models []prot
 	if j == m.selModel {
 		return cell, cursor
 	}
-	return cell, dim
+	return cell, th.TextMuted()
 }
 
 // providerStatus maps the wire auth state to the locked dot + label (plain
 // text plus its style; the row may wrap, so the style is applied per segment).
-func providerStatus(auth *protocol.ProviderAuth) (string, lipgloss.Style) {
+func providerStatus(th theme.Theme, auth *protocol.ProviderAuth) (string, lipgloss.Style) {
 	switch {
 	case auth != nil && auth.Status == "loaded":
 		return "● loaded", okGreen
 	case auth != nil && auth.RequiresKey && auth.Status == "missing":
 		return "○ missing", errRed
 	default:
-		return "· not-required", dim
+		return "· not-required", th.TextMuted()
 	}
 }
 
@@ -730,17 +740,18 @@ func (m *agentDlg) handleKey(a *App, k tea.KeyPressMsg) []tea.Cmd {
 // view renders the agent list, the subchoice overlay and the keymap hint.
 // Each agent row word-wraps at the terminal width (descriptions can be
 // long); the selection style stays on the row's first visual line.
-func (m *agentDlg) view(st *store.State, w int) string {
+func (m *agentDlg) view(st *store.State, w int, th theme.Theme) string {
 	var b strings.Builder
 	b.WriteString(title.Render("Agents") + "\n")
 	if len(st.Agents) == 0 {
-		b.WriteString(dim.Render("  loading…"))
+		b.WriteString(th.TextMuted().Render("  loading…"))
 		return b.String()
 	}
 	if m.sel >= len(st.Agents) {
 		m.sel = len(st.Agents) - 1
 	}
 	cur := currentAgentName(st)
+	muted := th.TextMuted()
 	rows := make([]string, 0, len(st.Agents))
 	for i, x := range st.Agents {
 		line := "  " + x.Name
@@ -751,13 +762,13 @@ func (m *agentDlg) view(st *store.State, w int) string {
 			line += "  " + x.Description
 		}
 		line = strings.TrimRight(line, " ")
-		sty := dim
+		sty := muted
 		if i == m.sel {
 			sty = cursor
 		}
 		for j, l := range strings.Split(wrapLine(line, w), "\n") {
 			if j > 0 {
-				rows = append(rows, dim.Render(l))
+				rows = append(rows, muted.Render(l))
 			} else {
 				rows = append(rows, sty.Render(l))
 			}
@@ -765,8 +776,8 @@ func (m *agentDlg) view(st *store.State, w int) string {
 	}
 	b.WriteString(strings.Join(rows, "\n"))
 	if m.hasSubChoice {
-		b.WriteString("\n" + dimWrapped("  [a] this session  [b] set default", w))
+		b.WriteString("\n" + dimWrapped(th, "  [a] this session  [b] set default", w))
 	}
-	b.WriteString("\n" + dimWrapped("  \u2191/\u2193 move \u00B7 enter set \u00B7 esc close", w))
+	b.WriteString("\n" + dimWrapped(th, "  \u2191/\u2193 move \u00B7 enter set \u00B7 esc close", w))
 	return b.String()
 }
