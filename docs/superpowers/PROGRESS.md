@@ -5,14 +5,17 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
-**Status (2026-08-25):** TUI parity slice S0 (theme engine) in progress
-on `new_tui` (epic `yolo-oae`): Tasks S0.1–S0.5 complete (commits
-`c9364ed`→`8619252`; deviations 122–129), S0.6–S0.10 + slice gate remain
-(beads under `yolo-oae.1`; plan
-`plans/2026-08-24-opencode-tui-parity/s0-theme-engine.md`). NEXT: user
-go-ahead → execute Task S0.6 (custom theme discovery + SIGUSR2 refresh);
-no approval gates left before the slice gate except none (the x/term
-promotion gate was S0.5's and is spent).
+**Status (2026-08-26):** TUI parity S0 landed on `new_tui` (epic
+`yolo-oae`): theme engine (33 embedded upstream themes, the
+resolveTheme/generateSystem ports, OSC 11/10/4 detection, custom
+discovery + SIGUSR2, the config>KV>default selection chain over the TUI
+KV) + the app-shell restyle (logo, borders, home list, footer, session
+chrome — teatest SGR goldens under the pinned ANSI256 env); deviations
+122–147 logged. The S0.5-review follow-up (bead `yolo-oae.1.12`) fixed
+the lingering /dev/tty reader in DetectStd (poll-loop pump joined before
+return; deviation 145). Next: the S1 detail pass (Slice Detail Protocol,
+plan 2026-08-24-opencode-tui-parity) then S1 execution — first bead is
+the glamour dep proposal (approval gate).
 Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
 (PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
 + GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,
