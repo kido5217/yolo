@@ -32,7 +32,7 @@ func (a *App) view() string {
 	if a.route == routeSession {
 		b.WriteString(a.viewSession(menu, perm, toasts, dlg))
 	} else {
-		b.WriteString(a.home.render(&a.store, w))
+		b.WriteString(a.home.render(&a.store, w, a.theme))
 	}
 	if menu != "" {
 		b.WriteString("\n" + menu)

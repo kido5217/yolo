@@ -10,6 +10,7 @@ import (
 
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/tui/store"
+	"github.com/kido5217/yolo/internal/tui/theme"
 )
 
 // homeModel holds home-route state: the cursor line and the relative-time
@@ -96,16 +97,16 @@ func (h *homeModel) moveCursor(s *store.State, d int) {
 
 const helpText = "\u2191/\u2193 move \u00B7 enter open \u00B7 n new \u00B7 /help"
 
-// render produces the locked home layout for the store. Session rows
-// word-wrap at the terminal width (titles are LLM-generated); the cursor
-// stays one stop per session — continuation lines align under the content.
-func (h *homeModel) render(s *store.State, w int) string {
+// render produces the locked home layout for the store: the 4-line
+// upstream logo (S0.8 — replaces the old title + top divider), the
+// session rows word-wrapped at the terminal width (the cursor stays one
+// stop per session — continuation lines align under the content), the
+// theme borderSubtle divider and the dim help line.
+func (h *homeModel) render(s *store.State, w int, th theme.Theme) string {
 	h.clampCursor(s)
 	rows := h.visible(s)
 	var b strings.Builder
-	b.WriteString(title.Render("Yolo"))
-	b.WriteByte('\n')
-	b.WriteString(divider.Render(dividerLine()))
+	b.WriteString(renderLogo(th))
 	b.WriteByte('\n')
 	b.WriteString(h.renderRow(0, "New session", w))
 	b.WriteByte('\n')
@@ -113,7 +114,7 @@ func (h *homeModel) render(s *store.State, w int) string {
 		b.WriteString(h.renderRow(i+1, lineContent(se, h.now()), w))
 		b.WriteByte('\n')
 	}
-	b.WriteString(divider.Render(dividerLine()))
+	b.WriteString(th.BorderSubtle().Render(dividerLine()))
 	b.WriteByte('\n')
 	b.WriteString(dimWrapped(helpText, w))
 	return b.String()

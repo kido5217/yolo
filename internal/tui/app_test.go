@@ -38,8 +38,7 @@ func TestHomeRendersListAndNewSession(t *testing.T) {
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return bytes.Contains(b, []byte("Yolo")) &&
-			bytes.Contains(b, []byte("New session"))
+		return bytes.Contains(b, []byte("New session"))
 	}, teatest.WithDuration(5*time.Second))
 
 	ctx := context.Background()
@@ -256,7 +255,7 @@ func TestPromptSlashNewWithoutSession(t *testing.T) {
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return bytes.Contains(b, []byte("Yolo"))
+		return bytes.Contains(b, []byte("New session"))
 	}, teatest.WithDuration(5*time.Second))
 
 	typeIn(tm, "/new")

@@ -8,8 +8,8 @@ server over the wire contract only — it never reaches into core internals.
 ## Ownership
 
 Everything under `internal/tui/`: the app and its concern files (app,
-hydrate, dialog, keys, commands, view, footer, home, permission, prompt,
-session, style, toast, wrap), `client/` (HTTP + SSE client, backoff),
+hydrate, dialog, keys, logo, commands, view, footer, home, permission,
+prompt, session, style, toast, wrap), `client/` (HTTP + SSE client, backoff),
 `store/` (display state), `theme/` (theme engine — 33 embedded upstream
 themes, resolution, system-theme generation, OSC palette detection, custom
 discovery, selection chain over the TUI-local KV file; TUI-local by root
@@ -37,7 +37,10 @@ and the teatest suites.
   wraps at the terminal width (`App.termWidth()`, fallback 80) with the same
   `wrapLine` — toasts, permission overlay, slash menu, model/agent dialogs
   (rows AND hint lines via `dimWrapped`), home session rows, the `!` error
-  line; each renderer takes a `w` param from `App.view()`. The session
+  line; each renderer takes a `w` param from `App.view()`. The home logo
+  (S0.8) is the one exception: a fixed 39-column glyph block that never
+  wraps or shrinks (the upstream look) — terminals under 39 columns clip
+  it in the alt-screen frame. The session
   route counts the wrapped help line's real line count in the viewport
   height budget. The model dialog cell hangs at the left-pane column
   (`modelRow`); when the left pane alone ≥ width, cell lines go full width.

@@ -59,7 +59,7 @@ func TestTUIFullTurn(t *testing.T) {
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
-	teatest.WaitFor(t, tm.Output(), hasLine("Yolo"), teatest.WithDuration(5*time.Second))
+	teatest.WaitFor(t, tm.Output(), hasLine("New session"), teatest.WithDuration(5*time.Second))
 	tm.Send(press('n'))
 	teatest.WaitFor(t, tm.Output(), hasLine("esc abort/back"), teatest.WithDuration(5*time.Second))
 	suiteType(tm, "do it")
@@ -172,7 +172,7 @@ func hasPermDialogEcho(b []byte) bool {
 
 func driveToPermDialog(t *testing.T, tm *teatest.TestModel, ts *testutil.TestServer) {
 	t.Helper()
-	teatest.WaitFor(t, tm.Output(), hasLine("Yolo"), teatest.WithDuration(5*time.Second))
+	teatest.WaitFor(t, tm.Output(), hasLine("New session"), teatest.WithDuration(5*time.Second))
 	tm.Send(press('n'))
 	teatest.WaitFor(t, tm.Output(), hasLine("esc abort/back"), teatest.WithDuration(5*time.Second))
 	suiteType(tm, "run it")
@@ -244,7 +244,7 @@ func TestTUIDialogs(t *testing.T) {
 		seq.WriteString(got)
 	}
 
-	capture("Yolo")
+	capture("New session")
 	tm.Send(pressCtrlP())
 	capture("Model", "Kido", "\u00B7 not-required", "\u25CB missing")
 	tm.Send(press(tea.KeyEscape))
@@ -289,7 +289,7 @@ func TestTUILongReplyWraps(t *testing.T) {
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
-	teatest.WaitFor(t, tm.Output(), hasLine("Yolo"), teatest.WithDuration(5*time.Second))
+	teatest.WaitFor(t, tm.Output(), hasLine("New session"), teatest.WithDuration(5*time.Second))
 	tm.Send(press('n'))
 	teatest.WaitFor(t, tm.Output(), hasLine("esc abort/back"), teatest.WithDuration(5*time.Second))
 	suiteType(tm, "print 1000 words")
