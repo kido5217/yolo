@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:c6f169afcff74572841646f7ebc016de1a2180598cd9cc7be6ceb469d2185022",
+  "claims": [
+    {
+      "id": "claim_d0dbdc28078640a29905d8226b9bdc42",
+      "statement": "internal/storage is the pure-Go SQLite persistence layer built on modernc.org/sqlite (no cgo); DB wraps *sql.DB plus a cache of prepared statements so Exec/Query/QueryRow and their *Context variants reuse the driver's prepared statement, with the mutex held only across the map update.",
+      "evidence": [
+        {
+          "resource": "repo://internal/storage/db.go#L1-L16",
+          "version": "repo-lines-v1:sha256:51a803be6036bdd172167c6e9eccb6c5deb13cb914ffaca3759bda54705c1a34:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYwMjczOWNlOTFiNDRkMDE2NTI0NzlkODVlZTQzNWYwYWVhMjEzMjdmODgxZDA3YzMyMDlkNTA0NGNhMTg2YjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhZmJhMDUyN2MzOTUzYzRiNmUwZTViNTczOWJhODM2MTJmODA1M2JjZGM5NDY2NzMwMTkzY2QxZDU5MGI0MDgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZiYTMyNTc1NDlkMjBlOGNlOGRiZWJlOTliNDk2NjhhODQ5NGFiZGRhNGIxYjkyNzZkZTljMTZhYWJkMmJhMTcifQ"
+        },
+        {
+          "resource": "repo://internal/storage/db.go#L21-L29",
+          "version": "repo-lines-v1:sha256:e0251de45440a436dc339fda901e864de9ae0909fc405bcb63ad18a2d8558205:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjkzM2QzZGY3YjJmODgwNDc2YTBhM2Q1OGJkNDE2YzUyN2U4NTJkMTA5ZGZmMTZlYjFiYzI5ZjBmODkxNDBkNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDQ5MGNjOGQyM2Q3ZWNiYjQ5NGExODExNGZjNjdlMGY3M2QzOWZjMjllOTgzYWEyNDhjZjFkYTNkNGQxMjhmOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOGRiOTBiODJlZGEwOGFhZGI1Nzg0OTFlZjZhY2RjMTE0MGYwNTVlNjA3ZTUwYThhOTMyNjRkNzdkZjFmN2NjMiJ9"
+        },
+        {
+          "resource": "repo://internal/storage/db.go#L71-L147",
+          "version": "repo-lines-v1:sha256:a5520e6753b40dc27b63eaf9f5bde30ea369153a5e2aee97a83aff5d4b298dae:eyJzZWxlY3RlZExpbmVDb3VudCI6NzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImViNTk0MzU4NDc5YzE0YzIyM2VkZjQ0MTg4MWM3M2NjOWZmYWRmN2ZlOGNiMTI1OTM3OTVlY2I0MjExZjNjZWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMyMmM2YmQwMjlmMzdkMjlmZGRkZmNhMGRlOTFjNGNlOWY3NmM1ZTg1ZWU5MzU5ZGEwMDk4M2ExZWQ3NWUxMTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQzYThlZmQ0MzI3YzAyMWZlMjA1ZDY0YjIzNDlmNDk5NjkwZDc4YTM0NmQyMzY0ZmVjYWQ4YTdjZGE0MjY4ZDcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_250e5f0499d948fa93f33c12daea2bf4",
+      "statement": "Open(path) opens/creates the database and runs pending migrations, setting PRAGMAs per connection via DSN keys (file:<path>?_foreign_keys=1&_busy_timeout=5000&_journal_mode=WAL) since busy_timeout and foreign_keys are not persisted, and pins the pool to one shared connection (SetMaxOpenConns(1), SetMaxIdleConns(1)) so a single-writer store cannot bypass them.",
+      "evidence": [
+        {
+          "resource": "repo://internal/storage/db.go#L31-L52",
+          "version": "repo-lines-v1:sha256:8d402095af64835efd0eb0ca3e8a16f312692119d753ff8d91a167ff5a492bf5:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEwOWY4ZDU4NWJjMGVjNjJmNDE3YjBkY2NjMGI3YjIwNGRjMTBiYWYyM2QwYzM5ZDkzMjJlZjk4YmVmMzE2YzEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZhNDg5ZTMzMDQzZTVlYTk5ZGRlZGY4YWQwY2VhMmZhZWMwZDQ3NzA4NzBjMjk3N2YyNDhkZmRmYzM4ZjRkMjkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImNjOTJkYWEyN2M5OGI5Zjc4ODE1OWVlYzQ2YzdmYmY2Mjc5MjA0MWU5NjE4ODFkMGI0NWY5ZjcwMGI1MDFmZmMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_7827cacf6cb344bb91d149efe90bf752",
+      "statement": "The database file lives at <data>/storage/yolo.db, opened through openDB in cmd/yolo/deps.go.",
+      "evidence": [
+        {
+          "resource": "repo://cmd/yolo/deps.go#L52-L60",
+          "version": "repo-lines-v1:sha256:e2b3761677136af23fe6c8d44a3d53df9a35133a72d2b2dcaf189aacbe32de40:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjdjZGE4MmRhNjA2MjM4ZTA1ZTYyMzk5NTY5YzVlZTAzOTkzNDE5NjQ4YWU1ZDQzYTJiZjhjZDYzNDdmODI2MyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNjdjZGE4MmRhNjA2MjM4ZTA1ZTYyMzk5NTY5YzVlZTAzOTkzNDE5NjQ4YWU1ZDQzYTJiZjhjZDYzNDdmODI2MyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZWNlMTdhODEwNzNiZGRmY2FiMTkxMmIyNjI5Nzg2MzFiOWYxMjc2NGY3NDAxZGE1M2Q5MTNiODgwZGJhNTI5OSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmQ1MGNkN2QwNjFmZjgzYjM2NzQzZjFkZmU0MWY2NjIwNDlkYmU2ZTI0NzQ4OWQ0MmExODQ5ZjliYTQ1Y2YyNSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_42879d040408456eab6c80926944423d",
+      "statement": "Migrations are a map[int]string of schema version to DDL applied in ascending order in migrate.go: a meta key/value table is created in Open before migrations run and stores schema_version, currentSchemaVersion reads meta (0 when absent), and each unapplied version runs in its own transaction (DDL then INSERT OR REPLACE schema_version then commit, rolling back on failure); DB.SchemaVersion returns the applied version.",
+      "evidence": [
+        {
+          "resource": "repo://internal/storage/migrate.go#L10-L119",
+          "version": "repo-lines-v1:sha256:3edf8f4df184715ca29c389687de5502da553fad9b6daf25b4dd2697a19a192e:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJiMWRlOTUyMzEwMTlhMWYzMmUwY2U1MTBjMDViMTY5NWMzMjY4ZGMyN2NmMWM3YzJhOTMyYzljYWNjMDYxZmY1IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI3ODZiMGJhNDk4NTk0ZGY2NjhlZTBjYzU3NmFlOGMxNWI5ZmRkMWE3MzFmYWI1MTkxMWI1OWY0MGVjYzQ0Njc3IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MCwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0"
+        }
+      ]
+    },
+    {
+      "id": "claim_bfe6f685ff8b4c2eb8ecca9a6d8e25dc",
+      "statement": "The base schema (version 1) creates four tables with ON DELETE CASCADE FKs down session -> message -> part: session (id PK, project_dir, title, model, agent, cost, time_created, time_updated; cost kept for parity but ignored by SessionFromRow), message (id PK, session_id FK, role, agent, cost REAL, tokens TEXT JSON, time_created, time_completed), part (id PK, message_id FK, session_id, type, tool, state_json, time_created), and permission (request_id PK, session_id, action, resource, response, always_json, time_created); version 2 adds the todo table (session_id FK cascade, content, status, priority, position) and an index on session_id.",
+      "evidence": [
+        {
+          "resource": "repo://internal/storage/migrate.go#L16-L68",
+          "version": "repo-lines-v1:sha256:48b46162505cd7a20a88e09e4e6b6415bff05334776ccc8fe5a841b479cbb865:eyJzZWxlY3RlZExpbmVDb3VudCI6NTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk3MzNkYzU5ZjNhYTk1OGYwYTY2Zjk0NTM5YzljZWZiNzFjZmUxZGRiN2RlODE5NjgzNDY2YzRiMzYzMzA5MjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYyYzg2NDdiOWM1Mzg3ZGQwMjJjNDFmYjdkODk4ZjEyMTcyMzMzZTkxOTYzYzVlODgyNGY0ZmNjZmQxMzkzYjkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE0OTdlZDIxMjRiNzEyYzc4MjI0NmZhZGQ3ODk3ODc0YWU0ZTM3ODIxODVkNDQyNTAyNDQ3NDIxYTU1MDdmYjMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_9145094ede4d4dd6b0dfd053bdec5d0e",
+      "statement": "All DAOs use parameterized queries only (? placeholders), following the golang-database policy; sessions DAO provides CreateSession (empty agent defaults to build via agentOrDefault), GetSession (missing id -> ErrNotFound), ListSessions (newest time_updated first, optional LIMIT), UpdateSession (zero-valued patch fields untouched, no-op patch returns nil, RowsAffected 0 -> ErrNotFound), and DeleteSession (messages/parts cascade).",
+      "evidence": [
+        {
+          "resource": "repo://internal/storage/session_dao.go#L10-L121",
+          "version": "repo-lines-v1:sha256:b57f6e7a474280187ec23c5182fc37ab59c5e713ed5f8cc2c58120549ea15177:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEyLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJmOWYzNTcxNWE0ZDgyMWE0NGIzNWVjNTkwZDgxNmYzNDJjN2I3YzY2N2FhY2ZhYTU2MzFjNDVlZGU1ZDczNWM4IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI0ZDVkZTY3MzkwY2UzMmJmZmVmMGRlOTY0YzFjNzIwMDk5NWQ2OGNhM2VlY2FkZWIzZGQwOWI4NzJhNTRlYjc3IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MCwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0"
+        }
+      ]
+    },
+    {
+      "id": "claim_91d17c2a8e5141f19c98929047cfa379",
+      "statement": "Parts: ProtocolToPart stores tool parts as the full protocol.ToolState JSON and text/reasoning parts as a fixed 3-key document {text, end, synthetic} (end/synthetic omitted when unset) built by hand on the streamed-delta hot path to stay byte-identical to a sorted-key compact marshal; CallID is transient and not persisted; a marshal failure is an error because persisting an empty string would 500 every later read; PartToProtocol is the inverse.",
+      "evidence": [
+        {
+          "resource": "repo://internal/storage/part_convert.go#L27-L104",
+          "version": "repo-lines-v1:sha256:619cd29b74571f3db003012ca976fa40ef327574955932316dc66ecde498f10f:eyJzZWxlY3RlZExpbmVDb3VudCI6NzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNjNDRjZDUzNzZkYTdiMmMwZjUxZDc3MmE2Y2VkNDgxOTZiMzE4M2FkMjJmYmYwN2VlYWY0YTBhNmNhZmIyZGEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgxN2ZhNGM5ZjIxMDQ1MWJiMzZiNWM4MGRlZmM3YWEyYjlhMzA3ZDlhMTJiOWYwN2U0NTEzMWU5NjgyMjExZWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNkNTNkMzY2ZTgzMjIzNmQ3NjMzNDhmZjU0NTk4YzBmM2VjZTFlM2M1OGI5NWQxZDJiMjUwNTEyNTBlYjEwOTkifQ"
+        },
+        {
+          "resource": "repo://internal/storage/part_dao.go#L9-L79",
+          "version": "repo-lines-v1:sha256:950e675c4764f236c03caf942466eddb6894a98ed647bea5ffb353d21222b2f7:eyJzZWxlY3RlZExpbmVDb3VudCI6NzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIwZjgwMDdhODJjMDQwMGM0YzhiNjhlYmI5N2RkM2I4M2E3M2Q1NGUyZGJhMGUyMmZkMWZiOWM3NDA2ZDEzMmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM4Njg1NDZlNmI3ZTEyMjFkODU0MGJiZDUyYzlmYzFlZGM0Mjg4ZWM1ZTVlYjRmOTAzOGIwYzAzZjdiYjM1MGEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_6e5a12e7f81d44329af61fc8f0ac2c61",
+      "statement": "SessionFromRow assembles the wire protocol.Session, recomputing cost and tokens as the sum over assistant messages (the session.cost column is ignored by design); ProjectID is derived deterministically from the directory as prj_ plus the first 24 hex chars of its SHA-256.",
+      "evidence": [
+        {
+          "resource": "repo://internal/storage/db.go#L166-L173",
+          "version": "repo-lines-v1:sha256:0f4032af4aeff1d6d19faeff074a9f3a94ed4b985d71a240d6ae56e314e9035f:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDcyMTcyN2RjODE5NDFkN2FmMTRmM2NlNDg0NDUwNmM0ZDQxY2Y3NzU2ZGZiODQ5MTU4MTM3Y2NhNmE2YmY3NSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzhhODE3ZWQ1YzNlMjJhZTBmNzYyNjI3ZjJjMmNlM2RmNTliMmFlNWEzN2JlNjNlZWU4ZWM0YWNkMjg4MTQwZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNWY3NTIxYjlkNmY5NGZmMjJhYzM5MmZlZTNkNzU2ZGU2Y2NiMzQ3ZDY0ZTE1MmM5NThhN2U3ZmQxYzM3YTdkOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDg2NDQxYjQ5MDI0ZDBhOGExMWM0YWUwMDBhOTUwZWE0MGUxNDQzZGFkODQyZTgzMWEyODdlODU1YzIyY2UwNyJ9"
+        },
+        {
+          "resource": "repo://internal/storage/part_convert.go#L106-L134",
+          "version": "repo-lines-v1:sha256:5dc63f8582c81a0f9f5024146ba292069fc565fdc92d3b1621de98fb2230aa1d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ0MzhmNjkzMTk5MjE0YjY2NDg0MGQxNjUyYjAxZDBmZGE2YjMyOTgzMmIyNDhhOTU1MGZmZTdkN2VjN2MyYmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNlNjg3NzRjMjQwYzVmY2E3M2VjOWE5M2IwZTk4NDJiODc1NDg4ZTZkNjRhZmRhZDhmMDkzMTAwZjIxOWNkMDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_789ca2f5645640519454297c29d8ce6a",
+      "statement": "Permissions DAO: SavePermission inserts or updates by request_id, ListPermissions (pendingOnly filters to rows with no response yet), ReplyPermission (sets response, unknown id -> ErrNotFound).",
+      "evidence": [
+        {
+          "resource": "repo://internal/storage/permission_dao.go#L8-L66",
+          "version": "repo-lines-v1:sha256:e6c6599fe25709b5c2fe330d97a4e810e1122038bff34bf38ddec6e84e7dcdf4:eyJzZWxlY3RlZExpbmVDb3VudCI6NTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFmNmRmY2QxMzBjYWM0ZDUwMDA0NDUwMmY2ZWQ2OGU5ZjVmOWZjZjk2OTQyZWUzODIwM2JmOWUyMzQ3ZGYyMmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjlmMTAxNGZiODNlZmQ5OWQxNjA1OTM1YWIzMmY0ZjZjMzEwZGM2MjdmOWZmODYxMTc5NmQzMGZiZThhNjQ2NjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_7d62df7c2b0e4c38b839b517bca7032f",
+      "statement": "Todos DAO: SaveTodos replaces a session's todo list wholesale (delete-then-insert in order, position = index; an empty list clears it), GetTodos lists in stable position order, and AlwaysRules derives allow-rules from permission rows with response='always' (one protocol.Rule per pattern in always_json, permission from the row's action).",
+      "evidence": [
+        {
+          "resource": "repo://internal/storage/todos_dao.go#L12-L81",
+          "version": "repo-lines-v1:sha256:17e3136ef31de14cc06a4b80949a7632bd5919c2aa088b86846618894cc40ad4:eyJzZWxlY3RlZExpbmVDb3VudCI6NzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ5YzNkM2E5MjY4NTQ4NTM1ZDNhZjMzYzg1NTg2MjM0MWVjMWRkODE4ZTQxN2M5YTM4MDBiYjRmNjgxN2M2NzgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE5MzBmOTk0Y2EyMTZlYzYxZTgxOTQ1ZTA3YjlhMzgwMTQ4ZDZkM2RlNGRhNDE2NzBjMzNhZThkOGQ4NWE4NjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.4.0",
+    "at": "2026-08-26T18:04:14.871Z"
+  }
+}

@@ -1,0 +1,158 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:61b3498d95846fdf2b56a803a9d193e8394d567c816253cf70127a45f04f47fe",
+  "claims": [
+    {
+      "id": "claim_29bc1893acfd4271ac87fac2f7ad2410",
+      "statement": "The whole test suite runs offline: unit and integration tests never hit the network, live model paths are env-gated, and the only real-network check is a user-run script (never CI); the core mechanism is a scripted fake LLM driver that deterministically exercises the full stack (server -> session -> tools -> storage).",
+      "evidence": [
+        {
+          "resource": "repo://internal/AGENTS.md#L87-L87",
+          "version": "repo-lines-v1:sha256:d554d780924ca234f2139cd4e776a2cee9bb5bfdb6421b9185327884560a5279:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDU1NGQ3ODA5MjRjYTIzNGYyMTM5Y2Q0ZTc3NmEyY2VlOWJiNWJmZGI2NDIxYjkxODUzMjc4ODQ1NjBhNTI3OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDU1NGQ3ODA5MjRjYTIzNGYyMTM5Y2Q0ZTc3NmEyY2VlOWJiNWJmZGI2NDIxYjkxODUzMjc4ODQ1NjBhNTI3OSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMDdiY2VmY2VhN2ZhZDNhYmZkMDJjOWM2ODlkYTM0ZWRmNGJmYTMwNGFlZTY3M2Y4ZGRmZTFlMWQ0OWFmY2E5MiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOTJjMzYyYThmODM4NjNlZWYyZTA3YTU3OTVkNTFiYjc1NGZiZDUwNGM2YWZlYzc3ZjBkZjY3NTgxZWU4YzIxMiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_682be0c68b2d40c6809f372bd7de6a88",
+      "statement": "internal/llm/fake is a scripted llm.Driver: a Turn is one scripted Stream reply (parts emitted in order, the last must carry Finish; for Kind:tool parts the tool arguments JSON lives in Text while Part.Args is the canonical carrier), the Driver serves turns in order and records every request in ReqLog (Requests() returns a copy), title requests (first system message starting with the titleMarker from prompt/title.txt) draw from TitleTurns while all others draw from Turns, and with no turn remaining AutoText() emits a synthesized ok-<n> text part (else an empty stream/EOF); Turn.Err returns an error and Turn.Delay holds the reply open.",
+      "evidence": [
+        {
+          "resource": "repo://internal/llm/fake/fake.go#L18-L146",
+          "version": "repo-lines-v1:sha256:236c0ef634b9f0ed677ea7e3d1df2af2e9724939d4f41a14fba6456bd5bc8b79:eyJzZWxlY3RlZExpbmVDb3VudCI6MTI5LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIyOTdiNjJjYTcyZTJmMjdhYmNhOWMyY2NkYTdmZDJjYjRjZmM1YWUxYmVkZDZlZDFkYWVmNDFkODY2MTQxZDI0IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIzN2JmYjFkZjg3ZDRjYjA1NjNjODI3Zjc1N2YzMTA2MzIxZDY4ZjQwNTg0MmY5NjUzYWI5MGJkMzMzNTU3MmQ4IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJkZTE3NTNjODM5MmQzZjU3OWUwNDljM2ZmNDlhYTVmOTJmZGQ0NjllNThmM2I5MjE4ZGZiMTY0ZDBiMWU3ODQzIn0"
+        }
+      ]
+    },
+    {
+      "id": "claim_313a3ad328b84bf58dfe5d5c59976fe1",
+      "statement": "fake.FromScript loads a driver from a JSON script file (M5 format) of the shape [{\"parts\":[{\"kind\":\"text\",\"text\":\"hi\",\"finish\":\"stop\",...}],\"delay_ms\":0}], with delay_ms optional per turn.",
+      "evidence": [
+        {
+          "resource": "repo://internal/llm/fake/fake.go#L163-L192",
+          "version": "repo-lines-v1:sha256:cfd16cbd5dcc322997b69105974d2beb29ff9708dc8ffeaaaf5abc15ac2c9fca:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg5NWI1ZGUxYWQ4ZWE0MmQzMDEwOWEzZGIxZGMxNWUwYmNjOWZhODYyMmY1ZTM0NDJlOWY3ZmJkZjE0ZjY3OGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM2ZWY5ZWVlZjU0MDE2ZjIyMGY2OWU1ZmFkOThkODEyNjAxYTM2ZTMxMTE1ZjA5NTU5MWYwOGRlNjZlMzA5MzkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a3f10cd32da74d4484222640de07fa57",
+      "statement": "Env-gating via YOLO_LLM/YOLO_FAKE_SCRIPT (the M5 gate, FakeFromEnv in internal/server/deps.go, wired in cmd/yolo/deps.go): unset -> production drivers (Loader.Env convention); YOLO_LLM=fake + YOLO_FAKE_SCRIPT -> the scripted driver loaded from that JSON script; YOLO_LLM=fake without a script or any other value -> a boot error, so yolo serve with YOLO_LLM=fake runs the exact same path the offline e2e uses with no live endpoint.",
+      "evidence": [
+        {
+          "resource": "repo://cmd/yolo/deps.go#L100-L115",
+          "version": "repo-lines-v1:sha256:13d378065fc320e6c82d69840b021e1ed40cd549b6caefc9ff44e10b23fab190:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZlMWI0OWRjNzJmNjMyNjNkYzRmODFkZDIxZGYzZWRiZmU2NWU5NjVlN2FmMjhjNDM4OGFmMjc0NThlZTYwY2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQyOTE2MjYyN2I3N2MxMDZhOWU5ZmI4NzM3YTdiMTNkN2ZhYTg5NTVlMjZiNGI5NzRiNzAwMGVhMzE0ZDI5NTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjEwNWMzNjg4OWZkYjk5MmU0ZTQyYWMxZmJlYzhhODdlNDEzNzBmODA5M2ZmNDk3ZDg5ZWQwOGU3MjcyZTI2NTgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY5MzBmYjk2YzdjMjA4YTZmYmZiMGYzZWE3ZjA1MTM4OWQyZTAxZmIxMjQwZmQyYTViOTZiN2VlMTBiOWNlNjQifQ"
+        },
+        {
+          "resource": "repo://internal/server/deps.go#L10-L35",
+          "version": "repo-lines-v1:sha256:0a345e333b3a2cdf16c15b8761c1da01cae198be6d2df918248dde69bbbc34af:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI2N2RjMzUyOTQxNTk1OTgwZGRjZjgxYTkyMzkxMjY3ZjI4NDVmZTBkMDlmMDUyNmJkNjY2Y2M4M2VhZDM5OTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk0MDU1ZDRlNDQ0ZGQxNWI0NDc5ZmNkNTNjZjBlM2FkYzQ2YTEyM2FhMzUwNThmMjQxYTNhNmU3NmYyZjhiM2IiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a6b6e2dad47b4812b3bf545cdd1f4661",
+      "statement": "The internal/server wire-contract suites (the upstream mirror check against opencode v1.18.18): golden_test.go normalizes a canonical request's JSON body (generated IDs -> <PREFIX><n>, test dir -> <DIR>/<DIRNAME>, epoch-ms ints -> <T>, key-sorted maps) and compares or (with -update) regenerates testdata/golden/<name>.json.",
+      "evidence": [
+        {
+          "resource": "repo://internal/server/golden_test.go#L108-L147",
+          "version": "repo-lines-v1:sha256:cee34dbb471468b5d0660fef7a8278d83ae0af00f24a8640ef8b21db2849c6f7:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYyYmZlNTRhMWNmOTNmZjM3NmY4Njk3OGI0YzhkNGVkZjNlMGU5OTMyNmMwYjE2NjhmYWZlZDJhMDY2MTBjZTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYyOTY0MDc5YzNjNWM4MTUyMGVmMzNhMmI5ZDJlMTVhMWI4NGQ3MjgwZGI4NTkwZGNkNjU3NDdlM2UwMTJhNDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY2MmNkMmQ4NmExYWQwNWViOGNlNDg3MDczZTk2YmQ1ZDBhYWI1OWI5NTU1ZGQwNzBhMDk3NjJkMmExNjVjOGMifQ"
+        },
+        {
+          "resource": "repo://internal/server/golden_test.go#L19-L31",
+          "version": "repo-lines-v1:sha256:8d86267b62ec41b1acd3bffec1e8cdbf96874792fcb8304f7867d5a989bbefde:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE1NjU0NWI2YTU3NWYyYmVmOGQyMTQwNTFmZDIyMGMyYTg0NzdkOGI2NWY4ZGY5ZGE3Mjk0NWEyY2I4ZmNjNWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdkOGJjZmU5YTdiOWYwNDIyZGQ5ZWQwNjk3YmFkNGU0NTA5ODkyNWVhZjUwMGZkZDBhN2IzZmFhNTI4ZDhhNWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ1ZjI4Y2FhZjU0NTE2OTg4NmQyN2VhNjdjMzIxMzI3Mjg4OTc4N2NhZjViYjg4YTA5MzIyMTVlMTRiOTA5ZDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImVjNzlmYTJjNDUwOWM3NWZlODFhZDJlMDM1N2I1MWQwM2M1YTVjNTNhZjY1MDA5NjEzMjRlMGIyN2I2M2ExMTYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_936ad447437b420ebdd49b0218a6e1b9",
+      "statement": "sse_ordering_test.go TestSSEOrdering asserts the exact faithful frame order for one text turn: the user message/part are published synchronously in Send before the turn goroutine emits busy, matching upstream v1.18.18 and deviating from the plan's pinned busy-first order (see PROGRESS.md).",
+      "evidence": [
+        {
+          "resource": "repo://internal/server/sse_ordering_test.go#L37-L41",
+          "version": "repo-lines-v1:sha256:30bffda62b4861e7ded5ef5906c2a9c5c04a68495b2a12807e96116dc6f27e04:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDI3NWI1MDU3ZjUzMDlhNWM0MDZiMzBiMGY2MTA0NTljMDUxZjBkYWQ0NjM1ODJkNDJkZTRjNjA5NjM2M2VkYyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMTMwOGZiYmEwMzBkYjUwOTg4M2JhMGE0NDIwNjg4OTZhZGViNTQzNmJjMTc0MDc3MGFlOGE0NDMwZTU4YmU5NyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYmZlZGIyYTliYjk5YzkwMWQ3NzY3NjQ5MmIzYWM5NGY3MjZiZDM0Nzk0ZTEyMmI5NWY2OGE0YzkxODNiMjRiNiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjNjYmJiZjYzNTg4NmM2MGJmYTFkMGQ4OTUyNWZhNjc2NmNkMzVkMWYzN2U1YjMwYjVkM2FkOGFhMTFjODJkMCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_5d67a9acbcfb46b79ae27ad387b1e09d",
+      "statement": "fake_env_e2e_test.go: newSrvFakeEnv boots the full stack wiring the kido driver from YOLO_LLM/YOLO_FAKE_SCRIPT (the M5 gate, same path as yolo serve with YOLO_LLM=fake) and TestFakeEnvConversation drives a two-send conversation over HTTP verifying messages/parts persist and a later model request replays history including a tool result; its name deliberately avoids the e2e of scripts/e2e-live.sh (network, user-run).",
+      "evidence": [
+        {
+          "resource": "repo://internal/server/fake_env_e2e_test.go#L29-L50",
+          "version": "repo-lines-v1:sha256:b49deecee21311c7abd44ac7acb437214f44939df252820501df69b998272be6:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM5M2E1MDYwNGNmZDlkY2RhNDRiYzg5YzJjMGNhMThmZGJkNWFkNmQ5M2RkNzdkOGQ3MmIxMmJlY2IzMTA3OWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk5NjE3ODdiYmY0NmNiOWMwZTA5MWY5ODY0ZTQ1MDgxYWE1NjEwZmNiN2FjZTgxMDE4NzM0MjBlOGNmYTJlNzEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNkMGM5ZDdjYjQ5M2NhYmExOWM0ZWRhZDI5MzllY2UzZWZhNTU2MmU4ZDdjMzdkNDdiNzIxYzNlYzllMjkyMWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBlNTgzZWQ5NmNkYTExOGIzMTE5ZDk0OTZjZDlhODNhMmZmZmEwMWVjMDlhNjk2OWM5MTc2NTBmOGZlZDMwMzkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c140adfe65064b73a788bfb958cf6b05",
+      "statement": "scope_test.go TestScopeMatrix verifies directory scoping: an absent scoping header falls back to the server work dir, and every id-scoped route 404s for a session id belonging to a different directory.",
+      "evidence": [
+        {
+          "resource": "repo://internal/server/scope_test.go#L14-L16",
+          "version": "repo-lines-v1:sha256:f3e36c0034eba661bd924f394cb7d554d563ff60981e05deec2b2a37213ff2f5:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiM2JiZmE1ZDM5YWRhNTQ3OTFlZTlmZDBhZjQ5NDQxMzJiODE1M2ViNzE1ZjJhMDlmYjNjODdhY2U5ODY1NzMyYyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjFlOWRmZGRhOThjNzIyN2QxMzU5MGEwN2I5NGRiNzJiYTFhZjIzMzYzMzI3MjE3NWU2MjNlZTQ2OGY0ZTVjZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYmIzNGU0OGRhNGY0NjU3NGFhOGY4NDFhNDQ0MzhhMDU4ZjE2MzI0NzE0ZTBjNjIxZTI0Yzk4OTM3YjAzYjU5OCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGRhZDk1N2M5ZDkwYmQ4ZDNlMDEwMjM0ZDY0MTIzYjFmM2E1MDM4YmI3NmJjNDdlODdmMGE4M2RjODQ1OTBjNiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_5778917a1cbb4fe0aa1a02b1d9e25b89",
+      "statement": "internal/server/testutil exports the M5 blackbox harness: TestServer boots the full core server stack (server + engine + bus + storage, temp data/home dirs) on a scripted fake provider with no network, and is the TUI test escape hatch that lets TUI _test.go files drive the wire contract end to end.",
+      "evidence": [
+        {
+          "resource": "repo://internal/server/testutil/testutil.go#L1-L4",
+          "version": "repo-lines-v1:sha256:cb3b9e3c1f8f41d3670902439be3e00d222d93c463296f597b9c53dd8f272e6e:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTgxNDFkMDM0ZThjODY1Nzk5ZTRhZGQ2YTVmMzM2YzM4MDE2OGEyZGU4NTNjMDRmY2Y3MzNlMTUxNWRkYWM2YSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDQzYzYxMDg2MjYxMWNhOTNjYTllYzVkM2U1ZDQ1YjFjMjdmMTZiMmZkMGM0NTJlMTI5YTc1MWZiZGZiZWU4OCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYmUyYTQ0ZDVjMTUwZWJlMzcxNzRiYzNiZmU3N2UxN2ZkMWEwNzU5ODUzMzM4ODIzMzQxZjY2YTQzMGM1NzFiMSJ9"
+        },
+        {
+          "resource": "repo://internal/server/testutil/testutil.go#L34-L40",
+          "version": "repo-lines-v1:sha256:a752f3bb01ae496afaef0b58ee9f33a66fb263361c883aa213d16c4e7bb4028c:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYmZlOTAyYWU1OGU3ZTM1Y2FkNDhlMzE2YjdkNDAwMWU4YWNkMTk0N2NlYjQwNTM4ZGUzMjQ2Njk0Y2VjMDlmYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDQyNjgxZjQ1OGYxNjk3YTQ0MzRkYjAzYmZjOTA1YWFmMDM1Zjg2ZDZkMmU1YjgyNjBiY2RmMjNhYWIzOGJiNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZmJkYjMyY2Y4NWRhMzlmMTM1Yzg0ZGRhNGVlZGE1MzBlY2MwZWU5YWQ0OTc2OTk5ZDQwYWI3MzdjMmM0ZGQ5YyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZWMxZjhiMGJkNWFiZTMzODNiMDI1NzFiNGNjOWFlNWQwMmQwODQwOGVlNDM2MDA0YjhiZjMzNGVkNTdmMDI2MiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_b8a70349b03a4161b118c4782dc9ffd5",
+      "statement": "TUI tests use teatest (NewTestModel with initial 80x24) and assert on the captured output stream (teatest.WaitFor / WaitFinished) rather than a live terminal; TestImportsDirection in internal/tui/imports_test.go guards TUI purity (core principle 4) by parsing every internal/tui/*.go file so non-test files import only internal/protocol + internal/tui/* while _test.go may use the escape hatches.",
+      "evidence": [
+        {
+          "resource": "repo://internal/tui/app_test.go#L38-L62",
+          "version": "repo-lines-v1:sha256:88cbf4a5d668555ca3a934c7c30e024664826f3bd622a6254685c7234f85ffdc:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRhMTc5YWY0MDBhMzZiOGY0ZjEwNWRhNWU3YWUyZTE2MDJiNmE3MWI1YWRiODRiZmNiY2RmODU2ZWJmNmYzMDgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ3YWRhZjQ3NTY0MTJkYTU5NGM0Y2Y4NzIwNmYyODJiM2IyNTcwYTdiZTE1NDUxZmZlOWNiZGNkMjA0YjkyZjAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjliNWE2NTYxMzc2NTc3NjhkYWM5ZGQxYTQ4ZGEwMWQyOTBiNDQyYWUzNzhmMjVhMzM1MWZjOTJhODg5YzRiMTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZlOGEyM2EzNTJkNDk2Y2M1N2Q2ZjA3YmZjNzgyNTliMmMzZmZmZDgwN2Q3Mzc3YmIwN2MxNDhiMWJiY2FlYzkifQ"
+        },
+        {
+          "resource": "repo://internal/tui/imports_test.go#L16-L21",
+          "version": "repo-lines-v1:sha256:85183ef832bb26c0636e43c29351e79ec46e44778b3949a1161304482acbc7a1:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOGEzZWU2ZTFhZThhZmU4MDU5ZjExYmE3ZTVkZTQwYTE5MjliMjZkM2E3Nzg3NzkzODE0OWEyYzcwNGQyZjZhZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzg0OGFiZGU4NzJiZjhkODczZjFhNGRlOGIxNDRmOGM4YWUwNmY2NmRmMDk5NGYwNDA5MDY2MDBlYTM2ZTZiZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjYyZGMxMWE5ZWYzM2Q1MWM4ZmE1NmE3YjE2MDhkOWY0Y2JiYzBlYzI3OWMxN2U0YWUyNDYzNDE2MzE2OTIzZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzVhMjJiYTczY2FiNmI2ZjJmODMyNDQ3NDcyY2Q0YTQ3NDU1MTNjOGRkNDkyNWUxMGUxMTE0MGM4MjRmOGE1MCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_674da9d83aa94e82a6d39784d1338e73",
+      "statement": "Pinned text: the 14 session/prompt/*.txt files and the tool desc/*.txt files are sha256-pinned by tests (pins record current intended content, not an upstream lock; an intentional change re-baselines the pin in the same commit) — TestPromptFilesPinned pins all 14 prompts, TestDescPinned pins each tool description, and tool JSON-schema bytes are also pinned (e.g. the glob schema).",
+      "evidence": [
+        {
+          "resource": "repo://internal/session/prompt_test.go#L17-L70",
+          "version": "repo-lines-v1:sha256:733cfc757d6599466f5abf8157a56b415487057a4d3e60405cbe82caef069f5c:eyJzZWxlY3RlZExpbmVDb3VudCI6NTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU3NWYyMWI2Y2FiOTQ4ODQxNTI5NzgxZTJlOWM5MzZmY2YxY2E4ZjU0YjQxNjFlNTgyOWI3MDA0OWJmZGFmYzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY3Y2RhODJkYTYwNjIzOGUwNWU2MjM5OTU2OWM1ZWUwMzk5MzQxOTY0OGFlNWQ0M2EyYmY4Y2Q2MzQ3ZjgyNjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE4OTdmNzE2MThkMjg3MjkwZDE1MzUxNTgyYjY0NTRmOGM5ZmQwODhmYjVkY2YzYjQ1N2M3ZmEwODY1NGVhY2MiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjYzN2NjNzA2YzI2ZjU5NDliYzlkMDJhMTYxNmYxYjhlYWRkYTc4NWVjOTAzM2M5ZDJlODQ0NTY2MjU1MGYzNDgifQ"
+        },
+        {
+          "resource": "repo://internal/tool/glob_test.go#L128-L130",
+          "version": "repo-lines-v1:sha256:5717c9e8ef7a583c53d92211ef1ff4b94ddc3fd3be910aa78ecd99e98f733417:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZTZjNTlhOTVhYzYzNWE0MjU3MzlkNTIzZTM1ZWRhNmJiZWNhMDIzZmJiMDAwZWExM2VkZTdmNTQxOGQ1NTdiOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOWIyYzM0ZjRiMzNhNDBmYzhhMDdiM2QxOGE1ZmJlYjI0ZTY0OGI3M2NlZTJmOTViYzJmM2QyMGY2YzVlNmRkOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTAwMGNlODFmMGUyM2I4OTg4ZGQ2MTkyN2VmNDliOWQzNzU0M2I0OGFlZWFhMmU2OTIwMjVlZDk5ZmZhZGJjMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjIsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDAzOTk0NWY3MTNjZWNjYzJhMmJlOTgxYWI1YzVlZWEzN2Y5NWY5NzY5ZTU3NWNkOGVkOWE5ZmNiYWZkZjA2YSJ9"
+        },
+        {
+          "resource": "repo://internal/tool/read_test.go#L244-L271",
+          "version": "repo-lines-v1:sha256:9ae0af965011ad5fb4a447c7dc16a81202765207def95a233c4e64efa87c74b3:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk0ZmZlZDExYTJjN2JkYjY1MDZmMDg4YzZlN2VlYjFkN2U0MjM5NzU0MTUyZjRkNWZkNTQyOGMxNmVjM2E0NTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZiYWJhMjk4ZTE4NWU3YmFhY2JhMTM3NGIyZDJmZDA4NDgyMTMzODZjNWZmYmUyNTBkNmE0ODU1MjI1MDYzMWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYyOTY0MDc5YzNjNWM4MTUyMGVmMzNhMmI5ZDJlMTVhMWI4NGQ3MjgwZGI4NTkwZGNkNjU3NDdlM2UwMTJhNDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg1MDQ1Y2JhODZkNDJjMjgzNzFhZmRiNjRkOWIwNmUzMWFhODM4YWQxZjAzZTYwNGE5ODJlMjc1ZDAxZjMxYzkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b8669dfe803440c78ee381c425f6dde8",
+      "statement": "scripts/e2e-live.sh is the ON-DEMAND live end-to-end check against a real kido endpoint — NEVER run in CI, user-run only (KIDO_API_KEY): it boots yolo serve in a scratch project dir and drives health -> create session -> send 'list files in /tmp' (expect completed read/glob tool call + non-empty assistant reply) -> abort test -> SIGTERM graceful shutdown, exiting 0 on PASS / 1 on FAIL; scripts/tui-theme-golden.mjs is a golden-matrix oracle porting upstream pure theme-resolution (RGBA/ANSI) to Node so the Go port is verified bit-for-bit, writing internal/tui/theme/testdata/theme-golden.json (checked in).",
+      "evidence": [
+        {
+          "resource": "repo://scripts/e2e-live.sh#L1-L30",
+          "version": "repo-lines-v1:sha256:42421a734b4a68d5c1d9531b613c31b09a3a10faa0c6426efe1698405492829f:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFkOTVmYzA0YTgwYzk1MmY0OWNlNDE4ODYyN2M1M2IwZmJlOGM0NDA0MWI5NTJkNTkyYWNkMWRlOTk4NjE0NjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYxZjFjNDdmMGNjMmFjMWU1Y2FmOTNhZDM0ZWFmZjEwYjNiOGQ4OGFhNTczYjAxZjM4ZjM4YmYwZjcyNGM1YWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVhMDMwOTY4MjQxMmMyNWEzMDc2M2M1ZDI3ZTdiYjNlOTJjOTgzMTljZDFiM2M0ZGRkMmRiYzIwYmRhMzY5NzUifQ"
+        },
+        {
+          "resource": "repo://scripts/tui-theme-golden.mjs#L1-L10",
+          "version": "repo-lines-v1:sha256:b98085a0d2085a42202daa8f833af4154bd9716bb2a160530fe235cd3a076ffd:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc0ZmEyMDM2YTFlYjA1N2YxNjhmMWE0YTY0NTk3ODQyNzZkMjFiOGY2MjMwOWY1NDJjOTYzNzA3YzhkNDM5NmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZiMzI5OGY0M2UxMTAxZDdiYmUxNjQ1MThmZjg3MDBhYjYxZTZmZWJmMTFjN2FjMGE3YjRkZWUzZGRjOWQzNWUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI0NTQ0MmNmMTA3MmE2MjVmMjVlYjUxMjYzZDUwM2I1YWZlZTZjODYxMzE2YmUyYzYzMWViNWVjNzA3ODQzNzUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.4.0",
+    "at": "2026-08-26T18:04:14.871Z"
+  }
+}

@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:d31df96464fcddacfac22edb1c3c48fcfafe4130f9c335e3cae316d4ee55e741",
+  "claims": [
+    {
+      "id": "claim_07eb96ef40fb41c48dcbbe27159b12d3",
+      "statement": "The in-process bus fans events to subscribers with a 1024-event buffer each; Publish is non-blocking and a full subscriber is dropped (removed and its channel closed) so Publish never blocks; a dropped subscriber ends its SSE connection and the client reconnects.",
+      "evidence": [
+        {
+          "resource": "repo://internal/bus/bus.go#L10-L65",
+          "version": "repo-lines-v1:sha256:3ab07d26718cb35891fdd86a5ba1878b403bfa575156d52bd8108e64e5bfd996:eyJzZWxlY3RlZExpbmVDb3VudCI6NTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI0ZmQ1NDYxYzA2YmJmMGI4MDJmMGVhY2JjMjAyOWMyN2RlZTJhZWQ5Yzk2MTU5OTk2Y2E5OGM3MjRmYzFhODgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE5MzBmOTk0Y2EyMTZlYzYxZTgxOTQ1ZTA3YjlhMzgwMTQ4ZDZkM2RlNGRhNDE2NzBjMzNhZThkOGQ4NWE4NjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_986c2ede1525446298976a74349610b5",
+      "statement": "The server SSE handler streams bus events as data: {json} newline-newline frames flushed per event (with text/event-stream, no-cache, X-Accel-Buffering: no headers); the frame is written as three separate writes to avoid fmt buffer growth; a failed write ends the response so the client reconnects, and a bus-closed channel (subscriber overflow) also ends the stream.",
+      "evidence": [
+        {
+          "resource": "repo://internal/server/sse.go#L9-L53",
+          "version": "repo-lines-v1:sha256:267c9c23b54475f46e6bfc2f475a2e05c423dd10290cfde68a2bf3200c0d7db5:eyJzZWxlY3RlZExpbmVDb3VudCI6NDUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU5MWJmNjk1OTEwYTRjYTU5NTc0NTE0ZDYzZDU3OWIyMTI4Yzk5ZTlkZTAwNzQ3ZmExMzFlYmVlNGE2ODIyM2QiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY3Y2RhODJkYTYwNjIzOGUwNWU2MjM5OTU2OWM1ZWUwMzk5MzQxOTY0OGFlNWQ0M2EyYmY4Y2Q2MzQ3ZjgyNjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjEyNmNkZDIzYjQwNjc5MzMxZGEzZjEzZjg1ZGIyNDYzYzJiODdjMmJkZmE0N2E3Y2UyNmI1NDdmZTZlNzQ0OTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_5bd13256e23740f39b5de3bab6994356",
+      "statement": "The TUI SSE client reconnects with backoff on every dropped /event connection and pings a resync channel per drop; because the bus has no replay, events published in the gap are unrecoverable and the caller must re-hydrate state over REST on each ping; reconnects must never be silent (a silent reconnect previously left the footer stuck on busy).",
+      "evidence": [
+        {
+          "resource": "repo://internal/tui/client/event.go#L19-L52",
+          "version": "repo-lines-v1:sha256:e611f9006ebd45cf072bcb7972a38d0993e10512607acdffd9d1292836104ae7:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZmYjI5NzI2ODYwZDQ1ZWQ0MTljMzQ4OWYxYTgwNWVmZWM1ODA2ZjkwNzYzNzdiNmZhMTRkZGJkNTQ3MmEyMzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdiMTMxMDI2ZmRkMTM5MDhmOTcwN2IzYjM0NmYyMGEzOTU5ODdlNDJlZGE4ODU1MjcxMDgxY2NmZWYxYjZjOWIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImYxYTA3OWZlYjg3ZTk1NjUxYjgwNDJjYzY4YjQ0MmRlMzNiNWMyOGQyOGY1OGJjM2M4NmUwODIyYzQ3YzQ3NDEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_9c9abb0594f4464396a63b4644114cda",
+      "statement": "The SSE scanner token buffer is capped at 4 MiB because a single data: line carries one whole event JSON and escaped tool output exceeded the former 1 MiB cap; scanner overflow still aborts the stream and fires the resync ping, bounded by the re-hydrate.",
+      "evidence": [
+        {
+          "resource": "repo://internal/tui/client/event.go#L71-L99",
+          "version": "repo-lines-v1:sha256:77f69f8a3ce7649b0dd76a33d4d55b1e27b0eb217173a5656438ff64e85a0679:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI5NDhjYTU0NTYyNzgyNmVjMTc5N2YyNGZmZjc0ZWUxZGMyZTIzNWQyN2Y4MTA0MTBhYTE0ZDgxNDA5MTQ3OGIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY3Y2RhODJkYTYwNjIzOGUwNWU2MjM5OTU2OWM1ZWUwMzk5MzQxOTY0OGFlNWQ0M2EyYmY4Y2Q2MzQ3ZjgyNjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFhMDVhMTlhZWFjMmY2MjljNDdkMjczMTA3ZDJhNWQ0NTAzZTBkMTk3YTgwYjc1YWU3Zjg0Njk1YzAxYzcwZWIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoyLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM0YTBmMDZlZmJlOWVjNjZkMmJjMmE1MDVhMzMzOTAzYTMyNGRiOWZjMTllNTQxYzM2NzRlYWFmNGE5NDE5NDEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_665f3befdada405eb2370af30c9de236",
+      "statement": "The TUI eventPump blocks on the SSE channel and delivers each event as EventMsg, re-arming itself on every event; on channel close it delivers connLostMsg and stops.",
+      "evidence": [
+        {
+          "resource": "repo://internal/tui/app.go#L303-L316",
+          "version": "repo-lines-v1:sha256:e02ee240f883a07c0c6312c71782bf978e445d7c529cf2ebd75759036f1e3a2d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYzM2U0MmM5MWIzMmU1NWJjN2EyYjNmMDNkYjFiZGZjNGRmYmNmNGUyMWQ4ZTY1NmU5Mjc2YmZjNDAwMzhkYjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFhNjQ1MzVlNzQyNjA3NWNlNDBlMTNjZTgzY2JjNmI1YTdjMDlmZjRhNGVhNGY5NmZjN2YwN2NkMWZhYTg1ZWYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b5b14e0f64f144ecb0708ece63a8a504",
+      "statement": "On EventMsg the app sets store.Live, applies the event to the display store, and marks the session dirty so the transcript re-renders once per applied event (coalesced, not per frame); on resyncMsg it re-hydrates the current route over REST and re-arms the resync pump while the footer shows the outage window.",
+      "evidence": [
+        {
+          "resource": "repo://internal/tui/app.go#L162-L179",
+          "version": "repo-lines-v1:sha256:bb330aacebf147fdde5c5b290d0742ff27cce7b1f358af8be69378197c5c2df8:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI0YjdiNWMyNzA3ODQwNDRiZmRjNzM3NTY4NGRkZTc4MGFlM2MwNGU2ODcyNDg0ZTM1ZGUzYjNkYWE3MGI0MjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVkMDdhYjBlYWUyOTY1Y2JkMjg1ZDk2ZjhkZWU4YjEyMzJjZTFiNzg2NTE5Zjg0MWE4MTUxNTk4Zjk3ODRiNTIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZhOTU4ODZmYTQwZGM3OTJiMWY2MjM3NjJmMmEwN2U2M2Q4ZDgwNDBiZGNhODNlYTlkMGIxMzg3MjE2OTM3MzkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjEwMzQ5MGMyZWJjMTRmNjI2MDQ5Njc4NGQ2NTJkZjg1YWM0MDRkMjZlMTJiYmRkOWNhNTM1NDIxM2NjMzJmYWUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_cadf98756a0e4eed997587cc6d67667f",
+      "statement": "store.State.Apply is a closed switch over the ten wire event types the TUI renders (message.updated, message.part.updated, message.part.delta, message.removed, message.part.removed, session.updated, session.deleted, session.status, permission.asked, permission.replied); per-session applicators filter on the current session before upserting.",
+      "evidence": [
+        {
+          "resource": "repo://internal/tui/store/store.go#L46-L67",
+          "version": "repo-lines-v1:sha256:62c5f65131753f9d3366e90abd8fdb17ff6cc504c80754d9047ea94ad83be295:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE3MzRmOTVmYWU5ZWI3ZWMzMzhiNDBhZjYzZWQzYWZlOWUwZDEzNjc5YjU3NmRkOTEyMjhiMjhkYzc3YmM2MDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNlZGQ0ZDk1YzQwMTUzNTU4OTQ2NWI1ZGM3Njc2OTYxNDkyY2VlOGI4ZDhlMzk0OWQ5OGM4NDRmNzcwYWNlNjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIzZDQyNzBlZmMxZmM0ODgyMThhNDM5ZTliM2Y0MmEzMWZhOTQwYjA4YWQ4ODQ1YWMxODg5ODYzMjA3ZDA1MmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImYyOTY0MDc5YzNjNWM4MTUyMGVmMzNhMmI5ZDJlMTVhMWI4NGQ3MjgwZGI4NTkwZGNkNjU3NDdlM2UwMTJhNDAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_ba78e213d91a4340a82962ba779fea3f",
+      "statement": "resyncPump blocks on the resync channel and delivers resyncMsg per ping (re-armed by the resyncMsg case); a closed channel (ctx done) ends the pump quietly because connLostMsg arrives via the event channel at the same time.",
+      "evidence": [
+        {
+          "resource": "repo://internal/tui/hydrate.go#L27-L42",
+          "version": "repo-lines-v1:sha256:879fef25b8fe0d6ff987ae406f28759208895bbe3b2e3f3aa88c9b90c8bbd415:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJkZDc4NmRlZWY0MzQ2MzZjMWVkOTU3NjExMDQ4NTQyZmE5MTdjNDMxMjg1MTdjZTU3Y2Q0ZGMxMDVjMWY1MDAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjIzMjgwNWUzOWU2Y2ZlMjVmNzM4MTk2ZDlmOWY3Y2YwNWNlMzc2ZmVkMmE0M2RjYzY5ZmE0ZjcwOWZjMTBiNzkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ4YTRlMTM4MzAxMmRmZmU3NzMzMDgxYmE0ZjVkYTIzN2ZmN2UwZmEzNjA1ZjI3NTI1NmFiZGZiY2ZjZTUzZDAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_3c9061f3571942d99fb5a1e381ad92c3",
+      "statement": "The log package is a local-only, zero-telemetry, slog-based leveled file logger on a rotating append-only file at <dataDir>/log/yolo.log: 5 MiB rotation threshold to a single-generation .1 backup, YOLO_LOG_LEVEL (invalid falls back to INFO), opt-in YOLO_PRINT_LOGS=1 stderr mirror, and best-effort semantics (open/write failures never propagate; a nil Logger no-ops and each write retries the open).",
+      "evidence": [
+        {
+          "resource": "repo://internal/log/log.go#L1-L11",
+          "version": "repo-lines-v1:sha256:4cdec3322f78899bd3788c3622bb9db3dc33e18de372f027616fbef452d66ce4:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMxOTJlY2Y0N2VlMjE0NTZmNWY4NGFmN2M1YzA1MzIwZmMxNTc4ZGJkZjZmZGNkNWMzMTM1OGNmNWQxYjg2ODYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNhNzk2MDlmNGZhMjBiOTJkZjExNDBkODc1MTA5NGJhMGE2NTFjNWNiMWVjYWUyN2E2NTNkMjI2NGY0NmNjZmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjUxYTkxNTZkNmNlNWU4YTJlYmNlODkyOTc3YjljNTg0YzQ4NmFjYTgwZTYxYzI5MzE1MjQwNGRkNjNmMzI0MzcifQ"
+        },
+        {
+          "resource": "repo://internal/log/log.go#L28-L60",
+          "version": "repo-lines-v1:sha256:ab75adcc33f5ce8d8e1a7dc269e9a4cb1016ec89d12ed8e76c40b0417f5a8c16:eyJzZWxlY3RlZExpbmVDb3VudCI6MzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRlYWMyZTlhZDc0OTljZmRlOWU0MDUzZjk4NTBiZjhmYzI5MDVlNDg0MjkzYTAyNzY3OWY0ZWExOWExYjBiYzYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc5ZWRkNzJiYTZiNDAwODNjZTk1MjY5ZmE1NmZjZjNhYzFiZDk4MjIxYWE2NjIxYTY4M2Y3ZDU2MzJiYjIxZDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE4YWY3ZmNjZjE0ZGJjODliMmJhZmRiZDkxMjllZTJlYTlhNTliYzQ1NzYyZGU2YzQzOTBmOGJhYjMyNmZlNzcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_fad11f5003d546e38bc513589822b7af",
+      "statement": "Log lines use the pinned order time=<RFC3339 UTC ms> level=<LEVEL> run=<8hex process id> msg=<msg> k=v ... (owned by a custom pinnedHandler because the stdlib TextHandler emits msg before handler attrs), and values that could forge a line or break key=value parsing are quoted/escaped (CWE-117).",
+      "evidence": [
+        {
+          "resource": "repo://internal/log/log.go#L96-L157",
+          "version": "repo-lines-v1:sha256:f3b18e78762067f15cc193a893150618b0e43ce37f355ec153b33074dbf3276f:eyJzZWxlY3RlZExpbmVDb3VudCI6NjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM2MTBhZTYxMWI1YTY5YjBjOTkzNWM2NTJmM2ZjZjA3MGM3OGQ2MDcyOWViMjNlMmEyOGJlYzg1MmNlNjQzMGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFjNzQzZDA2Zjk1N2VhYWZiZTMxN2UxZmM1Y2ZjZWY5NjAzY2RlYjcwM2ZjNjU4Y2RmNmM1YzA2NDcxNDQ3ZWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk5NGRiOTQ0NzlkYzVlZDk0ZDdkZGMwMzhiYTIxMTVlNTQ5ZjczMWQ5YWEzYjZkMWRjZjBlMGVmYzAyZDcyZDIifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.4.0",
+    "at": "2026-08-26T18:04:14.871Z"
+  }
+}

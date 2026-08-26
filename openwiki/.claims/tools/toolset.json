@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:7718e4e7c17b7a366fe514c54af1a24665ae8b42421fc8aa2516556899362ccd",
+  "claims": [
+    {
+      "id": "claim_e880fae4f39b4f14a20e62dc2545407a",
+      "statement": "internal/tool implements the v1 tool framework (Tool contract, registry, permission-based visibility, LLM schema rendering, output truncation) with the built-in tools read, write, edit, glob, grep, bash, todowrite.",
+      "evidence": [
+        {
+          "resource": "repo://internal/tool/tool.go#L1-L4",
+          "version": "repo-lines-v1:sha256:1eb671029f77155f610dfca938fa9feb8d62a54cc3ad439d7d069f215115ffc6:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNWM3NmNkN2I3OTgyNTVlZGEzY2YzMzMwYWExNDEyODRiNzk2MTgyMDZlYWYxYjdiZmQzZDFhMmQ2OWM5YWEwMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMThiN2Y5OTU5NWZjZmE2NDVkZjM3Y2Q0NzdmNjI1NDA5MThjODQxMmI0NGUyYmQwMjUyODc5YzQ1MzFiNmI2ZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzJjOTRkNmVjOTQ2NjFjNjY2NTY5ZmJmMzJjMTE3YmQxZWUwNjU1MTRiZjUyN2JmNGM3OWZlOWM2N2I2OGRmNiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_e5a6d7db15924bce9b7b35cdaae8eb69",
+      "statement": "The Tool interface is ID/Permission/Patterns/External/Schema/Desc/Run; Patterns and External receive raw args only (no Env) and emit paths as given (the engine resolves them against Env.Dir), Run receives *Env (session project dir as permission anchor + base for relative paths, session shell, output limits, OutputDir, session storage, session id, logger) and returns Output (Title for the TUI, Text for the model, Meta for TUI display metadata); Registry() returns the built-ins keyed by ID, Visible filters out tools the ruleset hides (permission.Hidden), and SchemaFor renders the type:function tool-call schema; output limits default to 2000 lines / 50 KiB mirroring upstream truncate.ts.",
+      "evidence": [
+        {
+          "resource": "repo://internal/tool/tool.go#L16-L139",
+          "version": "repo-lines-v1:sha256:b1c3b01fb55a594ec2a694317e1f0fae0a6644fbf124a38bba6577c67294c7a9:eyJzZWxlY3RlZExpbmVDb3VudCI6MTI0LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIyNzYyZmFhMjYyZmNmMGY5ZjdkMDY0OWI2MmRmYmM5MWM5OTllNmJkYmIyMDdhMjIzZmMzOWQ2ZGRiYjBjNmFlIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJkMTUzNTUxNjBkYTBlOWE4NWU2YWMyZjA3Yjk5NDI1ZjU0NzBkZTNiNzRlN2JiMGZiOGM5YmJlMjBiMGU2ZTgwIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MCwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0"
+        }
+      ]
+    },
+    {
+      "id": "claim_361e5d2b8423464183018f5b1eae02bc",
+      "statement": "Shell keeps one bash --norc --noprofile process alive across Exec calls so cd, environment assignments, and other shell state carry over (spawned lazily on first Exec, rooted at the session dir); each command is followed by a marker line echo __YOLO_END_{n}_$?_$(pwd | base64 -w0), the child's stdout and stderr both hit a single output pipe, and output is read until a line matches endMarkerRe with the matching counter n (a marker with another counter falls through as normal output), the exit code and new cwd coming from the marker; a 10MB in-memory cap guards each invocation, on timeout/abort the process group is SIGKILL'd and the shell is marked dead (the next Exec respawns from the last known cwd), and signal-terminated processes report exit 128+signum.",
+      "evidence": [
+        {
+          "resource": "repo://internal/tool/shell.go#L21-L58",
+          "version": "repo-lines-v1:sha256:f85bcc7cdc9e75248b8fc8a90e9c66f34a06342ab57dd4da7cfa3dc66d5b8129:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEzYjI5MjdlYjFhMzExYTJjNzI2MjY0MWY5NWVkYWNmYTlhMGUyZDhiMmM3ZDg2MzcwM2E0MjY4OWU1N2M2ZjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc5ZWRkNzJiYTZiNDAwODNjZTk1MjY5ZmE1NmZjZjNhYzFiZDk4MjIxYWE2NjIxYTY4M2Y3ZDU2MzJiYjIxZDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI3ZmNiNDgyNTVlNjJjZmNjNWFlZmFhYzlkM2Y4YTIxNTJlOTRkZDA0MTAwY2Y0MDU2MzRmZTQ0NTVlN2NlNTAifQ"
+        },
+        {
+          "resource": "repo://internal/tool/shell.go#L335-L381",
+          "version": "repo-lines-v1:sha256:3bfaf53f026feb6e62331fcfb2f2a0205dc17369e44bd083765312f1b7dc1928:eyJzZWxlY3RlZExpbmVDb3VudCI6NDcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFlYmMzOWFmZWE2Njg3MjE4NzBiNDY0OGJkYWYyNDM5MjdmYmYxYzlhMTU0ZGNkNWNhOTM2ZjBkMmJmZDM2YTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYyOTY0MDc5YzNjNWM4MTUyMGVmMzNhMmI5ZDJlMTVhMWI4NGQ3MjgwZGI4NTkwZGNkNjU3NDdlM2UwMTJhNDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://internal/tool/shell.go#L88-L191",
+          "version": "repo-lines-v1:sha256:3a565fa127ecabd9711ecd7960c658aaa36a63f1bbc81d2207a91a39a8a1f79f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTA0LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI0ZmYxNGU5MDllYjUxNzVmMTAwZWRkODdjOWI1ZDViODlmNWQ4NWEyNDMyZDUxZjQ5MWYxZGI3MWNiZWNmMmJjIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIxNjMxYjZlMmNhMDdkOGJhZjBlYjQ0ZTc0OWRiZjQ5MGIzOTJlM2E1MzRlZjYxMDIyNzcxMTQ2Y2RmOWFmMWEyIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJmZmI4Y2RlOWZiYmRhYzYwNGQyYzc2OTkwMTY0Mjg2Nzg2YjA5MGI3OGIxNWQ3ZWY2ZjM4OWEzZWRiZTUxMmNjIn0"
+        }
+      ]
+    },
+    {
+      "id": "claim_168c84fa2cc143c4bb731f6ad8d1dad0",
+      "statement": "bashTool.Run runs the command through the shell and rewrites the sentinel errors to the pinned upstream v1.18.18 messages (a timeout becomes 'shell tool terminated command after exceeding timeout %d ms. ... retry with a larger timeout value in milliseconds' and an abort becomes 'command aborted'); a non-zero exit is NOT a tool error — the exit code is surfaced only via meta[exit] when present.",
+      "evidence": [
+        {
+          "resource": "repo://internal/tool/bash.go#L103-L154",
+          "version": "repo-lines-v1:sha256:71f7183dac43d8037a78ce267eb53c922dfaedac5cbff4dfc7b8f1a6ab15fbc2:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc5ZjdiYWM0ODdiMGNhMDJlZTEyMGNlMDFjMWM2YzY5MGE5NmM1OGVhYmUyNTAzMDg5YjQ4ZDNiYWUxNDA0OTciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM5Mjc2OGZiMTEyODJhMjU2ZjFmNjY2MGUzYWM0MTE5M2UzMDZiYmNjNzQ0NjcxZjljZGQyMmZkODFlM2RlOWIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8ae33b6acdaa43aa823c4562ec437a1b",
+      "statement": "Truncate keeps the TAIL of the text (the last up-to MaxLines lines within MaxBytes UTF-8 bytes, a port of upstream shell.ts tail() including the UTF-8-boundary cut of a single over-long line) and returns cut when anything was removed; WriteFullOutput writes the untruncated output to dir/tool_<id> (the data dir's tool-output/) returning the path (an empty dir returns empty so the caller skips the marker); when cut, the model-visible text is prefixed with '...output truncated...\\n\\nFull output saved to: <path>\\n\\n' and meta[outputPath] is set; CleanOutputDir removes tool_* outputs older than OutputDirRetention (7 days), a missing dir is a no-op, and v1 runs the sweep once at startup (cmd/yolo/deps.go, best-effort) rather than upstream's hourly.",
+      "evidence": [
+        {
+          "resource": "repo://cmd/yolo/deps.go#L42-L46",
+          "version": "repo-lines-v1:sha256:d9b7983ed123c0923090022f6fce5f40176ade9da4e2bce2e521b4b3044e7d73:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZjA3ZjUxMGIwZTBjMTk1Y2JkNzRiMzBlODRkNGIwZGE4NDlmYzhhMjE2YjA2YTRkYjUyZWVhNDEyMjUyMDA4OCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZjZjMzYyMWZhNDkzODczNDgxZDVlMzY0Y2Y3ZjIwZWE0MGU3OGJiNTFkNmUwMTBjMmU3NTI2YzEyY2QwNDQ1YyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiN2UxMTJjMTdhM2Q4YmNmMDgzZjYyNWMzNzk4MzA1ODlhNTczMmY3NjUwMWEzYjZhODMwZGI5OTVhZTY2ZTNhZiJ9"
+        },
+        {
+          "resource": "repo://internal/tool/truncate.go#L13-L102",
+          "version": "repo-lines-v1:sha256:6ca419a2debb3ec13abff342cd21560509ced3ca98a4532fc8b68e2449605039:eyJzZWxlY3RlZExpbmVDb3VudCI6OTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU2ODI5ZmNmYTYwOTU3OGZjN2JlZjY5MGU5MjY5MmIzZTQzZDY4YzhkMzRiZWQ1Mjk3NjdkOTQzZTVjMTlkYzIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE5MzBmOTk0Y2EyMTZlYzYxZTgxOTQ1ZTA3YjlhMzgwMTQ4ZDZkM2RlNGRhNDE2NzBjMzNhZThkOGQ4NWE4NjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2b0b1cc9438547f68b23cbb183281d5a",
+      "statement": "bash Patterns pins a v1 simplification: the permission resource and always-rule are the first whitespace token plus ' *' when the command has more tokens (e.g. 'git *'), else the token alone (e.g. 'ls'); External is empty (no external-directory pre-scan for bash in v1).",
+      "evidence": [
+        {
+          "resource": "repo://internal/tool/bash.go#L44-L58",
+          "version": "repo-lines-v1:sha256:1ecd175653ae254de59ae959491402612a5a4d04d7cc529ef85a9890a4b5e406:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM5ZTk1ZDlkMjNlODQ0NmM5ZTY3MDU5MTg4YTgzMjVlYjYxMzYzN2UzYjU5MDhlYzNhOWQ1NWVhOTI0NTdmNjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU1NTQzYmZlOTVmZDAzMWFkYmViZjlmZTAxNmI2OGJhZWZiYjIzYWFjZTk0YTY4M2IxMjc1ZDA1YTgwOTUyNTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYyOTY0MDc5YzNjNWM4MTUyMGVmMzNhMmI5ZDJlMTVhMWI4NGQ3MjgwZGI4NTkwZGNkNjU3NDdlM2UwMTJhNDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgzMGQzN2U0MDlkODlhYWU3YTQ0ZWRmYzYyZmVhYjIwMzk3M2ViNjcyZWQ4YzRhMTc0NGI4YzIyZTFjYjZjZWEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f86cfdb9841e4f098a5258168baa06c5",
+      "statement": "Every tool's description is an embedded, sha256-pinned text file loaded via //go:embed desc/<tool>.txt; because the installed toolchains fail a plain import \"embed\" + scalar embed with 'embed imported and not used', the in-repo workaround is import _ \"embed\" (seen in read.go and every other tool file); the pins record current intended content, not an upstream lock, and an intentional change re-baselines the sha256 pin in the same commit.",
+      "evidence": [
+        {
+          "resource": "repo://internal/tool/read.go#L6-L22",
+          "version": "repo-lines-v1:sha256:c7dfdcbd98e27f9165975340ec0a634fb48c54dcab8b38cd09ba3be73f3b6014:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZiYzM3MmUzMTQ5ODQ2ZTk3MjE1OTczZTQ1NWFjOGYzMGI4ZGU4MzU5ZDdjMzgwNjdiYWEwMjJmNzAwYWViMmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNmOWZkY2NkODZhZmIwZDdmODczZmVmNzVhNmQzNmQ0MTU2MmRmYjU2NzI5ZjdjNWFlNWE5ODQ5N2Q3YjUwNWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNjZmM3ODMwZjQ1ZGQzODkwYWQ1OTI3M2E5ZGFiN2VlNTVmZDdkOWUwYWI3OWQxMjEzZWI2MTVjNTZiN2Q3MWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImNjYzIxNzMwMmYzZGJmY2E1YzZkN2M0NGNjODQxMzUyZjM3ZjlhZmVhNGJkNzMwOTUwY2JjN2YwYmQyZTg5MDIifQ"
+        },
+        {
+          "resource": "repo://internal/tool/read_test.go#L244-L271",
+          "version": "repo-lines-v1:sha256:9ae0af965011ad5fb4a447c7dc16a81202765207def95a233c4e64efa87c74b3:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk0ZmZlZDExYTJjN2JkYjY1MDZmMDg4YzZlN2VlYjFkN2U0MjM5NzU0MTUyZjRkNWZkNTQyOGMxNmVjM2E0NTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZiYWJhMjk4ZTE4NWU3YmFhY2JhMTM3NGIyZDJmZDA4NDgyMTMzODZjNWZmYmUyNTBkNmE0ODU1MjI1MDYzMWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYyOTY0MDc5YzNjNWM4MTUyMGVmMzNhMmI5ZDJlMTVhMWI4NGQ3MjgwZGI4NTkwZGNkNjU3NDdlM2UwMTJhNDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg1MDQ1Y2JhODZkNDJjMjgzNzFhZmRiNjRkOWIwNmUzMWFhODM4YWQxZjAzZTYwNGE5ODJlMjc1ZDAxZjMxYzkifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.4.0",
+    "at": "2026-08-26T18:04:14.871Z"
+  }
+}

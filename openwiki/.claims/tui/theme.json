@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:46b0b891fe929cdbebb270196089e5f24944359f5d6142c8becbf28f740b50c8",
+  "claims": [
+    {
+      "id": "claim_227165d699434df497d96ba2b01629dd",
+      "statement": "internal/tui/theme is the TUI-local theme engine (root principle 4: it imports nothing outside internal/tui, so every filesystem path is injected by cmd/yolo); it provides the 33 embedded upstream themes, resolution, system-theme generation, terminal palette detection, custom discovery, and the selection chain (config > KV > default).",
+      "evidence": [
+        {
+          "resource": "repo://internal/tui/theme/theme.go#L1-L5",
+          "version": "repo-lines-v1:sha256:f8e751c37e8d5f7ec7a396b6feb35fa2773bb744af3888d0995001fd6f05a13f:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZWM2ODA2OTllODc2OGE0YWU4N2M1NjNlMjhlOTRhYjhhYTVkMGMwNmMwOTZjM2FmNTEwMTkxZTFlNzE0MzFmNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZjcwOTIzMzAwOTRiZTE0N2Y3ZTc1Zjk5OThhNTY5ZDQ2YWE3ZTU0OWUyYzNhM2U2YmMyNmYzMmJlN2FmNDRmNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzcxYzEzN2RhOTc4YzhiM2RmZTZmZjFiYTdhNjY2MGQ5NGQ0YWUyNGQyMGVkMDA0ZDJiNjhjZGNhMzE2ZTkwNiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_b4c7cf759d9643a78abd67d5f0a1a119",
+      "statement": "The 33 upstream theme assets are embedded verbatim (//go:embed assets/*.json -> assetsFS, the strict-copy bar of spec §1); AllThemes parses them with names as the asset file stems (kebab-case preserved: catppuccin-frappe, one-dark, ...); DefaultName is 'opencode'; IsTheme is the upstream check (a non-array object with a non-array object 'theme' member).",
+      "evidence": [
+        {
+          "resource": "repo://internal/tui/theme/embed.go#L7-L10",
+          "version": "repo-lines-v1:sha256:55200af70f994951924bb95c9dd9c22c9558aa8941aefd37306417decec5abfd:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTBlZTllNzQ0ZmVlY2FmODFhNjI2Njk1MGU1ZWJjMmZlZTc1NDgzZDYyZGFiNmZkOWIzNzIwNjFjNDM0OGJmZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDVlYzRhYzdlYWVjYmNhZWIzZDY3MzYxMGExMGYwMzY4N2NlNzk2MGNiZmM1NWQ5NTI0NTE2YWY5YTUxOTM2NCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNjODY3MDA5OTg1ZGM3ZjBmZjFlMTUzZGQyOWM4YTljM2ZmMTMwMDc0NWYyZjM4NGI2NWI5MmFjYTM5M2FhOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+        },
+        {
+          "resource": "repo://internal/tui/theme/theme.go#L13-L60",
+          "version": "repo-lines-v1:sha256:0ebc92b3fdb3af3313e82d1a4f98e230f93b95747ad347ff367949ff64c8cd9f:eyJzZWxlY3RlZExpbmVDb3VudCI6NDgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFkMmU2ZWU5ZDg5NGEwODNiMDljMDIwNDIwNWUyNzJhMzNkMTJjNzNkODlmZjkwMjRiMjU2OTkyMjQ0YjJiZmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZjZTRjMTE1ODcxMDc2MGRmOTEzYzM5ZjAyZjkwMDcxMGNjYjVlZDAwY2EyNzU2NzVkNzIwYWQ0Y2RjZDQ0NjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4912392e79dd44fda934588d5cec0e9e",
+      "statement": "The Engine selection store: active = config > KV 'theme' > 'opencode' and mode = KV lock > terminal luminance > 'dark'; New mirrors the upstream init (lock = theme_mode_lock, mode = lock ?? 'dark', the one-shot theme_mode cleared when unlocked only when it holds a valid mode, active = config > KV theme > 'opencode', KV loaded synchronously so the first Get is race-free); Resolve runs the startup sequence (system theme first, the palette probed exactly here exactly once per the S0 scoping rule, then custom discovery) and always returns nil; ActiveTheme is the values memo themes[active] ?? themes[KV 'theme'] ?? themes[opencode] where themesMap = builtins + customs + optional 'system' (later entries win) and themesFromRaw filters the raw custom map to IsTheme objects round-tripped to ThemeJson.",
+      "evidence": [
+        {
+          "resource": "repo://internal/tui/theme/engine.go#L32-L229",
+          "version": "repo-lines-v1:sha256:ed0bc8c50dcee4ef5aa7953c13c09a2971982a89f3ff06e1deec1469bde135f2:eyJzZWxlY3RlZExpbmVDb3VudCI6MTk4LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJiMTEzMzNhZGFiMTMzMDdmZGZjNzAwNzAxM2ZhNzM2NjI5YjUxMzc1NWMzM2JkNzUzOGE5Yzk0ZTg1MWMzZWRiIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI5ODRmNzU0ZDBmM2E3OGEzZmQzMTJmMzEyYzI5YjQzZjA1MWI4YmEzNDBkZDMyZTNkODVhOTBhYjBiMzA3NzVhIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJmNzg4ZmU5ZDFlYTM1YTU2MWI1ZjYyOWM0NTI4MDBlNDdiZWE5MjQ0MzRkZjRjZDE4YzdiNTZjZTA4MzRhNDYzIn0"
+        }
+      ]
+    },
+    {
+      "id": "claim_179f5fc1ed9048b49b673846aa95cd40",
+      "statement": "Engine mutations: Set switches active and persists to KV 'theme' (unknown name returns false leaving the KV untouched); Pin sets the mode lock and applies it; Free clears the lock + one-shot KV keys and re-resolves the mode from the cached terminal luminance (no re-probe); Apply switches the mode and persists to KV 'theme_mode' only while locked, regenerating the system theme at the new mode from the cached palette; the two-leg refresh is Reapply (250 ms leg: regenerate the system theme at the current mode from the cached palette) and RefreshCustoms (1000 ms leg: re-discover customs; on error take the catch path — active 'opencode', customs emptied since the custom set is derived state never persisted).",
+      "evidence": [
+        {
+          "resource": "repo://internal/tui/theme/engine.go#L277-L385",
+          "version": "repo-lines-v1:sha256:8f9a1aeee2597ae6edcd89e5d02a34566455adab8b9d25d769ebbc6aff045031:eyJzZWxlY3RlZExpbmVDb3VudCI6MTA5LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI0ZTU3ODVkYjZkZjFmMTQ3YzBiMWE3MDc2NTlhYzM4ZDJjOTNkNTA0ZTcyNTUzMjdlMjFiNDFmYzFjOGMwMjg4IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlZjViNjM0MzFmYzAwNDg3OGFlZTc5ZmE4ZmQ0NThjNWE1OGNkOTI4ZjgwMWNlMWMzMmQwNWVjNDA5M2I5NDM5IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIwYTk1NTMzYTMxNTU4NWU1ZTk1OGEzOWM4ZjE4YTYwMGI0ZWE5YzYzNTFlNjA4NTE2NjMyNTFjYWZlZmE3MGJhIn0"
+        }
+      ]
+    },
+    {
+      "id": "claim_0cc499ec4ccc4b7cab2bd4674002bb9e",
+      "statement": "DetectPalette ports TerminalPalette.detect: (1) an OSC 4;0 support probe, then (2) the 16 palette + 9 special-color queries (indices 10-17,19) with per-group idle timers, a hard timeout, and an 8192->keep-last-4096 buffer cap with first-wins stored slots; the response shapes and toHex8/scaleComponent are verbatim ports of @opentui/core 0.4.5; DetectStd probes via an owned /dev/tty in raw mode (x/term) where the fd is restored and closed on exit and the pump goroutine is joined so no reader lingers, and no controlling terminal yields (TerminalColors{}, false) (no system theme, no probe, no goroutines); LegacyTmux (TMUX set && TMUX_PANE unset) double-escapes OSC and limits the special queries to 10-12, with timeouts spec-pinned to 100 ms.",
+      "evidence": [
+        {
+          "resource": "repo://internal/tui/theme/palette.go#L121-L400",
+          "version": "repo-lines-v1:sha256:329fce3c7157afc1b8b840ddbccff997354ac552dceab7890db6fd324ef2bd47:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI3NzhiNmM5OGVlNTU3NWJkMDU1NWVhOGUwYzIwMDFlOTE3MjkyZGMxNGQ0ZmE1NDU3ZjVkNGE3OWRjYzUyNWQ4IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI0ODZhZWIyZTI0NjFjMjFmNTIyMzA2Y2U5NzQzYWNmZTJlMGI2ZjJlMmNiZTU0MDAzYWJlNzFmZDZiYmQ0MWMzIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIxOTU1YTQ4OGYyNjg0ODUwYmUxMDkxZGE4MDYyZWRhNTNjODkwNjAxNDJkMjdjMzU4MGNlZmJhZjY3YjRjMWI3In0"
+        },
+        {
+          "resource": "repo://internal/tui/theme/palette.go#L18-L58",
+          "version": "repo-lines-v1:sha256:9a9772502881c7cdf21439820d394e187292e5bfec52075ad47ecb72cf667e00:eyJzZWxlY3RlZExpbmVDb3VudCI6NDEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjliMzllMzg4Y2MyOWUxZTUxZTBmMjYwYjRmY2NjMDI0MGFlNDE5Y2YyMGZiOTAxNzE2OTJkOTg4NTM0NDlmMWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjViNzZjYTE2YTdjZjRiYWYxY2E1NmM5OTIyM2Q1MTZjODIyNGRiMmUyYzBiNjU4ZDk0NmYwNWJlOTgwYTE0NmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZkMDU5OTUxM2Q5NWI2ZmJiYzNiNzYxNDhiYmFkMzA1MDRmN2I5NjYxMmZiMTAyYjQ2Y2ZiMTVhOTQxZGZlMDEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_51736f38701440feb0b212ea7ccf9ea6",
+      "statement": "ThemeDirs is the upstream directory list: the injected global config dir first, then <dir>/.yolo for every dir from cwd up to and including the filesystem root (no dedupe, later-dir-wins); Discover scans each <dir>/themes/ for *.json (dotfiles included, symlinks followed) with name = base minus .json, later dirs overriding earlier, a missing themes dir skipped but an unreadable or unparseable file a hard error, values returned RAW (the IsTheme filter is the caller's job); WatchThemeSignals forwards SIGUSR2 to refresh (the 250/1000 ms debounce lives in the engine).",
+      "evidence": [
+        {
+          "resource": "repo://internal/tui/theme/discover.go#L13-L100",
+          "version": "repo-lines-v1:sha256:364710d43bd14f04a29f778e59c65ea64b90ed48aa86afa205c6a7696538157f:eyJzZWxlY3RlZExpbmVDb3VudCI6ODgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlkZGYwMzY4ZjMwM2UxMjFkYjM5MDU5MTc4MjM4NDNjODI5YzMzZTdkODc5NDU2MDA2MzRhZDhiMGY4Mjc1YTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVmYTMzYWJkNmZkYTRhNjI1OWQwZmU0NGZlZGI5MjFlYTRjMTg3NTdmMzM4ZWEzOGE2MGI0MjkxNjgwMDdiMTAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_0a59d8fd9f5b4841ab280dde57506101",
+      "statement": "ResolveTheme ports the upstream resolver (defs refs, #hex, transparent/none, ANSI ints, and {dark,light} variants; optional selectedListItemText default background, backgroundMenu default backgroundElement, thinkingOpacity default 0.6; circular- and missing-reference errors keep the upstream wording); Rgba is stored as 0-255 uint8 (upstream RGBA is float 0-1 but every color is int-derived or float ops on 0-255 rounded at the end, so uint8 is exact and the operation order is preserved for bit-identical results); GenerateSystem turns the terminal palette + default fg/bg into a generated ThemeJson (values are Rgba mirroring upstream's RGBA-instance values; missing palette entries fall back to the ANSI table, missing default bg/fg to palette[0]/palette[7]); TerminalMode is the luminance rule (bg luminance > 0.5 -> 'light' else 'dark').",
+      "evidence": [
+        {
+          "resource": "repo://internal/tui/theme/resolve.go#L9-L193",
+          "version": "repo-lines-v1:sha256:258511bfae7a37725dd8d02df2fb02d31ac78bf16918b998ca4b0d1d9e5b91ce:eyJzZWxlY3RlZExpbmVDb3VudCI6MTg1LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJhYjQ3ZmM1MThiOTg4MWMyMzdlZGY4YWY2ODUxOTQwMTA1NzhlYmVmMzZkMzI4NGM3NzU0MWFiYWYyNWQ5YTlmIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI0ZDVkZTY3MzkwY2UzMmJmZmVmMGRlOTY0YzFjNzIwMDk5NWQ2OGNhM2VlY2FkZWIzZGQwOWI4NzJhNTRlYjc3IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MCwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0"
+        },
+        {
+          "resource": "repo://internal/tui/theme/system.go#L83-L155",
+          "version": "repo-lines-v1:sha256:516e88bc7cb28321a87833de071779da0453b92d04f769978a7f128a378bc2d2:eyJzZWxlY3RlZExpbmVDb3VudCI6NzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwNmFkNWZhZmJkNzMxNjhhOTIwNWQ2NjBkNDExZjZlOGVhMDhhOWMzNDk3ZjgwMTQyNDBhZDc3MzA1NzMxNDciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzNGU2ZGYxNGI3NmJhZTA3OTMwNzc5ZDk1NjVmYjVmY2IwYzQ0YjhlNjJkZjJjMDliNzZjZWYxYzBkYTg0MTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMxYThmN2JhYzZkNDJlMWYzYWIwZmNjNDY1YTA3ODg3Zjc5OTNiMWUyNTI2ZjE1ODYzODRmOThmODA0NTI4ZTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ2MGYzNzViZmIzYmI3OGQ3ZGEwMDA2ZTQ4ZDljMmRhODVhNTZlMTdjNzVlODI1ZmEzMGVlNDgwYWYxYmFlNjkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_68025e33efb54107addfdcb5120a8b88",
+      "statement": "Theme is a resolved theme + name/mode exposing lipgloss styles (components never see hex, spec §3); fg/bg yield an empty style for an absent or transparent (alpha 0) token; SelectedForeground is the upstream contrast rule (explicit selectedListItemText wins; a transparent background contrasts via the luminance rule 0.299r+0.587g+0.114b > 0.5 -> black else white; else the background); the token accessors (Text, TextMuted, Primary, ..., Markdown*, Syntax*, Diff*) map each semantic token to a lipgloss style.",
+      "evidence": [
+        {
+          "resource": "repo://internal/tui/theme/styles.go#L7-L116",
+          "version": "repo-lines-v1:sha256:934c2b61f1c0300d6f2aaa76cf2c0668a1667bf8dacf46178dbc414bedfef792:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI1YWMzYjE2ZWY5NDdkYzhhM2UyZTA4Y2FkNDY1YTk4MTdkZDU1ZjBkMTJhYjdlZjg5MThjMTAwMDQ1ZmU5YmI2IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIzMjczMmI1NDYwY2U5YjMyZWQxMjY4NGFhZDE0OTE5NzM4YThkZjY3YzMxMmIwZGMzOGE3N2UyOWE0OTY0MzUzIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIzZThmNmNlMWJhMjkyNjFjYWFlNzQyODc5YzYyOGM3YTYyZGQ5ZWMyMGMyNTc2N2NkMzFmNWJjNWE0N2NjODdiIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MCwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0"
+        }
+      ]
+    },
+    {
+      "id": "claim_7dde9c14703441bc9473a226f8f3e113",
+      "statement": "StyleConfig builds the glamour element styles from the markdown* tokens (base = 'markdownText' for text parts and 'textMuted' for reasoning, the word-wrap width also driving the horizontal-rule line length with an <4 -> 8-dash fallback); NewTranscriptRenderer builds a glamour TermRenderer word-wrapped at width, and a zero Theme (a nil-engine run) skips WithStyles so glamour renders plain with no SGR; the SGR profile is 24-bit for plain text but 256-color for the code-block path in a plain unit context, while under teatest glamour emits 256-color for both (teatest goldens pin 38;5;N); the chroma token map + the global 'charm' style-slot workaround for per-language code highlighting is the planned S1.4 work and in the current tree CodeBlock.Chroma is still nil (pinned by syntax_test.go).",
+      "evidence": [
+        {
+          "resource": "repo://internal/tui/theme/syntax.go#L1-L127",
+          "version": "repo-lines-v1:sha256:457cfa25b6688ef4b07b956ee1dfe6c42a673436082ecfa087a446f6ecc977ac:eyJzZWxlY3RlZExpbmVDb3VudCI6MTI3LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI4NjQyMjkzMDhkOTNjZDkzYzhiYTMyNzU1MTdkYzRjNmU5MGYxYzdmNDViNDFjMjZiMjRhN2I1NDI2N2M5NWYwIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyYmE0ZTFmOTFjMWI4MjVmYjdiYTc4YzA4MmRjOWU0ZTJkNGE3MGY1ZDllMTQ2ZmIzMzEzZmQwOWRiNGNjYzZhIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MCwicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MCwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0"
+        },
+        {
+          "resource": "repo://internal/tui/theme/syntax_test.go#L112-L113",
+          "version": "repo-lines-v1:sha256:b1d807e4b90a280581315aad5e06bd5a0effe8e5fc07df36a278ac637db9cd09:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTM4YTk2MWY3NTE5YjA0YjU3YjEyNjMzOGE2ZTFmM2I5ZGM1NDc3MTA2MDFiZDYwYTgzZDk0NDViMjRlMWY1NSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzcyMTVjY2U4MDllZjk0ZDhkMzAzZDQyODYxODc4OGE2NTM0ZDQ5YTlkMzVkNzhhNmQwZWNkNjNlMWJhMjQ4NiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWZmZmZlNmRiYTJlNzk4Yjk0YzFlNjU3MGE3NzdjZWNkYTMzOWI4ZTUyYTc3MzY4ZjczNzkyNDU5OGVmMDQ0NCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjI5NjQwNzljM2M1YzgxNTIwZWYzM2EyYjlkMmUxNWExYjg0ZDcyODBkYjg1OTBkY2Q2NTc0N2UzZTAxMmE0MCJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.4.0",
+    "at": "2026-08-26T18:04:14.871Z"
+  }
+}

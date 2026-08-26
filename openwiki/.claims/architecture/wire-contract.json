@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:6b06ffe416eae9c77cd87d36035db6acf8f6077aa9b3fa3d2f9554b3e084c985",
+  "claims": [
+    {
+      "id": "claim_bde097f0f3c84bfbb68a14d43a8bcfca",
+      "statement": "internal/protocol is the single source of truth for the wire contract and is wire-level by contract (DTOs, ids, event shapes; no business logic, no I/O): server emits the shapes, internal/tui consumes them, no other package defines or remarshal wire structs, and wire changes land in protocol first with both sides following in the same change.",
+      "evidence": [
+        {
+          "resource": "repo://internal/protocol/AGENTS.md#L16-L34",
+          "version": "repo-lines-v1:sha256:9cbe2233b1fa2e271132c2bf871b13c837ddccc86a3f2976a72a2165a57abd40:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEyZTVlMzQ4YzA2NWNjODI4YTc1OTQ0ZTNkMmJiYzVhZGJjNjI5ZjZjZDA4ZjYxZWQ0Y2ZlZWE5NjhkYjE3NmEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVlMDI5OTI4ZTJiMjM3MDdmZjVhYjBkZDljNGVjMDk2OWIzNWIzMjkzODI3OWY4MDg3NGZkM2Q3NDZjMDAzOGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdhYTQ0NmEyY2NjNjAyOWJmOTkwMWViMWNlMjI0ZTAyYjUyYTIzYTI1ODkxMWUzZmJmYmM4MGI5OWUzZjc1NWIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjYwMTgwN2NmOTZkNzJhYzcyYzJjNWM1MGRjOGJiMTk1OGQwMmVlZjFlMDYxYjQzODIyZTVlMTIyMTViODY3OGIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_0bb1efff22fa4f1bbd2d38e21e650191",
+      "statement": "The package owns ten DTO families: message (Message with role user|assistant, MessageTime, MessageModel, MessageError, MessageWithParts), part (Part with type text|reasoning|tool, ToolState with status running|completed|error, IsSynthetic/IsIgnored flags), session (Session, SessionStatus idle|busy|retry, Tokens, ModelRef, Todo), provider, agent (Rule), command, config (Config + ParsePerms), errors, event, and id.",
+      "evidence": [
+        {
+          "resource": "repo://internal/protocol/AGENTS.md#L9-L10",
+          "version": "repo-lines-v1:sha256:4f1b15070d613144ed5f837283d6120512439dbf41dd6423bf4cd49d8cb941f4:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2Q5NzhjYTYxZDcyMTU5NmQ5MTkwZGM4M2VhYTNmZDQ2ZWIyY2Y3YWUyNzY4NjEyNzg2NDYzNDU1MmRjMWYwYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODFiMzg4ZDU1M2UzOGNhMGMxZGEzNDA3NzYxZTRkM2U2YjIwNWIwZTU2YzBjZjI4NTEwODAzY2E2MTc5NzZlZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNGI2ZGU1ZTVhYTVhZGFmN2UzNDkyMzE3ZWMzNGU4NGFiMzY3ODc1YWVlMzkyMWQ3NjVmZWI1MDViNDMwY2IwNiJ9"
+        },
+        {
+          "resource": "repo://internal/protocol/part.go#L3-L37",
+          "version": "repo-lines-v1:sha256:5dc899857441881bbd63ad9ad6582012be10549f2cb06bef44f326cfc3dee3e9:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdhMWVjODRjODJiNzU5Y2Y0MGU0NWYzYTdhOGU2NzAwZWI2NzQ1OGRjNmRlOGYyYWM5ZjZlNzMyYThmODFhMTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjoyLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVjMGEwOTBhZTEwMzM0NjNmYmM2ZDRiNTc0ZWEyYWEwZDQxMzM3MTAxYzdlYWZlMzBjNTA5ODQ3MTM3NDU4YjQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://internal/protocol/session.go#L20-L57",
+          "version": "repo-lines-v1:sha256:328fa4eef9bfbe2f77e3f976fc3f430c12609530b1bfa2e466ac3005ec8b2d30:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVmOGRjZGY4YWI2MGMzY2UxMGIxYTZiZjUyYTg5MTVhMTVjM2E1Njc4YjhiZjQ3NTkwYjk2ZTAyNTA3NjFhNzciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJmYzg1N2M3N2I1N2NjZTIyZGEwZmU1ZWI1NzhiNGU4NWU5NDg3NGJlYmQ5Yjc1NGQyN2NiMzM4ZThhN2YzNGYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdkNWZjN2RiNjViNGZlZWMyNzkzNjA5YmNmODAwMmIzMDc1NWYyZWFiZmEzMDg2YzJiZTI4M2EwZDAyYjdjM2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c7555e44e13648b8919cde8ef91ff027",
+      "statement": "NewID(prefix) mints prefix + \"_\" + 20 random characters from a 55-char alphabet matching the ID contract regex (digits minus 0/1, A-Z minus I/O, a-z minus a/i/o); event ids use the evt prefix via NewEventID.",
+      "evidence": [
+        {
+          "resource": "repo://internal/protocol/id.go#L7-L26",
+          "version": "repo-lines-v1:sha256:d11e804d68dfcb4f242e3c36d39797f5863ff09c53e3745739e3260682267056:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY1NjY3ZjdmYTI0NWU5NWQ2ZjVlNDQyZjRlYjFkNDNhMDhkNzg3ZmRlMTViNmNiMDY2MzEwZjk0OTQ2OGYzZTgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4a2a89af8af44674ab1fc1c697ba1d5a",
+      "statement": "The Event SSE frame payload is {id, type, properties} with properties as json.RawMessage; MakeEvent wraps typed props in this legacy envelope with a fresh event id; the legacy SSE event set is exactly ten types (message.updated, message.part.updated, message.part.delta, message.removed, message.part.removed, session.updated, session.deleted, session.status, permission.asked, permission.replied) with JSON shapes matching upstream v1.18.18 legacy schemas.",
+      "evidence": [
+        {
+          "resource": "repo://internal/protocol/event.go#L15-L26",
+          "version": "repo-lines-v1:sha256:017bce0ad9cee0eb131e29372c282f69b7256af98afa6e7e897b538d919837b2:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQwZDk4NmIwZGY3ZTljNDdhYTc4MmIwNjYwOTQ2OWJjOGVlY2E0NzYxMmI4MzhjZjgyOWRkYTRiY2RkZDMzMjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhZmJhMDUyN2MzOTUzYzRiNmUwZTViNTczOWJhODM2MTJmODA1M2JjZGM5NDY2NzMwMTkzY2QxZDU5MGI0MDgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYyYjA3N2UyYzM3ODRkNzk1YjE1MWRiOGUxYzVkYWY1OTBhNDU5NjBmNjU5OWRhMzBiY2M5YjQ5NDNkNThjMmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJkOTc2Nzk2Mzc2OTVjMWQ4ZmM3MTg1MTQ4Y2EwZTYwMGE0ZGU3NDAzMzVmZWFhMzFlYTNlMWY4YjY5ZTI0YTgifQ"
+        },
+        {
+          "resource": "repo://internal/protocol/event.go#L8-L35",
+          "version": "repo-lines-v1:sha256:831168abb98bdc0b67be932dbcf3e9a11ea5e557528a9d3210a78349fb64c172:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdiMTdhMTc5OWZiZDc3MWIzZjY3YTY4ODFiMTZiM2E5Y2U0ODUxZmJkMGMxMzRkOGIyZDA5YWJjZTU2YjYxYTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZjZTRjMTE1ODcxMDc2MGRmOTEzYzM5ZjAyZjkwMDcxMGNjYjVlZDAwY2EyNzU2NzVkNzIwYWQ0Y2RjZDQ0NjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY2OTA1ODg5OTdhNmE4NTExNjU1ZGQ3ZTUxODgyNDg5MDQ1N2IxZDFlMjc0MzczZGM5ZTRhZGQ4NDFkOGU5N2UifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_fcfaa2ad210f4260b2aa4776f3ab8ec9",
+      "statement": "ParsePerms decodes a config permission map into a deterministic sorted []Rule (wildcard rules first, then specific; patterns ordered by length then lexically); an invalid entry is an error the caller degrades to no config rules.",
+      "evidence": [
+        {
+          "resource": "repo://internal/protocol/config.go#L52-L89",
+          "version": "repo-lines-v1:sha256:829809e78f41783d50172c9722b5376af3ddcedaaaa28aa2b7f7ddef53fa9ed3:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRjNThlZDAwYzI3MjM3YjI5OWVkOTU4ZDNiODRkODc0ZWViMjJkYzU3YTVhZjg0ZDU2ZDA5ZmIzMGI4ZGJkZmEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjEyY2EwN2YzMzhlOGQwMDRiYmE0OTJlMWUzMjdkNWI2NWJiMjJmYjhiZDZiYzg1YTAwOTU2YzQ5ZDkyODM2MWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_0f46c71258f14152a9817b6b862c3dc4",
+      "statement": "The mirrored REST surface comprises /global/health, /path, /project/current, session CRUD and send/abort/command routes, /event (SSE), /provider and /provider/auth, /config and /global/config, /auth/{providerID}, /agent, /command, and /permission (+ reply), with a catch-all 404; requests are scoped by the x-yolo-directory header (URL-encoded absolute path) with the server work dir as fallback.",
+      "evidence": [
+        {
+          "resource": "repo://internal/server/server.go#L89-L121",
+          "version": "repo-lines-v1:sha256:e7be485a5de5b5bbf0b5df7950abc42f4922399882dce464be5922bb31e34b93:eyJzZWxlY3RlZExpbmVDb3VudCI6MzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk2OGU4MzljMDgzOTc0YWQyYjUzZTE5YThkODQyODhjODYwNTVlNjVhNmE5MjI3ODZkNTQ3MjY4MmJmZTM5N2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQxYTIwYWI3NzQ2MzZkNDM0ZDdjYTJiY2E2YmFjMzY3YzgxOWRmODNmMzc0YjViMmI4N2JjNTA1YmJhZDRhZGYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE4MjE5N2JkZDE3ZmMyNjg0NDM4YjM0NWJjNDMxYmM3NDhhNzQ1OTk2NTYxZmY0NjcxNzBlM2YyNWE4MTFkODciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ0MGI0YTcxNWQwMWFmMDVmNWQ3NzI5YzJkODIyZWMwMjY5NTUzM2M2YTI2MzZlZTE3NGFhNTNlMGZiZmQ3MjkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_24e0daaf30604008afcedce9329bc5e9",
+      "statement": "The mirror of the opencode v1.18.18 contract is verbatim except the standing baseline deviation: the scoping header is x-yolo-directory instead of x-opencode-directory; further upstream deviations are possible only on explicit user instruction and are each logged in docs/superpowers/DEVIATIONS.md; telemetry surfaces are skipped, not deferred (no experimental.openTelemetry or telemetry-identity fields in the config DTOs).",
+      "evidence": [
+        {
+          "resource": "repo://internal/protocol/AGENTS.md#L18-L25",
+          "version": "repo-lines-v1:sha256:b0d60c533cf6ba57f09dc24ae93f9e1030ace9bd8d515423baea398b967cb149:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiM2ViNmIxOTJhNjA0MGY1N2ZjOGY1ZjQzODBlMTU0ODMzYjhkN2M5ODA1NmI0N2VlNTA2Y2Q4Y2JjOTAyMTNiZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDViNThmOTNhZGJhMGE1YTZkZGQzODcwN2RkZGY1YjU2NTUyMTMxMWJlNDJmMjRlNDNkZmQ5ZDI2Y2UyNzM1YyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMWU3NjZiNGI4ZTg3MTc4YWUwNGM0MmZmYzVlMTY3YWEzMDk5MjAxMjM0NGZlYWE1MzAzMGViODZhYTI4NDI2NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjZlM2M4NDJmMTFiNGZkNDQ5MzdjNmMyZjUzZDlhNGFmZDkxMThlM2M3ZWM1ZmRiMGEyOWZmMTdlNWUxNjJjNSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_7de5341fca6145d5b6ef34943e91ef45",
+      "statement": "The cross-package mirror check lives in the internal/server wire-contract suites: golden_test.go byte-compares normalized server responses against testdata/golden (generated ids, project dir, and epoch-millisecond values normalized; -update regenerates), sse_ordering_test.go asserts SSE frame ordering, fake_env_e2e_test.go boots the full stack via the YOLO_LLM/YOLO_FAKE_SCRIPT env gate (same path as yolo serve with YOLO_LLM=fake), and scope_test.go verifies the scoping matrix (absent header falls back to the work dir; id-scoped routes 404 for ids of another directory).",
+      "evidence": [
+        {
+          "resource": "repo://internal/server/fake_env_e2e_test.go#L25-L35",
+          "version": "repo-lines-v1:sha256:d09be5696ce665fc330d5dabd09c7a8412281385055035628a153c7ec345b112:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY3Y2RhODJkYTYwNjIzOGUwNWU2MjM5OTU2OWM1ZWUwMzk5MzQxOTY0OGFlNWQ0M2EyYmY4Y2Q2MzQ3ZjgyNjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZmN2ZkYjQ3ZThiYjMyZTI1ZDQ5MGQyMDEzOGY5ZDIxM2FiZThjM2FhMGE3ODU3Zjc2Y2YyYzNmNTQ2NzEwM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA1NDNhZGU4MGQzYTc2N2IxNmYxYjdmMDgzMzFhMTU1MDJmYmUyMzQzMTJhYTIyMDJmODQ2MThmY2M5MjAwZTciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImNkZTMyYjg4NWZhMzU2MGYyZTBjMWEzY2VkMTdhZjJlY2QzZjY1OGQ0M2Q1MzY2ODkwNzNkNTQ5MjRkOTY2YzYifQ"
+        },
+        {
+          "resource": "repo://internal/server/golden_test.go#L15-L40",
+          "version": "repo-lines-v1:sha256:36707868cffe6b743e5354379f592ab2d190bc6b3e80647e1d921da87508e8f2:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVmMjVmMTJjYmMyOGM2MzE5MjRiNGNlZDFmNDdkMjlhMTgwZjE3YmU1YzhjMzJiYzJhMmFmOWNjNzJlYzI2MTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjEyZDRjODA3ODcyYWVmYzdhYTg1ZjdkMDQ5Mjk5YmEwODEyYzgwODc0Mzg5YmVhZWU4OGIxYjY3Mzg1YzIxNjEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE0OGU5ZGE2OWNlNzgxZGM5NDA0MGFiMjZjOTUzMDY4MWI3M2MzYjBmNWY0NmNhNzRhODVlYTM5NDVlOGZjM2EifQ"
+        },
+        {
+          "resource": "repo://internal/server/scope_test.go#L11-L30",
+          "version": "repo-lines-v1:sha256:d3f9097c269b9a44119ee307a7dab4e8fe9b3423cc0a6ea3cc95cb34d703440a:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU5NDYxYzkxYjcxZTcwZjk4MzFjZjMwZjVlYWE5MGQ3NTMzNDMzYmE4Zjg2N2IyYzBjNDAwMDY5ZDIzYTBmMjgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI3YTFmMjFjZWNlODljY2MyYThiOTJiYjk1MzA0MDEwYWJmMDQzODU2NmFkMjFiZDgwMWUzM2MwM2JkOTAzMDMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ1ZjI4Y2FhZjU0NTE2OTg4NmQyN2VhNjdjMzIxMzI3Mjg4OTc4N2NhZjViYjg4YTA5MzIyMTVlMTRiOTA5ZDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFiNzhjZDE3Mjg3MGVkNjgxNDZmMGVlZmE2Y2QyYzA4YTFjMjkyNjQwMmYzYzMyMTlhYjgxMWZhNWI5ZTc3ZjgifQ"
+        },
+        {
+          "resource": "repo://internal/server/sse_ordering_test.go",
+          "version": "repo-file-v1:sha256:2efe7e91ba71a5efdca05ca7e61db05b5c10f55702a589270c06bdb6daff3ab9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.4.0",
+    "at": "2026-08-26T18:04:14.871Z"
+  }
+}

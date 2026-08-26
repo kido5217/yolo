@@ -1,0 +1,130 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:623a9a07a76c694eabcaa09e1f3d3e84356cc584f98680f8902c94bae31c9df2",
+  "claims": [
+    {
+      "id": "claim_36ac246cecb94ca6bfb83b6eab9c3d91",
+      "statement": "All task state lives in beads (bd), not in markdown TODOs or files; the resume rail is beads (the release epic; bd ready) -> the active spec/plan -> PROGRESS.md (facts) -> DEVIATIONS.md (audit); the workflow is bd ready to find unblocked work, bd update <id> --claim to claim atomically, discovered work linked with discovered-from, and bd close with a reason.",
+      "evidence": [
+        {
+          "resource": "repo://AGENTS.md#L282-L310",
+          "version": "repo-lines-v1:sha256:8a3371daffb2c9b78fecbbf1eac05d7d42f555603dd9d37ccc3fe204572daecb:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFmMTBjY2YyYTVkM2Y0MjIyOTAwNGJiYTU4MTkwNGUyMDIxMWY4ZGU3OWY2NTMxNWM1Y2RkNzE4ZjNjMWJlZDIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY5MWE4MjJjYjFlM2FkNDZhZjcxODhiOTFjYjE0M2I3ODkxYzlhZmM3MGU5OTg5ZjZmOWU1ZjRjMzEwN2MwODMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY5OGJjYTI5YThmNDU4MjgwZWU2NWQ1ZjNkMDRjNzIzMzgxMjMzNTQ2OWE4MTM3Y2I2YTZjMDYxNDlmZmVmMjMifQ"
+        },
+        {
+          "resource": "repo://docs/superpowers/AGENTS.md#L5-L8",
+          "version": "repo-lines-v1:sha256:dbf1483477880f02d30de569626142f029f085ab028f276d218a821c19949ad4:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTY2MTZmYmQxN2RlZWI1M2UzNTQ2NzFlYjA3M2ZlNzE3MjA4NTFkYzUyNzJjNjc5NWY1ZGE5MmIwYTVlNjVjYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTM1YjM2ZWJjNGYwYmRhYTcxMTMwNTExYjVlOTljNjhiYWQ3OTU4YTkxY2ZkZmY0M2YyZTcwMjJjMmEzZTI4NyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODJmZjEyMDkyZWI0NzU4ZDZiYjk3Y2RlYzBmNGRiYzlmNTZjNTBkNjc2NDNhY2I0ZTc4NzZlNmZhZWI0MjhhNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWVlOTQ5NjUzMGRiMjRiMzZiOGRiMzY0MTJjNjFiNTQyOTc2ZDUzMjM5OTZlNmZkMjliZjBlYmVlYzNhMTgwOSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_db4c358c07934451ae8e20515c456a5f",
+      "statement": "PROGRESS.md holds only key verified facts, the root-cause archive, and a one-line status pointer to beads — never task history; task state is beads and git log --oneline plus the plan files are the archive.",
+      "evidence": [
+        {
+          "resource": "repo://docs/superpowers/AGENTS.md#L17-L20",
+          "version": "repo-lines-v1:sha256:2b0f5528acebe47e1e18cd755bb552085227f7854faf8fa484dbb46e104ef73e:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMjk5YTcyN2ViYmYyNGRhYTUxZWI1NjdhYjBmMGViYTAyNzU0M2VmZDZiYzNlNDBiYjM1YTRlNDVjYTBiMjdiZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNjQ1ODE4YmFhMzEwYmUxOGQ3MDRmZjQ4MDRkZGUyZWU3OGNlOTBmNjQwM2ZjMTllMGYwOTA5NDE3NDYwYzYzMCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiN2FhNDQ2YTJjY2M2MDI5YmY5OTAxZWIxY2UyMjRlMDJiNTJhMjNhMjU4OTExZTNmYmZiYzgwYjk5ZTNmNzU1YiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODg1ZDJkNjk0MTZjZTg3NzYyMjAzNDg3NTE0YmU4NjgxNGM0YjcwMGJhMDVjZmQyZTk1NDQ0OWE0ODQzOGJhZiJ9"
+        },
+        {
+          "resource": "repo://docs/superpowers/PROGRESS.md#L1-L6",
+          "version": "repo-lines-v1:sha256:3489e6534a18bb8f49d8d2075c10046aadd86da4fa69e390104e18fe0cfc2515:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTdmMThjOTE2YmY4ZThkNTA3ZDlmMWY2MjQ2N2QwZDI4M2VmYTdjOGY5OGFmNzdmZjE2MTM4NWRiN2IzNjc3NyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzQ4MjljNDQzMzA1ZmY4Njk1OTIyY2FhZWY0MjhlNjYwZDVlYTM3NjYzMjQ4YmNhOWJjMDVmNWM0NGY4OThiNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYmYzNzlmMTQxMDExZGI2YjQwZTQ1ZjY1MTQ1OTFhY2U4ZjAwNDYzOWRjNjhiMzhkMGZlMmZmNmUyMmJmZDIzNyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_be712946b12e4b74a8ff2b2387677a65",
+      "statement": "DEVIATIONS.md is an append-only, numbered, continuous audit log: per the tests-define-the-contract principle, a plan contradiction resolves per the last-stated call, the test is fixed, and the resolution is logged with severity; items are never edited in place (superseded with a new one), and items 1-66 are frozen in deviations-archive-v0.1.0.md.",
+      "evidence": [
+        {
+          "resource": "repo://docs/superpowers/AGENTS.md#L21-L24",
+          "version": "repo-lines-v1:sha256:aba0e129735e3bdc336c90e857ecabc9e11cba101b06a0e47fa37c1e67d4d9a0:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDZhMDhiOTljNzhlMjlmYTE2NjQ3OGVkN2FiOWRiNDgwNDg2NzAzNTA4OTMzNmZiMzA5ZDU1NDMxMzVhNWMzOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMGJjNGMzZDE0Y2JjMTVmOThhMjJmMGJiMjA4NmNiNmE3MzA4OWM4NjQxNjljN2E4NDUyMDQ4ZWUxMThkYWU2OCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTNhN2Q1MWYyZmNkN2FhMDc3M2M1ZWE5ODQ1NmI1OGRhYmVjMDcxYTJmOTZjMzBjMzFjNzA4NWQ2ZDkwM2Q0OSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNDM3ZWIzNTg1MzUwZmRjYTVlMmNiZTI3NDUzOTdjYmQ1YzA1MDljZmRlOGE0NTM5YmQzMGExOTdjZjQ5MzA0NyJ9"
+        },
+        {
+          "resource": "repo://docs/superpowers/DEVIATIONS.md#L1-L8",
+          "version": "repo-lines-v1:sha256:d236a8594f4349ec2818af431d9fd0afcb4c5f18e20c668a8179f15507ec4e95:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzU0N2UyODk5NWRhNDg4YTI0YWRlZGM1ZjQ3OTE5NmM4ZWIzYzg1ODI1MTAwMWFhOGY2Y2JjNDVlMjdlMmI1ZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzA1MWYxZWYyNDQ1ZmJkNDI3YmM2YzI3OGNkNTJkNzIyZTFlZThlNTYyZmNkODUxYTE5MGFjMDFlMGFjZTU2MyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_65548eb04a834a208d897d7aed011e71",
+      "statement": "The docs/superpowers layout: plans/<date>-<topic>.md are dated implementation plans (one active at a time, named in the beads epic; large slice-based plans use a directory with a master plan.md plus one file per slice), specs/<date>-<topic>-design.md are approved designs, DEFERRED.md is the living deferred work list (OPEN items only, closed findings frozen in deferred-archive.md), and reviews/<version>/ holds per-wave review findings.",
+      "evidence": [
+        {
+          "resource": "repo://docs/superpowers/AGENTS.md#L25-L34",
+          "version": "repo-lines-v1:sha256:7fc0958f5b7d27299b40cc472e8b2174b6d2a8923fc2cfbcfc41a284340a8ee5:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI1NmE3NGI4Zjg4YzM5ODFkNmRmMzZjMzkzMjIzYWEyZjA2NTJkMWI0MGIyZDgxYjE5ZDkwNTIxM2Q0MjVhZmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY3N2YzOTNmYThlNDg2MDE2YWE1Njg3NDkxYjllZGZkZDIzOTQ2MWNmM2QzYTA3OGE0NmRiZmU2NWUzNmEyODgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ1YWFkMzllZDQ3NDQ3NWI3NzQzYzAwMTJiOGNkNmVkZDk1YThiMzdiZjM2NzRhNDRkMWRhNWY3MDhmZjRlODkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY5NDZjMzU5MTQwNWQzZjU2OTk0NDMxZDQyM2Q5ZDJhNDVjZTA3ZjA2MzZkODQ3Nzk5YjQ5N2NkZDdlMjE3ZGMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_24f0eefd4ee244179e9975119dc3cfb8",
+      "statement": "The non-negotiable core principles are: (1) zero telemetry (upstream OTEL/OTLP surfaces skipped, not deferred; OTEL_* env vars inert; config schema omits experimental.openTelemetry), (2) reference-not-contract (legacy REST/SSE mirrored for verifiability; deviations only on explicit user instruction and logged; standing x-yolo-directory deviation), (3) pins are change gates not upstream locks (sha256 pins re-baselined in the same commit, never left dangling), (4) TUI is a pure client (enforced by TestImportsDirection), (5) tests define the contract, (6) task state in beads and proven knowledge in docs, (7) subagents one at a time, (8) YOLO spawns only YOLO.",
+      "evidence": [
+        {
+          "resource": "repo://AGENTS.md#L52-L61",
+          "version": "repo-lines-v1:sha256:2559e0822fc0e29292964e8a423e2f0b1c29b3529c2eafbe03270065c2c98bb9:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMzYzQ2MGU1N2QyODYwZWU2ODY3NmQyZjgzNmFmMGU2NzhkYTgyODg2ZTFhODQxNzZmMzI3NTU4NTU4MDc3MzUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ5MWUxZDA5MjA4MjFjNTY2NzM4OGY5NzdlMmJhZGUxYjlhYTU2Yjc3NGNjMDI5NzZkY2FiOGQ5MTY3NzAxZDQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRjOTFmNmZkMGVhZTVlN2IzMDcxOWFiYzRjOWQ4MjdhODJlYzkzMTg3MGI5YjJjMjkxNTRmOGU4ZDdjYTE1ZDMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE4ODQxNTJiZDk3M2IwZTdkYjc3YjA1ZTdiOGFjY2UzMmE5ZWExMGFjNTdhNzZhZDUwZDkwMTUxMjliZjI2NjgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_ecdbf1673a4145c98176cbb7df6d12cc",
+      "statement": "The dependency policy is allowlist + agent-proposable: runtime deps are pinned at exact versions, and anything outside the allowlist requires an agent dependency proposal before any go get/go mod tidy (module + exact version, live-verified evidence of maintenance/license/transitive surface, why stdlib is inadequate); landing requires explicit user approval and an approved dep joins the allowlist plus a PROGRESS.md fact.",
+      "evidence": [
+        {
+          "resource": "repo://AGENTS.md#L14-L27",
+          "version": "repo-lines-v1:sha256:ce826542046fe692ed69f5d53a738bbcf672b93dc8ad15b540b03175690c3b60:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUxM2FjMGJmYWNmMjJiYWRiMzlkOTJiM2UzMjRiMjZiYTQwYjMxNGZlYTY5MDZiMGZhNDU3ZmFkMmViZTgwZDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI4N2Y5NzVlMTAxMjA5Mjc2ZTA1NjQwYjg4YmRhMmYxMGM2NzAxM2FjY2M3ZTFlMjAzMzkxZjU1YjU4ZjY2NjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE3YmU5NGZmYWVjYWEzOTk4YzczM2NmMjJlMmMyNmQ4ZGNkMmEwOWY4MDc2MGJjMjVkM2Q3Y2VhZTZkZjZmNjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgwNGViZmMxOWIzZTI0MWE0NDM5YjMxMzA5NmVlMGUzZDg0YzRiMmZkYTZiNTQ5MmY3ZWRhZDQyM2Y5MmY1NDYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_6be7af78f76d4dc6b735603945afb901",
+      "statement": "Commit and branch discipline: never commit directly onto main — every change is committed on a task branch and reaches main only via a merged PR; work happens inline one task at a time with conventional commits using the plan's pinned message; tags only with explicit user go-ahead under semantic versioning.",
+      "evidence": [
+        {
+          "resource": "repo://AGENTS.md#L71-L79",
+          "version": "repo-lines-v1:sha256:dfa5ce0a89d7bb70849c56bbe21c766c9c15cfe439ec80c9e0be7f641c757cb0:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOWE4YzdmMzk1MTA4NGU2NGI3ZmMwNzU1OWMzM2YyZDA3NGM3ZDI0OWI2Yzk5YjUyNWU3MDY5YmM4NDFkODQ0YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNGRjYzI0NzIzNjM4YjI4MmM3ODg0NDIxMzA1NzJiYWQ0M2QwNGMyMTM1OWFjZjcxMjYyNmYxMTE1ZGYzNjAzMCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzBkOTY3N2FmNzExODI5MDI4N2ZiMTk4YWNjY2E2NzhhZDZiMGRmZGQyNTY2ZTgxYmQ5NjNjNzNkNTQ1ZmEyYSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzk3ZGY5OTJhN2ExNGRhMTcxZDkyNzAxZTJiZjQ1ODFmYzY1YTliMzQ2MTk4OGI3Zjk4M2U1YmVhMWI1NGEzMSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_ef0d14a9ede041019745e6281401d5e4",
+      "statement": "The verification gate: every task ends with go vet ./... && go test ./... green and a commit, plus a clean gofmt -l .; unit tests never hit the network (live paths are env-gated via YOLO_LLM=fake) and the e2e smoke is user-run, never CI.",
+      "evidence": [
+        {
+          "resource": "repo://AGENTS.md#L63-L70",
+          "version": "repo-lines-v1:sha256:ef442272e77c3771952e03bdf21e82a16cef66aa412aeec42bba6600e80337c2:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzZhMmE1NzcyZDgzZTdhMzU2YThmMzQwODkxNmM4MTIyYjlhZGQ3YmQ1N2QyMDhlZjFlNDAwZWVkNzJiNjgyZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTExOWQwYTEzOWRlYjg0N2E4YjljOGQ5Mzg1YTk0YWJhZDgxMDBkMWUyNDE5ZTg0YTg0ODVkYmZiMjEyYmM3MyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOTc4M2MxNDIzMWFiYTFmYzFiYzFmNDI0NTkyNGM2ODYyYWU3NGZlMGI1MGMyMTdmZDMxZDA4MzU4OGM2NWZjYiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_1dceceaa68e745ef8df6bd4d93c19e25",
+      "statement": "The repo carries a hash-locked skill set in .agents/skills/ pinned by skills-lock.json (15 golang/charm skills plus the bd-managed beads skill); the relevant skills are invoked per task and the pinned golang skills are not edited.",
+      "evidence": [
+        {
+          "resource": "repo://AGENTS.md#L111-L133",
+          "version": "repo-lines-v1:sha256:4599b36ea4dd1156aa3a43900d6c74b6f6cb988ca3cec5e56df14f677325c0e7:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYyNjhlZGVkYjUwNzUxMWI4YWE5NDAzM2YxZjUwYWZmYzc2NWEwOTY1NTMxMjZkZGFhMWYzNWJlYjIwNWRjZTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM3OWM0MTExY2MzMjE3YzliNWY4ZDA5MTBhM2FhZGNhNzA0ZThkNDVkMDllMWY4NTdlNWQzMjYxYzg4YTYwNjIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc4ZmZkOGE2MWI0NDM2OTJhMWE2NWViZWUwNzEzZWM1ODFiODNjODg0NDllMDIyOWVmYTM1ODU0YjE0NDllYzQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBlMzc3ZGUzMDIzOTgwYjRjODViZjc0Yjk2MDVmYzk1NDg2YTVmNDY3ZmZjYmQ0OTM4ZmJhNWJlYzJkYTFhOGIifQ"
+        },
+        {
+          "resource": "repo://skills-lock.json#L1-L15",
+          "version": "repo-lines-v1:sha256:a016bd4ab808a386e8d64b6b5cdfa4ce99c732a4f1f98ba4d084545b3367cf41:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2ZmIwOGZkYTFhY2I5NTdiNjExNmJkMzc4MTFhMWZlNDFhMDE2MTFjMDYzMWVkYmY3ODZkNjg4OWEyN2E1NWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFmMGNkYjk3MmE3YmZiN2VkMjQ2ZjlmZjY3MjM4NWU1NWY0OTY4ZmMxMTA0M2RjNWI2ODRkNTFkZmEzMWRiY2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgwODBkOGQ3YmNjYTVhYjhmMGE4NjgxY2QxNTExNDk1ZTY4ZDJhZjg2NDcxY2RmMmIxYzgyOTMwZjE2MWVhOTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d5174051996944e98889c7472699022c",
+      "statement": "Execution follows strict 5-step TDD per plan task: write a failing test, confirm it fails, write a minimal implementation, get the gate green, then commit with the plan's pinned message.",
+      "evidence": [
+        {
+          "resource": "repo://AGENTS.md#L89-L90",
+          "version": "repo-lines-v1:sha256:a303effd2d15ab4ae6ff405b7b25ea57fbb3b8703fde5e894eb470438ad51bff:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYmE5YzhmODY4YzBkODdlNDA1Mzk5NmJhNmIwZjM5NWNhZTk5YjBhZjI3Nzc0MmExODg5NzA5YTRjYjU3ZDk0ZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2Y3Y2EzZDU1YWM2OGVjN2Q2ZDdhNzgxYTEyMTkxNGIxMzc2ZTJkNDUxZDEyMGRmYTVmZjhmNWM4MGY5MTY2MCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzE1ZGM1NWU1OTQxNDU0YjU4ZDlhZDY4YjU5MjJjZjhkZWMyNzFjMjIzMGJhOTU3ZjU2N2M2YjM3N2JkYmZhNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZmIxYWY2ZGJiOTQ0N2MxYTIwZGY1N2JlZmFhM2Y2Mzc0YzBkNTI0NjE1YTI5MzI0N2QzZTRhMDYxYmY2NjI3ZCJ9"
+        },
+        {
+          "resource": "repo://docs/superpowers/AGENTS.md#L37-L42",
+          "version": "repo-lines-v1:sha256:f670ceba405b1e9e18a2cad839e71eb5a3913b49c69f49f31be48bcf716b0480:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjEyMTIzMzM0ZjBlMjdmYTllN2U5ODAwMzEzODRkMDlmNDZlYWM0NzE2ZTNiY2I2NGI2NzI4ZDE4MDMzNDc2YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmE1NDgwM2U2MDlkYzMyNDg3MjM4OGFkNmI3ZTE5ZmFhNDJiMGU0ZjY5ODI0NzRjNTgzYzc2ZDgxNTgzOTQzZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDkxZTQ2MzlhZGQyMDRkM2MyNmY3YWExMjhhYjMzMWMzMmUxYjA3NWVhZDcyODQzYjBkOTcxYjRlZDljZmRkMSJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.4.0",
+    "at": "2026-08-26T18:04:14.871Z"
+  }
+}

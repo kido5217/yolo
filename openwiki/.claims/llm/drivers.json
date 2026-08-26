@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:840a3c748136e0e28c612be8b41b8339c21753a2398def9352b5debe4dbff24f",
+  "claims": [
+    {
+      "id": "claim_8f12a2bb6b2f4e4f8ee86fa4ec4c70f3",
+      "statement": "The llm package defines a provider-agnostic streaming chat interface: Driver has a single Stream(ctx, req) (PartStream, error) method; PartStream.Next blocks for the next Part and errors only when the context is done (ctx.Err) or after the final part (io.EOF); the final part carries Usage and Finish (stop|tool_calls|length|error), and Err is non-nil only on the final part after a 200 began.",
+      "evidence": [
+        {
+          "resource": "repo://internal/llm/llm.go#L63-L97",
+          "version": "repo-lines-v1:sha256:e1a4b21c61da1bd5a4bba8d69882eee8ac675aedfd0a55c1c736a118e8e72cd5:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc0MTYwNTRhMjUyOTc1ZTIyOGYwYTM1ZDYzYmQ2MTQwMTFjZjI1NzI3OTEyOWE1NWMzY2MyYmY4NTZkYWMwNGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY4ZDkwYTQ2ZGJiY2U2ZjBhNjNkMTY5YTA3NzZhM2Q3MzJkYWE4YmIzYzFjYjU3NTU1ZGI5ZmYxNTI3ZjY5OGIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjYzMTA4MjllMDBlMDFlNDdhYmI0NTljN2YyNDY4ZjE4OWZiZTYzNmIyNTMzN2U1NDEzZGE0MGU2MzFhNjAwZjQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c7405e75465143faab247b01c6c48886",
+      "statement": "The error model: APIError is a decoded non-2xx upstream response (Body capped at 64 KiB, Message the provider-decoded text, keeping the 'upstream error (http %d): ...' framing); TransientError wraps a retryable failure with its HTTP status; IsTransient reports a 429/5xx TransientError or a network error, and context errors are not transient — this is the predicate the engine's pre-stream retry uses.",
+      "evidence": [
+        {
+          "resource": "repo://internal/llm/llm.go#L105-L144",
+          "version": "repo-lines-v1:sha256:3e68e910c40fe4656c601a5746624d43990ab419c919ae1204e93de25e28d914:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkxNDgyOWIwMmUxMDA4ZDBlNmI3YTAyYzZkYWFmZjk2ZmQ5NTk4MTkwNGM0OGY2YmRjMjAwMjZlY2EyMjhjM2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRhNDgxMDc5ZDRhODM1ZTY2ODM1MzQ2MmI2ZWEwMmYwZDEwMjFjMGQ4ZmQxODhhMzFmNWVmNjNlZWYwOWUxZjYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_65b61135718e48a4a0e2897185874b49",
+      "statement": "upstreamError (shared by both drivers) drains the non-2xx body before close (capped at 64 KiB), decodes the provider message (the {\"error\":{...}} envelope first, then a plain-string error, then the trimmed body, then the status line), and returns *APIError — with 429/5xx wrapped in *TransientError.",
+      "evidence": [
+        {
+          "resource": "repo://internal/llm/openai.go#L39-L74",
+          "version": "repo-lines-v1:sha256:034ecfba983a1bebd74be4e40c5fa9881fe0964a249e64be03086710e7325c03:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZlMGEyODE0MTZlOGRjN2MzNDVlMzdjNTM4YTA0OTI4YzYwMzg5ZGVkMDhhZTVjOTY5MDg1MTIzY2NhNGJiZmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA1ZTE3MjVmNzU2ODEyZDVlMmY0NTkzYzFjZmRhYmJiZTI5ZTY0YTk0OTM1NGQxM2JkZThiMDcxYmEyM2UzMDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdmMzI3ZGM3MDBhNmM2ZTg1NGJkMDMwYjBjM2I4ZjA3ZWE1MzljNTMzMDI0ZWFkMGJkMGZlOGY4ZjE1ZTI1MWYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_fc11e50dda8945608452c664587587b7",
+      "statement": "The OpenAI driver POSTs {BaseURL}/chat/completions with Bearer auth, stream:true and stream_options.include_usage:true; the reader parses content (text) and reasoning_content/reasoning (reasoning) deltas, accumulates tool_calls per index (id/name/arguments fragments joined) emitted in first-seen order at finish, captures the usage frame on the final part, and the [DONE] sentinel triggers finish (which errors with 'stream ended without finish reason' when none was seen).",
+      "evidence": [
+        {
+          "resource": "repo://internal/llm/openai.go#L13-L37",
+          "version": "repo-lines-v1:sha256:7d1d6c363d57f854d6191ba6fb804e7c9437753731124caad0fba910c9a3d207:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIxYTEwOGUzNmM2Mzg2ZGE2YjkzOGM5YTIyNjNkZTI3OTUxN2QzZmU0ZWMzMWJkYmJlYjEyYWRiMmZlMzc5MDkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRkNWRlNjczOTBjZTMyYmZmZWYwZGU5NjRjMWM3MjAwOTk1ZDY4Y2EzZWVjYWRlYjNkZDA5Yjg3MmE1NGViNzciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIxNjUxNTJjODY5ZDM3ZTVkMzQyNjkwZmZmNGM1MTgyZGE3MGRjMjVkNjFkNGJjNTlkMzdiZWEzOWMwODQ1Y2QifQ"
+        },
+        {
+          "resource": "repo://internal/llm/openai.go#L189-L276",
+          "version": "repo-lines-v1:sha256:25ff391a3974d0ac58c1e3e11676f4cb50094048b9f9eb710caac0eb604e77fb:eyJzZWxlY3RlZExpbmVDb3VudCI6ODgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU5NjI2ZDI5ODI4MjhlMjlhNTRhZTgzYTg5OTJjYzk5ZjBhYzA1NDNlOWJjY2FjYmY1YmVkMDdlMmM4NDY4ZmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRiOWMzZTdlNTUxMzMyZDM0NmZlM2JhNDg4ODM4Yjg5MTFkM2Y1YjBmNjRmNGEyNmIwYzAxZTIzYmMwOTU4MjYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjlhOGVkYzA1YjEzYWQ0MTcwNTY3ZjMxMzYyNjEyODRkZGZjMWExZjE4NTAwNmQ0ZTI4MmY3MDk1OWY2NTFkZmEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_449ce2d43b3248548381ade97679c8cc",
+      "statement": "The Anthropic driver POSTs {BaseURL}/messages with x-api-key and anthropic-version 2023-06-01; system messages join into the top-level system string, tool results become user messages with tool_result blocks, assistant tool calls become text+tool_use blocks (args default to {} when empty), and max_tokens defaults to 8192; the reader switches on message_start/content_block_start/delta/stop/message_delta/message_stop/error and maps stop reasons end_turn->stop, tool_use->tool_calls, max_tokens->length.",
+      "evidence": [
+        {
+          "resource": "repo://internal/llm/anthropic.go#L170-L264",
+          "version": "repo-lines-v1:sha256:8a68078ed67aedd1f909bd6de545b4147db08a5e7a3865175b799a7b470ebadc:eyJzZWxlY3RlZExpbmVDb3VudCI6OTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2MmQ1MmNlZjkwYTYyNTU0ZGQwNmExY2MxOWE0MzRjYzZjMGE5OTUxZWJhM2Y2MjE5NjdmMzdkYjgzMzgzNTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRiOWMzZTdlNTUxMzMyZDM0NmZlM2JhNDg4ODM4Yjg5MTFkM2Y1YjBmNjRmNGEyNmIwYzAxZTIzYmMwOTU4MjYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://internal/llm/anthropic.go#L19-L44",
+          "version": "repo-lines-v1:sha256:f526e09e7f2af1a5359131a2083252b1fb3326ed934d40621e372a714c479179:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE0NTY2YjYxMmNhM2YzNTY1ZTZlODcyZWVhZGRiYzMyZWE5MmUyMmQzMWJjYzEwZTc4NDFkZWJmMzFiOWU0OWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIzYWUzMGQ1YzAyMTI2YjkzYTA3OWJmYzAyNmU0YjVhMDM1NmM1ZWZiMWVmYTRjZTUzZTNlYmE0YmMyZGJiYmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdmMzI3ZGM3MDBhNmM2ZTg1NGJkMDMwYjBjM2I4ZjA3ZWE1MzljNTMzMDI0ZWFkMGJkMGZlOGY4ZjE1ZTI1MWYifQ"
+        },
+        {
+          "resource": "repo://internal/llm/anthropic.go#L63-L131",
+          "version": "repo-lines-v1:sha256:920ce9a2e3fad9570a2882627bbfda6efd044a3e85f1d88f4bc1541622210011:eyJzZWxlY3RlZExpbmVDb3VudCI6NjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY3NjAyZGE3NTUxNmU0ZmJjZGY3Y2IwMzk1MWZhOGY1MzllNGQyNmVhZjI4N2E2NzgxNzFiNDI3NGE1OTBmYTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMyM2U1ZTQ3NGRkZTIzNDBlZGE0NzA2YjUyMTFiMDRlYjRkNjk2ZmZjOTFhZTI4NzM2NDM2NDcwYmUzNDZkZDIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQwNzQ4NmQ3NWRiM2U2Nzk4NjBhZjY4OTYzZDBlNzgwZGEwOTRkZGI2ZGQ5NTI0YjM5MzU0NTMwMjBkNmRkYmMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_7026383d1e5e4327802d26a93ab70fbe",
+      "statement": "sseLoop is the shared SSE data-frame pump both drivers use: it collects each blank-line-delimited frame's trimmed data: values joined with a newline, calls onErr on the first non-EOF read error, stops early when done() reports true (finish already ran) so a never-terminating body cannot hold the engine round hostage, and runs finish exactly once.",
+      "evidence": [
+        {
+          "resource": "repo://internal/llm/sse.go#L10-L56",
+          "version": "repo-lines-v1:sha256:cfe881b9d48421694a4ec86166d28157e0f39f9bcade1ae0d9ee8b87f298b7ca:eyJzZWxlY3RlZExpbmVDb3VudCI6NDcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk3YTQzNTA1NjFlNTNhNDBjMWNiMDNmMWMyZjU2MmU5MmU2MWI4NWE1NWQ3N2QxZjZiYjFiYzdkZTE2OWQ5ZjgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJjNzQ5NWE4ZTJhNjAwMDM1NDE5NTM5YTY5NDZlOTYwMGMyYzhiZjRlNmQ3NTg3YmU2NzQyYmQzMGFlYjRkZDkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc5NDE0OGQ0ZDBhODQ5ZmEwMjM1OWRlY2E5YWY1YTI0Yjg4ZGY3NTVkOTdhNDk4ZjMwNDNhY2NjMzA3OGEyMGUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8263b4a562344c42b9be25e6186a9896",
+      "statement": "The fake driver is a scripted llm.Driver and the offline test seam: every Stream call is recorded in ReqLog; requests whose first system message starts with the title-generation marker draw from TitleTurns while others draw from Turns; AutoText() synthesizes an 'ok-<n>' reply when no scripted turn remains; Turn.Err returns an error and Turn.Delay holds the reply open; FromScript loads a driver from a JSON script (M5 format) with optional per-turn delay_ms.",
+      "evidence": [
+        {
+          "resource": "repo://internal/llm/fake/fake.go#L163-L192",
+          "version": "repo-lines-v1:sha256:cfd16cbd5dcc322997b69105974d2beb29ff9708dc8ffeaaaf5abc15ac2c9fca:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg5NWI1ZGUxYWQ4ZWE0MmQzMDEwOWEzZGIxZGMxNWUwYmNjOWZhODYyMmY1ZTM0NDJlOWY3ZmJkZjE0ZjY3OGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM2ZWY5ZWVlZjU0MDE2ZjIyMGY2OWU1ZmFkOThkODEyNjAxYTM2ZTMxMTE1ZjA5NTU5MWYwOGRlNjZlMzA5MzkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://internal/llm/fake/fake.go#L18-L21",
+          "version": "repo-lines-v1:sha256:50ae1b5a273f79b5832572556372cb6c13100f29f97271415ef6b145d6d34a35:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMjk3YjYyY2E3MmUyZjI3YWJjYTljMmNjZGE3ZmQyY2I0Y2ZjNWFlMWJlZGQ2ZWQxZGFlZjQxZDg2NjE0MWQyNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDcwOTMxNGY5NDk5MTcyMDFlYzkxNTg5YjZlYmFmMTZjYjAyYjY3ZDM0MTMxMzM4MzU5MWQ3ZjVkNmVhOWYxYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzdiZmIxZGY4N2Q0Y2IwNTYzYzgyN2Y3NTdmMzEwNjMyMWQ2OGY0MDU4NDJmOTY1M2FiOTBiZDMzMzU1NzJkOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDgzMWM0MmM1Y2RiYjhiN2UxNDk5ZTAzMTJjNjFmM2RkM2E1ODM5M2Q5ZTdhMzMxYjY2MmUxMDkwZmUyNzdjMSJ9"
+        },
+        {
+          "resource": "repo://internal/llm/fake/fake.go#L89-L146",
+          "version": "repo-lines-v1:sha256:cd5c8adb003d9601c0254f9ea4ac274381c7dbd1ba1f7ff85bed871fd7856490:eyJzZWxlY3RlZExpbmVDb3VudCI6NTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRkYmFkYTM2MDZiMjViZjk2ZWRmZmRlNDRiZWJkNjVlNjZlMjExYmU4NGYzYmY3NmVlZmNiMmM3MGVmMWM1ZmEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMxZjkwM2MyOTgzYWQwMzU4Yjg5OTlhMmE0YzY4OTMxMzgxNmNhNGY3YjZhNjNmZTg3YzY2ZjczNDIzNmQ3NmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRlMTc1M2M4MzkyZDNmNTc5ZTA0OWMzZmY0OWFhNWY5MmZkZDQ2OWU1OGYzYjkyMThkZmIxNjRkMGIxZTc4NDMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_bdddd1476c794cfaa0d18a5e30dfb586",
+      "statement": "The env gate is server.FakeFromEnv: YOLO_LLM unset -> production drivers; YOLO_LLM=fake + YOLO_FAKE_SCRIPT -> the scripted driver; YOLO_LLM=fake without a script, or any other value, is an error (500 at boot); this lets the whole suite run the same code path as a live run without touching the network.",
+      "evidence": [
+        {
+          "resource": "repo://internal/server/deps.go#L10-L35",
+          "version": "repo-lines-v1:sha256:0a345e333b3a2cdf16c15b8761c1da01cae198be6d2df918248dde69bbbc34af:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI2N2RjMzUyOTQxNTk1OTgwZGRjZjgxYTkyMzkxMjY3ZjI4NDVmZTBkMDlmMDUyNmJkNjY2Y2M4M2VhZDM5OTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk0MDU1ZDRlNDQ0ZGQxNWI0NDc5ZmNkNTNjZjBlM2FkYzQ2YTEyM2FhMzUwNThmMjQxYTNhNmU3NmYyZjhiM2IiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.4.0",
+    "at": "2026-08-26T18:04:14.871Z"
+  }
+}
