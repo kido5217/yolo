@@ -25,9 +25,10 @@ epic; `bd ready`) — the resume rail is beads → active spec/plan →
 - Layout: `plans/<date>-<topic>.md` = dated implementation plans (one
   active, named in the beads epic); large slice-based plans use a directory
   `plans/<date>-<topic>/` instead — `plan.md` (master: global constraints,
-  binding bead inventory, slice detail protocol) + one file per slice
-  (`s0-…md` fully detailed, `s1-…md`… briefs gated on a detail pass; see
-  `2026-08-24-opencode-tui-parity/` as the reference); `specs/<date>-<topic>-design.md` =
+   binding bead inventory, slice detail protocol) + one file per slice,
+   each a brief gated on its detail pass (fully detailed once its pass has
+   filled it; see `2026-08-24-opencode-tui-parity/` as the reference);
+   `specs/<date>-<topic>-design.md` =
   approved designs; `DEFERRED.md` = living 0.3.0 work list (OPEN items only;
   closed v0.1.2-review findings frozen in `deferred-archive.md`);
   `reviews/<version>/` = per-wave review findings (e.g. `v0.1.2/`).
