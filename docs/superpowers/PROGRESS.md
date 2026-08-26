@@ -268,9 +268,21 @@ deviation 104) — the sole new dependency of 0.3.0 (root AGENTS.md allowlist, p
   direct (raw-mode tty for OSC palette detection); ZERO new modules —
   already in the module graph via bubbletea v2; now on the root
   AGENTS.md allowlist.
-- Deviation renumbering (slice S0, supersedes the plan's 122–125 map):
-  the log now runs 122–129 (122/123 S0.2, 124 S0.3, 125/126 S0.4,
-  127/128/129 S0.5); remaining plan entries keep their TEXT with shifted
-  numbers: S0.7 config.theme wire → 130, S0.7 single-probe scoping → 131,
-  slice-gate SGR quantization → 132 (cross-refs: S0.7 step 5,
-  `config_test.go` comment, S0.10 DOX bullet, slice gate steps 4/5/7).
+ - Deviation renumbering (slice S0, supersedes the plan's 122–125 map):
+   the log now runs 122–129 (122/123 S0.2, 124 S0.3, 125/126 S0.4,
+   127/128/129 S0.5); remaining plan entries keep their TEXT with shifted
+   numbers: S0.7 config.theme wire → 130, S0.7 single-probe scoping → 131,
+   slice-gate SGR quantization → 132 (cross-refs: S0.7 step 5,
+   `config_test.go` comment, S0.10 DOX bullet, slice gate steps 4/5/7).
+- OpenWiki evidence index (2026-08-26, bead `yolo-9pn`, branch `new_tui`):
+  generated `openwiki/` wiki is finalized — 15 pages (architecture ×4, llm
+  ×2, tools ×2, tui ×2, config, storage, testing, project, quickstart) plus
+  OpenWiki-owned sidecars (`.claims/`, indexes, provenance,
+  `.last-update.json`). Generated pages are NEVER hand-edited; source changes
+  propagate via the scheduled OpenWiki refresh (root AGENTS.md setup block,
+  `OPENWIKI` markers).
+- qmd knowledge base (2026-08-26): `openwiki/` is a qmd collection — 24
+  documents, 71 chunks, CPU embeddings (embeddinggemma-300M). MCP
+  `qmd_query` works here only with `rerank: false` or typed `searches` (the
+  rerank LLM step times out over MCP on this CPU-only box); CLI `qmd query`
+  is the full hybrid+rerank fallback.
