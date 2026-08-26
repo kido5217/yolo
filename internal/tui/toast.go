@@ -83,7 +83,7 @@ func (a *App) toastsView(w int) string {
 			if j > 0 {
 				b.WriteByte('\n')
 			}
-			b.WriteString(errRed.Render(l))
+			b.WriteString(a.theme.Error().Render(l))
 		}
 	}
 	return b.String()

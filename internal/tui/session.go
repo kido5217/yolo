@@ -180,7 +180,7 @@ func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool, w in
 				writeStyled(muted, "\u25B8 think")
 			}
 		case "tool":
-			sty, row, ok := toolRowLine(p)
+			sty, row, ok := toolRowLine(p, th)
 			if !ok {
 				continue
 			}
@@ -209,15 +209,18 @@ func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool, w in
 		}
 	}
 	if m.Info.Error != nil {
-		writeStyled(errRed, "! "+m.Info.Error.Message)
+		writeStyled(th.Error(), "! "+m.Info.Error.Message)
 	}
 	return b.String()
 }
 
 // toolRowLine renders the locked tool row: "✓ <tool> <title>" completed,
-// "▶ <tool> <title>" running, "✗ <tool> <error>" error (first error line).
-// The caller applies the style per wrapped line (the row may wrap).
-func toolRowLine(p protocol.Part) (lipgloss.Style, string, bool) {
+// "▶ <tool> <title>" running, "✗ <tool> <error>" error (first error line),
+// in the upstream InlineTool fg tokens (index.tsx:1882-1889): completed ->
+// textMuted, running -> text, error -> error. A zero Theme (nil-engine
+// runs, S0.7) degrades to plain rows — never a panic. The caller applies
+// the style per wrapped line (the row may wrap).
+func toolRowLine(p protocol.Part, th theme.Theme) (lipgloss.Style, string, bool) {
 	st := p.State
 	status := "running"
 	title := ""
@@ -230,7 +233,7 @@ func toolRowLine(p protocol.Part) (lipgloss.Style, string, bool) {
 	}
 	switch status {
 	case "completed":
-		return okGreen, "\u2713 " + p.Tool + " " + title, true
+		return th.TextMuted(), "\u2713 " + p.Tool + " " + title, true
 	case "error":
 		errText := ""
 		if st != nil {
@@ -242,9 +245,9 @@ func toolRowLine(p protocol.Part) (lipgloss.Style, string, bool) {
 		if errText == "" {
 			errText = title
 		}
-		return errRed, "\u2717 " + p.Tool + " " + errText, true
+		return th.Error(), "\u2717 " + p.Tool + " " + errText, true
 	default:
-		return toolRow, "\u25B6 " + p.Tool + " " + title, true
+		return th.Text(), "\u25B6 " + p.Tool + " " + title, true
 	}
 }
 

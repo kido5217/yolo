@@ -85,7 +85,7 @@ func (pm *promptModel) menuView(cmds []protocol.Command, w int, th theme.Theme) 
 		}
 		sty := muted
 		if i == pm.sel {
-			sty = cursor
+			sty = cursorStyle(th)
 		}
 		for j, l := range strings.Split(wrapLine("  "+c.Name+"  "+c.Description, w), "\n") {
 			if j > 0 {

@@ -508,7 +508,7 @@ func (m *modelDlg) view(st *store.State, w int, th theme.Theme) string {
 		left := name + sPlain + strings.Repeat(" ", leftCol-len(name)-utf8.RuneCountInString(sPlain))
 		rowSty := th.TextMuted()
 		if i == m.selProv {
-			rowSty = cursor
+			rowSty = cursorStyle(th)
 		}
 		switch {
 		case i == m.selProv && len(models) > 0:
@@ -608,19 +608,21 @@ func (m *modelDlg) modelCell(th theme.Theme, st *store.State, p protocol.Provide
 	}
 	cell += "  " + fmtCtx(mm.Limit.Context) + " ctx  " + usd(mm.Cost.Input) + "/" + usd(mm.Cost.Output)
 	if j == m.selModel {
-		return cell, cursor
+		return cell, cursorStyle(th)
 	}
 	return cell, th.TextMuted()
 }
 
 // providerStatus maps the wire auth state to the locked dot + label (plain
 // text plus its style; the row may wrap, so the style is applied per segment).
+// The dots follow the upstream status-dot semantics (footer.tsx:70,76,79):
+// loaded = success, missing = error.
 func providerStatus(th theme.Theme, auth *protocol.ProviderAuth) (string, lipgloss.Style) {
 	switch {
 	case auth != nil && auth.Status == "loaded":
-		return "● loaded", okGreen
+		return "● loaded", th.Success()
 	case auth != nil && auth.RequiresKey && auth.Status == "missing":
-		return "○ missing", errRed
+		return "○ missing", th.Error()
 	default:
 		return "· not-required", th.TextMuted()
 	}
@@ -764,7 +766,7 @@ func (m *agentDlg) view(st *store.State, w int, th theme.Theme) string {
 		line = strings.TrimRight(line, " ")
 		sty := muted
 		if i == m.sel {
-			sty = cursor
+			sty = cursorStyle(th)
 		}
 		for j, l := range strings.Split(wrapLine(line, w), "\n") {
 			if j > 0 {

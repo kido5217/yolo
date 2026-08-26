@@ -53,7 +53,7 @@ func (a *App) view() string {
 			if i > 0 {
 				b.WriteByte('\n')
 			}
-			b.WriteString(errRed.Render(l))
+			b.WriteString(a.theme.Error().Render(l))
 		}
 	}
 	b.WriteString("\n" + a.footerView())

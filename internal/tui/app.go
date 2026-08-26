@@ -12,6 +12,7 @@ import (
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/tui/client"
@@ -269,14 +270,22 @@ func (a *App) themeRefresh() tea.Cmd {
 }
 
 // retheme refreshes a.theme from the engine (the port of the upstream
-// values() memo read, theme.tsx:256-267). With no engine, a.theme
-// stays the zero Theme.
+// values() memo read, theme.tsx:256-267) and applies the theme to the
+// prompt cursor (upstream cursorColor = theme.text, prompt/index.tsx:253;
+// CursorStyle carries a Color but no bold field — bubbles v2.2.1
+// textinput/styles.go:70-98). With no engine (or no `text` token),
+// a.theme stays the zero Theme and the cursor keeps its default.
 func (a *App) retheme() {
 	if a.engine == nil {
 		return
 	}
 	if th, err := a.engine.ActiveTheme(); err == nil {
 		a.theme = th
+		if c, ok := th.Color("text"); ok && c.A != 0 {
+			st := a.prompt.input.Styles()
+			st.Cursor.Color = lipgloss.Color(c.Hex()[:7])
+			a.prompt.input.SetStyles(st)
+		}
 	}
 }
 

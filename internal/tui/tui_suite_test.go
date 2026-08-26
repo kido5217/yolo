@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -137,16 +136,6 @@ func permFlowHarness(t *testing.T) (*teatest.TestModel, *testutil.TestServer) {
 	return tm, ts
 }
 
-// redSGR reports whether raw contains a foreground color SGR sequence.
-func redSGR(b []byte) bool {
-	for _, seq := range []string{"\x1b[38;5;196m", "\x1b[31m", "\x1b[38;2;"} {
-		if bytes.Contains(b, []byte(seq)) {
-			return true
-		}
-	}
-	return false
-}
-
 // hasLines requires every token within one WaitFor's accumulated polls
 // (consecutive WaitFors drain each other and would starve on a quiet app).
 func hasLines(tokens ...string) func([]byte) bool {
@@ -185,14 +174,18 @@ func driveToPermDialog(t *testing.T, tm *teatest.TestModel, ts *testutil.TestSer
 
 // TestTUIPermissionFlow: the locked bash ask replied with 1/2/3 in separate
 // runs — allow (once/always) proceeds and completes; reject renders the tool
-// error part in red with the engine's locked "permission rejected" text (the
-// plan's "forbidden" word deviates; deviation 56).
+// error part (theme error token — SGR pinned by TestSessionChromeThemeSGR
+// under the real engine) with the engine's locked "permission rejected" text
+// (the plan's "forbidden" word deviates; deviation 56).
 func TestTUIPermissionFlow(t *testing.T) {
 	t.Run("once", func(t *testing.T) {
 		tm, ts := permFlowHarness(t)
 		driveToPermDialog(t, tm, ts)
 		tm.Send(press('1'))
-		teatest.WaitFor(t, tm.Output(), hasLines("\u2713 bash", "all done"), teatest.WithDuration(5*time.Second))
+		// Zero-engine run: the completed row re-emits only its changed
+		// icon cell (no static SGR to force a whole-line re-render), so
+		// pin the ✓ icon + the final text (deviation 140).
+		teatest.WaitFor(t, tm.Output(), hasLines("\u2713", "all done"), teatest.WithDuration(5*time.Second))
 		_ = tm.Quit()
 		tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 	})
@@ -200,7 +193,10 @@ func TestTUIPermissionFlow(t *testing.T) {
 		tm, ts := permFlowHarness(t)
 		driveToPermDialog(t, tm, ts)
 		tm.Send(press('2'))
-		teatest.WaitFor(t, tm.Output(), hasLines("\u2713 bash", "all done"), teatest.WithDuration(5*time.Second))
+		// Zero-engine run: the completed row re-emits only its changed
+		// icon cell (no static SGR to force a whole-line re-render), so
+		// pin the ✓ icon + the final text (deviation 140).
+		teatest.WaitFor(t, tm.Output(), hasLines("\u2713", "all done"), teatest.WithDuration(5*time.Second))
 		_ = tm.Quit()
 		tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 	})
@@ -208,12 +204,7 @@ func TestTUIPermissionFlow(t *testing.T) {
 		tm, ts := permFlowHarness(t)
 		driveToPermDialog(t, tm, ts)
 		tm.Send(press('3'))
-		teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-			s := stripANSI(string(b))
-			return redSGR(b) &&
-				strings.Contains(s, "permission rejected") &&
-				strings.Contains(s, "all done")
-		}, teatest.WithDuration(5*time.Second))
+		teatest.WaitFor(t, tm.Output(), hasLines("\u2717 bash", "permission rejected", "all done"), teatest.WithDuration(5*time.Second))
 		_ = tm.Quit()
 		tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 	})

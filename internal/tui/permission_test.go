@@ -272,7 +272,10 @@ func TestPermissionDialogKeyReply(t *testing.T) {
 
 	tm.Send(permKey('1'))
 
-	teatest.WaitFor(t, tm.Output(), hasLine("\u2713 bash"), teatest.WithDuration(5*time.Second))
+	// Zero-engine run: the completed row re-emits only its changed icon
+	// cell (no static SGR to force a whole-line re-render), so pin the ✓
+	// icon + the final text (deviation 144).
+	teatest.WaitFor(t, tm.Output(), hasLines("\u2713", "done"), teatest.WithDuration(5*time.Second))
 	if got := waitPending(t, ts, 0); len(got) != 0 {
 		t.Fatalf("pending = %+v, want empty after reply", got)
 	}
@@ -313,7 +316,10 @@ func TestPermissionDialogHTTPReply(t *testing.T) {
 		t.Fatalf("ReplyPermission: %v", err)
 	}
 
-	teatest.WaitFor(t, tm.Output(), hasLine("\u2713 bash"), teatest.WithDuration(5*time.Second))
+	// Zero-engine run: the completed row re-emits only its changed icon
+	// cell (no static SGR to force a whole-line re-render), so pin the ✓
+	// icon + the final text (deviation 144).
+	teatest.WaitFor(t, tm.Output(), hasLines("\u2713", "done"), teatest.WithDuration(5*time.Second))
 	if got := waitPending(t, ts, 0); len(got) != 0 {
 		t.Fatalf("pending = %+v, want empty after the replied event", got)
 	}

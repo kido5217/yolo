@@ -244,8 +244,9 @@ func joinRowLine(ws []wTag) rowLine {
 // line's content only — no background on the plain indent or the empty
 // tail beyond the content. Other rows: the title in the theme text token,
 // the metadata tail in textMuted, no background. A zero Theme (nil-engine
-// runs, S0.7) degrades: the cursor row keeps the static cursor bold on the
-// "▸" run with plain content, every other row plain — never a panic.
+// runs, S0.7) degrades: the cursor row keeps the cursorStyle bold (plain —
+// a zero Theme has no text token) on the "▸" run with plain content, every
+// other row plain — never a panic.
 func (h *homeModel) renderRow(line int, title, meta string, w int, th theme.Theme) string {
 	cursor := line == h.cursor
 	prefix := "  "
@@ -291,9 +292,10 @@ func writeRowLine(b *strings.Builder, l rowLine, selected bool, th theme.Theme) 
 	}
 	bg, ok := th.Color("primary")
 	if !ok {
-		// zero Theme: the static cursor bold (S0.10's) + plain content
+		// zero Theme: the cursorStyle bold (plain — a zero Theme has no
+		// text token) + plain content
 		if l.cur != "" {
-			b.WriteString(cursor.Render(l.cur))
+			b.WriteString(cursorStyle(th).Render(l.cur))
 		}
 		b.WriteString(l.title + l.meta)
 		return

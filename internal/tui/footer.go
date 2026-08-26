@@ -83,11 +83,11 @@ func (a *App) footerView() string {
 	parts := []string{main}
 	switch {
 	case a.resyncing:
-		parts = append(parts, errRed.Render("◌ reconnecting"))
+		parts = append(parts, a.theme.Error().Render("◌ reconnecting"))
 	case a.store.Live:
-		parts = append(parts, okGreen.Render("● live"))
+		parts = append(parts, a.theme.Success().Render("● live"))
 	default:
-		parts = append(parts, errRed.Render("○ off"))
+		parts = append(parts, a.theme.Error().Render("○ off"))
 	}
 	if seg := a.statusSeg(); seg != "" {
 		parts = append(parts, muted.Render(seg))

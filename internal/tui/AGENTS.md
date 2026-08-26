@@ -60,6 +60,13 @@ and the teatest suites.
 - Completed `bash` tool parts render an inline output preview (10-line head,
   `…` overflow hint, `headPreview` in session.go) without alt+e — upstream
   parity; other tools stay row-only until expanded.
+- App-shell themed (S0.8–S0.10): every shell surface reads the theme (the
+  `th` render-arg or `a.theme`) — the only remaining statics are `title` +
+  `divider` (the yolo-specific session title/divider + the dialog titles —
+  S2–S3/S1 retheme them) and the `cursorStyle(th)` helper (bold + text fg).
+  teatest SGR goldens pin TTY_FORCE=1 + TERM=xterm-256color (ANSI256
+  `38;5;N` via x/ansi v0.11.8 `Convert256` — deviation 125 at the S0 slice
+  gate).
 
 ## Work Guidance
 
