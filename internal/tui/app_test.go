@@ -33,7 +33,7 @@ func stripANSITest(b []byte) string { return sgrTestRe.ReplaceAllString(string(b
 func TestHomeRendersListAndNewSession(t *testing.T) {
 	ts := testutil.Boot(t)
 	c := client.New(ts.URL, ts.Dir)
-	a := tui.NewApp(c, store.State{}, "")
+	a := tui.NewApp(c, store.State{}, "", nil)
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
@@ -66,7 +66,7 @@ func TestHomeRendersListAndNewSession(t *testing.T) {
 func TestResumeMissingSessionExitsWithError(t *testing.T) {
 	ts := testutil.Boot(t)
 	c := client.New(ts.URL, ts.Dir)
-	a := tui.NewApp(c, store.State{}, "ses_missing")
+	a := tui.NewApp(c, store.State{}, "ses_missing", nil)
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
@@ -110,7 +110,7 @@ func TestSessionStreamingViewport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	a := tui.NewApp(c, store.State{}, ses.ID)
+	a := tui.NewApp(c, store.State{}, ses.ID, nil)
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 10))
 
@@ -159,7 +159,7 @@ func TestPromptSendAndSlashMenu(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	a := tui.NewApp(c, store.State{}, ses.ID)
+	a := tui.NewApp(c, store.State{}, ses.ID, nil)
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
@@ -219,7 +219,7 @@ func TestPromptSendWhileBusyToasts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	a := tui.NewApp(c, store.State{}, ses.ID)
+	a := tui.NewApp(c, store.State{}, ses.ID, nil)
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
@@ -251,7 +251,7 @@ func TestPromptSendWhileBusyToasts(t *testing.T) {
 func TestPromptSlashNewWithoutSession(t *testing.T) {
 	ts := testutil.Boot(t)
 	c := client.New(ts.URL, ts.Dir)
-	a := tui.NewApp(c, store.State{}, "")
+	a := tui.NewApp(c, store.State{}, "", nil)
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 

@@ -26,7 +26,7 @@ func TestGlobalProjectYoloDiscoveryAndMerge(t *testing.T) {
 	// fake global config dir
 	write(t, filepath.Join(global, "config.json"), `{"model":"opencode/gpt-5-nano","provider":{"opencode":{"apiKey":"{env:MY_KEY}"}}}`)
 	write(t, filepath.Join(global, "yolo.jsonc"), `// comment
-{"instructions":["/docs/A.md"], "theme":{"dark":true}}`)
+{"instructions":["/docs/A.md"], "theme":"opencode"}`)
 
 	root := filepath.Join(work, "repo")
 	mid := filepath.Join(root, "mid")
@@ -69,8 +69,8 @@ func TestGlobalProjectYoloDiscoveryAndMerge(t *testing.T) {
 	if cfg.ToolOutput == nil || cfg.ToolOutput.MaxLines != 500 {
 		t.Fatalf("tool_output not merged: %+v", cfg.ToolOutput)
 	}
-	if cfg.Theme == nil {
-		t.Fatal("theme lost")
+	if cfg.Theme != "opencode" {
+		t.Fatalf("theme = %q, want opencode (string shape, deviation 130)", cfg.Theme)
 	}
 	rules, err := protocol.ParsePerms(cfg.Permission)
 	if err != nil {

@@ -38,7 +38,7 @@ type Config struct {
 	Provider     map[string]ProviderConfig `json:"provider,omitempty"`
 	Permission   map[string]any            `json:"permission,omitempty"`
 	Instructions []string                  `json:"instructions,omitempty"`
-	Theme        map[string]any            `json:"theme,omitempty"`
+	Theme        string                    `json:"theme,omitempty"`
 	ToolOutput   *ToolOutput               `json:"tool_output,omitempty"`
 	Agents       map[string]CustomAgent    `json:"agents,omitempty"`
 }

@@ -8,6 +8,7 @@ package tui
 
 import (
 	"context"
+	"time"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
@@ -15,11 +16,26 @@ import (
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/tui/client"
 	"github.com/kido5217/yolo/internal/tui/store"
+	"github.com/kido5217/yolo/internal/tui/theme"
 )
 
 // EventMsg carries one server SSE event. It is exported so the test harness
 // can drive the app with it.
 type EventMsg struct{ Event protocol.Event }
+
+// ThemeRefreshMsg re-arms the theme refresh debounce (the port of
+// upstream themes.subscribeRefresh → refresh, theme.tsx:235-244);
+// cmd/yolo sends it to the running program on every theme signal
+// (SIGUSR2 via theme.WatchThemeSignals, S0.6).
+type ThemeRefreshMsg struct{}
+
+type themeReapplyMsg struct{} // 250 ms leg: regenerate the system theme
+type themeCustomsMsg struct{} // 1000 ms leg: system theme + customs re-discovery
+
+// themeRefreshDelays mirrors upstream THEME_REFRESH_DELAYS
+// (theme.tsx:82): the 250 ms leg re-generates the system theme; the
+// 1000 ms leg (the last) also re-discovers customs.
+var themeRefreshDelays = [2]time.Duration{250 * time.Millisecond, time.Second}
 
 type route int
 
@@ -43,7 +59,11 @@ type App struct {
 	toastSeq     int
 	toastCmds    []tea.Cmd
 	lastErr      string
-	spinIdx      int // footer spinner frame
+	// theme engine (S0.7): nil = unthemed run (the zero Theme paints
+	// nothing — S0.8+ views read a.theme, never hex)
+	engine  *theme.Engine
+	theme   theme.Theme
+	spinIdx int // footer spinner frame
 	// tea plumbing
 	size      tea.WindowSizeMsg
 	eventCh   chan protocol.Event
@@ -54,9 +74,10 @@ type App struct {
 }
 
 // NewApp builds the root model. A non-empty startSessionID starts on that
-// session (resume); empty starts at home. The prompt is always focused with a
-// static (non-blinking) cursor.
-func NewApp(c *client.Service, s store.State, startSessionID string) *App {
+// session (resume); empty starts at home. A nil engine runs without the
+// theme engine (the zero Theme paints nothing). The prompt is always
+// focused with a static (non-blinking) cursor.
+func NewApp(c *client.Service, s store.State, startSessionID string, engine *theme.Engine) *App {
 	ctx, cancel := context.WithCancel(context.Background())
 	eventCh, resyncCh := c.Events(ctx)
 	a := &App{
@@ -69,6 +90,7 @@ func NewApp(c *client.Service, s store.State, startSessionID string) *App {
 		eventCh:  eventCh,
 		resyncCh: resyncCh,
 		stop:     cancel,
+		engine:   engine,
 	}
 	in := textinput.New()
 	// textinput's View is prompt(2) + width + cursor(1): size the value
@@ -83,6 +105,7 @@ func NewApp(c *client.Service, s store.State, startSessionID string) *App {
 		a.route = routeSession
 		a.curSessionID = startSessionID
 	}
+	a.retheme()
 	return a
 }
 
@@ -202,8 +225,59 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 		return tea.Batch(cmds...)
+	case ThemeRefreshMsg:
+		if a.engine == nil {
+			return nil
+		}
+		return a.themeRefresh()
+	case themeReapplyMsg:
+		if a.engine != nil {
+			a.engine.Reapply()
+			a.retheme()
+		}
+		return nil
+	case themeCustomsMsg:
+		if a.engine != nil {
+			// Upstream leg order (theme.tsx:239-243): refreshSystemTheme
+			// FIRST, then syncCustomThemes on the last delay.
+			a.engine.Reapply()
+			_ = a.engine.RefreshCustoms(context.Background())
+			a.retheme()
+		}
+		return nil
 	}
 	return nil
+}
+
+// themeRefresh arms the two refresh legs (upstream refresh,
+// theme.tsx:235-244). A re-signal re-arms a second pair — bubbletea
+// v2 has no tick cancellation; the legs are idempotent (they
+// re-derive from the engine's cached state), so the outcome is
+// unchanged.
+func (a *App) themeRefresh() tea.Cmd {
+	cmds := make([]tea.Cmd, 0, len(themeRefreshDelays))
+	for i, d := range themeRefreshDelays {
+		// Go ≥ 1.22: i and d are per-iteration (module requires 1.25).
+		cmds = append(cmds, tea.Tick(d, func(time.Time) tea.Msg {
+			if i == len(themeRefreshDelays)-1 {
+				return themeCustomsMsg{}
+			}
+			return themeReapplyMsg{}
+		}))
+	}
+	return tea.Batch(cmds...)
+}
+
+// retheme refreshes a.theme from the engine (the port of the upstream
+// values() memo read, theme.tsx:256-267). With no engine, a.theme
+// stays the zero Theme.
+func (a *App) retheme() {
+	if a.engine == nil {
+		return
+	}
+	if th, err := a.engine.ActiveTheme(); err == nil {
+		a.theme = th
+	}
 }
 
 // afterApply arms the footer spinner when a just-applied event left the
