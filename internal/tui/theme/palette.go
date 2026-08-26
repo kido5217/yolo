@@ -2,12 +2,14 @@ package theme
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	term "github.com/charmbracelet/x/term"
@@ -321,14 +323,18 @@ queryLoop:
 	return colors, true
 }
 
+// ttyPollInterval bounds the /dev/tty pump's poll wait: short enough that
+// the post-detection join stays snappy, long enough to avoid busy-spinning.
+const ttyPollInterval = 20 * time.Millisecond
+
 // DetectStd probes via an owned /dev/tty in raw mode (x/term): the fd is
-// restored and closed on exit, so no reader lingers. No controlling
-// terminal (open fails) → (TerminalColors{}, false) — no system theme
-// (spec §3 fallback), no probe attempt, no goroutines. Input is pumped
-// through a pipe so ctx cancellation closes it early; LegacyTmux is detected
-// from the environment (TMUX set && TMUX_PANE unset).
+// restored and closed on exit and the pump goroutine is joined, so no
+// reader lingers (close alone does not wake a read blocked in the kernel).
+// No controlling terminal (open fails) → (TerminalColors{}, false) — no
+// system theme (spec §3 fallback), no probe attempt, no goroutines. Input
+// is pumped through a pipe so ctx cancellation closes it early; LegacyTmux
+// is detected from the environment (TMUX set && TMUX_PANE unset).
 func DetectStd(ctx context.Context) (TerminalColors, bool) {
-	opts := PaletteOptions{LegacyTmux: os.Getenv("TMUX") != "" && os.Getenv("TMUX_PANE") == ""}
 	f, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 	if err != nil {
 		return TerminalColors{}, false
@@ -339,19 +345,42 @@ func DetectStd(ctx context.Context) (TerminalColors, bool) {
 		return TerminalColors{}, false
 	}
 	defer term.Restore(uintptr(f.Fd()), state)
+	return detectFd(ctx, f, os.Stdout)
+}
+
+// detectFd runs the OSC palette detection with f as the input source
+// (the /dev/tty opened by DetectStd): input is pumped through an
+// io.Pipe that DetectPalette's readLoop consumes. The pump waits for
+// input with a bounded select(2) and checks the done flag on every
+// wakeup; detectFd then joins the pump before returning — close() alone
+// does not wake a read blocked in the kernel on the same open file
+// description, so a blocking pump could outlive the detection and
+// swallow the first post-startup keystroke. The pipe still lets ctx
+// cancellation close the reader early (DetectPalette's readLoop exits on
+// EOF).
+func detectFd(ctx context.Context, f *os.File, out io.Writer) (TerminalColors, bool) {
+	opts := PaletteOptions{LegacyTmux: os.Getenv("TMUX") != "" && os.Getenv("TMUX_PANE") == ""}
 	pr, pw := io.Pipe()
 	done := make(chan struct{})
+	pumpDone := make(chan struct{})
 	go func() {
+		defer close(pumpDone)
 		defer pw.Close()
 		buf := make([]byte, 4096)
 		for {
+			if !waitForReadable(f, done) {
+				return
+			}
 			n, err := f.Read(buf)
 			if n > 0 {
 				if _, werr := pw.Write(buf[:n]); werr != nil {
 					return
 				}
 			}
-			if err != nil {
+			switch {
+			case err == nil:
+			case errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EWOULDBLOCK):
+			default:
 				return
 			}
 		}
@@ -363,7 +392,36 @@ func DetectStd(ctx context.Context) (TerminalColors, bool) {
 		case <-done:
 		}
 	}()
-	defer close(done)
-	defer pw.Close()
-	return DetectPalette(pr, os.Stdout, opts)
+	colors, ok := DetectPalette(pr, out, opts)
+	close(done) // signal the pump to stop (checked on each poll wakeup)
+	pw.Close()  // EOF for DetectPalette's readLoop; fails any in-flight pump write
+	<-pumpDone  // join: the tty reader is provably dead before return
+	return colors, ok
+}
+
+// waitForReadable blocks until f is readable, returning false when done
+// closes first. The wait is bounded by ttyPollInterval so the pump
+// reacts to done within one interval; EINTR restarts the wait.
+// select(2) is used because Go 1.26 removed syscall.Poll (deviation 145).
+func waitForReadable(f *os.File, done <-chan struct{}) bool {
+	fd := int(f.Fd())
+	tv := syscall.Timeval{Usec: int64(ttyPollInterval / time.Microsecond)}
+	var rd syscall.FdSet
+	for {
+		rd.Bits[fd/64] |= 1 << (uint(fd) % 64)
+		n, err := syscall.Select(fd+1, &rd, nil, nil, &tv)
+		switch {
+		case err == syscall.EINTR:
+			continue
+		case err != nil:
+			return false
+		case n > 0:
+			return true
+		}
+		select {
+		case <-done:
+			return false
+		default:
+		}
+	}
 }

@@ -2,7 +2,9 @@ package theme
 
 import (
 	"bytes"
+	"context"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -173,6 +175,99 @@ func TestDetectPaletteIdleTimerFires(t *testing.T) {
 	}
 	if elapsed >= 200*time.Millisecond {
 		t.Errorf("query ended in %v: the idle timer (50ms), not the hard timer (200ms) or EOF, must have fired", elapsed)
+	}
+}
+
+func TestDetectFdNoLingeringReader(t *testing.T) {
+	// The tty pump must be provably dead when detectFd returns: feed input
+	// AFTER the return and assert it is NOT consumed/discarded — a
+	// lingering blocking reader would wake on the write, read the byte,
+	// and drop it (pw is closed by then).
+	inF, outF, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	defer inF.Close()
+	defer outF.Close()
+
+	var out bytes.Buffer
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	start := time.Now()
+	got, ok := detectFd(ctx, inF, &out)
+	elapsed := time.Since(start)
+	if ok {
+		t.Fatal("expected unsupported (no probe answer)")
+	}
+	if got != (TerminalColors{}) {
+		t.Errorf("colors = %+v, want zero", got)
+	}
+	if elapsed >= 400*time.Millisecond {
+		t.Errorf("detectFd took %v: default probe timeout (100ms) + one poll interval, not a hang", elapsed)
+	}
+
+	// keystroke "arrives" after detection finished
+	if _, err := outF.Write([]byte("x")); err != nil {
+		t.Fatalf("post-return write: %v", err)
+	}
+	// give a hypothetical lingering reader time to steal the byte
+	time.Sleep(50 * time.Millisecond)
+
+	type rb struct {
+		n   int
+		b   []byte
+		err error
+	}
+	res := make(chan rb, 1)
+	go func() {
+		b := make([]byte, 8)
+		n, err := inF.Read(b)
+		res <- rb{n: n, b: b, err: err}
+	}()
+	select {
+	case r := <-res:
+		if r.n == 0 {
+			t.Fatal("post-return input was consumed by a lingering tty reader")
+		}
+		if string(r.b[:r.n]) != "x" {
+			t.Errorf("read back %q, want %q", r.b[:r.n], "x")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("read-back timed out: post-return input was consumed by a lingering tty reader")
+	}
+}
+
+func TestDetectFdFullResponse(t *testing.T) {
+	// the seam must preserve the OSC behavior end-to-end: a pipe-backed
+	// file answering as a terminal yields the full palette.
+	inF, outF, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	defer inF.Close()
+	defer outF.Close()
+
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		_, _ = outF.Write([]byte(fullResponses()))
+	}()
+
+	var out bytes.Buffer
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	got, ok := detectFd(ctx, inF, &out)
+	if !ok {
+		t.Fatal("expected OSC support")
+	}
+	if got.Palette[1] != "#800000" || got.Palette[15] != "#ffffff" {
+		t.Errorf("palette = %v", got.Palette)
+	}
+	if got.DefaultForeground != "#00ff00" || got.DefaultBackground != "#ffff00" {
+		t.Errorf("defaults = %q/%q", got.DefaultForeground, got.DefaultBackground)
+	}
+	if !strings.Contains(out.String(), "\x1b]4;0;?\x07") {
+		t.Errorf("probe query missing: %q", out.String())
 	}
 }
 
