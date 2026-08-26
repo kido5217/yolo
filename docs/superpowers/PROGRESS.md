@@ -10,12 +10,16 @@ re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 resolveTheme/generateSystem ports, OSC 11/10/4 detection, custom
 discovery + SIGUSR2, the config>KV>default selection chain over the TUI
 KV) + the app-shell restyle (logo, borders, home list, footer, session
-chrome — teatest SGR goldens under the pinned ANSI256 env); deviations
-122–147 logged. The S0.5-review follow-up (bead `yolo-oae.1.12`) fixed
-the lingering /dev/tty reader in DetectStd (poll-loop pump joined before
-return; deviation 145). Next: the S1 detail pass (Slice Detail Protocol,
-plan 2026-08-24-opencode-tui-parity) then S1 execution — first bead is
-the glamour dep proposal (approval gate).
+chrome — teatest SGR goldens under the pinned ANSI256 env); the S0.5-review
+follow-up (bead `yolo-oae.1.12`) fixed the lingering /dev/tty reader in
+DetectStd (poll-loop pump joined before return; deviation 145). S1
+(transcript) in progress: detail pass complete (`s1-transcript.md` fully
+detailed, 9 tasks), glamour v2.0.1 user-approved + landed (S1.1, bead
+`yolo-oae.2.11`, 16 new modules, deviation 148 — tidy prunes pre-import
+requires), S1.2 TermRenderer from resolved theme done (deviation 149).
+Deviations 122–149 logged. Next: S1.3 wire renderer into text parts
+(bead `yolo-oae.2.3`), then S1.4–S1.9 + the S1 slice gate; S2 starts with
+its own detail pass + the huh/sahilm-fuzzy dep approval gate.
 Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
 (PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
 + GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,
