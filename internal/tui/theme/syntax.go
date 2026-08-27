@@ -8,10 +8,12 @@ package theme
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"charm.land/glamour/v2"
 	"charm.land/glamour/v2/ansi"
+	"github.com/alecthomas/chroma/v2/styles"
 )
 
 // Zero reports whether t is the zero Theme (nil-engine runs, S0.7): the
@@ -35,6 +37,85 @@ func (t Theme) md(name string) *string {
 }
 
 func boolPtr(b bool) *bool { return &b }
+
+// Chroma builds the full syntax token map (upstream getSyntaxRules,
+// theme/index.ts:586-760 — the scope table in the S1.4 plan notes).
+func (t Theme) Chroma() ansi.Chroma {
+	c := ansi.Chroma{}
+	c.Text = ansi.StylePrimitive{Color: t.md("text")}
+	c.Comment = ansi.StylePrimitive{Color: t.md("syntaxComment"), Italic: boolPtr(true)}
+	c.CommentPreproc = ansi.StylePrimitive{Color: t.md("syntaxComment"), Italic: boolPtr(true)}
+	c.Keyword = ansi.StylePrimitive{Color: t.md("syntaxKeyword"), Italic: boolPtr(true)}
+	c.KeywordReserved = ansi.StylePrimitive{Color: t.md("syntaxKeyword"), Italic: boolPtr(true)}
+	c.KeywordNamespace = ansi.StylePrimitive{Color: t.md("syntaxKeyword")}
+	c.KeywordType = ansi.StylePrimitive{Color: t.md("syntaxType"), Bold: boolPtr(true), Italic: boolPtr(true)}
+	c.Operator = ansi.StylePrimitive{Color: t.md("syntaxOperator")}
+	c.Punctuation = ansi.StylePrimitive{Color: t.md("syntaxPunctuation")}
+	c.Name = ansi.StylePrimitive{Color: t.md("syntaxVariable")}
+	c.NameBuiltin = ansi.StylePrimitive{Color: t.md("error")}
+	c.NameAttribute = ansi.StylePrimitive{Color: t.md("syntaxVariable")}
+	c.NameClass = ansi.StylePrimitive{Color: t.md("syntaxType")}
+	c.NameConstant = ansi.StylePrimitive{Color: t.md("syntaxNumber")}
+	c.NameFunction = ansi.StylePrimitive{Color: t.md("syntaxFunction")}
+	c.LiteralNumber = ansi.StylePrimitive{Color: t.md("syntaxNumber")}
+	c.LiteralString = ansi.StylePrimitive{Color: t.md("syntaxString")}
+	c.LiteralStringEscape = ansi.StylePrimitive{Color: t.md("syntaxString")}
+	return c
+}
+
+// SubtleChroma is the reasoning variant (upstream generateSubtleSyntax,
+// theme/index.ts:560-584: RGB kept, alpha set to ThinkingOpacity. SGR
+// 24-bit carries no alpha and lipgloss v2 parseHex takes 6-digit hex only,
+// so each foreground is PRE-BLENDED over the theme background:
+// out = round(fg*α + bg*(1-α)), half-up per channel; absent background →
+// #000000). It blends the TOKEN colors directly (the token name is the
+// source of truth).
+func (t Theme) SubtleChroma() ansi.Chroma {
+	full := t.Chroma()
+	alpha := t.R.ThinkingOpacity
+	if alpha <= 0 || alpha >= 1 {
+		return full
+	}
+	bg := Rgba{0, 0, 0, 255}
+	if c, ok := t.R.Color("background"); ok {
+		bg = c
+	}
+	// pairs is the (field pointer, token) set — exactly the fields
+	// Chroma() sets.
+	type pair struct {
+		p   *ansi.StylePrimitive
+		tok string
+	}
+	pairs := []pair{
+		{&full.Text, "text"}, {&full.Comment, "syntaxComment"},
+		{&full.CommentPreproc, "syntaxComment"}, {&full.Keyword, "syntaxKeyword"},
+		{&full.KeywordReserved, "syntaxKeyword"}, {&full.KeywordNamespace, "syntaxKeyword"},
+		{&full.KeywordType, "syntaxType"}, {&full.Operator, "syntaxOperator"},
+		{&full.Punctuation, "syntaxPunctuation"}, {&full.Name, "syntaxVariable"},
+		{&full.NameBuiltin, "error"}, {&full.NameAttribute, "syntaxVariable"},
+		{&full.NameClass, "syntaxType"}, {&full.NameConstant, "syntaxNumber"},
+		{&full.NameFunction, "syntaxFunction"}, {&full.LiteralNumber, "syntaxNumber"},
+		{&full.LiteralString, "syntaxString"}, {&full.LiteralStringEscape, "syntaxString"},
+	}
+	for _, pr := range pairs {
+		if pr.p.Color == nil {
+			continue
+		}
+		fg, ok := t.R.Color(pr.tok)
+		if !ok {
+			continue
+		}
+		out := Rgba{
+			R: uint8(math.Round(float64(fg.R)*alpha + float64(bg.R)*(1-alpha))),
+			G: uint8(math.Round(float64(fg.G)*alpha + float64(bg.G)*(1-alpha))),
+			B: uint8(math.Round(float64(fg.B)*alpha + float64(bg.B)*(1-alpha))),
+			A: 255,
+		}
+		s := hex6(out)
+		pr.p.Color = &s
+	}
+	return full
+}
 
 // StyleConfig builds the glamour element styles from the markdown* tokens.
 // base is the base text token name ("markdownText" for text parts,
@@ -91,22 +172,33 @@ func hrWidth(width int) int {
 	return width
 }
 
-// Renderer is a glamour TermRenderer bound to one theme + width. The TUI
-// renders single-threaded (bubbletea View), so the app builds one per
-// renderMessages call — no cache (the construct cost is ~20–50µs; the S1.9
-// budget covers the whole re-render).
+// Renderer is a glamour TermRenderer bound to one theme + width. The
+// chroma field is the map this renderer registered under the GLOBAL
+// "charm" slot (finding 2): Render deletes the slot first, so this
+// renderer's map (re-)registers on the next code block — transcript (full)
+// and reasoning (subtle) renderers + SIGUSR2 theme switches never
+// cross-color. The TUI renders single-threaded (bubbletea View), so
+// sequential re-registration is safe.
 type Renderer struct {
-	tr *glamour.TermRenderer
+	tr     *glamour.TermRenderer
+	chroma *ansi.Chroma
 }
 
-// NewTranscriptRenderer builds the text-part renderer: the markdownText
-// base, word-wrap at width (the caller passes w-3 — the post-indent width;
-// <=0 disables wrapping). A zero Theme (S0.7) skips WithStyles — all-nil
-// element styles, glamour renders plain (no SGR).
-func NewTranscriptRenderer(th Theme, width int) (*Renderer, error) {
+// newRenderer builds a TermRenderer from a base token + a chroma map,
+// word-wrapped at width (<=0 disables wrapping). A zero Theme (S0.7)
+// skips BOTH WithStyles and the chroma attach: StyleConfig always sets
+// the attribute pointers even with nil colors, so attaching either
+// would emit attribute-only SGR and squat the global "charm" slot —
+// the chroma pointer stays nil and Render skips the slot delete
+// (deviation 149 + 152).
+func newRenderer(th Theme, width int, base string, ch ansi.Chroma) (*Renderer, error) {
 	var opts []glamour.TermRendererOption
+	var chroma *ansi.Chroma
 	if !th.Zero() {
-		opts = append(opts, glamour.WithStyles(th.StyleConfig("markdownText", width)))
+		cfg := th.StyleConfig(base, width)
+		chroma = &ch
+		cfg.CodeBlock.Chroma = chroma
+		opts = append(opts, glamour.WithStyles(cfg))
 	}
 	if width > 0 {
 		opts = append(opts, glamour.WithWordWrap(width))
@@ -115,13 +207,33 @@ func NewTranscriptRenderer(th Theme, width int) (*Renderer, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Renderer{tr: tr}, nil
+	return &Renderer{tr: tr, chroma: chroma}, nil
 }
 
-// Render renders md to an ANSI string. SGR profile (verified, sgrprobe):
-// in a plain unit context glamour's plain text is 24-bit (38;2;R;G;B) while
-// the chroma code-block path is 256-color (38;5;N); under teatest (the
-// TUI's program environment) glamour emits 256-color for both. Teatest
-// goldens therefore pin 38;5;N; direct renderer unit tests pin whichever
-// profile the path uses.
-func (r *Renderer) Render(md string) (string, error) { return r.tr.Render(md) }
+// NewTranscriptRenderer builds the text-part renderer: the markdownText
+// base + the FULL chroma map, word-wrap at width (the caller passes w-3 —
+// the post-indent width; <=0 disables wrapping).
+func NewTranscriptRenderer(th Theme, width int) (*Renderer, error) {
+	return newRenderer(th, width, "markdownText", th.Chroma())
+}
+
+// NewReasoningRenderer builds the expanded-reasoning renderer: the
+// textMuted base + the pre-blended chroma map (upstream
+// generateSubtleSyntax, theme/index.ts:560-584).
+func NewReasoningRenderer(th Theme, width int) (*Renderer, error) {
+	return newRenderer(th, width, "textMuted", th.SubtleChroma())
+}
+
+// Render renders md to an ANSI string. It clears the global "charm" chroma
+// slot first (finding 2) so THIS renderer's map (re-)registers. SGR
+// profile (verified, sgrprobe): in a plain unit context glamour's plain
+// text is 24-bit (38;2;R;G;B) while the chroma code-block path is
+// 256-color (38;5;N); under teatest (the TUI's program environment)
+// glamour emits 256-color for both. Teatest goldens therefore pin
+// 38;5;N; direct renderer unit tests pin whichever profile the path uses.
+func (r *Renderer) Render(md string) (string, error) {
+	if r.chroma != nil {
+		delete(styles.Registry, "charm")
+	}
+	return r.tr.Render(md)
+}

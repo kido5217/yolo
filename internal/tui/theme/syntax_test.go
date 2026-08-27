@@ -3,6 +3,8 @@ package theme
 import (
 	"strings"
 	"testing"
+
+	"charm.land/glamour/v2/ansi"
 )
 
 // markdownTokens + syntaxTokens are the flat upstream theme keys
@@ -161,5 +163,130 @@ func TestTranscriptRendererRenders(t *testing.T) {
 	}
 	if strings.Contains(zout, "\x1b[") {
 		t.Errorf("zero-Theme renderer emitted SGR: %q", zout)
+	}
+}
+
+// TestChromaMapping pins the syntax* → ansi.Chroma field map (finding: the
+// upstream getSyntaxRules scope table; opencode.dark hexes).
+func TestChromaMapping(t *testing.T) {
+	ch := resolveOpencodeDark(t).Chroma()
+	check := func(name string, p ansi.StylePrimitive, want string) {
+		t.Helper()
+		if p.Color == nil || *p.Color != want {
+			t.Errorf("%s = %v, want %s", name, p.Color, want)
+		}
+	}
+	check("Text", ch.Text, "#eeeeee")
+	check("Comment", ch.Comment, "#808080")
+	if ch.Comment.Italic == nil || !*ch.Comment.Italic {
+		t.Error("Comment.Italic = false/nil, want true")
+	}
+	check("Keyword", ch.Keyword, "#9d7cd8")
+	if ch.Keyword.Italic == nil || !*ch.Keyword.Italic {
+		t.Error("Keyword.Italic = false/nil, want true")
+	}
+	check("KeywordNamespace", ch.KeywordNamespace, "#9d7cd8")
+	if ch.KeywordNamespace.Italic != nil {
+		t.Error("KeywordNamespace.Italic set, want nil (upstream keyword.import has no italic)")
+	}
+	check("KeywordType", ch.KeywordType, "#e5c07b")
+	if ch.KeywordType.Bold == nil || !*ch.KeywordType.Bold || ch.KeywordType.Italic == nil || !*ch.KeywordType.Italic {
+		t.Error("KeywordType = bold+italic, got", ch.KeywordType.Bold, ch.KeywordType.Italic)
+	}
+	check("Operator", ch.Operator, "#56b6c2")
+	check("Punctuation", ch.Punctuation, "#eeeeee")
+	check("Name", ch.Name, "#e06c75")
+	check("NameBuiltin", ch.NameBuiltin, "#e06c75")
+	check("NameAttribute", ch.NameAttribute, "#e06c75")
+	check("NameClass", ch.NameClass, "#e5c07b")
+	check("NameConstant", ch.NameConstant, "#f5a742")
+	check("NameFunction", ch.NameFunction, "#fab283")
+	check("LiteralNumber", ch.LiteralNumber, "#f5a742")
+	check("LiteralString", ch.LiteralString, "#7fd88f")
+	check("LiteralStringEscape", ch.LiteralStringEscape, "#7fd88f")
+	if ch.NameTag.Color != nil || ch.NameDecorator.Color != nil {
+		t.Error("NameTag/NameDecorator must stay zero (no upstream scope)")
+	}
+}
+
+// TestSubtleChroma pins the pre-blend (finding 3): fg = round(fg*α +
+// bg*(1-α)) over the theme background, α = ThinkingOpacity (0.6 for
+// opencode dark; bg #0a0a0a).
+func TestSubtleChroma(t *testing.T) {
+	th := resolveOpencodeDark(t)
+	if th.R.ThinkingOpacity != 0.6 {
+		t.Fatalf("ThinkingOpacity = %v, want 0.6", th.R.ThinkingOpacity)
+	}
+	sub := th.SubtleChroma()
+	full := th.Chroma()
+	check := func(name string, got ansi.StylePrimitive, want string) {
+		t.Helper()
+		if got.Color == nil || *got.Color != want {
+			t.Errorf("%s = %v, want %s", name, got.Color, want)
+		}
+	}
+	check("Comment", sub.Comment, "#515151")             // #808080 @0.6 over #0a0a0a
+	check("Keyword", sub.Keyword, "#624e86")             // #9d7cd8
+	check("LiteralString", sub.LiteralString, "#50865a") // #7fd88f
+	check("LiteralNumber", sub.LiteralNumber, "#97682c") // #f5a742
+	check("Operator", sub.Operator, "#387178")           // #56b6c2
+	// attributes survive the blend (only the foreground changes upstream)
+	if sub.Keyword.Italic == nil || !*sub.Keyword.Italic {
+		t.Error("subtle Keyword lost its Italic")
+	}
+	if *sub.Comment.Color == *full.Comment.Color {
+		t.Error("subtle map identical to full — the blend did nothing")
+	}
+}
+
+// TestChromaSlotWorkaround pins the finding-2 contract: two renderers with
+// different chroma maps, rendered in EITHER order, each get their own
+// colors (the global "charm" slot is deleted before every Render).
+func TestChromaSlotWorkaround(t *testing.T) {
+	th := resolveOpencodeDark(t)
+	full, err := NewTranscriptRenderer(th, 77)
+	if err != nil {
+		t.Fatalf("full renderer: %v", err)
+	}
+	sub, err := NewReasoningRenderer(th, 77)
+	if err != nil {
+		t.Fatalf("subtle renderer: %v", err)
+	}
+	const md = "\n```go\nvar x = 1\n```\n"
+	// The keyword token ("var") is color+italic. CHROMA code blocks render
+	// through chroma's own terminal formatter (quick.Highlight), which
+	// quantizes to 256-COLOR SGR even in a unit context — glamour's plain
+	// text stays 24-bit, but the highlighted code is 38;5;N (verified:
+	// full keyword #9d7cd8 -> 140, subtle pre-blended #624e86 -> 60).
+	// Pin the 256 index as a substring.
+	for _, order := range []struct {
+		name string
+		r    *Renderer
+		want string
+	}{
+		{"full", full, "38;5;140"},
+		{"subtle", sub, "38;5;60"},
+	} {
+		out, err := order.r.Render(md)
+		if err != nil {
+			t.Fatalf("Render(%s): %v", order.name, err)
+		}
+		if !strings.Contains(out, order.want) {
+			t.Errorf("Render(%s) missing %q in: %q", order.name, order.want, out)
+		}
+	}
+	// order matters in BOTH directions: render subtle first, then full —
+	// the full renderer must still emit its OWN keyword (the slot delete
+	// re-registers on the next code block; without it the full renderer
+	// leaks the subtle 38;5;60, verified in the detail pass).
+	if _, err := sub.Render(md); err != nil {
+		t.Fatalf("Render(subtle, first): %v", err)
+	}
+	out, err := full.Render(md)
+	if err != nil {
+		t.Fatalf("Render(full, again): %v", err)
+	}
+	if !strings.Contains(out, "38;5;140") {
+		t.Errorf("full renderer cross-colored by the subtle render: %q", out)
 	}
 }
