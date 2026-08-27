@@ -18,9 +18,16 @@ spec shape; gate re-baselined 50→150 ms, measured min-of-5 ≈ 100 ms on
 glamour v2.0.1). The S1 slice-gate transcript-fixture pty diff is
 deferred to the S8 diff sweep (deviation 164; the pty-capture tooling is
 S8's per spec §8 — the S0 precedent at deviation 125); the user-run TTY
-smoke is on-demand, pending. Deviations 122–164 logged. Next: S2
-(dialogs) — detail pass + `yolo-oae.3`, starting with the huh/
-sahilm-fuzzy dep approval gate.
+smoke is on-demand, pending. S2 (dialogs) in progress: detail pass
+landed (`s2-dialogs.md` fully detailed, 10 tasks, commit 74d4f17; the
+task beads sit at `yolo-oae.3.4`–`3.13` — deviation 165), S2.1 deps huh
+v2.0.3 + sahilm/fuzzy v0.1.3 landed (69→79 modules, MVS kept all yolo
+pins, scratch smoke green), S2.2 modal dialog stack landed (dlgSize
+60/88/116, push/replace/close/clear ops, esc+ctrl+c with the model/agent
+subchoice veto, clamped-chrome overlay frame — blank backdrop per
+deviation 166; deviations 166–169 logged). Deviations 122–169 logged.
+Next: S2.3 (bead `yolo-oae.3.6`) — huh field dialogs alert + confirm,
+themed via StyleConfig.
 Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
 (PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
 + GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,
