@@ -22,8 +22,13 @@ Read it before acting. Task state: beads (`bd ready`). Verified facts:
    the graph via bubbletea v2), `charm.land/glamour/v2` v2.0.1
    (user-approved 2026-08-26, bead `yolo-oae.2.11` — GFM markdown + chroma
    syntax highlighting for the transcript; direct imports: `glamour`,
-   `glamour/ansi`, `chroma/v2/styles` for the global "charm" slot
-   workaround); dev-only
+    `glamour/ansi`, `chroma/v2/styles` for the global "charm" slot
+    workaround), `charm.land/huh/v2` v2.0.3
+    (user-approved 2026-08-27, bead `yolo-oae.3.4` — huh field dialogs:
+    alert/confirm/input; direct import `charm.land/huh/v2`),
+    `github.com/sahilm/fuzzy` v0.1.3 (same approval — subsequence fuzzy
+    filter for the select/palette; direct import `github.com/sahilm/fuzzy`);
+    dev-only
   `github.com/charmbracelet/x/exp/teatest/v2`
    v2.0.0-20260823001701-96af6d2cb5f6. Anything outside the allowlist requires
   an agent **dep proposal** (in the task's spec/plan or beads issue) BEFORE any

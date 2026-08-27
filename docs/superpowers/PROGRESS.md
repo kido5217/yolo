@@ -141,8 +141,10 @@ is `*` deny; `write`+`edit` both map to permission `edit`.
 - glamour v2.0.1 landed (S1.1, 16 new modules, live-verified evidence in bead
 `yolo-oae.2.11`); its custom chroma map registers under the global "charm"
 slot (first-write-wins) — yolo deletes the slot before every Render
-(Renderer.Render, internal/tui/theme/syntax.go) so the transcript (full)
-and reasoning (subtle) renderers + SIGUSR2 theme switches never cross-color.
+ (Renderer.Render, internal/tui/theme/syntax.go) so the transcript (full)
+ and reasoning (subtle) renderers + SIGUSR2 theme switches never cross-color.
+- S2.1 landed huh v2.0.3 + sahilm/fuzzy v0.1.3 (MVS delta 10 modules; smoke
+ render green under yolo pins).
 - Module `github.com/kido5217/yolo`, Go ≥ 1.25 (installed 1.26.7).
 - Single deliberate wire deviation: `x-yolo-directory` header.
 - Config profiles (2026-08-24, deviation 121, beads `yolo-3pe`): global
