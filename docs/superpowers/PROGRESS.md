@@ -291,8 +291,3 @@ deviation 104) — the sole new dependency of 0.3.0 (root AGENTS.md allowlist, p
   `.last-update.json`). Generated pages are NEVER hand-edited; source changes
   propagate via the scheduled OpenWiki refresh (root AGENTS.md setup block,
   `OPENWIKI` markers).
-- qmd knowledge base (2026-08-26): `openwiki/` is a qmd collection — 24
-  documents, 71 chunks, CPU embeddings (embeddinggemma-300M). MCP
-  `qmd_query` works here only with `rerank: false` or typed `searches` (the
-  rerank LLM step times out over MCP on this CPU-only box); CLI `qmd query`
-  is the full hybrid+rerank fallback.
