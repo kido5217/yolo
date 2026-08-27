@@ -92,12 +92,18 @@ func (sm *sessionModel) sync(st *store.State, w, h int, th theme.Theme) {
 // expanded maps partID to the parts whose I/O block or reasoning text is
 // shown.
 func renderMessages(st *store.State, expanded map[string]bool, w int, th theme.Theme) string {
+	var r *theme.Renderer
+	if !th.Zero() {
+		if built, err := theme.NewTranscriptRenderer(th, w-3); err == nil {
+			r = built
+		}
+	}
 	blocks := make([]string, 0, len(st.Messages))
 	for _, m := range st.Messages {
 		if m.Info.Role == "user" {
 			blocks = append(blocks, renderUser(m, w))
 		} else {
-			blocks = append(blocks, renderAssistant(m, expanded, w, th))
+			blocks = append(blocks, renderAssistant(m, expanded, w, th, r))
 		}
 	}
 	if len(blocks) == 0 {
@@ -138,7 +144,7 @@ func renderUser(m protocol.MessageWithParts, w int) string {
 	return b.String()
 }
 
-func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool, w int, th theme.Theme) string {
+func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool, w int, th theme.Theme, r *theme.Renderer) string {
 	muted := th.TextMuted()
 	var b strings.Builder
 	first := true
@@ -167,8 +173,24 @@ func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool, w in
 			if p.Text == "" {
 				continue
 			}
-			for _, l := range strings.Split(p.Text, "\n") {
-				writePlain(l)
+			if r == nil {
+				for _, l := range strings.Split(p.Text, "\n") {
+					writePlain(l)
+				}
+				continue
+			}
+			// The upstream TextPart is a 3-column-indented markdown block
+			// (index.tsx:1700-1707). The renderer word-wraps at w-3
+			// (WithWordWrap), so the indented lines already fit w — the
+			// styled output never reaches wrapLine.
+			if out, err := r.Render(p.Text); err == nil {
+				for _, l := range strings.Split(strings.Trim(out, "\n"), "\n") {
+					writeRaw("   " + l)
+				}
+			} else {
+				for _, l := range strings.Split(p.Text, "\n") {
+					writePlain(l)
+				}
 			}
 		case "reasoning":
 			if expanded[p.ID] && p.Text != "" {

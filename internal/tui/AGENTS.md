@@ -25,14 +25,17 @@ and the teatest suites.
   `internal/llm` / `internal/llm/fake` (scripted fake turns).
 - V1 behavior pins (PROGRESS.md "Key verified facts"): keymap is pgup/pgdn
   scroll + `\`+enter newline (noted in /help).
-- Transcript word-wrap (yolo-0ca): `renderMessages` wraps every transcript
-  line at the viewport width via `wrapLine` (wrap.go) — word boundaries,
-  over-long tokens hard-split, CJK/emoji count 2 columns, tab = word
-  separator, plain text ONLY. Styled lines wrap BEFORE styling
+- Transcript word-wrap (yolo-0ca): `renderMessages` wraps every PLAIN
+  transcript line at the viewport width via `wrapLine` (wrap.go) — word
+  boundaries, over-long tokens hard-split, CJK/emoji count 2 columns, tab =
+  word separator. Assistant TEXT parts render through the glamour renderer
+  (S1.3) — the renderer's `WithWordWrap(w-3)` is their wrap strategy, every
+  rendered line carries the upstream 3-column indent, and the styled output
+  never reaches `wrapLine`. Styled lines wrap BEFORE styling
   (`toolRowLine` returns the style + plain text; `writeStyled` re-renders
-  each wrapped line). The viewport's hard clip is a backstop, never the
-  content strategy (no horizontal scroll is bound — clipped text would be
-  unreadable). `WindowSizeMsg` sets `sess.isDirty` so a resize re-wraps.
+  each wrapped line). The viewport's hard clip remains the backstop, never
+  the content strategy (no horizontal scroll is bound — clipped text would
+  be unreadable). `WindowSizeMsg` sets `sess.isDirty` so a resize re-wraps.
 - Below-viewport surface wrap (yolo-ukc): every non-transcript text surface
   wraps at the terminal width (`App.termWidth()`, fallback 80) with the same
   `wrapLine` — toasts, permission overlay, slash menu, model/agent dialogs
