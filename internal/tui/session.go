@@ -284,9 +284,61 @@ func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool, w in
 		}
 	}
 	if m.Info.Error != nil {
-		writeStyled(th.Error(), "! "+m.Info.Error.Message)
+		writeRaw(renderMessageError(*m.Info.Error, th, w))
 	}
 	return b.String()
+}
+
+// rgbaHex is the 6-digit hex of a resolved token (the theme package's
+// hex6 stays unexported — the TUI keeps its own one-liner; the surface
+// stays S1.2/S1.4-locked).
+func rgbaHex(c theme.Rgba) string {
+	return fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B)
+}
+
+// renderMessageError renders the assistant message error: the upstream
+// error BOX for non-aborted errors (index.tsx:1534-1548 — left border in
+// the error token, the panel background, 1/2 padding, textMuted text) and
+// the muted "~ <message>" line for aborted runs (upstream renders no box
+// for MessageAbortedError — the user caused them). A zero Theme degrades
+// to the bare plain message (the S0.7 contract: no SGR, never a panic).
+func renderMessageError(e protocol.MessageError, th theme.Theme, w int) string {
+	if th.Zero() {
+		return e.Message
+	}
+	if e.Type == "aborted" {
+		return th.TextMuted().Render("~ " + e.Message)
+	}
+	// word-wrap the message at the inner width before boxing (the box
+	// does not wrap).
+	var lines []string
+	inner := w - 4 // border(1) + paddingLeft(2) + margin(1)
+	for _, l := range strings.Split(e.Message, "\n") {
+		lines = append(lines, wrapLine(l, max(1, inner)))
+	}
+	return messageErrorBoxStyle(th).Render(th.TextMuted().Render(strings.Join(lines, "\n")))
+}
+
+// messageErrorBoxStyle builds the error box chrome (the S1.8 test pins it
+// through the lipgloss accessors): a single left border line in the error
+// token over the panel background, padded 1/0/1/2.
+func messageErrorBoxStyle(th theme.Theme) lipgloss.Style {
+	box := lipgloss.NewStyle().
+		Border(leftOnlyBorder(), false, false, false, true).
+		Padding(1, 0, 1, 2)
+	if c, ok := th.Color("error"); ok {
+		box = box.BorderForeground(lipgloss.Color(rgbaHex(c)))
+	}
+	if c, ok := th.Color("backgroundPanel"); ok {
+		box = box.Background(lipgloss.Color(rgbaHex(c)))
+	}
+	return box
+}
+
+func leftOnlyBorder() lipgloss.Border {
+	return lipgloss.Border{
+		Left: "│", // all other edges empty: a single left border line
+	}
 }
 
 // reasoningSummary ports upstream thinking.ts:12: the leading **title**

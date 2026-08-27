@@ -270,7 +270,7 @@ func TestSessionChromeZeroThemeIsPlain(t *testing.T) {
 		"~ Writing command...\n" +
 		"✱ grep\n" +
 		"ok-text\n" +
-		"! something broke"
+		"something broke"
 	if got != want {
 		t.Fatalf("transcript = %q, want %q", got, want)
 	}

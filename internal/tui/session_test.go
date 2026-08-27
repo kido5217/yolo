@@ -98,7 +98,7 @@ func TestRenderMessages(t *testing.T) {
 				"ok-text",
 		},
 		{
-			name: "message error renders red line after parts",
+			name: "message error renders bare line after parts",
 			mutate: func(s *store.State) {
 				s.Messages[1].Info.Error = &protocol.MessageError{Type: "unknown", Message: "something broke"}
 			},
@@ -109,7 +109,7 @@ func TestRenderMessages(t *testing.T) {
 				"~ Writing command...\n" +
 				"✱ grep\n" +
 				"ok-text\n" +
-				"! something broke",
+				"something broke",
 		},
 		{
 			name:  "empty store renders nothing",
