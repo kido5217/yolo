@@ -31,7 +31,14 @@ and the teatest suites.
   word separator. Assistant TEXT parts render through the glamour renderer
   (S1.3) — the renderer's `WithWordWrap(w-3)` is their wrap strategy, every
   rendered line carries the upstream 3-column indent, and the styled output
-  never reaches `wrapLine`. Styled lines wrap BEFORE styling
+  never reaches `wrapLine`. The rest of the transcript renders through
+  theme-derived surfaces (S1.6–S1.8): reasoning parts through the
+  `NewReasoningRenderer` (dimmed, collapsible, subtle syntax), tool rows
+  through `toolRow` (per-tool glyph + `alt+e` expand), errors through the
+  left-only-border `messageErrorBoxStyle` box, and toasts in their own
+  left-only Error-colored box (the same visual language) — all styled from
+  the resolved theme's `StyleConfig`, with one transcript/reasoning renderer
+  constructed per `renderMessages` call. Styled lines wrap BEFORE styling
   (`toolRow` returns the style + plain text; `writeStyled` re-renders
   each wrapped line). The viewport's hard clip remains the backstop, never
   the content strategy (no horizontal scroll is bound — clipped text would

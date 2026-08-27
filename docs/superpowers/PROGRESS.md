@@ -5,21 +5,22 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
-**Status (2026-08-26):** TUI parity S0 landed on `new_tui` (epic
-`yolo-oae`): theme engine (33 embedded upstream themes, the
-resolveTheme/generateSystem ports, OSC 11/10/4 detection, custom
-discovery + SIGUSR2, the config>KV>default selection chain over the TUI
-KV) + the app-shell restyle (logo, borders, home list, footer, session
-chrome — teatest SGR goldens under the pinned ANSI256 env); the S0.5-review
-follow-up (bead `yolo-oae.1.12`) fixed the lingering /dev/tty reader in
-DetectStd (poll-loop pump joined before return; deviation 145). S1
-(transcript) in progress: detail pass complete (`s1-transcript.md` fully
-detailed, 9 tasks), glamour v2.0.1 user-approved + landed (S1.1, bead
-`yolo-oae.2.11`, 16 new modules, deviation 148 — tidy prunes pre-import
-requires), S1.2 TermRenderer from resolved theme done (deviation 149).
-Deviations 122–149 logged. Next: S1.3 wire renderer into text parts
-(bead `yolo-oae.2.3`), then S1.4–S1.9 + the S1 slice gate; S2 starts with
-its own detail pass + the huh/sahilm-fuzzy dep approval gate.
+**Status (2026-08-27):** TUI parity S1 (transcript) landed on `new_tui`
+(epic `yolo-oae`): glamour v2.0.1 transcript rendering — StyleConfig +
+per-theme TranscriptRenderer/ReasoningRenderer (S1.2, dev 149), renderer
+wired into text parts with SGR goldens (S1.3, devs 150–151),
+Chroma/SubtleChroma syntax styling (S1.4, devs 152–153), GFM tables/task
+lists/strikethrough (S1.5, dev 154), reasoning restyle (S1.6, devs
+155–158), tool-row restyle (S1.7, devs 159–161), error-box + toast
+restyle (S1.8, dev 162), 100 KB re-render benchmark + budget gate (S1.9,
+dev 163 — brief fixture was 210,681 B not 100 KB, fixed to 104,981 B
+spec shape; gate re-baselined 50→150 ms, measured min-of-5 ≈ 100 ms on
+glamour v2.0.1). The S1 slice-gate transcript-fixture pty diff is
+deferred to the S8 diff sweep (deviation 164; the pty-capture tooling is
+S8's per spec §8 — the S0 precedent at deviation 125); the user-run TTY
+smoke is on-demand, pending. Deviations 122–164 logged. Next: S2
+(dialogs) — detail pass + `yolo-oae.3`, starting with the huh/
+sahilm-fuzzy dep approval gate.
 Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
 (PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
 + GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,
