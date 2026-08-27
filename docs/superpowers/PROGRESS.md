@@ -32,10 +32,13 @@ pill, buildConfirmForm = confirm/cancel pills starting on confirm;
 submit/esc-cascade driven through App — huh's unexported form-progress
 msgs are forwarded to the open form modal in `App.updateMsg`'s default
 case; deviations 170–171 logged), S2.4 huh field input landed
-(`buildInputForm` themed input — rename/prompt; deviation 172 logged).
-Deviations 122–172 logged.
-Next: S2.5 (bead `yolo-oae.3.8`) — select core: options, navigation,
-fuzzy filter.
+(`buildInputForm` themed input — rename/prompt; deviation 172 logged),
+S2.5 select core landed (`select.go`: selectOption/selectModel, fuzzy
+weighted filter with the focus fix, wrap nav, home/end, enter; deviations
+173–174 logged).
+Deviations 122–174 logged.
+Next: S2.6 (bead `yolo-oae.3.9`) — select: categories/groups + per-option
+details.
 Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
 (PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
 + GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,

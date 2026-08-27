@@ -61,10 +61,11 @@ type dialog struct {
 	kind    dialogKind
 	model   *modelDlg
 	agent   *agentDlg
-	form    *huhFormDlg // dlgForm payload (S2.3)
-	modal   bool        // true: rendered as the overlay frame (S2.2)
-	size    dlgSize     // the panel width, modal only
-	onClose func(*App)  // the stack-pop callback (upstream result callback)
+	form    *huhFormDlg  // dlgForm payload (S2.3)
+	sel     *selectModel // S2.5: the select payload (dlgModel/dlgAgents from S2.9/10)
+	modal   bool         // true: rendered as the overlay frame (S2.2)
+	size    dlgSize      // the panel width, modal only
+	onClose func(*App)   // the stack-pop callback (upstream result callback)
 }
 
 type dialogStack struct{ items []dialog }
@@ -189,6 +190,8 @@ func (m *agentDlg) cancelInner(tea.KeyPressMsg) bool {
 // dialogCanceler is the payload's esc veto, if it has one.
 func dialogCanceler(d dialog) (modalCanceler, bool) {
 	switch {
+	case d.sel != nil:
+		return nil, false
 	case d.model != nil:
 		return d.model, true
 	case d.agent != nil:
@@ -263,10 +266,16 @@ func (a *App) dlgView(w int) string {
 func (a *App) modalInner(d *dialog, w, h int) string {
 	switch d.kind {
 	case dlgModel:
+		if d.sel != nil {
+			return d.sel.view(w, h, a.theme)
+		}
 		if d.model != nil {
 			return d.model.view(&a.store, w, a.theme)
 		}
 	case dlgAgents:
+		if d.sel != nil {
+			return d.sel.view(w, h, a.theme)
+		}
 		if d.agent != nil {
 			return d.agent.view(&a.store, w, a.theme)
 		}
@@ -301,12 +310,18 @@ func (a *App) handleDialogKey(d dialog, k tea.KeyPressMsg) []tea.Cmd {
 	}
 	switch d.kind {
 	case dlgModel:
+		if d.sel != nil {
+			return d.sel.handleKey(a, k)
+		}
 		if d.model == nil {
 			a.dlg.pop()
 			return nil
 		}
 		return d.model.handleKey(a, k)
 	case dlgAgents:
+		if d.sel != nil {
+			return d.sel.handleKey(a, k)
+		}
 		if d.agent == nil {
 			a.dlg.pop()
 			return nil
