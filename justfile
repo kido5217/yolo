@@ -5,3 +5,6 @@ build:
 
 e2e-live:
     scripts/e2e-live.sh
+
+wiki-stale:
+    scripts/wiki-stale.sh
