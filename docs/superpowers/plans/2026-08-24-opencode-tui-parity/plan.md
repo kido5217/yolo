@@ -271,9 +271,9 @@ Dep gate: **`charm.land/huh/v2` v2.0.3 + `github.com/sahilm/fuzzy` v0.1.3**
 | File | Contents | State |
 |---|---|---|
 | `plan.md` | this file — goal, global constraints, branch setup, bead model, Slice Detail Protocol, the binding 65-bead inventory | done |
-| `s0-theme-engine.md` | S0.1–S0.10 full 5-step TDD detail + S0 slice gate | **fully detailed — the active slice** (execution pending) |
-| `s1-transcript.md` | S1 slice brief (dep gate, upstream sources, gate) | brief done; detail pass before S1 starts |
-| `s2-dialogs.md` | S2 slice brief | brief done; detail pass before S2 starts |
+| `s0-theme-engine.md` | S0.1–S0.10 full 5-step TDD detail + S0 slice gate | fully detailed — CLOSED (slice `yolo-oae.1` closed) |
+| `s1-transcript.md` | S1.1–S1.9 full 5-step TDD detail + S1 slice gate | fully detailed — CLOSED (slice `yolo-oae.2` closed) |
+| `s2-dialogs.md` | S2.1–S2.10 full 5-step TDD detail + S2 slice gate | **fully detailed — the active slice** (execution in progress) |
 | `s3-dialogs-2.md` | S3 slice brief | brief done; detail pass before S3 starts |
 | `s4-keymap.md` | S4 slice brief | brief done; detail pass before S4 starts |
 | `s5-prompt-completion.md` | S5 slice brief | brief done; detail pass before S5 starts |

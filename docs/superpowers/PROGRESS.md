@@ -289,5 +289,9 @@ deviation 104) — the sole new dependency of 0.3.0 (root AGENTS.md allowlist, p
   ×2, tools ×2, tui ×2, config, storage, testing, project, quickstart) plus
   OpenWiki-owned sidecars (`.claims/`, indexes, provenance,
   `.last-update.json`). Generated pages are NEVER hand-edited; source changes
-  propagate via the scheduled OpenWiki refresh (root AGENTS.md setup block,
-  `OPENWIKI` markers).
+  propagate via the on-demand host-driven update (openwiki skill, MCP
+  `openwiki_begin` mode=update — NOT a scheduled CI workflow; root AGENTS.md
+  `OPENWIKI` block). Pre-merge wiki gate: `just wiki-stale` (exit 1 when
+  `.last-update.json` gitHead trails HEAD on source changes outside
+  `openwiki/` + `CLAUDE.md`); enforced in the root AGENTS.md workflow table
+  ("Wiki gate first").
