@@ -102,6 +102,17 @@ func buildConfirmForm(th theme.Theme, title, description string) *huh.Form {
 	)).WithTheme(themeDialog(th)).WithShowHelp(false)
 }
 
+// buildInputForm is the upstream dialog-prompt (a single text input with
+// placeholder + initial value; return submits, esc cancels).
+func buildInputForm(th theme.Theme, title, description, placeholder, initial string) *huh.Form {
+	v := initial
+	return huh.NewForm(huh.NewGroup(
+		huh.NewInput().Key("value").
+			Title(title).Description(description).
+			Placeholder(placeholder).Value(&v),
+	)).WithTheme(themeDialog(th)).WithShowHelp(false)
+}
+
 // themeDialog maps the resolved theme to huh's Styles (deviation 170 —
 // borderless field boxes, the upstream dialog look; tokens from the
 // resolved theme; a zero Theme degrades to huh's default palette).

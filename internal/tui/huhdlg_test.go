@@ -115,3 +115,48 @@ func TestAlertFormSingleButton(t *testing.T) {
 		t.Fatalf("alert view leaked a second button: %q", v)
 	}
 }
+
+func TestInputFormTypedSubmit(t *testing.T) {
+	a := testApp()
+	a.size = tea.WindowSizeMsg{Width: 80, Height: 24}
+	var got string
+	a.openFormModal(buildInputForm(a.theme, "rename", "the session", "session name", "old"), dlgMedium,
+		func(_ *App, f *huh.Form) { got = f.GetString("value") }, nil)
+	driveCmds(t, a) // focus the field (openFormModal only queued the Init cmds)
+	updateKey(a, press('h'))
+	driveCmds(t, a)
+	updateKey(a, press('i'))
+	driveCmds(t, a)
+	updateKey(a, enterKey)
+	driveCmds(t, a)
+	if got != "oldhi" || len(a.dlg.items) != 0 {
+		t.Fatalf("got=%q depth=%d, want oldhi/0", got, len(a.dlg.items))
+	}
+}
+
+func TestInputFormEscCancels(t *testing.T) {
+	a := testApp()
+	a.size = tea.WindowSizeMsg{Width: 80, Height: 24}
+	cancelled := false
+	a.openFormModal(buildInputForm(a.theme, "t", "d", "ph", "x"), dlgMedium,
+		func(*App, *huh.Form) { t.Fatalf("confirm must not fire on esc") },
+		func(*App) { cancelled = true })
+	a.handleKey(press(tea.KeyEscape))
+	if !cancelled || len(a.dlg.items) != 0 {
+		t.Fatalf("cancelled=%v depth=%d, want true/0", cancelled, len(a.dlg.items))
+	}
+}
+
+func TestInputFormPlaceholder(t *testing.T) {
+	a := testApp()
+	a.size = tea.WindowSizeMsg{Width: 80, Height: 24}
+	a.openFormModal(buildInputForm(a.theme, "t", "d", "session name", ""), dlgMedium, nil, nil)
+	driveCmds(t, a) // placeholder only renders once the textinput is focused
+	v := a.dlg.form().form.View()
+	// The placeholder renders interleaved with SGR runs (the cursor char is
+	// reversed, the placeholder is dim), so check the stripped copy (deviation
+	// 172).
+	if !strings.Contains(stripANSI(v), "session name") {
+		t.Fatalf("placeholder missing from the view: %q", v)
+	}
+}

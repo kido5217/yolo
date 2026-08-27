@@ -31,8 +31,11 @@ deviation 166; deviations 166–169 logged), S2.3 huh field dialogs landed
 pill, buildConfirmForm = confirm/cancel pills starting on confirm;
 submit/esc-cascade driven through App — huh's unexported form-progress
 msgs are forwarded to the open form modal in `App.updateMsg`'s default
-case; deviations 170–171 logged). Deviations 122–171 logged.
-Next: S2.4 (bead `yolo-oae.3.7`) — huh field input (rename/prompt).
+case; deviations 170–171 logged), S2.4 huh field input landed
+(`buildInputForm` themed input — rename/prompt; deviation 172 logged).
+Deviations 122–172 logged.
+Next: S2.5 (bead `yolo-oae.3.8`) — select core: options, navigation,
+fuzzy filter.
 Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
 (PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
 + GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,
