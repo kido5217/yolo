@@ -124,13 +124,16 @@ func TestReasoningPartSGR(t *testing.T) {
 		if !strings.Contains(s, "var x = 1") {
 			return false
 		}
-		// subtle base text: raw theme.textMuted fg (→ 244), only the
-		// chroma pre-blended to subtle.
-		if !bytes.Contains(b, []byte("38;5;244")) {
+		// subtle base text: contiguous pin — the body text run opens
+		// directly with the raw theme.textMuted fg (→ 244); the bare
+		// 244 token pre-exists in the buffer from the session help line.
+		if !bytes.Contains(b, []byte("38;5;244mvar x = 1")) {
 			return false
 		}
-		// deterministic open header: warning-subtle (→ 94).
-		return bytes.Contains(b, []byte("38;5;94"))
+		// deterministic open header: contiguous pin — the header row
+		// opens directly with warning-subtle (→ 94); the bare 94 token
+		// may pre-exist from the running reasoning row.
+		return bytes.Contains(b, []byte("38;5;94m- Thought"))
 	}, teatest.WithDuration(10*time.Second))
 
 	_ = tm.Quit()
