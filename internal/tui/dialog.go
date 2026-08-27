@@ -30,6 +30,7 @@ const (
 	dlgHelp
 	dlgModel
 	dlgAgents
+	dlgForm
 )
 
 // dlgSize is the modal panel width (upstream DialogSize: medium 60, large
@@ -60,9 +61,10 @@ type dialog struct {
 	kind    dialogKind
 	model   *modelDlg
 	agent   *agentDlg
-	modal   bool       // true: rendered as the overlay frame (S2.2)
-	size    dlgSize    // the panel width, modal only
-	onClose func(*App) // the stack-pop callback (upstream result callback)
+	form    *huhFormDlg // dlgForm payload (S2.3)
+	modal   bool        // true: rendered as the overlay frame (S2.2)
+	size    dlgSize     // the panel width, modal only
+	onClose func(*App)  // the stack-pop callback (upstream result callback)
 }
 
 type dialogStack struct{ items []dialog }
@@ -91,6 +93,16 @@ func (d *dialogStack) model() *modelDlg {
 	for i := range d.items {
 		if d.items[i].model != nil {
 			return d.items[i].model
+		}
+	}
+	return nil
+}
+
+// form returns the open huh-form modal's payload (same invariant as model).
+func (d *dialogStack) form() *huhFormDlg {
+	for i := range d.items {
+		if d.items[i].form != nil {
+			return d.items[i].form
 		}
 	}
 	return nil
@@ -258,6 +270,10 @@ func (a *App) modalInner(d *dialog, w, h int) string {
 		if d.agent != nil {
 			return d.agent.view(&a.store, w, a.theme)
 		}
+	case dlgForm:
+		if d.form != nil {
+			return d.form.form.View()
+		}
 	}
 	return ""
 }
@@ -296,6 +312,12 @@ func (a *App) handleDialogKey(d dialog, k tea.KeyPressMsg) []tea.Cmd {
 			return nil
 		}
 		return d.agent.handleKey(a, k)
+	case dlgForm:
+		if d.form == nil {
+			a.dlg.pop()
+			return nil
+		}
+		return d.form.handleKey(a, k)
 	}
 	a.dlg.pop() // dlgHelp: any key closes
 	return nil

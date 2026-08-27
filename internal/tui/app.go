@@ -246,6 +246,17 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 			a.retheme()
 		}
 		return nil
+	default:
+		// huh v2's form-progress messages (unexported group/field types,
+		// driven by huh's NextField/SubmitCmd cmds) belong to the open form
+		// modal — feed them back in so submit completes (S2.3).
+		if f := a.dlg.form(); f != nil {
+			cmds := f.forwardMsg(a, msg)
+			if len(cmds) > 0 {
+				return tea.Batch(cmds...)
+			}
+			return nil
+		}
 	}
 	return nil
 }

@@ -25,9 +25,14 @@ v2.0.3 + sahilm/fuzzy v0.1.3 landed (69→79 modules, MVS kept all yolo
 pins, scratch smoke green), S2.2 modal dialog stack landed (dlgSize
 60/88/116, push/replace/close/clear ops, esc+ctrl+c with the model/agent
 subchoice veto, clamped-chrome overlay frame — blank backdrop per
-deviation 166; deviations 166–169 logged). Deviations 122–169 logged.
-Next: S2.3 (bead `yolo-oae.3.6`) — huh field dialogs alert + confirm,
-themed via StyleConfig.
+deviation 166; deviations 166–169 logged), S2.3 huh field dialogs landed
+(`huhdlg.go`: huhFormDlg form payload + openFormModal, themed via
+`themeDialog` from the resolved theme tokens; buildAlertForm = lone ok
+pill, buildConfirmForm = confirm/cancel pills starting on confirm;
+submit/esc-cascade driven through App — huh's unexported form-progress
+msgs are forwarded to the open form modal in `App.updateMsg`'s default
+case; deviations 170–171 logged). Deviations 122–171 logged.
+Next: S2.4 (bead `yolo-oae.3.7`) — huh field input (rename/prompt).
 Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
 (PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
 + GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,
