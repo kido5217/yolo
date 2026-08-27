@@ -16,10 +16,10 @@ sources:
     resource: repo://scripts/wiki-stale.sh
   - id: openwiki-source-453611660ffbf02a66fa4bf3
     resource: repo://skills-lock.json
-generated: {by: "opencode", at: "2026-08-27T15:27:54.907Z"}
+generated: {by: "opencode", at: "2026-08-27T15:34:12.682Z"}
 verified:
   - by: openwiki/0.4.0
-    at: 2026-08-27T15:27:54.907Z
+    at: 2026-08-27T15:34:12.682Z
 ---
 
 # Project Workflow
@@ -136,12 +136,16 @@ user-run, never CI.
 The generated `openwiki/` evidence index must be current before a milestone
 merges: `just wiki-stale` (`scripts/wiki-stale.sh`) compares the `gitHead`
 recorded in `openwiki/.last-update.json` to `HEAD` and exits 1 when the wiki
-trails the source it documents. The refresh is a host-driven update through
-the `openwiki` skill (MCP `openwiki_begin` mode=update) — there is **no
-scheduled CI workflow** (a GitHub runner cannot reach the local model). The
-gate is wired into the root `AGENTS.md` "Superpowers workflow" as the first
-step of the pre-merge `requesting-code-review` row; generated pages are never
-hand-edited (source changes propagate via the update).
+trails the source it documents. The wiki is considered current when
+`gitHead == HEAD` **or** when no source outside OpenWiki-owned output
+(`openwiki/` and the root `CLAUDE.md` pointer) changed since `gitHead` — so a
+pure-wiki commit never trips the gate, while any non-wiki source change since
+`gitHead` does. The refresh is a host-driven update through the `openwiki`
+skill (MCP `openwiki_begin` mode=update) — there is **no scheduled CI
+workflow** (a GitHub runner cannot reach the local model). The gate is wired
+into the root `AGENTS.md` "Superpowers workflow" as the first step of the
+pre-merge `requesting-code-review` row; generated pages are never hand-edited
+(source changes propagate via the update).
 
 ## Skills
 

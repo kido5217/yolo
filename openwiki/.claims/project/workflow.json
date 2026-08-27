@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:c9c7777b43a49a1b13ef467a1b7c7428764eb89e60d0e3bb7b4d681f9c8ff925",
+  "pageVersion": "sha256:7e46a304c65c7a771676140f6f4f622de38b781f994f7c485bea1e5945d9acb3",
   "claims": [
     {
       "id": "claim_36ac246cecb94ca6bfb83b6eab9c3d91",
@@ -124,7 +124,7 @@
     },
     {
       "id": "claim_c1f27ea88cfe47f996a47111da0ba312",
-      "statement": "The pre-merge OpenWiki wiki gate: just wiki-stale (scripts/wiki-stale.sh) exits 1 when the gitHead recorded in openwiki/.last-update.json trails HEAD; the wiki then refreshes via the openwiki skill's host-driven update (openwiki_begin mode=update) — there is no scheduled CI workflow — and the gate is the first step of the AGENTS.md requesting-code-review row.",
+      "statement": "The pre-merge OpenWiki wiki gate: just wiki-stale (scripts/wiki-stale.sh) exits 1 when the gitHead recorded in openwiki/.last-update.json trails HEAD, treating the wiki as current when gitHead == HEAD or when no source outside OpenWiki-owned output (openwiki/ and the root CLAUDE.md pointer) changed since gitHead, so a pure-wiki commit never trips the gate while any non-wiki source change since gitHead does; the wiki then refreshes via the openwiki skill's host-driven update (openwiki_begin mode=update) — there is no scheduled CI workflow — and the gate is the first step of the AGENTS.md requesting-code-review row.",
       "evidence": [
         {
           "resource": "repo://AGENTS.md#L99-L103",
@@ -132,13 +132,13 @@
         },
         {
           "resource": "repo://scripts/wiki-stale.sh",
-          "version": "repo-file-v1:sha256:eaeec9889967288afa8a04571751f29a44d655ce8b3710f0da4a7d000a9c9bd3"
+          "version": "repo-file-v1:sha256:5ddc8ade4b41bc98774ecebe6afe8ee28241699b82eff163e1842a44f4dce776"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.4.0",
-    "at": "2026-08-27T15:27:54.907Z"
+    "at": "2026-08-27T15:34:12.682Z"
   }
 }
