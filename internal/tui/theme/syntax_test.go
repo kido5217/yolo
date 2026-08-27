@@ -1,11 +1,16 @@
 package theme
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
 	"charm.land/glamour/v2/ansi"
 )
+
+// sgrRe strips SGR (color/attribute) escape sequences. Used only for the
+// TaskElement contiguity pin in TestGFMRender (deviation 154).
+var sgrRe = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 // markdownTokens + syntaxTokens are the flat upstream theme keys
 // (theme/index.ts; every one of the 33 embedded assets carries them).
@@ -288,5 +293,84 @@ func TestChromaSlotWorkaround(t *testing.T) {
 	}
 	if !strings.Contains(out, "38;5;140") {
 		t.Errorf("full renderer cross-colored by the subtle render: %q", out)
+	}
+}
+
+// TestStyleConfigGFM pins the S1.5 GFM trio (opencode.dark).
+func TestStyleConfigGFM(t *testing.T) {
+	cfg := resolveOpencodeDark(t).StyleConfig("markdownText", 77)
+	if cfg.Strikethrough.CrossedOut == nil || !*cfg.Strikethrough.CrossedOut {
+		t.Error("Strikethrough.CrossedOut = false/nil, want true")
+	}
+	if cfg.Strikethrough.Color != nil {
+		t.Error("Strikethrough.Color set, want nil (no upstream token)")
+	}
+	if cfg.Task.Ticked != "• " || cfg.Task.Unticked != "• " {
+		t.Errorf("Task ticks = %q/%q, want '• '/'• ' (upstream hides the checkbox)",
+			cfg.Task.Ticked, cfg.Task.Unticked)
+	}
+	if cfg.Task.Color == nil || *cfg.Task.Color != "#fab283" {
+		t.Errorf("Task.Color = %v, want #fab283 (markdownListItem)", cfg.Task.Color)
+	}
+}
+
+// TestGFMRender pins the three GFM features end-to-end (theme opencode
+// dark; the 24-bit SGR is asserted directly — the 38;5;N quantization is
+// the teatest layer's job). Verified against glamour v2.0.1 behavior:
+// the Task element's StylePrimitive styles only the checkbox (the item
+// TEXT renders in the base Text color — upstream parity: opentui's list
+// items carry the markdown base fg); the table grid is the │ / ┼ / ─
+// column layout (no corner glyphs); the strikethrough run resets to
+// default first, so SGR 9 is standalone. v2.0.1 emits the TaskElement tick
+// prefix and the item text as SEPARATE SGR runs with a reset between them
+// (inter-run reset, ansi/task.go + baseelement.go:
+// \x1b[38;2;238;238;238m• \x1b[m\x1b[38;2;238;238;238mdone), so the
+// "bullet immediately precedes its item's text" pin runs on an
+// SGR-stripped copy; every other assertion stays on the raw output
+// (deviation 154).
+func TestGFMRender(t *testing.T) {
+	r, err := NewTranscriptRenderer(resolveOpencodeDark(t), 77)
+	if err != nil {
+		t.Fatalf("NewTranscriptRenderer: %v", err)
+	}
+	// 1) table: the glamour grid column borders (│ separator, ┼ join).
+	out, err := r.Render("| a | b |\n|---|---|\n| 1 | 2 |\n")
+	if err != nil {
+		t.Fatalf("Render(table): %v", err)
+	}
+	for _, want := range []string{"\u2502", "\u253C"} { // │ ┼
+		if !strings.Contains(out, want) {
+			t.Errorf("table missing border %q in %q", want, out)
+		}
+	}
+	// 2) task list: hidden checkbox, "• " bullets, the item text in the
+	// base text color (38;2;238;238;238 = markdownText #eeeeee).
+	out, err = r.Render("- [x] done\n- [ ] todo\n")
+	if err != nil {
+		t.Fatalf("Render(task): %v", err)
+	}
+	// Contiguity on the SGR-stripped copy only: the tick prefix and the
+	// item text are separate SGR runs with an inter-run reset (deviation 154).
+	stripped := sgrRe.ReplaceAllString(out, "")
+	if !strings.Contains(stripped, "\u2022 done") || !strings.Contains(stripped, "\u2022 todo") {
+		t.Errorf("task list = %q, want '• done' / '• todo' (stripped)", stripped)
+	}
+	if strings.Contains(out, "[x]") || strings.Contains(out, "[ ]") {
+		t.Errorf("checkbox visible: %q", out)
+	}
+	if !strings.Contains(out, "38;2;238;238;238") { // base text color
+		t.Errorf("task item missing the base text color: %q", out)
+	}
+	// 3) strikethrough: SGR 9 (crossed-out), standalone after a reset
+	// (\x1b[9m) — or merged, if glamour ever changes the pen handling.
+	out, err = r.Render("a ~~gone~~ word\n")
+	if err != nil {
+		t.Fatalf("Render(strike): %v", err)
+	}
+	if !strings.Contains(out, "\x1b[9m") && !strings.Contains(out, ";9m") {
+		t.Errorf("strikethrough missing SGR 9: %q", out)
+	}
+	if !strings.Contains(out, "gone") {
+		t.Errorf("strikethrough lost its text: %q", out)
 	}
 }

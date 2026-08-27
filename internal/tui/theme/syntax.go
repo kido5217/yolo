@@ -139,6 +139,7 @@ func (t Theme) StyleConfig(base string, width int) ansi.StyleConfig {
 	}}
 	cfg.Emph = ansi.StylePrimitive{Color: t.md("markdownEmph"), Italic: boolPtr(true)}
 	cfg.Strong = ansi.StylePrimitive{Color: t.md("markdownStrong"), Bold: boolPtr(true)}
+	cfg.Strikethrough = ansi.StylePrimitive{CrossedOut: boolPtr(true)}
 	cfg.HorizontalRule = ansi.StylePrimitive{
 		Color:  t.md("markdownHorizontalRule"),
 		Format: "\n" + strings.Repeat("─", hrWidth(width)) + "\n",
@@ -147,6 +148,14 @@ func (t Theme) StyleConfig(base string, width int) ansi.StyleConfig {
 	cfg.Enumeration = ansi.StylePrimitive{
 		Color:       t.md("markdownListEnumeration"),
 		BlockPrefix: ". ",
+	}
+	// Task: the upstream <markdown> element HIDES the checkbox
+	// (opentui createListItemRenderable skips checkbox tokens) — a task
+	// item is a plain bullet in the item color.
+	cfg.Task = ansi.StyleTask{
+		StylePrimitive: ansi.StylePrimitive{Color: t.md("markdownListItem")},
+		Ticked:         "• ",
+		Unticked:       "• ",
 	}
 	cfg.Link = ansi.StylePrimitive{Color: t.md("markdownLink"), Underline: boolPtr(true)}
 	cfg.LinkText = ansi.StylePrimitive{Color: t.md("markdownLinkText")}
