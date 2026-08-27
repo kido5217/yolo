@@ -73,6 +73,13 @@ func TestTUIFullTurn(t *testing.T) {
 			strings.Contains(full, "all done")
 	}, teatest.WithDuration(10*time.Second))
 
+	// S1.6: the done+collapsed reasoning row is the "+/- Thought" form —
+	// the turn drain carries the frame that settled it (zero theme, empty
+	// spin; the duration may or may not be present, the prefix is pinned).
+	if !strings.Contains(full, "+ Thought") {
+		t.Fatalf("done+collapsed reasoning row missing from turn drain:\n%s", full)
+	}
+
 	// The full turn rendered in order: user echo, text, completed tool, final.
 	idx := []int{
 		strings.Index(full, "User: do it"),
@@ -97,11 +104,24 @@ func TestTUIFullTurn(t *testing.T) {
 		t.Fatalf("read final output: %v", err)
 	}
 	tsTail := stripANSI(string(tail))
-	// "think" is asserted via its \u25BE marker and the expanded content:
-	// the v2 renderer cell-diffs frames, and on the alt screen's fixed
-	// frame the unchanged tail of the marker line is never re-emitted, so
-	// the contiguous "▾ think" line cannot appear in the byte stream.
-	for _, w := range []string{"\u25BE", "let me think", "world", "quit?", "[Y/n]"} {
+	// S1.6: the alt+t toggle is asserted on the model state, not the tail
+	// drain: the v2 renderer cell-diffs frames and on the alt screen's
+	// fixed frame only the changed marker cell (+ → -) is re-emitted —
+	// the row tail never re-appears in this drain (the old ▾-era pin's
+	// root cause), and the body ("let me think") is invisible on this
+	// zero-engine run (the subtle-markdown body needs a real theme).
+	expandedReasoning := 0
+	for _, m := range a.store.Messages {
+		for _, p := range m.Parts {
+			if p.Type == "reasoning" && a.sess.expanded[p.ID] {
+				expandedReasoning++
+			}
+		}
+	}
+	if expandedReasoning == 0 {
+		t.Error("alt+t did not expand the reasoning part")
+	}
+	for _, w := range []string{"world", "quit?", "[Y/n]"} {
 		if !strings.Contains(tsTail, w) {
 			t.Errorf("final output missing %q:\n%s", w, tsTail)
 		}

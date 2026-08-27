@@ -114,7 +114,7 @@ func BenchmarkRenderMessages(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				sink = renderMessages(st, exp, 80, theme.Theme{})
+				sink = renderMessages(st, exp, 80, theme.Theme{}, "")
 			}
 			if sink == "" {
 				b.Fatal("renderMessages returned empty output")

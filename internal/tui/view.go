@@ -92,7 +92,7 @@ func (a *App) viewSession(menu, perm, toasts, dlg string) string {
 	if h < 1 {
 		h = 1
 	}
-	a.sess.sync(&a.store, w, h, a.theme)
+	a.sess.sync(&a.store, w, h, a.theme, a.spinFrame())
 	t := "session"
 	if a.store.Current != nil {
 		t = a.store.Current.Title

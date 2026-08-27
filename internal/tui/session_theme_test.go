@@ -262,10 +262,10 @@ func hexColor(s string) color.RGBA {
 func TestSessionChromeZeroThemeIsPlain(t *testing.T) {
 	s := sessionFixture()
 	s.Messages[1].Info.Error = &protocol.MessageError{Type: "unknown", Message: "something broke"}
-	got := renderMessages(&s, nil, 80, theme.Theme{})
+	got := renderMessages(&s, nil, 80, theme.Theme{}, "")
 	want := "User: hello\n" +
 		divider.Render(dividerLine()) + "\n" +
-		"\u25B8 think\n" +
+		"Thinking\n" +
 		"\u2713 read src/main.go\n" +
 		"\u25B6 bash ls -la\n" +
 		"\u2717 grep pattern: no match\n" +

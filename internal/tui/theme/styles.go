@@ -1,6 +1,8 @@
 package theme
 
 import (
+	"math"
+
 	"charm.land/lipgloss/v2"
 )
 
@@ -33,6 +35,39 @@ func (t Theme) bg(token string) lipgloss.Style {
 		return lipgloss.NewStyle()
 	}
 	return lipgloss.NewStyle().Background(lipgloss.Color(c.Hex()[:7]))
+}
+
+// WarningSubtle is warning pre-blended over the background at
+// ThinkingOpacity (upstream RGBA.fromValues(warning.r, g, b,
+// thinkingOpacity), index.tsx:1660) — the lipgloss hex takes 6 digits,
+// so the alpha is pre-applied (finding 3).
+func (t Theme) WarningSubtle() lipgloss.Style {
+	return t.blended("warning")
+}
+
+// blended returns fg(token) with the color pre-blended over the
+// background at ThinkingOpacity (identity when the token or background
+// is absent or α is out of (0,1)).
+func (t Theme) blended(token string) lipgloss.Style {
+	c, ok := t.R.Color(token)
+	if !ok {
+		return lipgloss.NewStyle()
+	}
+	a := t.R.ThinkingOpacity
+	if a <= 0 || a >= 1 {
+		return t.fg(token)
+	}
+	bg := Rgba{0, 0, 0, 255}
+	if bc, ok := t.R.Color("background"); ok {
+		bg = bc
+	}
+	out := Rgba{
+		R: uint8(math.Round(float64(c.R)*a + float64(bg.R)*(1-a))),
+		G: uint8(math.Round(float64(c.G)*a + float64(bg.G)*(1-a))),
+		B: uint8(math.Round(float64(c.B)*a + float64(bg.B)*(1-a))),
+		A: 255,
+	}
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(hex6(out)))
 }
 
 // SelectedForeground is the port of upstream selectedForeground

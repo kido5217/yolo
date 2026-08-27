@@ -54,7 +54,7 @@ func TestRenderMessages(t *testing.T) {
 			name: "collapsed",
 			want: "User: hello\n" +
 				dividerLine() + "\n" +
-				"\u25B8 think\n" +
+				"Thinking\n" +
 				"\u2713 read src/main.go\n" +
 				"\u25B6 bash ls -la\n" +
 				"\u2717 grep pattern: no match\n" +
@@ -65,7 +65,7 @@ func TestRenderMessages(t *testing.T) {
 			expanded: map[string]bool{"t1": true},
 			want: "User: hello\n" +
 				dividerLine() + "\n" +
-				"\u25B8 think\n" +
+				"Thinking\n" +
 				"\u2713 read src/main.go\n" +
 				"  line1\n  line2\n  line3\n" +
 				"\u25B6 bash ls -la\n" +
@@ -77,7 +77,7 @@ func TestRenderMessages(t *testing.T) {
 			expanded: map[string]bool{"t3": true},
 			want: "User: hello\n" +
 				dividerLine() + "\n" +
-				"\u25B8 think\n" +
+				"Thinking\n" +
 				"\u2713 read src/main.go\n" +
 				"\u25B6 bash ls -la\n" +
 				"\u2717 grep pattern: no match\n" +
@@ -85,12 +85,13 @@ func TestRenderMessages(t *testing.T) {
 				"ok-text",
 		},
 		{
-			name:     "reasoning expanded shows indented text",
+			// Zero theme: no reasoning renderer is built, so the expanded
+			// part shows only the header row (the body needs a real theme).
+			name:     "reasoning expanded under zero theme shows header only",
 			expanded: map[string]bool{"r1": true},
 			want: "User: hello\n" +
 				dividerLine() + "\n" +
-				"\u25BE think\n" +
-				"  because x\n  and y\n" +
+				"Thinking\n" +
 				"\u2713 read src/main.go\n" +
 				"\u25B6 bash ls -la\n" +
 				"\u2717 grep pattern: no match\n" +
@@ -103,7 +104,7 @@ func TestRenderMessages(t *testing.T) {
 			},
 			want: "User: hello\n" +
 				dividerLine() + "\n" +
-				"\u25B8 think\n" +
+				"Thinking\n" +
 				"\u2713 read src/main.go\n" +
 				"\u25B6 bash ls -la\n" +
 				"\u2717 grep pattern: no match\n" +
@@ -127,7 +128,7 @@ func TestRenderMessages(t *testing.T) {
 			},
 			want: "User: hello\n" +
 				dividerLine() + "\n" +
-				"\u25B8 think\n" +
+				"Thinking\n" +
 				"\u2713 read src/main.go\n" +
 				"\u2713 bash ls -la\n" +
 				"  l1\n  l2\n  l3\n  l4\n  l5\n  l6\n  l7\n  l8\n  l9\n  l10\n  \u2026\n" +
@@ -143,7 +144,7 @@ func TestRenderMessages(t *testing.T) {
 			},
 			want: "User: hello\n" +
 				dividerLine() + "\n" +
-				"\u25B8 think\n" +
+				"Thinking\n" +
 				"\u2713 read src/main.go\n" +
 				"\u2713 bash ls -la\n" +
 				"  a\n  b\n" +
@@ -162,7 +163,7 @@ func TestRenderMessages(t *testing.T) {
 			expanded: map[string]bool{"t2": true},
 			want: "User: hello\n" +
 				dividerLine() + "\n" +
-				"\u25B8 think\n" +
+				"Thinking\n" +
 				"\u2713 read src/main.go\n" +
 				"\u2713 bash ls -la\n" +
 				"  l1\n  l2\n  l3\n  l4\n  l5\n  l6\n  l7\n  l8\n  l9\n  l10\n  l11\n  l12\n" +
@@ -179,7 +180,7 @@ func TestRenderMessages(t *testing.T) {
 			expanded: map[string]bool{"t1": true},
 			want: "User: hello\n" +
 				dividerLine() + "\n" +
-				"\u25B8 think\n" +
+				"Thinking\n" +
 				"\u2713 read src/main.go\n" +
 				"\u25B6 bash ls -la\n" +
 				"\u2717 grep pattern: no match\n" +
@@ -195,7 +196,7 @@ func TestRenderMessages(t *testing.T) {
 			if tt.mutate != nil {
 				tt.mutate(&s)
 			}
-			got := stripANSI(renderMessages(&s, tt.expanded, 80, theme.Theme{}))
+			got := stripANSI(renderMessages(&s, tt.expanded, 80, theme.Theme{}, ""))
 			if got != tt.want {
 				t.Errorf("renderMessages mismatch:\ngot:\n%q\nwant:\n%q", got, tt.want)
 			}
@@ -234,7 +235,7 @@ func TestRenderMessagesTitleFallbacks(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := stripANSI(renderMessages(&tt.s, nil, 80, theme.Theme{}))
+			got := stripANSI(renderMessages(&tt.s, nil, 80, theme.Theme{}, ""))
 			if got != tt.want {
 				t.Errorf("renderMessages = %q, want %q", got, tt.want)
 			}
@@ -349,7 +350,7 @@ func TestRenderMessagesWrapsLongLines(t *testing.T) {
 	}
 	// w must be >= the locked 28-rune divider.
 	const w = 30
-	got := stripANSI(renderMessages(&s, nil, w, theme.Theme{}))
+	got := stripANSI(renderMessages(&s, nil, w, theme.Theme{}, ""))
 	want := "User: print me 1000 words\n" +
 		"about anime\n" +
 		dividerLine() + "\n" +

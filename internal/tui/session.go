@@ -67,14 +67,14 @@ const sessionHelp = "pgup/pgdn scroll \u00B7 alt+e expand \u00B7 alt+t think \u0
 // The transcript re-renders only when dirty (store mutation or expand
 // toggle); frames that only advance the footer spinner or report a status
 // tick reuse the existing viewport content instead of rebuilding it.
-func (sm *sessionModel) sync(st *store.State, w, h int, th theme.Theme) {
+func (sm *sessionModel) sync(st *store.State, w, h int, th theme.Theme, spin string) {
 	if sm.vm.Width() != w || sm.vm.Height() != h {
 		sm.vm.SetWidth(w)
 		sm.vm.SetHeight(h)
 	}
 	if sm.isDirty {
 		sm.isDirty = false
-		content := renderMessages(st, sm.expanded, w, th)
+		content := renderMessages(st, sm.expanded, w, th, spin)
 		if content != sm.content {
 			sm.content = content
 			sm.vm.SetContent(content)
@@ -86,16 +86,20 @@ func (sm *sessionModel) sync(st *store.State, w, h int, th theme.Theme) {
 }
 
 // renderMessages renders the current session's transcript as viewport
-// content: user messages verbatim, assistant parts in arrival order (reasoning
-// collapsed as "▸ think", tool rows "✓/▶/✗ <tool> <title>"), a divider before
-// every message after the first, and message errors as a red "! message" line.
-// expanded maps partID to the parts whose I/O block or reasoning text is
-// shown.
-func renderMessages(st *store.State, expanded map[string]bool, w int, th theme.Theme) string {
-	var r *theme.Renderer
+// content: user messages verbatim, assistant parts in arrival order
+// (reasoning as the spinner/Thought row, tool rows "✓/▶/✗ <tool>
+// <title>"), a divider before every message after the first, and message
+// errors as a red "! message" line. expanded maps partID to the parts
+// whose I/O block or reasoning text is shown; spin is the footer
+// spinner frame for the running reasoning row ("" in unit runs).
+func renderMessages(st *store.State, expanded map[string]bool, w int, th theme.Theme, spin string) string {
+	var tr, rr *theme.Renderer
 	if !th.Zero() {
 		if built, err := theme.NewTranscriptRenderer(th, w-3); err == nil {
-			r = built
+			tr = built
+		}
+		if built, err := theme.NewReasoningRenderer(th, w-5); err == nil {
+			rr = built
 		}
 	}
 	blocks := make([]string, 0, len(st.Messages))
@@ -103,7 +107,7 @@ func renderMessages(st *store.State, expanded map[string]bool, w int, th theme.T
 		if m.Info.Role == "user" {
 			blocks = append(blocks, renderUser(m, w))
 		} else {
-			blocks = append(blocks, renderAssistant(m, expanded, w, th, r))
+			blocks = append(blocks, renderAssistant(m, expanded, w, th, tr, rr, spin))
 		}
 	}
 	if len(blocks) == 0 {
@@ -144,8 +148,7 @@ func renderUser(m protocol.MessageWithParts, w int) string {
 	return b.String()
 }
 
-func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool, w int, th theme.Theme, r *theme.Renderer) string {
-	muted := th.TextMuted()
+func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool, w int, th theme.Theme, tr, rr *theme.Renderer, spin string) string {
 	var b strings.Builder
 	first := true
 	writeRaw := func(s string) {
@@ -173,7 +176,7 @@ func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool, w in
 			if p.Text == "" {
 				continue
 			}
-			if r == nil {
+			if tr == nil {
 				for _, l := range strings.Split(p.Text, "\n") {
 					writePlain(l)
 				}
@@ -183,7 +186,7 @@ func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool, w in
 			// (index.tsx:1700-1707). The renderer word-wraps at w-3
 			// (WithWordWrap), so the indented lines already fit w — the
 			// styled output never reaches wrapLine.
-			if out, err := r.Render(p.Text); err == nil {
+			if out, err := tr.Render(p.Text); err == nil {
 				for _, l := range strings.Split(strings.Trim(out, "\n"), "\n") {
 					writeRaw("   " + l)
 				}
@@ -193,13 +196,57 @@ func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool, w in
 				}
 			}
 		case "reasoning":
-			if expanded[p.ID] && p.Text != "" {
-				writeStyled(muted, "\u25BE think")
-				for _, l := range strings.Split(p.Text, "\n") {
-					writeStyled(muted, "  "+l)
+			text := strings.TrimSpace(strings.ReplaceAll(p.Text, "[REDACTED]", ""))
+			if text == "" {
+				continue
+			}
+			done := p.Time.End != 0
+			dur := int64(0)
+			if done {
+				dur = p.Time.End - p.Time.Start
+				if dur < 0 {
+					dur = 0
 				}
+			}
+			title, body := reasoningSummary(text)
+			open := expanded[p.ID]
+			// The upstream header fg: warning PRE-BLENDED at ThinkingOpacity
+			// while running (the Spinner color, index.tsx:1660) and when
+			// open (1657-1659); full warning when done+closed.
+			var hdr lipgloss.Style
+			if !done || open {
+				hdr = th.WarningSubtle()
 			} else {
-				writeStyled(muted, "\u25B8 think")
+				hdr = th.Warning()
+			}
+			row := ""
+			switch {
+			case !done:
+				label := "Thinking"
+				if title != "" {
+					label = "Thinking: " + title
+				}
+				if spin != "" {
+					row = spin + " " + label
+				} else {
+					row = label // zero-theme/unit runs pass "" — no leading space
+				}
+			case title != "" && dur > 0:
+				row = openMark(open) + " Thought: " + title + " · " + durationText(dur)
+			case title != "":
+				row = openMark(open) + " Thought: " + title
+			case dur > 0:
+				row = openMark(open) + " Thought: " + durationText(dur)
+			default:
+				row = openMark(open) + " Thought"
+			}
+			writeStyled(hdr, row)
+			if open && body != "" && rr != nil {
+				if out, err := rr.Render(body); err == nil {
+					for _, l := range strings.Split(strings.Trim(out, "\n"), "\n") {
+						writeRaw("     " + l) // 3 (part box) + 2 (body box)
+					}
+				}
 			}
 		case "tool":
 			sty, row, ok := toolRowLine(p, th)
@@ -234,6 +281,72 @@ func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool, w in
 		writeStyled(th.Error(), "! "+m.Info.Error.Message)
 	}
 	return b.String()
+}
+
+// reasoningSummary ports upstream thinking.ts:12: the leading **title**
+// block is disclosure metadata; the rest is the markdown body.
+func reasoningSummary(text string) (title string, body string) {
+	content := strings.TrimSpace(text)
+	i := strings.Index(content, "**")
+	if i != 0 {
+		return "", content
+	}
+	j := strings.Index(content[2:], "**")
+	if j < 0 {
+		return "", content
+	}
+	title = strings.TrimSpace(content[2 : 2+j])
+	if title == "" {
+		return "", content
+	}
+	rest := content[2+j+2:]
+	if rest == "" {
+		return title, ""
+	}
+	// the upstream regex requires the title block to end at a blank line
+	// ((\r?\n) twice, mixed endings allowed) or the end of the content;
+	// the body is what follows the blank line.
+	i = 0
+	for n := 0; n < 2; n++ {
+		if i < len(rest) && rest[i] == '\r' {
+			i++
+		}
+		if i < len(rest) && rest[i] == '\n' {
+			i++
+		} else {
+			return "", content
+		}
+	}
+	return title, strings.TrimRight(rest[i:], " \t\r\n")
+}
+
+// durationText ports upstream Locale.duration (util/locale.ts:39): ms <
+// 1s, X.Xs < 1m, Nm Ns < 1h, Nh Nm < 24h, else Nd Nh.
+func durationText(ms int64) string {
+	if ms < 1000 {
+		return fmt.Sprintf("%dms", ms)
+	}
+	if ms < 60000 {
+		return fmt.Sprintf("%.1fs", float64(ms)/1000)
+	}
+	if ms < 3600000 {
+		return fmt.Sprintf("%dm %ds", ms/60000, (ms%60000)/1000)
+	}
+	if ms < 86400000 {
+		return fmt.Sprintf("%dh %dm", ms/3600000, (ms%3600000)/60000)
+	}
+	return fmt.Sprintf("%dd %dh", ms/86400000, (ms%86400000)/3600000)
+}
+
+// openMark is the done-reasoning header prefix mark: "-" open, "+"
+// collapsed (the single separating space lives in the row string — the
+// brief's spaced mark + spaced row string built a double space; the
+// binding parity note pins the single-space form, deviation 156).
+func openMark(open bool) string {
+	if open {
+		return "-"
+	}
+	return "+"
 }
 
 // toolRowLine renders the locked tool row: "✓ <tool> <title>" completed,
