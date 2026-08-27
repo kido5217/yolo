@@ -24,8 +24,9 @@ import (
 )
 
 // stripANSITest removes SGR color sequences from raw teatest output so the
-// assertions can match the visible text (the ✓ tool row is split across two
-// styled spans, so the raw bytes never contain "✓ read" contiguously).
+// assertions can match the visible text (the `→ hello.txt` tool row is the
+// pin; a styled run splits the row text across spans in the raw bytes, so
+// the strip keeps the assertions form-agnostic).
 var sgrTestRe = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 func stripANSITest(b []byte) string { return sgrTestRe.ReplaceAllString(string(b), "") }
@@ -122,7 +123,7 @@ func TestSessionStreamingViewport(t *testing.T) {
 	}
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
 		s := []byte(stripANSITest(b))
-		return bytes.Contains(s, []byte("\u2713 read")) && bytes.Contains(s, []byte("done"))
+		return bytes.Contains(s, []byte("→ hello.txt")) && bytes.Contains(s, []byte("done"))
 	}, teatest.WithDuration(5*time.Second))
 
 	_ = tm.Quit()

@@ -87,11 +87,13 @@ func (sm *sessionModel) sync(st *store.State, w, h int, th theme.Theme, spin str
 
 // renderMessages renders the current session's transcript as viewport
 // content: user messages verbatim, assistant parts in arrival order
-// (reasoning as the spinner/Thought row, tool rows "✓/▶/✗ <tool>
-// <title>"), a divider before every message after the first, and message
-// errors as a red "! message" line. expanded maps partID to the parts
-// whose I/O block or reasoning text is shown; spin is the footer
-// spinner frame for the running reasoning row ("" in unit runs).
+// (reasoning as the spinner/Thought row, tool rows in the S1.7 glyph form —
+// "~ <pending>" running, "<icon> <title>" completed, "<icon>
+// <failure ?? title>" error), a divider before every message after the
+// first, and message errors as a red "! message" line. expanded maps partID
+// to the parts whose I/O block or reasoning text is shown; spin is the
+// footer spinner frame for the running reasoning + read rows ("" in unit
+// runs).
 func renderMessages(st *store.State, expanded map[string]bool, w int, th theme.Theme, spin string) string {
 	var tr, rr *theme.Renderer
 	if !th.Zero() {
@@ -249,17 +251,22 @@ func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool, w in
 				}
 			}
 		case "tool":
-			sty, row, ok := toolRowLine(p, th)
+			sty, row, ok := toolRow(p, th, spin)
 			if !ok {
 				continue
 			}
 			writeStyled(sty, row)
 			switch {
+			case expanded[p.ID] && p.State != nil && p.State.Status == "error":
+				// The upstream expanded error (InlineToolRow 1992-1999):
+				// the FULL error at the icon width (2), fg=error.
+				if p.State.Error != "" {
+					for _, l := range strings.Split(p.State.Error, "\n") {
+						writeStyled(th.Error(), "  "+l)
+					}
+				}
 			case expanded[p.ID] && p.State != nil:
 				block := tailLines(p.State.Output, 40)
-				if p.State.Status == "error" {
-					block = p.State.Error
-				}
 				if block == "" {
 					continue
 				}
@@ -267,8 +274,7 @@ func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool, w in
 					writePlain("  " + l)
 				}
 			case p.Tool == "bash" && p.State != nil && p.State.Status == "completed":
-				// Inline preview (upstream parity): a completed bash part
-				// shows the 10-line head of its output without alt+e.
+				// Inline preview (S0 lock): the 10-line head.
 				if block := headPreview(p.State.Output, 10); block != "" {
 					for _, l := range strings.Split(block, "\n") {
 						writePlain("  " + l)
@@ -349,13 +355,61 @@ func openMark(open bool) string {
 	return "+"
 }
 
-// toolRowLine renders the locked tool row: "✓ <tool> <title>" completed,
-// "▶ <tool> <title>" running, "✗ <tool> <error>" error (first error line),
-// in the upstream InlineTool fg tokens (index.tsx:1882-1889): completed ->
-// textMuted, running -> text, error -> error. A zero Theme (nil-engine
-// runs, S0.7) degrades to plain rows — never a panic. The caller applies
-// the style per wrapped line (the row may wrap).
-func toolRowLine(p protocol.Part, th theme.Theme) (lipgloss.Style, string, bool) {
+// toolGlyph is the per-tool icon (upstream InlineTool icon props,
+// index.tsx:2105-2545 — the 2-column slot is the glyph + space).
+func toolGlyph(tool string) string {
+	switch tool {
+	case "bash":
+		return "$"
+	case "write", "edit":
+		return "←"
+	case "glob", "grep":
+		return "✱"
+	case "read":
+		return "→"
+	default:
+		return "⚙"
+	}
+}
+
+// toolPending is the upstream pending text (the running row, index.tsx
+// pending= props).
+func toolPending(tool string) string {
+	switch tool {
+	case "bash":
+		return "Writing command..."
+	case "write":
+		return "Preparing write..."
+	case "edit":
+		return "Preparing edit..."
+	case "glob":
+		return "Finding files..."
+	case "grep":
+		return "Searching content..."
+	case "read":
+		return "Reading file..."
+	case "todowrite":
+		return "Updating todos..."
+	default:
+		return "Working..."
+	}
+}
+
+// toolFailure is the upstream failure= prop (the error row text when the
+// part has no title).
+func toolFailure(tool string) string {
+	if tool == "todowrite" {
+		return "Todo update failed"
+	}
+	return ""
+}
+
+// toolRow renders the upstream InlineTool row: the running row is "~
+// <pending>" at fg=text (read: "<spin> Reading file..."), the completed
+// row "<icon> <title>" at fg=textMuted, the error row "<icon>
+// <failure ?? title>" at fg=error (index.tsx:1882-1889, 1966-1990).
+// A zero Theme degrades to plain rows (the S0.10 contract).
+func toolRow(p protocol.Part, th theme.Theme, spin string) (lipgloss.Style, string, bool) {
 	st := p.State
 	status := "running"
 	title := ""
@@ -366,23 +420,23 @@ func toolRowLine(p protocol.Part, th theme.Theme) (lipgloss.Style, string, bool)
 	if title == "" {
 		title = toolTitleFallback(p)
 	}
+	icon := toolGlyph(p.Tool) + " "
 	switch status {
 	case "completed":
-		return th.TextMuted(), "\u2713 " + p.Tool + " " + title, true
+		return th.TextMuted(), icon + title, true
 	case "error":
-		errText := ""
-		if st != nil {
-			errText = st.Error
+		text := toolFailure(p.Tool)
+		if text == "" {
+			text = title
 		}
-		if i := strings.IndexByte(errText, '\n'); i >= 0 {
-			errText = errText[:i]
-		}
-		if errText == "" {
-			errText = title
-		}
-		return th.Error(), "\u2717 " + p.Tool + " " + errText, true
+		return th.Error(), icon + text, true
 	default:
-		return th.Text(), "\u25B6 " + p.Tool + " " + title, true
+		// read: the upstream spinner row (spinner={isRunning()}); a
+		// zero-spin caller (zero-theme/unit runs) degrades to "~".
+		if p.Tool == "read" && spin != "" {
+			return th.Text(), spin + " " + toolPending("read"), true
+		}
+		return th.Text(), "~ " + toolPending(p.Tool), true
 	}
 }
 

@@ -69,7 +69,7 @@ func TestTUIFullTurn(t *testing.T) {
 		full = stripANSI(string(b))
 		return strings.Contains(full, "User: do it") &&
 			strings.Contains(full, "thinking now") &&
-			strings.Contains(full, "\u2713 read") &&
+			strings.Contains(full, "→ hello.txt") &&
 			strings.Contains(full, "all done")
 	}, teatest.WithDuration(10*time.Second))
 
@@ -84,7 +84,7 @@ func TestTUIFullTurn(t *testing.T) {
 	idx := []int{
 		strings.Index(full, "User: do it"),
 		strings.Index(full, "thinking now"),
-		strings.Index(full, "\u2713 read"),
+		strings.Index(full, "→ hello.txt"),
 		strings.Index(full, "all done"),
 	}
 	for i := range idx {
@@ -202,10 +202,11 @@ func TestTUIPermissionFlow(t *testing.T) {
 		tm, ts := permFlowHarness(t)
 		driveToPermDialog(t, tm, ts)
 		tm.Send(press('1'))
-		// Zero-engine run: the completed row re-emits only its changed
-		// icon cell (no static SGR to force a whole-line re-render), so
-		// pin the ✓ icon + the final text (deviation 140).
-		teatest.WaitFor(t, tm.Output(), hasLines("\u2713", "all done"), teatest.WithDuration(5*time.Second))
+		// Zero-engine run: the running->completed transition rewrites the
+		// WHOLE row (`~ Writing command...` -> `$ echo hi`), so the full
+		// completed line lands in the drain — pin it + the final text
+		// (deviation 140 pinned the pre-S1.7 icon-cell form).
+		teatest.WaitFor(t, tm.Output(), hasLines("$ echo hi", "all done"), teatest.WithDuration(5*time.Second))
 		_ = tm.Quit()
 		tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 	})
@@ -213,10 +214,11 @@ func TestTUIPermissionFlow(t *testing.T) {
 		tm, ts := permFlowHarness(t)
 		driveToPermDialog(t, tm, ts)
 		tm.Send(press('2'))
-		// Zero-engine run: the completed row re-emits only its changed
-		// icon cell (no static SGR to force a whole-line re-render), so
-		// pin the ✓ icon + the final text (deviation 140).
-		teatest.WaitFor(t, tm.Output(), hasLines("\u2713", "all done"), teatest.WithDuration(5*time.Second))
+		// Zero-engine run: the running->completed transition rewrites the
+		// WHOLE row (`~ Writing command...` -> `$ echo hi`), so the full
+		// completed line lands in the drain — pin it + the final text
+		// (deviation 140 pinned the pre-S1.7 icon-cell form).
+		teatest.WaitFor(t, tm.Output(), hasLines("$ echo hi", "all done"), teatest.WithDuration(5*time.Second))
 		_ = tm.Quit()
 		tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 	})
@@ -224,7 +226,22 @@ func TestTUIPermissionFlow(t *testing.T) {
 		tm, ts := permFlowHarness(t)
 		driveToPermDialog(t, tm, ts)
 		tm.Send(press('3'))
-		teatest.WaitFor(t, tm.Output(), hasLines("\u2717 bash", "permission rejected", "all done"), teatest.WithDuration(5*time.Second))
+		// The rejected row is the CallID fallback (`$ call_1` — failToolPart
+		// persists empty Input for a rejected tool), coalesced with the
+		// final text in the post-dialog frame. That frame is also the sync
+		// point for the expansion: the reject reply clears store.Pending
+		// only async (permReplyMsg / permission.replied), and while Pending
+		// is non-empty handleKey routes every key to handlePermKey — an
+		// alt+e queued right after '3' would be eaten. permission.replied
+		// precedes the part update on the bus, so by this render Pending is
+		// provably cleared and the next alt+e reaches the session ladder.
+		teatest.WaitFor(t, tm.Output(), hasLines("$ call_1", "all done"), teatest.WithDuration(5*time.Second))
+		// S1.7: the rejected row no longer carries the error text — it
+		// renders via the S1.7 expansion, so alt+e expands the rejected
+		// part; the deviation-56 "permission rejected" pin stays on the
+		// expanded error block.
+		tm.Send(pressAlt('e'))
+		teatest.WaitFor(t, tm.Output(), hasLine("permission rejected"), teatest.WithDuration(5*time.Second))
 		_ = tm.Quit()
 		tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 	})

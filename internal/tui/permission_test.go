@@ -272,10 +272,11 @@ func TestPermissionDialogKeyReply(t *testing.T) {
 
 	tm.Send(permKey('1'))
 
-	// Zero-engine run: the completed row re-emits only its changed icon
-	// cell (no static SGR to force a whole-line re-render), so pin the ✓
-	// icon + the final text (deviation 144).
-	teatest.WaitFor(t, tm.Output(), hasLines("\u2713", "done"), teatest.WithDuration(5*time.Second))
+	// Zero-engine run: the running->completed transition rewrites the
+	// WHOLE row (`~ Writing command...` -> `$ ls -la`), so the full
+	// completed line lands in the drain — pin it + the final text
+	// (deviation 144 pinned the pre-S1.7 icon-cell form).
+	teatest.WaitFor(t, tm.Output(), hasLines("$ ls -la", "done"), teatest.WithDuration(5*time.Second))
 	if got := waitPending(t, ts, 0); len(got) != 0 {
 		t.Fatalf("pending = %+v, want empty after reply", got)
 	}
@@ -316,10 +317,11 @@ func TestPermissionDialogHTTPReply(t *testing.T) {
 		t.Fatalf("ReplyPermission: %v", err)
 	}
 
-	// Zero-engine run: the completed row re-emits only its changed icon
-	// cell (no static SGR to force a whole-line re-render), so pin the ✓
-	// icon + the final text (deviation 144).
-	teatest.WaitFor(t, tm.Output(), hasLines("\u2713", "done"), teatest.WithDuration(5*time.Second))
+	// Zero-engine run: the running->completed transition rewrites the
+	// WHOLE row (`~ Writing command...` -> `$ ls -la`), so the full
+	// completed line lands in the drain — pin it + the final text
+	// (deviation 144 pinned the pre-S1.7 icon-cell form).
+	teatest.WaitFor(t, tm.Output(), hasLines("$ ls -la", "done"), teatest.WithDuration(5*time.Second))
 	if got := waitPending(t, ts, 0); len(got) != 0 {
 		t.Fatalf("pending = %+v, want empty after the replied event", got)
 	}

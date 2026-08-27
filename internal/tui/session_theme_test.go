@@ -72,8 +72,8 @@ var (
 var (
 	// The row/dot markers are literal UTF-8 runes: Go's regexp has no \u
 	// escape (the plan snippet's `\u2713` in a raw string panics at init).
-	completedRowRe = regexp.MustCompile(`\x1b\[(?:[0-9]+;)*38;5;244(?:;[0-9]+)*m✓ read`)
-	errorRowRe     = regexp.MustCompile(`\x1b\[(?:[0-9]+;)*38;5;246(?:;[0-9]+)*m✗ bash`)
+	completedRowRe = regexp.MustCompile(`\x1b\[(?:[0-9]+;)*38;5;244(?:;[0-9]+)*m→ hello.txt`)
+	errorRowRe     = regexp.MustCompile(`\x1b\[(?:[0-9]+;)*38;5;246(?:;[0-9]+)*m\$ call_2`)
 	liveDotRe      = regexp.MustCompile(`\x1b\[(?:[0-9]+;)*38;5;114(?:;[0-9]+)*m● live`)
 	// The prompt cursor: the static virtual cursor's render is
 	// fg(text)+reverse (bubbles cursor.View: Style.Inline(true).Reverse(true),
@@ -156,7 +156,7 @@ func TestSessionChromeThemeSGR(t *testing.T) {
 			return false
 		}
 		s := stripANSI(string(b))
-		if !strings.Contains(s, "\u2713 read") || !strings.Contains(s, "\u25CF live") {
+		if !strings.Contains(s, "→ hello.txt") || !strings.Contains(s, "\u25CF live") {
 			return false
 		}
 		for _, tok := range chromeTokensSettled {
@@ -175,7 +175,7 @@ func TestSessionChromeThemeSGR(t *testing.T) {
 	// token) + the final text (deviation 141).
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
 		s := stripANSI(string(b))
-		if !strings.Contains(s, "\u2717 bash") || !strings.Contains(s, "all done") {
+		if !strings.Contains(s, "$ call_2") || !strings.Contains(s, "all done") {
 			return false
 		}
 		for _, tok := range chromeTokensRejected {
@@ -214,29 +214,29 @@ func TestToolRowLineTheme(t *testing.T) {
 			name: "completed -> textMuted",
 			part: protocol.Part{ID: "t1", Type: "tool", Tool: "read", CallID: "call_1",
 				State: &protocol.ToolState{Status: "completed", Title: "f.go"}},
-			want:   "\u2713 read f.go",
+			want:   "→ f.go",
 			fgWant: "#808080",
 		},
 		{
 			name: "running -> text",
 			part: protocol.Part{ID: "t2", Type: "tool", Tool: "bash", CallID: "call_2",
 				State: &protocol.ToolState{Status: "running", Title: "ls -la"}},
-			want:   "\u25B6 bash ls -la",
+			want:   "~ Writing command...",
 			fgWant: "#eeeeee",
 		},
 		{
 			name: "error -> error",
 			part: protocol.Part{ID: "t3", Type: "tool", Tool: "grep", CallID: "call_3",
 				State: &protocol.ToolState{Status: "error", Title: "grep", Error: "no match"}},
-			want:   "\u2717 grep no match",
+			want:   "✱ grep",
 			fgWant: "#e06c75",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			st, row, ok := toolRowLine(tt.part, th)
+			st, row, ok := toolRow(tt.part, th, "")
 			if !ok || row != tt.want {
-				t.Fatalf("toolRowLine = (%q, %v), want (%q, true)", row, ok, tt.want)
+				t.Fatalf("toolRow = (%q, %v), want (%q, true)", row, ok, tt.want)
 			}
 			if got, want := st.GetForeground(), hexColor(tt.fgWant); got != want {
 				t.Errorf("fg = %v, want %v", got, want)
@@ -266,9 +266,9 @@ func TestSessionChromeZeroThemeIsPlain(t *testing.T) {
 	want := "User: hello\n" +
 		divider.Render(dividerLine()) + "\n" +
 		"Thinking\n" +
-		"\u2713 read src/main.go\n" +
-		"\u25B6 bash ls -la\n" +
-		"\u2717 grep pattern: no match\n" +
+		"→ src/main.go\n" +
+		"~ Writing command...\n" +
+		"✱ grep\n" +
 		"ok-text\n" +
 		"! something broke"
 	if got != want {

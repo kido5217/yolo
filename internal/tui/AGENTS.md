@@ -32,7 +32,7 @@ and the teatest suites.
   (S1.3) — the renderer's `WithWordWrap(w-3)` is their wrap strategy, every
   rendered line carries the upstream 3-column indent, and the styled output
   never reaches `wrapLine`. Styled lines wrap BEFORE styling
-  (`toolRowLine` returns the style + plain text; `writeStyled` re-renders
+  (`toolRow` returns the style + plain text; `writeStyled` re-renders
   each wrapped line). The viewport's hard clip remains the backstop, never
   the content strategy (no horizontal scroll is bound — clipped text would
   be unreadable). `WindowSizeMsg` sets `sess.isDirty` so a resize re-wraps.

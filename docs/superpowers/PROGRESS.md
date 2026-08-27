@@ -164,7 +164,7 @@ scroll, so pre-wrap the transcript lost everything past the right edge
 (unreadable; upstream ink word-wraps). `wrapLine` (`internal/tui/wrap.go`)
 word-wraps at the viewport width (word boundaries, over-long tokens
 hard-split, CJK/emoji = 2 columns, tab = separator, plain text only);
-styled lines wrap before styling (`toolRowLine` returns style + plain);
+styled lines wrap before styling (`toolRow` returns style + plain);
 `WindowSizeMsg` re-wraps via `sess.isDirty`. Tests: `TestWrapLine`,
 `TestRenderMessagesWrapsLongLines`, `TestTUILongReplyWraps` (the last word
 of a 1000-word single-line fake reply reaches the screen).

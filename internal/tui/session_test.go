@@ -55,9 +55,9 @@ func TestRenderMessages(t *testing.T) {
 			want: "User: hello\n" +
 				dividerLine() + "\n" +
 				"Thinking\n" +
-				"\u2713 read src/main.go\n" +
-				"\u25B6 bash ls -la\n" +
-				"\u2717 grep pattern: no match\n" +
+				"→ src/main.go\n" +
+				"~ Writing command...\n" +
+				"✱ grep\n" +
 				"ok-text",
 		},
 		{
@@ -66,10 +66,10 @@ func TestRenderMessages(t *testing.T) {
 			want: "User: hello\n" +
 				dividerLine() + "\n" +
 				"Thinking\n" +
-				"\u2713 read src/main.go\n" +
+				"→ src/main.go\n" +
 				"  line1\n  line2\n  line3\n" +
-				"\u25B6 bash ls -la\n" +
-				"\u2717 grep pattern: no match\n" +
+				"~ Writing command...\n" +
+				"✱ grep\n" +
 				"ok-text",
 		},
 		{
@@ -78,9 +78,9 @@ func TestRenderMessages(t *testing.T) {
 			want: "User: hello\n" +
 				dividerLine() + "\n" +
 				"Thinking\n" +
-				"\u2713 read src/main.go\n" +
-				"\u25B6 bash ls -la\n" +
-				"\u2717 grep pattern: no match\n" +
+				"→ src/main.go\n" +
+				"~ Writing command...\n" +
+				"✱ grep\n" +
 				"  pattern: no match\n  detail line\n" +
 				"ok-text",
 		},
@@ -92,9 +92,9 @@ func TestRenderMessages(t *testing.T) {
 			want: "User: hello\n" +
 				dividerLine() + "\n" +
 				"Thinking\n" +
-				"\u2713 read src/main.go\n" +
-				"\u25B6 bash ls -la\n" +
-				"\u2717 grep pattern: no match\n" +
+				"→ src/main.go\n" +
+				"~ Writing command...\n" +
+				"✱ grep\n" +
 				"ok-text",
 		},
 		{
@@ -105,9 +105,9 @@ func TestRenderMessages(t *testing.T) {
 			want: "User: hello\n" +
 				dividerLine() + "\n" +
 				"Thinking\n" +
-				"\u2713 read src/main.go\n" +
-				"\u25B6 bash ls -la\n" +
-				"\u2717 grep pattern: no match\n" +
+				"→ src/main.go\n" +
+				"~ Writing command...\n" +
+				"✱ grep\n" +
 				"ok-text\n" +
 				"! something broke",
 		},
@@ -129,10 +129,10 @@ func TestRenderMessages(t *testing.T) {
 			want: "User: hello\n" +
 				dividerLine() + "\n" +
 				"Thinking\n" +
-				"\u2713 read src/main.go\n" +
-				"\u2713 bash ls -la\n" +
+				"→ src/main.go\n" +
+				"$ ls -la\n" +
 				"  l1\n  l2\n  l3\n  l4\n  l5\n  l6\n  l7\n  l8\n  l9\n  l10\n  \u2026\n" +
-				"\u2717 grep pattern: no match\n" +
+				"✱ grep\n" +
 				"ok-text",
 		},
 		{
@@ -145,10 +145,10 @@ func TestRenderMessages(t *testing.T) {
 			want: "User: hello\n" +
 				dividerLine() + "\n" +
 				"Thinking\n" +
-				"\u2713 read src/main.go\n" +
-				"\u2713 bash ls -la\n" +
+				"→ src/main.go\n" +
+				"$ ls -la\n" +
 				"  a\n  b\n" +
-				"\u2717 grep pattern: no match\n" +
+				"✱ grep\n" +
 				"ok-text",
 		},
 		{
@@ -164,10 +164,10 @@ func TestRenderMessages(t *testing.T) {
 			want: "User: hello\n" +
 				dividerLine() + "\n" +
 				"Thinking\n" +
-				"\u2713 read src/main.go\n" +
-				"\u2713 bash ls -la\n" +
+				"→ src/main.go\n" +
+				"$ ls -la\n" +
 				"  l1\n  l2\n  l3\n  l4\n  l5\n  l6\n  l7\n  l8\n  l9\n  l10\n  l11\n  l12\n" +
-				"\u2717 grep pattern: no match\n" +
+				"✱ grep\n" +
 				"ok-text",
 		},
 		{
@@ -181,9 +181,9 @@ func TestRenderMessages(t *testing.T) {
 			want: "User: hello\n" +
 				dividerLine() + "\n" +
 				"Thinking\n" +
-				"\u2713 read src/main.go\n" +
-				"\u25B6 bash ls -la\n" +
-				"\u2717 grep pattern: no match\n" +
+				"→ src/main.go\n" +
+				"~ Writing command...\n" +
+				"✱ grep\n" +
 				"ok-text",
 		},
 	}
@@ -212,25 +212,30 @@ func TestRenderMessagesTitleFallbacks(t *testing.T) {
 		}
 		return s
 	}
+	// S1.7: the running row no longer renders the title (only the pending
+	// text), so these cases re-target to completed/error states where the
+	// title — and thus the fallback — is visible. Fallback coverage is
+	// preserved.
 	tests := []struct {
 		name string
 		s    store.State
 		want string
 	}{
 		{
-			name: "running tool without title falls back to command input",
+			name: "completed tool without title falls back to command input",
 			s: one(protocol.Part{
 				ID: "t2", Type: "tool", Tool: "bash", CallID: "call_2",
-				State: &protocol.ToolState{Status: "running", Input: map[string]any{"command": "ls -la"}},
+				State: &protocol.ToolState{Status: "completed", Input: map[string]any{"command": "ls -la"}},
 			}),
-			want: "\u25B6 bash ls -la",
+			want: "$ ls -la",
 		},
 		{
-			name: "nil state falls back to callID prefix 8",
+			name: "error tool without title falls back to callID prefix 8",
 			s: one(protocol.Part{
 				ID: "t8", Type: "tool", Tool: "read", CallID: "call_abcdef1234",
+				State: &protocol.ToolState{Status: "error"},
 			}),
-			want: "\u25B6 read call_abc",
+			want: "→ call_abc",
 		},
 	}
 	for _, tt := range tests {
