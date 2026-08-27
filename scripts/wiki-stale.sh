@@ -27,6 +27,15 @@ if [[ "$git_head" == "$head" ]]; then
   exit 0
 fi
 
+# The wiki commit itself (openwiki/ output + the root CLAUDE.md pointer) never
+# makes the wiki stale: only source outside openwiki/ since gitHead counts.
+# gitHead is the wiki commit's parent after a refresh, so a pure-wiki commit
+# must not trip the gate.
+if git diff --quiet "$git_head"..HEAD -- . ':(exclude)openwiki/**' ':(exclude)CLAUDE.md'; then
+  echo "wiki current (source unchanged since gitHead)"
+  exit 0
+fi
+
 echo "wiki STALE: gitHead $git_head, HEAD $head" >&2
 echo "refresh via the openwiki skill (host-driven update) before merging" >&2
 exit 1
