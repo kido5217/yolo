@@ -101,13 +101,22 @@ func (h *homeModel) moveCursor(s *store.State, d int) {
 
 const helpText = "\u2191/\u2193 move \u00B7 enter open \u00B7 n new \u00B7 /help"
 
-// render produces the locked home layout for the store: the 4-line upstream
+func (h *homeModel) render(s *store.State, w int, th theme.Theme) string {
+	return h.renderClamped(s, w, th, -1)
+}
+
+// renderClamped is render with the recent-session row count capped (maxRows
+// -1 = all; the modal stack, S2.2, clamps the chrome so the panel fits).
+// It produces the locked home layout for the store: the 4-line upstream
 // logo (S0.8), the session rows word-wrapped at the terminal width (the
 // cursor stays one stop per session — continuation lines align under the
 // content), the theme borderSubtle divider and the dimmed help line.
-func (h *homeModel) render(s *store.State, w int, th theme.Theme) string {
+func (h *homeModel) renderClamped(s *store.State, w int, th theme.Theme, maxRows int) string {
 	h.clampCursor(s)
 	rows := h.visible(s)
+	if maxRows >= 0 && len(rows) > maxRows {
+		rows = rows[:maxRows]
+	}
 	var b strings.Builder
 	b.WriteString(renderLogo(th))
 	b.WriteByte('\n')

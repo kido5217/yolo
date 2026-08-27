@@ -32,12 +32,37 @@ const (
 	dlgAgents
 )
 
+// dlgSize is the modal panel width (upstream DialogSize: medium 60, large
+// 88, xlarge 116; clamped to the terminal width by the stack).
+type dlgSize int
+
+const (
+	dlgMedium dlgSize = iota
+	dlgLarge
+	dlgXLarge
+)
+
+// width is the size's panel width in columns.
+func (s dlgSize) width() int {
+	switch s {
+	case dlgLarge:
+		return 88
+	case dlgXLarge:
+		return 116
+	default:
+		return 60
+	}
+}
+
 // dialog is a stack item; the picker dialogs (model/agent) carry their live
 // state as the item's payload, so pop drops state with the item.
 type dialog struct {
-	kind  dialogKind
-	model *modelDlg
-	agent *agentDlg
+	kind    dialogKind
+	model   *modelDlg
+	agent   *agentDlg
+	modal   bool       // true: rendered as the overlay frame (S2.2)
+	size    dlgSize    // the panel width, modal only
+	onClose func(*App) // the stack-pop callback (upstream result callback)
 }
 
 type dialogStack struct{ items []dialog }
@@ -79,6 +104,85 @@ func (d *dialogStack) agent() *agentDlg {
 		}
 	}
 	return nil
+}
+
+// pushModal pushes a modal item (upstream <Dialog> push): it owns the keys
+// until esc/ctrl+c or its own completion closes it; onClose fires when the
+// stack pops it.
+func (a *App) pushModal(item dialog, size dlgSize, onClose func(*App)) {
+	item.modal = true
+	item.size = size
+	item.onClose = onClose
+	a.dlg.push(item)
+}
+
+// closeTopModal pops the top modal and fires its onClose (esc/ctrl+c).
+func (a *App) closeTopModal() {
+	d, ok := a.dlg.top()
+	if !ok || !d.modal {
+		return
+	}
+	a.dlg.pop()
+	if d.onClose != nil {
+		d.onClose(a)
+	}
+}
+
+// replaceModal closes the top modal (firing its onClose) and pushes the
+// replacement (upstream DialogProvider replace).
+func (a *App) replaceModal(item dialog, size dlgSize, onClose func(*App)) {
+	a.closeTopModal()
+	a.pushModal(item, size, onClose)
+}
+
+// clearModals closes every modal top-down (non-modal items stop the walk).
+func (a *App) clearModals() {
+	for {
+		d, ok := a.dlg.top()
+		if !ok || !d.modal {
+			return
+		}
+		a.dlg.pop()
+		if d.onClose != nil {
+			d.onClose(a)
+		}
+	}
+}
+
+// modalCanceler is a modal payload that consumes esc for its own inner state
+// before the stack closes it (upstream: the model/agent subchoice).
+type modalCanceler interface {
+	cancelInner(tea.KeyPressMsg) bool
+}
+
+// cancelInner consumes esc while the subchoice overlay is open (the next esc
+// closes the dialog).
+func (m *modelDlg) cancelInner(tea.KeyPressMsg) bool {
+	if m.hasSubChoice {
+		m.hasSubChoice = false
+		return true
+	}
+	return false
+}
+
+// cancelInner is the agentDlg twin.
+func (m *agentDlg) cancelInner(tea.KeyPressMsg) bool {
+	if m.hasSubChoice {
+		m.hasSubChoice = false
+		return true
+	}
+	return false
+}
+
+// dialogCanceler is the payload's esc veto, if it has one.
+func dialogCanceler(d dialog) (modalCanceler, bool) {
+	switch {
+	case d.model != nil:
+		return d.model, true
+	case d.agent != nil:
+		return d.agent, true
+	}
+	return nil, false
 }
 
 // Static frame parts render once at package init instead of on every frame:
@@ -142,7 +246,30 @@ func (a *App) dlgView(w int) string {
 	return a.dlg.view(a.theme)
 }
 
+// modalInner renders the top modal's payload content at the panel width
+// (the stack draws the panel chrome; the payload supplies the inner lines).
+func (a *App) modalInner(d *dialog, w, h int) string {
+	switch d.kind {
+	case dlgModel:
+		if d.model != nil {
+			return d.model.view(&a.store, w, a.theme)
+		}
+	case dlgAgents:
+		if d.agent != nil {
+			return d.agent.view(&a.store, w, a.theme)
+		}
+	}
+	return ""
+}
+
 func (a *App) handleDialogKey(d dialog, k tea.KeyPressMsg) []tea.Cmd {
+	if d.modal && (key.Matches(k, escBinding) || key.Matches(k, dlgCtrlC)) {
+		if c, ok := dialogCanceler(d); ok && c.cancelInner(k) {
+			return nil
+		}
+		a.closeTopModal()
+		return nil
+	}
 	if d.kind == dlgQuit {
 		if key.Matches(k, dlgYes) {
 			return a.emit(quitCmd())

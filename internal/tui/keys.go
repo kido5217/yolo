@@ -9,6 +9,10 @@ import (
 
 var escBinding = key.NewBinding(key.WithKeys("esc"))
 
+// dlgCtrlC is the modal's second close binding (upstream dialog.tsx: esc AND
+// ctrl+c are both "Close dialog").
+var dlgCtrlC = key.NewBinding(key.WithKeys("ctrl+c"))
+
 // handleKey is the app key dispatcher: permission > dialog > model/agent
 // openers > slash menu > route > prompt. A pending permission ask owns every
 // key (1/2/3/esc only); while the slash menu is open it owns the keys; routes
