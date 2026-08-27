@@ -3,9 +3,6 @@ type: reference
 title: TUI Application
 description: "internal/tui: the bubbletea v2 App model with home/session routes, the Update loop and SSE event/resync pumps, the in-memory store (REST hydration + SSE Apply with a per-part delta fast path), the HTTP/SSE client over the wire contract, the key ladder, dialogs, toasts, and the import-purity contract enforced by TestImportsDirection."
 tags: [tui, bubbletea, app, store, client, sse, hydration, keymap, teatest]
-verified:
-  - by: openwiki/0.4.0
-    at: 2026-08-26T18:04:14.871Z
 sources:
   - id: openwiki-source-dc1a4c07786693904124eeb5
     resource: repo://internal/tui/app.go
@@ -13,15 +10,26 @@ sources:
     resource: repo://internal/tui/client/client.go
   - id: openwiki-source-8e451f54fa552553ca161ff0
     resource: repo://internal/tui/client/event.go
+  - id: openwiki-source-61c37d7a25b4ebc77cfdd9c5
+    resource: repo://internal/tui/dialog.go
   - id: openwiki-source-fb3c0893e313eb6d52b0f35e
     resource: repo://internal/tui/hydrate.go
   - id: openwiki-source-99b37a6823820f4cb0c51a48
     resource: repo://internal/tui/imports_test.go
   - id: openwiki-source-9810dd9771e7a2d6b9a8c61d
     resource: repo://internal/tui/keys.go
+  - id: openwiki-source-e692ce3e613731685fb28eb0
+    resource: repo://internal/tui/session.go
   - id: openwiki-source-73b92f8d965bfdb1db27b2bc
     resource: repo://internal/tui/store/store.go
-generated: {by: "opencode", at: "2026-08-26T18:04:14.871Z"}
+  - id: openwiki-source-a859fdd58e09bf9ec21041ff
+    resource: repo://internal/tui/toast.go
+  - id: openwiki-source-29148fd8f669f7236ca28db8
+    resource: repo://internal/tui/view.go
+generated: {by: "opencode", at: "2026-08-27T15:27:54.907Z"}
+verified:
+  - by: openwiki/0.4.0
+    at: 2026-08-27T15:27:54.907Z
 ---
 
 # TUI Application
@@ -139,14 +147,50 @@ hydrate).
 `handleKey` is the key dispatcher, a strict ladder:
 **permission > dialog > model/agent openers > slash menu > route
 (session/home) > prompt**. A pending permission ask owns every key
-(`1`/`2`/`3`/`esc`); an open dialog owns its keys; the slash menu (live-filtered
-over `store.Commands`) owns arrows/enter/esc; routes handle their navigation
-keys; everything else falls through to the always-focused prompt input.
+(`1`/`2`/`3`/`esc`); an open dialog owns its keys (a **modal** closes on esc
+**or ctrl+c** — `dlgCtrlC`, the upstream dialog.tsx twin of esc); the slash
+menu (live-filtered over `store.Commands`) owns arrows/enter/esc; routes
+handle their navigation keys; everything else falls through to the
+always-focused prompt input.
 
 `promptEnter` implements the **locked send semantics**: a trailing backslash
 soft-enters a draft line; empty input is ignored; a busy store toasts;
 otherwise the draft+line is sent and the input clears **only on success** (a
 server-side busy error leaves the line for retry).
+
+### Modal dialog stack (S2.2)
+
+The **modal stack** (dialog.go, port of upstream `dialog.tsx`) renders the
+top modal as an **overlay frame**: `viewModal` draws the route chrome clamped
+to the panel top, plain blank backdrop lines (deviation 166 — the upstream
+`rgba(0,0,0,0.15)` dim has no SGR equivalent), the centered panel
+(`backgroundPanel` fill, width `min(size, w-2)`, top padding 1, top at
+`max(h/4, chromeMin)`), and the footer on the last line. Prompt, menu, toasts
+and `lastErr` are **suppressed while a modal is open**. The chrome is clamped
+via `modalChromeMin` + the `renderClamped`/`sessionChrome` viewport math, so
+the panel always fits the terminal. Stack ops: `pushModal` (owns the keys
+until esc/ctrl+c or its own completion), `closeTopModal` (fires the `onClose`
+callback), `replaceModal`, and `clearModals` (closes every modal top-down);
+picker payloads (model/agent) carry an optional `cancelInner` veto that
+consumes esc for their inner sub-choice overlay before the stack closes.
+Static frame parts (the locked quit/help blocks) render once at package init.
+
+### Transcript surface family
+
+The session transcript renders through theme-derived surfaces
+(`renderMessages` / `renderAssistant` in session.go, all styled from the
+resolved theme, with one transcript + reasoning renderer built per render
+call): assistant **text parts** through the glamour renderer (GFM — tables,
+task lists, strikethrough — with **chroma-highlighted code blocks**);
+**reasoning parts** as a dimmed, collapsible header (`Thinking: title`,
+`▾/▸` open mark, `alt+e` toggles expansion) whose running/open header uses
+the warning token **pre-blended** at `ThinkingOpacity`; **tool rows** with a
+per-tool glyph + `alt+e` expand (completed `bash` runs also show an inline
+10-line head preview); and **error parts** in a left-only-border box
+(`messageErrorBoxStyle`, `error` color) — the same visual language as the
+**toasts**, which render newest-on-top in a left-only Error-colored box
+(`toastsView`, cap 3, 4s auto-clear) that the themeless zero-engine path
+falls back to plain red lines for.
 
 `view.go` renders the active route, the dialog overlay, and the last error line
 into a `tea.View` (bubbletea v2's Model interface returns `tea.View`, not

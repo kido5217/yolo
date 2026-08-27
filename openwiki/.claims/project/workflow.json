@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:623a9a07a76c694eabcaa09e1f3d3e84356cc584f98680f8902c94bae31c9df2",
+  "pageVersion": "sha256:c9c7777b43a49a1b13ef467a1b7c7428764eb89e60d0e3bb7b4d681f9c8ff925",
   "claims": [
     {
       "id": "claim_36ac246cecb94ca6bfb83b6eab9c3d91",
@@ -69,8 +69,8 @@
       "statement": "The dependency policy is allowlist + agent-proposable: runtime deps are pinned at exact versions, and anything outside the allowlist requires an agent dependency proposal before any go get/go mod tidy (module + exact version, live-verified evidence of maintenance/license/transitive surface, why stdlib is inadequate); landing requires explicit user approval and an approved dep joins the allowlist plus a PROGRESS.md fact.",
       "evidence": [
         {
-          "resource": "repo://AGENTS.md#L14-L27",
-          "version": "repo-lines-v1:sha256:ce826542046fe692ed69f5d53a738bbcf672b93dc8ad15b540b03175690c3b60:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUxM2FjMGJmYWNmMjJiYWRiMzlkOTJiM2UzMjRiMjZiYTQwYjMxNGZlYTY5MDZiMGZhNDU3ZmFkMmViZTgwZDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI4N2Y5NzVlMTAxMjA5Mjc2ZTA1NjQwYjg4YmRhMmYxMGM2NzAxM2FjY2M3ZTFlMjAzMzkxZjU1YjU4ZjY2NjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE3YmU5NGZmYWVjYWEzOTk4YzczM2NmMjJlMmMyNmQ4ZGNkMmEwOWY4MDc2MGJjMjVkM2Q3Y2VhZTZkZjZmNjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgwNGViZmMxOWIzZTI0MWE0NDM5YjMxMzA5NmVlMGUzZDg0YzRiMmZkYTZiNTQ5MmY3ZWRhZDQyM2Y5MmY1NDYifQ"
+          "resource": "repo://AGENTS.md#L14-L35",
+          "version": "repo-lines-v1:sha256:558a344b2322ead9994d2a07305e50cd08b638998a9d0e947c46856758998324:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUxM2FjMGJmYWNmMjJiYWRiMzlkOTJiM2UzMjRiMjZiYTQwYjMxNGZlYTY5MDZiMGZhNDU3ZmFkMmViZTgwZDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAzM2QxZmU2NzhmMjA5ZTNkY2IzMTk4ZjIzNTI5ZjVjMTBkNjE3N2Q1MjU5M2YzOWIxYjg5NjY5ZjJiNTI5ZjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE3YmU5NGZmYWVjYWEzOTk4YzczM2NmMjJlMmMyNmQ4ZGNkMmEwOWY4MDc2MGJjMjVkM2Q3Y2VhZTZkZjZmNjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc0YTMyMjMwMzVmODk4NGM3YzA4MTM0MTRhN2E3MDZkYzNjNTlkNWMzOGFhYWJjNTJiMDBkYTRhM2FmMzhjYTQifQ"
         }
       ]
     },
@@ -79,8 +79,8 @@
       "statement": "Commit and branch discipline: never commit directly onto main — every change is committed on a task branch and reaches main only via a merged PR; work happens inline one task at a time with conventional commits using the plan's pinned message; tags only with explicit user go-ahead under semantic versioning.",
       "evidence": [
         {
-          "resource": "repo://AGENTS.md#L71-L79",
-          "version": "repo-lines-v1:sha256:dfa5ce0a89d7bb70849c56bbe21c766c9c15cfe439ec80c9e0be7f641c757cb0:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOWE4YzdmMzk1MTA4NGU2NGI3ZmMwNzU1OWMzM2YyZDA3NGM3ZDI0OWI2Yzk5YjUyNWU3MDY5YmM4NDFkODQ0YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNGRjYzI0NzIzNjM4YjI4MmM3ODg0NDIxMzA1NzJiYWQ0M2QwNGMyMTM1OWFjZjcxMjYyNmYxMTE1ZGYzNjAzMCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzBkOTY3N2FmNzExODI5MDI4N2ZiMTk4YWNjY2E2NzhhZDZiMGRmZGQyNTY2ZTgxYmQ5NjNjNzNkNTQ1ZmEyYSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzk3ZGY5OTJhN2ExNGRhMTcxZDkyNzAxZTJiZjQ1ODFmYzY1YTliMzQ2MTk4OGI3Zjk4M2U1YmVhMWI1NGEzMSJ9"
+          "resource": "repo://AGENTS.md#L76-L82",
+          "version": "repo-lines-v1:sha256:0279ddae051f1c9328644879eb108e162f20114b2eddbfc6117823c795140c0c:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOWE4YzdmMzk1MTA4NGU2NGI3ZmMwNzU1OWMzM2YyZDA3NGM3ZDI0OWI2Yzk5YjUyNWU3MDY5YmM4NDFkODQ0YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiY2MyZmMzOGQ1NzM1YmYwZDI0MDQ3YWM4YzIzNjkzNWY4MDBlNTVjNmIzYTNlZjc3ZmIzMGVkN2EzZTk4MWRkMCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzBkOTY3N2FmNzExODI5MDI4N2ZiMTk4YWNjY2E2NzhhZDZiMGRmZGQyNTY2ZTgxYmQ5NjNjNzNkNTQ1ZmEyYSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTE3MGE5YmY0MGE3YTBlNzc5MmQyZWYzMDZiYjU4NWFmZDVhNjgyZTY1ZjRlOTAyYWFjMDc5ZTA2ZGVmZTIyZiJ9"
         }
       ]
     },
@@ -89,8 +89,8 @@
       "statement": "The verification gate: every task ends with go vet ./... && go test ./... green and a commit, plus a clean gofmt -l .; unit tests never hit the network (live paths are env-gated via YOLO_LLM=fake) and the e2e smoke is user-run, never CI.",
       "evidence": [
         {
-          "resource": "repo://AGENTS.md#L63-L70",
-          "version": "repo-lines-v1:sha256:ef442272e77c3771952e03bdf21e82a16cef66aa412aeec42bba6600e80337c2:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzZhMmE1NzcyZDgzZTdhMzU2YThmMzQwODkxNmM4MTIyYjlhZGQ3YmQ1N2QyMDhlZjFlNDAwZWVkNzJiNjgyZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTExOWQwYTEzOWRlYjg0N2E4YjljOGQ5Mzg1YTk0YWJhZDgxMDBkMWUyNDE5ZTg0YTg0ODVkYmZiMjEyYmM3MyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOTc4M2MxNDIzMWFiYTFmYzFiYzFmNDI0NTkyNGM2ODYyYWU3NGZlMGI1MGMyMTdmZDMxZDA4MzU4OGM2NWZjYiJ9"
+          "resource": "repo://AGENTS.md#L68-L74",
+          "version": "repo-lines-v1:sha256:15cff897b590004722e476e135ce0297a4eae21cd5fdd23ba8c0d129693d7771:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzZhMmE1NzcyZDgzZTdhMzU2YThmMzQwODkxNmM4MTIyYjlhZGQ3YmQ1N2QyMDhlZjFlNDAwZWVkNzJiNjgyZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOGNjNWQwNjNhZWQ2ZDllYzg0OWRhOTk3M2Y3ZmZmMmYxODM0YTc5NGU2N2QxOTNhYTkxNTM5NTk4ZmZkNGVlMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTExOWQwYTEzOWRlYjg0N2E4YjljOGQ5Mzg1YTk0YWJhZDgxMDBkMWUyNDE5ZTg0YTg0ODVkYmZiMjEyYmM3MyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDRmMDJlYzY1ZjJhMzM3NTRmYWYyMTAxYTdlODVlMTlhZjRlNTdhYjdmMWI0NTliMjlmZTEwMDU5ZDRjMTFjZSJ9"
         }
       ]
     },
@@ -121,10 +121,24 @@
           "version": "repo-lines-v1:sha256:f670ceba405b1e9e18a2cad839e71eb5a3913b49c69f49f31be48bcf716b0480:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjEyMTIzMzM0ZjBlMjdmYTllN2U5ODAwMzEzODRkMDlmNDZlYWM0NzE2ZTNiY2I2NGI2NzI4ZDE4MDMzNDc2YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmE1NDgwM2U2MDlkYzMyNDg3MjM4OGFkNmI3ZTE5ZmFhNDJiMGU0ZjY5ODI0NzRjNTgzYzc2ZDgxNTgzOTQzZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDkxZTQ2MzlhZGQyMDRkM2MyNmY3YWExMjhhYjMzMWMzMmUxYjA3NWVhZDcyODQzYjBkOTcxYjRlZDljZmRkMSJ9"
         }
       ]
+    },
+    {
+      "id": "claim_c1f27ea88cfe47f996a47111da0ba312",
+      "statement": "The pre-merge OpenWiki wiki gate: just wiki-stale (scripts/wiki-stale.sh) exits 1 when the gitHead recorded in openwiki/.last-update.json trails HEAD; the wiki then refreshes via the openwiki skill's host-driven update (openwiki_begin mode=update) — there is no scheduled CI workflow — and the gate is the first step of the AGENTS.md requesting-code-review row.",
+      "evidence": [
+        {
+          "resource": "repo://AGENTS.md#L99-L103",
+          "version": "repo-lines-v1:sha256:1e047ded6d9233c1d5a0d7e53dd4637504a43297b50bda87b0340b002b3327be:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDg0ZTlmZjM0YzQxZWY3YTk4NDFkOTY0NmVkMmM5NjVhYzEyYjBkNTAyMGJhMGI3M2VkOTNiY2U1NDMwNDJhYyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjMyY2M2NTJkZDI2ODg4ZTE2NzgwZDU0Njg3OTFlMzZjNmI3NjQyZTA4YWJjYTczYTNhMzU5NGJlNzQ4NTc4NyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZmIxYWY2ZGJiOTQ0N2MxYTIwZGY1N2JlZmFhM2Y2Mzc0YzBkNTI0NjE1YTI5MzI0N2QzZTRhMDYxYmY2NjI3ZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjM3NjZjOGY4MmQ5YTFiNzUzOTkyMzI3NjQ1Y2RkYjE0NWQ5MDI4NWI2ODZkODhmOWFjZjA5MGYxZGNhZWEyMyJ9"
+        },
+        {
+          "resource": "repo://scripts/wiki-stale.sh",
+          "version": "repo-file-v1:sha256:eaeec9889967288afa8a04571751f29a44d655ce8b3710f0da4a7d000a9c9bd3"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.4.0",
-    "at": "2026-08-26T18:04:14.871Z"
+    "at": "2026-08-27T15:27:54.907Z"
   }
 }

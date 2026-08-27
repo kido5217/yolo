@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:46b0b891fe929cdbebb270196089e5f24944359f5d6142c8becbf28f740b50c8",
+  "pageVersion": "sha256:f6086ddf01750d2514528f19536d5342048e0fc1711397c00546527f074023ac",
   "claims": [
     {
       "id": "claim_227165d699434df497d96ba2b01629dd",
@@ -86,31 +86,49 @@
     },
     {
       "id": "claim_68025e33efb54107addfdcb5120a8b88",
-      "statement": "Theme is a resolved theme + name/mode exposing lipgloss styles (components never see hex, spec §3); fg/bg yield an empty style for an absent or transparent (alpha 0) token; SelectedForeground is the upstream contrast rule (explicit selectedListItemText wins; a transparent background contrasts via the luminance rule 0.299r+0.587g+0.114b > 0.5 -> black else white; else the background); the token accessors (Text, TextMuted, Primary, ..., Markdown*, Syntax*, Diff*) map each semantic token to a lipgloss style.",
+      "statement": "Theme is a resolved theme + name/mode exposing lipgloss styles (components never see hex, spec §3); fg/bg yield an empty style for an absent or transparent (alpha 0) token; SelectedForeground is the upstream contrast rule (explicit selectedListItemText wins; a transparent background contrasts via the luminance rule 0.299r+0.587g+0.114b > 0.5 -> black else white; else the background); the token accessors (Text, TextMuted, Primary, ..., Markdown*, Syntax*, Diff*) map each semantic token to a lipgloss style, and WarningSubtle pre-blends the warning token over the background at ThinkingOpacity via blended() (identity when the token or background is absent or alpha is outside (0,1)).",
       "evidence": [
         {
-          "resource": "repo://internal/tui/theme/styles.go#L7-L116",
-          "version": "repo-lines-v1:sha256:934c2b61f1c0300d6f2aaa76cf2c0668a1667bf8dacf46178dbc414bedfef792:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI1YWMzYjE2ZWY5NDdkYzhhM2UyZTA4Y2FkNDY1YTk4MTdkZDU1ZjBkMTJhYjdlZjg5MThjMTAwMDQ1ZmU5YmI2IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIzMjczMmI1NDYwY2U5YjMyZWQxMjY4NGFhZDE0OTE5NzM4YThkZjY3YzMxMmIwZGMzOGE3N2UyOWE0OTY0MzUzIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIzZThmNmNlMWJhMjkyNjFjYWFlNzQyODc5YzYyOGM3YTYyZGQ5ZWMyMGMyNTc2N2NkMzFmNWJjNWE0N2NjODdiIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MCwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0"
+          "resource": "repo://internal/tui/theme/styles.go#L18-L68",
+          "version": "repo-lines-v1:sha256:486a79b25e72fc54e67b1f91aa62dc3fb84322757ab99a0816cc918e4b94999d:eyJzZWxlY3RlZExpbmVDb3VudCI6NTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM5NWE5MzEyYmZhMzdlZDIyMjM2MTRjNzU1Y2Y5YTRmMzVjYjE3MTRlZDhlMGY1NjVkMzQyZDk4MjhhZTNlOGEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM3MGFhMDJjMDNkZTMxODJiZjQ5Mzk0NjRmZjJmZDM1YjRmNzg5NGQzYzVjYTBiNjAwYTg3Yjg5YjcyMWIxYWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIyYTYzNmFiMmE3NGJhNzNkN2UwMTUxM2JmOTgwMTgyZGFjZWZjYjA2NWFhNDA0ZjI4MGIyOGI3Mjk4YTAwNmYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIzNTE5MmJkY2Q0NWJjNzgxYTIxYTJiZGQwMDY0MjJhNmRjMTRlMzM1YjMzYzEzOTcxOWZmODQ4OWJiMDljN2EifQ"
+        },
+        {
+          "resource": "repo://internal/tui/theme/styles.go#L99-L151",
+          "version": "repo-lines-v1:sha256:17ad1edead53f123a90ee2bbf2b37c3389e748b8aaab950271935589d5a36e44:eyJzZWxlY3RlZExpbmVDb3VudCI6NTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY1NTlhMGQzYmNiMjE5MGUyZGM5ODExYjE5Mzc5ZmFmNDQ4N2ViZDJmODQ3ZGE3ZmRiNmQ1ZTY2NzI1Yzg4NzEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMyNzMyYjU0NjBjZTliMzJlZDEyNjg0YWFkMTQ5MTk3MzhhOGRmNjdjMzEyYjBkYzM4YTc3ZTI5YTQ5NjQzNTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJjMjE4NDlmNTEwNjcxNDI3Zjc3YmIyYzU5NzBiMDUyZmJkZjdmNTdjN2NkZmIyN2ZmYjhjZjE5M2I2YzE2N2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         }
       ]
     },
     {
       "id": "claim_7dde9c14703441bc9473a226f8f3e113",
-      "statement": "StyleConfig builds the glamour element styles from the markdown* tokens (base = 'markdownText' for text parts and 'textMuted' for reasoning, the word-wrap width also driving the horizontal-rule line length with an <4 -> 8-dash fallback); NewTranscriptRenderer builds a glamour TermRenderer word-wrapped at width, and a zero Theme (a nil-engine run) skips WithStyles so glamour renders plain with no SGR; the SGR profile is 24-bit for plain text but 256-color for the code-block path in a plain unit context, while under teatest glamour emits 256-color for both (teatest goldens pin 38;5;N); the chroma token map + the global 'charm' style-slot workaround for per-language code highlighting is the planned S1.4 work and in the current tree CodeBlock.Chroma is still nil (pinned by syntax_test.go).",
+      "statement": "Chroma() builds the full syntax token map (upstream getSyntaxRules: Text, italic Comment/Keyword/KeywordReserved, bold-italic KeywordType, Operator, Punctuation, Name* and Literal* mapping each syntax* token with NameBuiltin to error); SubtleChroma() is the reasoning variant (upstream generateSubtleSyntax) pre-blending every foreground over the theme background at ThinkingOpacity (out = round(fg*alpha + bg*(1-alpha)), half-up per channel, absent background #000000) because SGR 24-bit carries no alpha and lipgloss parseHex takes 6-digit hex only; newRenderer attaches the map to cfg.CodeBlock.Chroma and registers it under the global 'charm' style-slot, Render deletes the slot first so the transcript (full) and reasoning (subtle) renderers plus SIGUSR2 theme switches never cross-color, and a zero Theme keeps the chroma pointer nil skipping the slot delete (deviations 149/152).",
       "evidence": [
         {
-          "resource": "repo://internal/tui/theme/syntax.go#L1-L127",
-          "version": "repo-lines-v1:sha256:457cfa25b6688ef4b07b956ee1dfe6c42a673436082ecfa087a446f6ecc977ac:eyJzZWxlY3RlZExpbmVDb3VudCI6MTI3LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI4NjQyMjkzMDhkOTNjZDkzYzhiYTMyNzU1MTdkYzRjNmU5MGYxYzdmNDViNDFjMjZiMjRhN2I1NDI2N2M5NWYwIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyYmE0ZTFmOTFjMWI4MjVmYjdiYTc4YzA4MmRjOWU0ZTJkNGE3MGY1ZDllMTQ2ZmIzMzEzZmQwOWRiNGNjYzZhIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MCwicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MCwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0"
+          "resource": "repo://internal/tui/theme/syntax.go#L184-L248",
+          "version": "repo-lines-v1:sha256:626987eccf1db6cd0bf9661fe966d9970ab1c046415e9efedac8d90f698de396:eyJzZWxlY3RlZExpbmVDb3VudCI6NjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJiNGI1NDk5YjkxMzhiYWMzNDk2YzkyN2Y3YjcwNGQ2OTVhYmUxYzk5ZDYyNWQ5ODVlNzUzOTVjMTg2Zjk2YjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjEyYTA4Yjk5ZDNlOWJmNDYyYmI1YWZlNmI4YmUwNzRiNmMzMDI0ZTU0MDg2MmNiMjViMDU0ZGUzNzUxYjVmZWIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         },
         {
-          "resource": "repo://internal/tui/theme/syntax_test.go#L112-L113",
-          "version": "repo-lines-v1:sha256:b1d807e4b90a280581315aad5e06bd5a0effe8e5fc07df36a278ac637db9cd09:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTM4YTk2MWY3NTE5YjA0YjU3YjEyNjMzOGE2ZTFmM2I5ZGM1NDc3MTA2MDFiZDYwYTgzZDk0NDViMjRlMWY1NSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzcyMTVjY2U4MDllZjk0ZDhkMzAzZDQyODYxODc4OGE2NTM0ZDQ5YTlkMzVkNzhhNmQwZWNkNjNlMWJhMjQ4NiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWZmZmZlNmRiYTJlNzk4Yjk0YzFlNjU3MGE3NzdjZWNkYTMzOWI4ZTUyYTc3MzY4ZjczNzkyNDU5OGVmMDQ0NCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjI5NjQwNzljM2M1YzgxNTIwZWYzM2EyYjlkMmUxNWExYjg0ZDcyODBkYjg1OTBkY2Q2NTc0N2UzZTAxMmE0MCJ9"
+          "resource": "repo://internal/tui/theme/syntax.go#L38-L124",
+          "version": "repo-lines-v1:sha256:1c3e35dd0afaf637e9f5c78c83f7c6b9bde82ca0008e04d9aed011738e5a6209:eyJzZWxlY3RlZExpbmVDb3VudCI6ODcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJiYTAxOWIwYjIzNTFiYTNiODhkYjg5NmIxMmFlOTZmYmMwYzg5OTFiOGQyNTI3NDk3ZmNhZmMyMzBmZTU5MmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMyMmNjNDQ4Y2Q0M2Y5YWEwZmE1ZGRjZDI2ZjY3NDM5OTUyOTFmMDBiODhlMzZiOTQ1OWNkMDAxZjVjZGIzZTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImVhZjg0ZTgzMmZmNGY1NGExYzYwNzUwNmY1ZTE0NTYxMGE1NWUyZDVkZGJlNzY4MWY2MzVkMGMyMjI0MGUxZDkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8bb487fd71934a91bf184537f91270cb",
+      "statement": "StyleConfig builds the glamour element styles from the markdown* tokens (base = 'markdownText' for text parts and 'textMuted' for reasoning, the word-wrap width also driving the horizontal-rule line length with an <4 -> 8-dash fallback); NewTranscriptRenderer builds a glamour TermRenderer word-wrapped at width using the full Chroma() map while NewReasoningRenderer uses the pre-blended SubtleChroma() map, and a zero Theme (a nil-engine run) skips WithStyles so glamour renders plain with no SGR; the SGR profile is 24-bit for plain text but 256-color for the code-block path in a plain unit context, while under teatest glamour emits 256-color for both (teatest goldens pin 38;5;N).",
+      "evidence": [
+        {
+          "resource": "repo://internal/tui/theme/syntax.go#L126-L172",
+          "version": "repo-lines-v1:sha256:d9e3d3a2ff2d724c78d8b7f09e98a342cba98f717f937592a1a96ad8e53ff756:eyJzZWxlY3RlZExpbmVDb3VudCI6NDcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEzMmJiMjZmNmNhOTFiNjY0YzlmOWRiZjNhNTQ1YzE3NjIyYjg4ZTQ3ZTcxMzc5OGE0NWY0YTZjYTZlOGFjNWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM2NDkyNTU0YjlhMzcyMWQ0Y2RjZGQ2ZGI0YmE4ZjE5MWYwMWY5Y2VlNDg0OGEwMGMyYzQ3ZjFlMmUyODAwZWIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA4NmQzNmQwZDRiMmM2M2RkNDU3OTVlY2M3YTM1ZWRmMmVkODU5Mjk1ZjQ1YTM0Mjg4NmU3MjQwZTM1ZmQ5OTgifQ"
+        },
+        {
+          "resource": "repo://internal/tui/theme/syntax.go#L222-L234",
+          "version": "repo-lines-v1:sha256:03cfe3c4f74143ac4849c3ef18c963f5f1720e39f6220156a4c279910c80864b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlkN2NiNzc5ZTg4MDUxOGE5MzIwMGEzYjVmYjgwZjI2NGYwNTE4MGNlZjI0OTVhZmQxNDE2MWM2ODU5ZjY3YmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM5ZmEyYWIxMjdlMzVmMTdkNTQ0YWY3OGU1MzRlZTkyN2EzMTAwOTE1OTBiM2MwODM4ODcxYjJkYzY4YWMxZmQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ2NDhjMDU5NzNhYjI5MjQ0YzI0YWVhYWRiYmY2ZWZlMTBlODFkOWFjMDU1Njk5OGU1MjVmMTU2NjE5MDQ4NDAifQ"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.4.0",
-    "at": "2026-08-26T18:04:14.871Z"
+    "at": "2026-08-27T15:27:54.907Z"
   }
 }

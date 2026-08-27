@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:6743ee8187d568171735bff60957560aa91f96fb7674d310f57f51adc1cc71ff",
+  "pageVersion": "sha256:45cc56a227f27e8315038575f6f50fbdaa53c8e4602deb677f04f4559c14e438",
   "claims": [
     {
       "id": "claim_4f0c2927ddd24e87b425a898d8fcfe39",
@@ -102,17 +102,17 @@
     },
     {
       "id": "claim_93169bc499fc4fe784a83f57937aa0db",
-      "statement": "Runtime dependencies are pinned at exact versions behind an allowlist (charm stack, modernc.org/sqlite pure-Go no cgo, tidwall/jsonc, go-udiff, charmbracelet/x/term); anything outside the allowlist requires an agent dependency proposal with live-verified evidence and explicit user approval before landing.",
+      "statement": "Runtime dependencies are pinned at exact versions behind an allowlist (the charm stack bubbletea/lipgloss/bubbles/glamour, charm.land/huh/v2 for field dialogs, github.com/sahilm/fuzzy for subsequence select filtering, chroma/v2 direct for syntax highlighting, modernc.org/sqlite pure-Go no cgo, tidwall/jsonc, go-udiff, charmbracelet/x/term); anything outside the allowlist requires an agent dependency proposal with live-verified evidence and explicit user approval before landing.",
       "evidence": [
         {
-          "resource": "repo://go.mod#L5-L15",
-          "version": "repo-lines-v1:sha256:d11369896c3a98f675de93bb8d9f34f3c82e9f0d937d7a1e2e8847d79db3f1b2:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAzODVjZWQ5ZjY4YWYxNTkyYmU2YjMxYzQ4MmQ2NDZjMGMwYzdmZDkxM2UwNWIyNzM4Yjk0ZDlmM2U5NWZkNTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhZmJhMDUyN2MzOTUzYzRiNmUwZTViNTczOWJhODM2MTJmODA1M2JjZGM5NDY2NzMwMTkzY2QxZDU5MGI0MDgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUwMTBlMDMwNDczMTQ1OTFiYTJmMThkNTBhNWY3NGYxZjIwZjg1NjcwMDI1MzAzNThlYzg1ODQ2NjZkNzhiOWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQwNzZkMTRlZTkyMDQzOWU1MTliMDFlYjE4NWM4MTYxYmY2ZDRiNTI1M2I2ZGExM2UyMWY5ZjlhM2ZmNTYyZTAifQ"
+          "resource": "repo://go.mod",
+          "version": "repo-file-v1:sha256:6483f1a3dc0a77522ad5c81af7ce7adb135eed4a0f3832ad3b76dc5c2221c326"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.4.0",
-    "at": "2026-08-26T18:04:14.871Z"
+    "at": "2026-08-27T15:27:54.907Z"
   }
 }

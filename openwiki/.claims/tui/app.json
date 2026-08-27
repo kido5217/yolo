@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:25047567d663e6fb886ce59e83e8ab7d5fdaaf4d466115db3a8e09fe64f3593b",
+  "pageVersion": "sha256:a3ca147c5e2d60fceba85d183e1cacaed70d12354917bf671d3f212bbbc736a2",
   "claims": [
     {
       "id": "claim_4ee68812344746119f15ac0d5cc4f908",
@@ -104,17 +104,49 @@
     },
     {
       "id": "claim_40136895c5a04ec9811df5c5126ee8e5",
-      "statement": "handleKey is the key dispatcher ladder: permission > dialog > model/agent openers > slash menu > route (session/home) > prompt; a pending permission ask owns every key (1/2/3/esc), an open dialog owns its keys, the slash menu (live-filtered over store.Commands) owns arrows/enter/esc, routes handle their navigation keys, and everything else falls through to the always-focused prompt input; promptEnter implements the locked send semantics where a trailing backslash soft-enters a draft line, empty input is ignored, a busy store toasts, and otherwise the draft+line is sent and the input clears only on success (a server-side busy error leaves the line for retry).",
+      "statement": "handleKey is the key dispatcher ladder: permission > dialog > model/agent openers > slash menu > route (session/home) > prompt; a pending permission ask owns every key (1/2/3/esc), an open dialog owns its keys (a modal closes on esc or ctrl+c via dlgCtrlC), the slash menu (live-filtered over store.Commands) owns arrows/enter/esc, routes handle their navigation keys, and everything else falls through to the always-focused prompt input; promptEnter implements the locked send semantics where a trailing backslash soft-enters a draft line, empty input is ignored, a busy store toasts, and otherwise the draft+line is sent and the input clears only on success (a server-side busy error leaves the line for retry).",
       "evidence": [
         {
-          "resource": "repo://internal/tui/keys.go#L10-L116",
-          "version": "repo-lines-v1:sha256:2fa0794c9c91403ac9142e8a5248e752e2793377874de76c2e9f33eee946674a:eyJzZWxlY3RlZExpbmVDb3VudCI6MTA3LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI5Y2MxNTgwNDE2NWRhOTlmZjFmM2Y2YjdmOTkwZWIyYmU3YzkzZDljYTZhNTJmZGIxZDljOGE5ZmMyY2E2OTBlIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI1MGQ4ZjUxNzYyNDliZWFkOGIxOGU1ZTNmZjg2MmM0YzVjZDc5ZmE1ODRiZjE1Njc4MjNmYjA1NTQ0MzdkNjY1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MCwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0"
+          "resource": "repo://internal/tui/keys.go#L10-L120",
+          "version": "repo-lines-v1:sha256:9a966c318aa23eb37dc59e6afa975370b88a345f51154f515d244e6775698b16:eyJzZWxlY3RlZExpbmVDb3VudCI6MTExLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI5Y2MxNTgwNDE2NWRhOTlmZjFmM2Y2YjdmOTkwZWIyYmU3YzkzZDljYTZhNTJmZGIxZDljOGE5ZmMyY2E2OTBlIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI1MGQ4ZjUxNzYyNDliZWFkOGIxOGU1ZTNmZjg2MmM0YzVjZDc5ZmE1ODRiZjE1Njc4MjNmYjA1NTQ0MzdkNjY1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MCwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0"
+        }
+      ]
+    },
+    {
+      "id": "claim_d04852730bc14b9a90fb7b83f7783750",
+      "statement": "The modal dialog stack (S2.2, port of upstream dialog.tsx) renders the top modal as an overlay frame: viewModal draws the route chrome clamped to the panel top, plain blank backdrop lines (deviation 166 — the upstream rgba(0,0,0,0.15) dim has no SGR equivalent), the centered backgroundPanel panel (width min(size, w-2), top padding 1, top at max(h/4, chromeMin)), and the footer on the last line; prompt, menu, toasts and lastErr are suppressed while a modal is open; stack ops are pushModal/closeTopModal/replaceModal/clearModals with onClose callbacks fired on pop, picker payloads can veto esc for an inner sub-choice via cancelInner, and modal chrome clamps via modalChromeMin plus renderClamped/sessionChrome.",
+      "evidence": [
+        {
+          "resource": "repo://internal/tui/dialog.go#L109-L150",
+          "version": "repo-lines-v1:sha256:c99bbb5ef989423e35ac0ba8c7eba4ab4b8e7db0979a906084c27984c2a37705:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwYjU0M2JkMTMwYmNlZjU0NjIwYzI5ZDcyZGZkZGQyMTgwYzdlZDA2Yjc1MzUyNWU5MzlkN2E2MjViZjhhOWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE2MzFiNmUyY2EwN2Q4YmFmMGViNDRlNzQ5ZGJmNDkwYjM5MmUzYTUzNGVmNjEwMjI3NzExNDZjZGY5YWYxYTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM0OGJhZmNkMDQyYWI5NDc4MTQ1NjE1NTA2M2RkMTAwMDEwZDI3MDEwZGE3NGY2OGNjOGNhNWI4NTllZTE1ZWQifQ"
+        },
+        {
+          "resource": "repo://internal/tui/view.go#L131-L197",
+          "version": "repo-lines-v1:sha256:1c2ff2d798403099606bbcc0319c7964f0e973a46007932d4552eb40b6f2f409:eyJzZWxlY3RlZExpbmVDb3VudCI6NjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlhNzE1NmZlYjc0NDNiZGRhZjEyYjZlY2MyYjRiMTBiNjEwNjUxMzdmMGRjOWI3ZmM2ODA0MGQwODY4ZDYwYmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc0MWI5NmQ0YWU3ZWNjNmIwNDlhYjNmNjFiMWNjY2NmNjRkN2U3NWE3ZjRiMGJmMDc0YzExZDJhODNlZGJlNjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b85b07ea571a4a6aaf32a66f1f913ad9",
+      "statement": "The transcript renders through theme-derived surfaces: assistant text parts via the glamour renderer (GFM tables/task-lists/strikethrough plus chroma-highlighted code blocks), reasoning parts as a dimmed collapsible header (Thinking: title, open mark, alt+e toggle; running/open header uses the warning token pre-blended at ThinkingOpacity via WarningSubtle), tool rows with a per-tool glyph and alt+e expand (completed bash runs also show an inline 10-line head preview), error parts in a left-only-border box (messageErrorBoxStyle), and toasts newest-on-top in a left-only Error-colored box (cap 3, 4s auto-clear) with the zero-theme path falling back to plain red lines.",
+      "evidence": [
+        {
+          "resource": "repo://internal/tui/session.go#L153-L290",
+          "version": "repo-lines-v1:sha256:590d0f950cd7347850d789d292f49d3c0dff5601625281feb5183ffe11c4a21d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTM4LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI2N2Y3YTQ0OGZkOTU5YTE5Zjg5ZDJlMzRkMGU2MDQ1MTI4NjdkMTllYzllMjM1MTdhMThlNWMwNDUxZThmNTBmIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI3NDFiOTZkNGFlN2VjYzZiMDQ5YWIzZjYxYjFjY2NjZjY0ZDdlNzVhN2Y0YjBiZjA3NGMxMWQyYTgzZWRiZTYwIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI4MTA2MmQ5MzA1YzlmZWVjZWI5NTIyNjRmYzg1YzcxZTM2YzA1NzhmNGI5NTk5MjYxZmUzZDZiZjM3OTJmNzE3In0"
+        },
+        {
+          "resource": "repo://internal/tui/session.go#L97-L127",
+          "version": "repo-lines-v1:sha256:d188b514752e2099761c84b3b9bb36cd403bfbacb1da9a2b19a49e5ff5c52c28:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY5MzEzMTE1NThiNTg2MmMxNGEzZjNiNzQ2MzlmM2I4NWFjZTA0ZjA1NTc1ZjY4ZDhlYTJmYzk4YTZlZTk1YjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk4NzllMWExNWVhNGFjNWVjNzQzY2UxYTMxMmM2NzUzMTlhZDdhODI0ZGIxZjIyZTY4YWFhNTA2ZTZiODE2MWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImEwN2NjYjVhZWYwMjg3YmFkMzEyYWNhYTViZGE1ZjBkNzcwYzk4MDg1YjI5M2QyNjI5MGJiNzdjMGMxOTZmMTkifQ"
+        },
+        {
+          "resource": "repo://internal/tui/toast.go#L71-L108",
+          "version": "repo-lines-v1:sha256:0481b22a625dad54c8f4a6b2f15f9eb747469399b7a3215d7b6611f31d907803:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzYzg4ZjNkZTU4MGZkYjY3Yjk2NWViZDFhMWQwOTcyOGE2ZTMxNjJmODAzYzU1NzkyYzIwMWExZDBmY2JkMWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYyOTY0MDc5YzNjNWM4MTUyMGVmMzNhMmI5ZDJlMTVhMWI4NGQ3MjgwZGI4NTkwZGNkNjU3NDdlM2UwMTJhNDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.4.0",
-    "at": "2026-08-26T18:04:14.871Z"
+    "at": "2026-08-27T15:27:54.907Z"
   }
 }

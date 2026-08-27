@@ -3,9 +3,6 @@ type: concept
 title: Project Workflow
 description: "How work is run in this repo: beads (bd) owns all task state, docs/superpowers holds verified facts and the deviation audit, the dependency allowlist is agent-proposable with user approval, and the non-negotiable core principles (zero telemetry, reference-not-contract, TUI purity, tests-define-the-contract) gate every change."
 tags: [workflow, beads, superpowers, deviations, dependency-policy, core-principles, git-discipline]
-verified:
-  - by: openwiki/0.4.0
-    at: 2026-08-26T18:04:14.871Z
 sources:
   - id: openwiki-source-8037e2358a2c4f9b2c722a11
     resource: repo://AGENTS.md
@@ -15,9 +12,14 @@ sources:
     resource: repo://docs/superpowers/DEVIATIONS.md
   - id: openwiki-source-88e030e7afe0cc3f8d8160b0
     resource: repo://docs/superpowers/PROGRESS.md
+  - id: openwiki-source-75043e88a22f1cb5cae08c53
+    resource: repo://scripts/wiki-stale.sh
   - id: openwiki-source-453611660ffbf02a66fa4bf3
     resource: repo://skills-lock.json
-generated: {by: "opencode", at: "2026-08-26T18:04:14.871Z"}
+generated: {by: "opencode", at: "2026-08-27T15:27:54.907Z"}
+verified:
+  - by: openwiki/0.4.0
+    at: 2026-08-27T15:27:54.907Z
 ---
 
 # Project Workflow
@@ -128,6 +130,18 @@ Every task ends with the module-root gate green **and a commit**:
 (`AGENTS.md` "Commands & verification", line 65). Unit tests never hit the
 network — live paths are env-gated (`YOLO_LLM=fake`), and the e2e smoke is
 user-run, never CI.
+
+### OpenWiki wiki gate (pre-merge)
+
+The generated `openwiki/` evidence index must be current before a milestone
+merges: `just wiki-stale` (`scripts/wiki-stale.sh`) compares the `gitHead`
+recorded in `openwiki/.last-update.json` to `HEAD` and exits 1 when the wiki
+trails the source it documents. The refresh is a host-driven update through
+the `openwiki` skill (MCP `openwiki_begin` mode=update) — there is **no
+scheduled CI workflow** (a GitHub runner cannot reach the local model). The
+gate is wired into the root `AGENTS.md` "Superpowers workflow" as the first
+step of the pre-merge `requesting-code-review` row; generated pages are never
+hand-edited (source changes propagate via the update).
 
 ## Skills
 

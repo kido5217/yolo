@@ -3,9 +3,6 @@ type: reference
 title: Theme Engine
 description: "internal/tui/theme: the TUI-local theme engine — 33 embedded upstream theme assets, the config > KV > default selection chain and dark/light mode resolution, OSC-based terminal palette discovery (raw-mode /dev/tty), system-theme generation, custom discovery from .yolo/themes, lipgloss style generation, and the glamour GFM transcript renderer."
 tags: [theme, lipgloss, glamour, chroma, palette, osc, discovery, selection, markdown]
-verified:
-  - by: openwiki/0.4.0
-    at: 2026-08-26T18:04:14.871Z
 sources:
   - id: openwiki-source-028d026d26511c1f750984fb
     resource: repo://internal/tui/theme/discover.go
@@ -19,15 +16,16 @@ sources:
     resource: repo://internal/tui/theme/resolve.go
   - id: openwiki-source-d0216349c9e0aeab0faa3bc0
     resource: repo://internal/tui/theme/styles.go
-  - id: openwiki-source-371ed13c1b640a7af2fa1258
-    resource: repo://internal/tui/theme/syntax_test.go
   - id: openwiki-source-3069fa4c7f1a198e3d38723a
     resource: repo://internal/tui/theme/syntax.go
   - id: openwiki-source-03973d46c62210cb4574d233
     resource: repo://internal/tui/theme/system.go
   - id: openwiki-source-2325305be7fade63b9401bc2
     resource: repo://internal/tui/theme/theme.go
-generated: {by: "opencode", at: "2026-08-26T18:04:14.871Z"}
+generated: {by: "opencode", at: "2026-08-27T15:27:54.907Z"}
+verified:
+  - by: openwiki/0.4.0
+    at: 2026-08-27T15:27:54.907Z
 ---
 
 # Theme Engine
@@ -138,6 +136,10 @@ explicit `selectedListItemText` wins; a transparent background contrasts via the
 luminance rule (`0.299r+0.587g+0.114b > 0.5 → black`, else white); else the
 background. The token accessors (`Text`, `TextMuted`, `Primary`, …, `Markdown*`,
 `Syntax*`, `Diff*`) map each semantic token to a lipgloss style.
+**`WarningSubtle`** (via `blended("warning")`) pre-blends the warning token over
+the theme background at `ThinkingOpacity` (upstream `RGBA.fromValues`, the
+running/expanded reasoning header color) — identity when the token or
+background is absent or α is outside (0,1).
 
 ## Transcript rendering (glamour)
 
@@ -151,7 +153,19 @@ verified: in a plain unit context glamour's plain text is 24-bit while the
 code-block path is 256-color, but **under teatest glamour emits 256-color for
 both**, so teatest goldens pin `38;5;N`.
 
-The **chroma token map + the global `"charm"` style-slot workaround** for
-per-language code highlighting is the **planned S1.4 work** (the `glamour` /
-`glamour/ansi` / `chroma/v2/styles` allowlist entry); in the current tree
-**`CodeBlock.Chroma` is still nil** (pinned by `syntax_test.go`).
+**Code highlighting (chroma, S1.4 — landed):** `Chroma()` builds the full
+syntax token map (upstream `getSyntaxRules`): `Text`/`Comment` (italic)/
+`Keyword` (italic)/`KeywordType` (bold-italic)/`Operator`/`Punctuation`/
+`Name*`/`Literal*` map each `syntax*` token (and `NameBuiltin` → `error`).
+`SubtleChroma()` is the reasoning variant (upstream `generateSubtleSyntax`):
+RGB kept, every foreground **pre-blended** over the theme background at
+`ThinkingOpacity` (`out = round(fg*α + bg*(1-α))`, half-up per channel; absent
+background → `#000000`) because SGR 24-bit carries no alpha and lipgloss
+`parseHex` takes 6-digit hex only. `newRenderer` attaches the map to
+`cfg.CodeBlock.Chroma` and registers it under the **global `"charm"` slot**
+(`styles.Registry`); `Renderer.Render` **deletes the slot first** so the
+transcript (full) and reasoning (subtle) renderers + SIGUSR2 theme switches
+never cross-color (the TUI renders single-threaded, so sequential
+re-registration is safe). A zero Theme keeps the chroma pointer nil and skips
+the slot delete (deviation 149/152). `syntax_test.go` pins the token→color
+mapping and the SGR profile.

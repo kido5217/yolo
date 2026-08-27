@@ -5,7 +5,7 @@ description: "yolo's single-binary design: the core HTTP server (REST + SSE) run
 tags: [architecture, single-binary, layering, wire-contract, dependency-policy]
 verified:
   - by: openwiki/0.4.0
-    at: 2026-08-26T18:04:14.871Z
+    at: 2026-08-27T15:27:54.907Z
 sources:
   - id: openwiki-source-41612f8ed7b59c998588fda2
     resource: repo://cmd/yolo/deps.go
@@ -21,7 +21,7 @@ sources:
     resource: repo://internal/server/server.go
   - id: openwiki-source-99b37a6823820f4cb0c51a48
     resource: repo://internal/tui/imports_test.go
-generated: {by: "opencode", at: "2026-08-26T18:04:14.871Z"}
+generated: {by: "opencode", at: "2026-08-27T15:27:54.907Z"}
 ---
 
 # Architecture Overview
@@ -129,8 +129,12 @@ local-only (see the event-flow page).
 Runtime dependencies are **pinned at exact versions** behind an allowlist
 (go.mod:5-15). The direct runtime set is the charm stack
 (`bubbletea/v2`, `lipgloss/v2`, `bubbles/v2`, `glamour/v2`),
-`modernc.org/sqlite` (pure Go, no cgo), `tidwall/jsonc`,
-`github.com/aymanbagabas/go-udiff`, and `charmbracelet/x/term`. Anything outside
+`charm.land/huh/v2` (field dialogs) and `github.com/sahilm/fuzzy`
+(subsequence filtering for the select/palette) — both approved together for
+the dialog pass — `modernc.org/sqlite` (pure Go, no cgo), `tidwall/jsonc`,
+`github.com/aymanbagabas/go-udiff`, and `charmbracelet/x/term`. `chroma/v2`
+is a direct dependency for glamour's per-language syntax highlighting (the
+global "charm" style-slot workaround). Anything outside
 the allowlist requires an agent **dependency proposal** (with live-verified
 evidence) and explicit user approval before it lands (root AGENTS.md, "Project").
 
