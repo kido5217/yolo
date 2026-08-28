@@ -94,7 +94,14 @@ func TestSelectFuzzyWeighting(t *testing.T) {
 
 func TestSelectViewLayout(t *testing.T) {
 	a := testApp()
-	m := selectNew("Test", "Search", selTestOptions(), nil, nil, nil)
+	// no-category options: the S2.6 category headers must not shift the
+	// pinned row lines (upstream flat list — deviation 175)
+	opts := []selectOption{
+		{title: "Alpha", description: "first"},
+		{title: "Beta", description: "second"},
+		{title: "Gamma", description: "third"},
+	}
+	m := selectNew("Test", "Search", opts, nil, nil, nil)
 	out := strings.Split(m.view(60, 24, a.theme), "\n")
 	if !strings.Contains(out[0], "Test") {
 		t.Fatalf("title row = %q", out[0])
@@ -130,3 +137,89 @@ var (
 	homeKeyTest = tea.KeyPressMsg{Code: tea.KeyHome}
 	endKey      = tea.KeyPressMsg{Code: tea.KeyEnd}
 )
+
+func TestSelectCategoriesRender(t *testing.T) {
+	a := testApp()
+	m := selectNew("Test", "Search", []selectOption{
+		{title: "Alpha", category: "Group A"},
+		{title: "Beta", category: "Group A"},
+		{title: "Gamma", category: "Group B"},
+	}, nil, nil, nil)
+	lines := strings.Split(m.view(60, 24, a.theme), "\n")
+	joined := strings.Join(lines, "\n")
+	if !strings.Contains(joined, "Group A") || !strings.Contains(joined, "Group B") {
+		t.Fatalf("category headers missing:\n%s", joined)
+	}
+	// the blank row separates the groups (Group A's last row, blank, header)
+	iA := -1
+	iB := -1
+	for i, l := range lines {
+		if l == "   Group A" {
+			iA = i
+		}
+		if l == "   Group B" {
+			iB = i
+		}
+	}
+	if iA == -1 || iB == -1 || lines[iB-1] != "" {
+		t.Fatalf("header layout wrong (iA=%d iB=%d):\n%s", iA, iB, joined)
+	}
+	// filtering hides the headers (upstream flat)
+	m.input.SetValue("a")
+	joined = strings.Join(strings.Split(m.view(60, 24, a.theme), "\n"), "\n")
+	if strings.Contains(joined, "Group A") {
+		t.Fatalf("headers must be hidden while filtering:\n%s", joined)
+	}
+}
+
+func TestSelectDetailsAndFooter(t *testing.T) {
+	a := testApp()
+	m := selectNew("Test", "Search", []selectOption{
+		{title: "Alpha", details: []string{"detail one", strings.Repeat("long detail ", 20)}, footer: "f1"},
+	}, nil, nil, nil)
+	lines := strings.Split(m.view(60, 24, a.theme), "\n")
+	joined := strings.Join(lines, "\n")
+	if !strings.Contains(joined, "detail one") {
+		t.Fatalf("detail row missing:\n%s", joined)
+	}
+	// the long detail is truncateMiddle'd to fit the row width
+	for _, l := range lines {
+		plain := stripANSI(l)
+		if strings.Contains(plain, "long detail") && runeWidth(plain) > 60 {
+			t.Fatalf("detail not clipped to the row width: %q", plain)
+		}
+	}
+	// the footer tail sits at the right edge of its row
+	for _, l := range lines {
+		plain := strings.TrimRight(stripANSI(l), " ")
+		if strings.Contains(plain, "Alpha") && strings.HasSuffix(plain, "f1") {
+			return
+		}
+	}
+	t.Fatalf("footer tail missing:\n%s", joined)
+}
+
+func TestSelectScrollWindowCountsRows(t *testing.T) {
+	a := testApp()
+	opts := make([]selectOption, 0, 20)
+	for i := 0; i < 20; i++ {
+		opts = append(opts, selectOption{
+			title:   "Option " + string(rune('A'+i/26)) + string(rune('a'+i%26)),
+			details: []string{"d"},
+		})
+	}
+	m := selectNew("Test", "Search", opts, nil, nil, nil)
+	// h=40 → visible = 40/2-6 = 14 rows; each option = 2 rows (row + detail)
+	m.view(60, 40, a.theme)
+	if m.top != 0 {
+		t.Fatalf("initial top = %d, want 0", m.top)
+	}
+	for i := 0; i < 19; i++ { // walk the selection past the window
+		m.move(1)
+		m.view(60, 40, a.theme)
+	}
+	// 20 options × 2 rows = 40 rows; sel 19 → row 38-39 → top = 38-14+1 = 25
+	if m.top < 20 {
+		t.Fatalf("scroll did not follow the selection: top=%d", m.top)
+	}
+}
