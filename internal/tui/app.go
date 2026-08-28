@@ -162,6 +162,7 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 	case EventMsg:
 		a.store.Live = true
 		a.store.Apply(m.Event)
+		a.syncPermDialog()
 		// Any applied event may have changed the transcript (message/part
 		// family); re-render once instead of on every frame.
 		a.sess.isDirty = true

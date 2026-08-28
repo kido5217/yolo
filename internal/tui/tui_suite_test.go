@@ -170,13 +170,21 @@ func hasLines(tokens ...string) func([]byte) bool {
 	}
 }
 
-// hasPermDialogEcho matches this scenario's bash ask (the shared
-// hasPermDialog pins T25's "ls *" pattern).
+// hasPermDialogEcho matches this scenario's bash ask (the S2.8 restyle:
+// the info() port reads the part input — "$ echo hi" — and the pills). The
+// tokens are pinned per RUN: under the real-theme engine the cell-diff
+// renderer splits the panel lines at pen changes (the header lands as "△
+// Permission" + a separate "required" run — deviation 181), so the
+// contiguous "Permission required" form is only matchable in the
+// zero-theme flow drains.
 func hasPermDialogEcho(b []byte) bool {
 	s := stripANSI(string(b))
-	return strings.Contains(s, "permission · bash") &&
+	return strings.Contains(s, "required") &&
+		strings.Contains(s, "# Shell") &&
+		strings.Contains(s, "$ echo hi") &&
 		strings.Contains(s, "patterns: echo *") &&
-		strings.Contains(s, "[1] once  [2] always  [3] reject")
+		strings.Contains(s, "Allow") &&
+		strings.Contains(s, "Reject")
 }
 
 func driveToPermDialog(t *testing.T, tm *teatest.TestModel, ts *testutil.TestServer) {
@@ -231,7 +239,7 @@ func TestTUIPermissionFlow(t *testing.T) {
 		// final text in the post-dialog frame. That frame is also the sync
 		// point for the expansion: the reject reply clears store.Pending
 		// only async (permReplyMsg / permission.replied), and while Pending
-		// is non-empty handleKey routes every key to handlePermKey — an
+		// is non-empty handleKey routes every key to the perm dialog — an
 		// alt+e queued right after '3' would be eaten. permission.replied
 		// precedes the part update on the bus, so by this render Pending is
 		// provably cleared and the next alt+e reaches the session ladder.

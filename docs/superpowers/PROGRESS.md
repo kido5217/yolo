@@ -44,9 +44,17 @@ deviation 175 logged), S2.7 select actions/hints/acceleration landed
 with wrap, enter-on-focus) + right-footer hints, pgup/pgdn ±10 row
 scroll — the upstream env-machined `getScrollAcceleration` not ported;
 the window re-anchor is now selection-change-driven via `lastSel`;
-deviations 176–178 logged).
-Deviations 122–178 logged.
-Next: S2.8 (bead `yolo-oae.3.11`) — permission restyle.
+deviations 176–178 logged), S2.8 permission restyle landed
+(`permission.go`: `permDlg` modal payload (sel pill) + `permInfo` info()
+port over the part input (no request Meta on the wire) + the reply pills
+(selected pinned to the warning token, unselected muted) + `handleKey`
+(1/2/3 + esc reply, left/right pill nav with wrap, enter = selected) +
+`partInput` + `view`/`permissionView` (the non-modal overlay path; wraps
+at w); `dialog.go` `syncPermDialog` push/pop against parked asks
+(idempotent) driven from `applyPermReply` (success only) + the
+`permission.*` events in `EventMsg`; deviations 179–182 logged).
+Deviations 122–182 logged.
+Next: S2.9 (bead `yolo-oae.3.12`) — model restyle.
 Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
 (PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
 + GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,

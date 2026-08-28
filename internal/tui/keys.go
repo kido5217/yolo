@@ -15,12 +15,16 @@ var dlgCtrlC = key.NewBinding(key.WithKeys("ctrl+c"))
 
 // handleKey is the app key dispatcher: permission > dialog > model/agent
 // openers > slash menu > route > prompt. A pending permission ask owns every
-// key (1/2/3/esc only); while the slash menu is open it owns the keys; routes
+// key (1/2/3/esc reply or reject, left/right/enter drive the pill, S2.8);
+// while the slash menu is open it owns the keys; routes
 // handle their navigation keys; everything else falls through to the
 // always-focused prompt input.
 func (a *App) handleKey(k tea.KeyPressMsg) []tea.Cmd {
 	if len(a.store.Pending) > 0 {
-		return a.handlePermKey(k)
+		if d, ok := a.dlg.top(); ok && d.kind == dlgPerm && d.perm != nil {
+			return d.perm.handleKey(a, k)
+		}
+		return (&permDlg{}).handleKey(a, k)
 	}
 	if d, ok := a.dlg.top(); ok {
 		return a.handleDialogKey(d, k)

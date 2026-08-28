@@ -31,6 +31,7 @@ const (
 	dlgModel
 	dlgAgents
 	dlgForm
+	dlgPerm
 )
 
 // dlgSize is the modal panel width (upstream DialogSize: medium 60, large
@@ -63,6 +64,7 @@ type dialog struct {
 	agent   *agentDlg
 	form    *huhFormDlg  // dlgForm payload (S2.3)
 	sel     *selectModel // S2.5: the select payload (dlgModel/dlgAgents from S2.9/10)
+	perm    *permDlg     // S2.8: the permission payload (dlgPerm)
 	modal   bool         // true: rendered as the overlay frame (S2.2)
 	size    dlgSize      // the panel width, modal only
 	onClose func(*App)   // the stack-pop callback (upstream result callback)
@@ -200,6 +202,31 @@ func dialogCanceler(d dialog) (modalCanceler, bool) {
 	return nil, false
 }
 
+// syncPermDialog keeps the permission modal in step with the parked asks
+// (S2.8): pushed when the first ask parks, popped when the queue drains
+// (the reply landed or the permission.replied event dropped it).
+func (a *App) syncPermDialog() {
+	has := false
+	for _, d := range a.dlg.items {
+		if d.kind == dlgPerm {
+			has = true
+			break
+		}
+	}
+	if len(a.store.Pending) > 0 && !has {
+		a.pushModal(dialog{kind: dlgPerm, perm: &permDlg{}}, dlgMedium, nil)
+		return
+	}
+	if len(a.store.Pending) == 0 && has {
+		for i := len(a.dlg.items) - 1; i >= 0; i-- {
+			if a.dlg.items[i].kind == dlgPerm {
+				a.dlg.items = append(a.dlg.items[:i], a.dlg.items[i+1:]...)
+				break
+			}
+		}
+	}
+}
+
 // Static frame parts render once at package init instead of on every frame:
 // the styles involved (title, divider) set no width, border, padding, or
 // alignment, and lipgloss v2 Style.Render is a pure function of the style
@@ -282,6 +309,10 @@ func (a *App) modalInner(d *dialog, w, h int) string {
 	case dlgForm:
 		if d.form != nil {
 			return d.form.form.View()
+		}
+	case dlgPerm:
+		if d.perm != nil {
+			return d.perm.view(&a.store, w, a.theme)
 		}
 	}
 	return ""
