@@ -35,10 +35,14 @@ case; deviations 170–171 logged), S2.4 huh field input landed
 (`buildInputForm` themed input — rename/prompt; deviation 172 logged),
 S2.5 select core landed (`select.go`: selectOption/selectModel, fuzzy
 weighted filter with the focus fix, wrap nav, home/end, enter; deviations
-173–174 logged).
-Deviations 122–174 logged.
-Next: S2.6 (bead `yolo-oae.3.9`) — select: categories/groups + per-option
-details.
+173–174 logged), S2.6 select categories/details landed (`locale.go`:
+truncateMiddle + titlecase ports; `buildLines`/`selLine` row model —
+flat-on-filter category headers, truncateMiddle'd detail rows, footer
+tail via `rowWithFooter`; the scroll window now counts rendered rows;
+deviation 175 logged).
+Deviations 122–175 logged.
+Next: S2.7 (bead `yolo-oae.3.10`) — select: actions + footer hints +
+scroll acceleration.
 Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
 (PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
 + GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,
