@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 )
 
@@ -222,4 +223,79 @@ func TestSelectScrollWindowCountsRows(t *testing.T) {
 	if m.top < 20 {
 		t.Fatalf("scroll did not follow the selection: top=%d", m.top)
 	}
+}
+
+var (
+	selTabMsg      = tea.KeyPressMsg{Code: tea.KeyTab}
+	selShiftTabMsg = tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}
+	selPgDnMsg     = tea.KeyPressMsg{Code: tea.KeyPgDown}
+	selPgUpMsg     = tea.KeyPressMsg{Code: tea.KeyPgUp}
+)
+
+func TestSelectActions(t *testing.T) {
+	a := testApp()
+	favs, runs := 0, 0
+	m := selectNew("Test", "Search", selTestOptions(), nil, nil, nil).
+		WithActions([]selectAction{
+			{key: key.NewBinding(key.WithKeys("f")), title: "Favorite", run: func(*App) { favs++ }},
+			{key: key.NewBinding(key.WithKeys("r")), title: "Remove", run: func(*App) { runs++ }},
+		})
+	pushSelectModal(t, a, m)
+	a.handleKey(press('f'))
+	if favs != 1 {
+		t.Fatalf("action key: favs=%d, want 1", favs)
+	}
+	a.handleKey(selTabMsg)
+	if m.focAct != 0 {
+		t.Fatalf("tab focus = %d, want 0", m.focAct)
+	}
+	a.handleKey(enterKey)
+	if favs != 2 || runs != 0 {
+		t.Fatalf("enter on the focused action must run it: favs=%d runs=%d", favs, runs)
+	}
+	a.handleKey(selShiftTabMsg) // wraps to the last action
+	if m.focAct != 1 {
+		t.Fatalf("shift+tab wrap = %d, want 1", m.focAct)
+	}
+}
+
+func TestSelectFooterHints(t *testing.T) {
+	a := testApp()
+	m := selectNew("Test", "Search", selTestOptions(), nil, nil, nil).
+		WithHints([]footerHint{{key: "ctrl+x", desc: "remove"}})
+	lines := strings.Split(m.view(60, 24, a.theme), "\n")
+	last := stripANSI(lines[len(lines)-1])
+	if !strings.Contains(last, "ctrl+x") || !strings.Contains(last, "remove") {
+		t.Fatalf("hint row = %q", last)
+	}
+}
+
+func TestSelectScrollAcceleration(t *testing.T) {
+	a := testApp()
+	opts := make([]selectOption, 40)
+	for i := range opts {
+		opts[i] = selectOption{title: fmtOption(i)}
+	}
+	m := selectNew("Test", "Search", opts, nil, nil, nil)
+	pushSelectModal(t, a, m)
+	// h=40 → visible 14 rows; 40 options = 40 rows → the window can scroll
+	a.handleKey(selPgDnMsg)
+	m.view(60, 40, a.theme)
+	if m.top != 10 {
+		t.Fatalf("pgdn: top=%d, want 10 (±10 rows)", m.top)
+	}
+	a.handleKey(selPgDnMsg)
+	m.view(60, 40, a.theme)
+	if m.top != 20 {
+		t.Fatalf("pgdn twice: top=%d, want 20", m.top)
+	}
+	a.handleKey(selPgUpMsg)
+	m.view(60, 40, a.theme)
+	if m.top != 10 {
+		t.Fatalf("pgup: top=%d, want 10", m.top)
+	}
+}
+
+func fmtOption(i int) string {
+	return "Option " + string(rune('a'+i/26)) + string(rune('a'+i%26))
 }

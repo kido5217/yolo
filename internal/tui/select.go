@@ -32,6 +32,20 @@ type selectOption struct {
 	disabled    bool // excluded from the filtered list entirely (upstream)
 }
 
+// selectAction is a footer action (upstream DialogSelectAction): its key
+// triggers it, tab/shift+tab focus it, enter on the focus runs it.
+type selectAction struct {
+	key   key.Binding
+	title string
+	run   func(*App)
+}
+
+// footerHint is a right-footer hint (upstream: key + desc).
+type footerHint struct {
+	key  string
+	desc string
+}
+
 // selectModel is the DialogSelect state machine.
 type selectModel struct {
 	title       string
@@ -42,8 +56,13 @@ type selectModel struct {
 	onMove      func(selectOption)
 	sel         int
 	top         int // first visible row (S2.6 counts rendered rows)
+	lastSel     int // the selection row the window was last anchored at; 0 is the initial anchor (the window starts at the top, the selection's first row) so the first view re-anchors only when the selection actually moves (S2.7)
+	pageDelta   int // queued window shift from pgup/pgdn, consumed by view (S2.7)
 	filter      string
 	input       textinput.Model
+	actions     []selectAction
+	hints       []footerHint
+	focAct      int // focused action index, -1 = none (S2.7)
 }
 
 // selectNew builds a select (isCurrent/onMove/onSelect may be nil).
@@ -57,12 +76,26 @@ func selectNew(title, placeholder string, options []selectOption,
 		isCurrent:   isCurrent,
 		onSelect:    onSelect,
 		onMove:      onMove,
+		focAct:      -1,
 	}
 	m.input = textinput.New()
 	m.input.Prompt = ""
 	m.input.Placeholder = placeholder
 	m.input.SetWidth(40)
 	_ = m.input.Focus()
+	return m
+}
+
+// WithActions attaches the left-footer actions (the focused one highlights).
+func (m *selectModel) WithActions(actions []selectAction) *selectModel {
+	m.actions = actions
+	m.focAct = -1
+	return m
+}
+
+// WithHints attaches the right-footer hints.
+func (m *selectModel) WithHints(hints []footerHint) *selectModel {
+	m.hints = hints
 	return m
 }
 
@@ -123,12 +156,28 @@ func (m *selectModel) syncFilter() {
 	}
 }
 
-// handleKey drives the select while the modal stack owns the frame: arrows
-// move with wraparound, home/end jump, enter submits the selection; every
-// other key feeds the fuzzy filter input (esc/ctrl+c are consumed by the
-// stack first — S2.2).
+// handleKey drives the select while the modal stack owns the frame (S2.7):
+// an action's own key runs it; pgup/pgdn page-scroll the window;
+// tab/shift+tab cycle the action focus; arrows move with wraparound,
+// home/end jump, enter runs the focused action (or submits the selection);
+// every other key feeds the fuzzy filter input (esc/ctrl+c are consumed
+// by the stack first — S2.2).
 func (m *selectModel) handleKey(a *App, k tea.KeyPressMsg) []tea.Cmd {
+	for i := range m.actions {
+		if key.Matches(k, m.actions[i].key) {
+			m.actions[i].run(a)
+			return nil
+		}
+	}
 	switch {
+	case key.Matches(k, selPgUpKey):
+		m.pageScroll(-10)
+	case key.Matches(k, selPgDnKey):
+		m.pageScroll(10)
+	case key.Matches(k, selTabKey):
+		m.focusAction(+1)
+	case key.Matches(k, selShiftTabKey):
+		m.focusAction(-1)
 	case key.Matches(k, homeKeyMap.Up):
 		m.move(-1)
 	case key.Matches(k, homeKeyMap.Down):
@@ -138,6 +187,10 @@ func (m *selectModel) handleKey(a *App, k tea.KeyPressMsg) []tea.Cmd {
 	case key.Matches(k, selEndKey):
 		m.jump(-1)
 	case key.Matches(k, homeKeyMap.Enter):
+		if m.focAct >= 0 {
+			m.actions[m.focAct].run(a)
+			return nil
+		}
 		m.submit(a)
 	default:
 		var cmd tea.Cmd
@@ -152,9 +205,36 @@ func (m *selectModel) handleKey(a *App, k tea.KeyPressMsg) []tea.Cmd {
 }
 
 var (
-	selHomeKey = key.NewBinding(key.WithKeys("home"))
-	selEndKey  = key.NewBinding(key.WithKeys("end"))
+	selHomeKey     = key.NewBinding(key.WithKeys("home"))
+	selEndKey      = key.NewBinding(key.WithKeys("end"))
+	selTabKey      = key.NewBinding(key.WithKeys("tab"))
+	selShiftTabKey = key.NewBinding(key.WithKeys("shift+tab"))
+	selPgUpKey     = key.NewBinding(key.WithKeys("pgup"))
+	selPgDnKey     = key.NewBinding(key.WithKeys("pgdown"))
 )
+
+// pageScroll queues a window shift (deviation 176: ±10 rows pinned; the
+// upstream env-machined getScrollAcceleration is not ported). The WINDOW
+// moves (the selection stays); view() consumes the delta and re-anchors
+// the window to the selection only when the selection itself changed
+// (selectModel.lastSel — added in this task; S2.6's every-call re-anchor
+// becomes the selection-change re-anchor):
+//
+//	if selRow >= 0 && selRow != m.lastSel { m.lastSel = selRow; <S2.6 anchor> }
+//	else if m.pageDelta != 0 { m.top += m.pageDelta; m.pageDelta = 0; if m.top < 0 { m.top = 0 } }
+//	// then the existing clamp (top > len(visible) → max(0, len-visible))
+func (m *selectModel) pageScroll(rows int) {
+	m.pageDelta += rows
+}
+
+// focusAction cycles the action focus (tab/shift+tab; no actions = no-op).
+func (m *selectModel) focusAction(d int) {
+	n := len(m.actions)
+	if n == 0 {
+		return
+	}
+	m.focAct = ((m.focAct+d)%n + n) % n
+}
 
 // move steps the selection with wraparound (upstream move, 290-297).
 func (m *selectModel) move(d int) {
@@ -195,7 +275,8 @@ func (m *selectModel) submit(a *App) {
 // view renders the select's inner lines (the modal stack draws the panel
 // chrome — S2.2): the title row, the filter input row, the visible row window
 // (the scroll window counts the BUILT rows — headers + options + details —
-// upstream height = min(rows, floor(h/2)-6)) and the keymap hint row.
+// upstream height = min(rows, floor(h/2)-6)) and the footer row (the S2.7
+// actions/hints, the S2.5 keymap hint when neither exists).
 func (m *selectModel) view(w, h int, th theme.Theme) string {
 	m.syncFilter()
 	lines := m.buildLines(w, th)
@@ -212,7 +293,10 @@ func (m *selectModel) view(w, h int, th theme.Theme) string {
 		b.WriteString(th.TextMuted().Render("  No results found"))
 		return b.String()
 	}
-	// the selection's FIRST row anchors the window (S2.5: the option row)
+	// the selection's FIRST row anchors the window only when the selection
+	// row changed (S2.7: S2.6's every-call re-anchor becomes the
+	// selection-change re-anchor); otherwise a queued page delta shifts the
+	// window (the window moves, the selection stays)
 	selRow := -1
 	for i, l := range lines {
 		if l.opt == m.sel {
@@ -220,12 +304,19 @@ func (m *selectModel) view(w, h int, th theme.Theme) string {
 			break
 		}
 	}
-	if selRow >= 0 {
+	if selRow >= 0 && selRow != m.lastSel {
+		m.lastSel = selRow
 		if selRow < m.top {
 			m.top = selRow
 		}
 		if selRow >= m.top+visible {
 			m.top = selRow - visible + 1
+		}
+	} else if m.pageDelta != 0 {
+		m.top += m.pageDelta
+		m.pageDelta = 0
+		if m.top < 0 {
+			m.top = 0
 		}
 	}
 	if m.top > len(lines)-visible {
@@ -244,8 +335,54 @@ func (m *selectModel) view(w, h int, th theme.Theme) string {
 		b.WriteString(lines[i].text)
 	}
 	b.WriteByte('\n')
-	b.WriteString(th.TextMuted().Render("  \u2191/\u2193 move \u00B7 enter select \u00B7 esc close"))
+	// footer: actions left (focused highlighted), hints right (muted),
+	// the S2.5 keymap hint when neither exists
+	if len(m.actions) > 0 || len(m.hints) > 0 {
+		var leftParts, leftPlain []string
+		for i, ac := range m.actions {
+			label := ac.key.Keys()[0] + " " + ac.title
+			leftPlain = append(leftPlain, label)
+			if i == m.focAct {
+				leftParts = append(leftParts, cursorStyle(th).Render(label))
+			} else {
+				leftParts = append(leftParts, th.TextMuted().Render(label))
+			}
+		}
+		rightPlain := strings.Join(hintTexts(m.hints), " \u00B7 ")
+		line := strings.Join(leftParts, "   ")
+		if rightPlain != "" {
+			gap := w - 2 - plainJoinWidth(leftPlain, "   ") - runeWidth(rightPlain)
+			if gap < 1 {
+				gap = 1
+			}
+			line += strings.Repeat(" ", gap) + th.TextMuted().Render(rightPlain)
+		}
+		b.WriteString(line)
+	} else {
+		b.WriteString(th.TextMuted().Render("  \u2191/\u2193 move \u00B7 enter select \u00B7 esc close"))
+	}
 	return b.String()
+}
+
+// hintTexts is the right-tail text of the hints (key + desc pairs).
+func hintTexts(hints []footerHint) []string {
+	out := make([]string, len(hints))
+	for i, h := range hints {
+		out[i] = h.key + " " + h.desc
+	}
+	return out
+}
+
+// plainJoinWidth is the rendered width of the joined parts (rune columns).
+func plainJoinWidth(parts []string, sep string) int {
+	w := 0
+	for i, p := range parts {
+		if i > 0 {
+			w += runeWidth(sep)
+		}
+		w += runeWidth(p)
+	}
+	return w
 }
 
 // selLine is one rendered line of the select list (the scroll window slices

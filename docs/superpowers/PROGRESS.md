@@ -39,10 +39,14 @@ weighted filter with the focus fix, wrap nav, home/end, enter; deviations
 truncateMiddle + titlecase ports; `buildLines`/`selLine` row model —
 flat-on-filter category headers, truncateMiddle'd detail rows, footer
 tail via `rowWithFooter`; the scroll window now counts rendered rows;
-deviation 175 logged).
-Deviations 122–175 logged.
-Next: S2.7 (bead `yolo-oae.3.10`) — select: actions + footer hints +
-scroll acceleration.
+deviation 175 logged), S2.7 select actions/hints/acceleration landed
+(`select.go`: footer actions (own-key run, tab/shift+tab focus cycle
+with wrap, enter-on-focus) + right-footer hints, pgup/pgdn ±10 row
+scroll — the upstream env-machined `getScrollAcceleration` not ported;
+the window re-anchor is now selection-change-driven via `lastSel`;
+deviations 176–178 logged).
+Deviations 122–178 logged.
+Next: S2.8 (bead `yolo-oae.3.11`) — permission restyle.
 Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
 (PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
 + GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,
