@@ -16,9 +16,8 @@ import (
 	"github.com/kido5217/yolo/internal/tui/store"
 )
 
-// pressTab builds a synthetic tab keypress (Text must stay empty or String()
-// stops matching the "tab" binding).
-func pressTab() tea.KeyPressMsg { return tea.KeyPressMsg{Code: '\t'} }
+// model_test.go — the S2.9 restyle: the flat model select (deviation 168)
+// + the yolo-pinned a/b subchoice.
 
 // pressCtrlP / pressCtrlA build the locked dialog openers (ctrl modifiers, no
 // Text).
@@ -87,172 +86,93 @@ func openModelAt() *recApp {
 	return a
 }
 
-func modelBlock(t *testing.T, a *recApp, want string) {
-	t.Helper()
-	if got := stripANSI(a.dlg.model().view(&a.store, 80, a.theme)); got != want {
-		t.Errorf("model dialog mismatch:\ngot:\n%q\nwant:\n%q", got, want)
-	}
-}
-
 func TestModelDialogRender(t *testing.T) {
-	t.Run("current model is marked and its provider selected", func(t *testing.T) {
+	t.Run("catalog flattens into the select, the current model is marked", func(t *testing.T) {
 		a := openModelAt()
-		want := "Model\n" +
-			"  Kido  · not-required     Qwen*  100k ctx  $0/$0\n" +
-			"  OpenCode Zen  ○ missing\n" +
-			"  ↑/↓ move · tab pane · enter set · esc close"
-		modelBlock(t, a, want)
-	})
-
-	t.Run("down selects the next provider; its models fill the right pane", func(t *testing.T) {
-		a := openModelAt()
-		a.handleKey(press(tea.KeyDown))
-		want := "Model\n" +
-			"  Kido  · not-required\n" +
-			"  OpenCode Zen  ○ missing  Claude Opus 4.7  200k ctx  $0/$0\n" +
-			strings.Repeat(" ", 27) + "GPT-5 Nano  400k ctx  $0/$0\n" +
-			"  ↑/↓ move · tab pane · enter set · esc close"
-		modelBlock(t, a, want)
-	})
-
-	t.Run("subchoice line is the locked [a]/[b] overlay", func(t *testing.T) {
-		a := openModelAt()
-		a.handleKey(press(tea.KeyDown))
-		a.handleKey(pressTab())
-		a.handleKey(press(tea.KeyEnter))
-		want := "Model\n" +
-			"  Kido  · not-required\n" +
-			"  OpenCode Zen  ○ missing  Claude Opus 4.7  200k ctx  $0/$0\n" +
-			strings.Repeat(" ", 27) + "GPT-5 Nano  400k ctx  $0/$0\n" +
-			"  [a] this session  [b] set default\n" +
-			"  ↑/↓ move · tab pane · enter set · esc close"
-		modelBlock(t, a, want)
-	})
-
-	t.Run("config model marks the default when no session exists", func(t *testing.T) {
-		a := openModelAt()
-		a.store.Current = nil
-		want := "Model\n" +
-			"  Kido  · not-required     Qwen*  100k ctx  $0/$0\n" +
-			"  OpenCode Zen  ○ missing\n" +
-			"  ↑/↓ move · tab pane · enter set · esc close"
-		modelBlock(t, a, want)
+		got := stripANSI(a.dlg.model().view(&a.store, 80, 24, a.theme))
+		lines := strings.Split(got, "\n")
+		if !strings.Contains(lines[0], "Model") {
+			t.Fatalf("title row = %q", lines[0])
+		}
+		if !strings.Contains(lines[1], "Search") {
+			t.Fatalf("filter row = %q", lines[1])
+		}
+		// category headers + the rows (the zero-theme renders plain)
+		if !strings.Contains(got, "   Kido") || !strings.Contains(got, "   OpenCode Zen") {
+			t.Fatalf("category headers missing:\n%s", got)
+		}
+		// the current model: the ● gutter + the active-row title + the ctx/cost tail
+		var qwenLine string
+		for _, l := range lines {
+			if strings.Contains(l, "Qwen") {
+				qwenLine = l
+			}
+		}
+		if !strings.Contains(qwenLine, "●") || !strings.Contains(qwenLine, "100k ctx") || !strings.Contains(qwenLine, "$0/$0") {
+			t.Fatalf("current model row = %q", qwenLine)
+		}
+		if !strings.Contains(got, "Claude Opus 4.7") || !strings.Contains(got, "GPT-5 Nano") {
+			t.Fatalf("catalog models missing:\n%s", got)
+		}
 	})
 
 	t.Run("no providers renders the loading hint", func(t *testing.T) {
 		a := modelFixture()
 		a.store.Providers = nil
 		a.openModelDialog()
-		modelBlock(t, a, "Model\n  loading…")
+		got := stripANSI(a.dlg.model().view(&a.store, 80, 24, a.theme))
+		if !strings.Contains(got, "Model") || !strings.Contains(got, "loading…") {
+			t.Fatalf("loading hint missing:\n%s", got)
+		}
+	})
+
+	t.Run("filter narrows the list", func(t *testing.T) {
+		a := openModelAt()
+		a.handleKey(press('g')) // only "GPT-5 Nano" matches
+		got := stripANSI(a.dlg.model().view(&a.store, 80, 24, a.theme))
+		if strings.Contains(got, "Qwen") || strings.Contains(got, "Claude") {
+			t.Fatalf("filter did not narrow:\n%s", got)
+		}
+		if !strings.Contains(got, "GPT-5 Nano") {
+			t.Fatalf("filtered row missing:\n%s", got)
+		}
+	})
+
+	t.Run("subchoice line is the locked [a]/[b] overlay", func(t *testing.T) {
+		a := openModelAt()
+		a.handleKey(press(tea.KeyEnter)) // the current (selected) model
+		got := stripANSI(a.dlg.model().view(&a.store, 80, 24, a.theme))
+		if !strings.Contains(got, "[a] this session  [b] set default") {
+			t.Fatalf("subchoice missing:\n%s", got)
+		}
 	})
 }
 
 func TestModelDialogKeys(t *testing.T) {
-	t.Run("down/up move the provider with wraparound", func(t *testing.T) {
+	t.Run("esc closes the subchoice first, then the dialog", func(t *testing.T) {
 		a := openModelAt()
-		if got := a.dlg.model().selProv; got != 0 {
-			t.Fatalf("initial selProv = %d, want 0 (current model's provider)", got)
-		}
-		a.handleKey(press(tea.KeyDown))
-		if got := a.dlg.model().selProv; got != 1 {
-			t.Fatalf("after down selProv = %d, want 1", got)
-		}
-		a.handleKey(press(tea.KeyUp))
-		if got := a.dlg.model().selProv; got != 0 {
-			t.Fatalf("after up selProv = %d, want 0", got)
-		}
-		a.handleKey(press(tea.KeyUp)) // wraps to the last provider
-		if got := a.dlg.model().selProv; got != 1 {
-			t.Fatalf("after wrap selProv = %d, want 1", got)
-		}
-	})
-
-	t.Run("tab toggles the focused pane", func(t *testing.T) {
-		a := openModelAt()
-		a.handleKey(pressTab())
-		if a.dlg.model().pane != paneModels {
-			t.Fatalf("after tab pane = %d, want models", a.dlg.model().pane)
-		}
-		a.handleKey(pressTab())
-		if a.dlg.model().pane != paneProviders {
-			t.Fatalf("after second tab pane = %d, want providers", a.dlg.model().pane)
-		}
-	})
-
-	t.Run("model arrows move and wrap in the models pane", func(t *testing.T) {
-		a := openModelAt()
-		a.handleKey(press(tea.KeyDown)) // opencode
-		a.handleKey(pressTab())
-		a.handleKey(press(tea.KeyDown))
-		if got := a.dlg.model().selModel; got != 1 {
-			t.Fatalf("after down selModel = %d, want 1 (gpt-5-nano)", got)
-		}
-		a.handleKey(press(tea.KeyDown)) // wraps to the first model
-		if got := a.dlg.model().selModel; got != 0 {
-			t.Fatalf("after wrap selModel = %d, want 0", got)
-		}
-	})
-
-	t.Run("enter opens the subchoice only on the models pane", func(t *testing.T) {
-		a := openModelAt()
-		a.handleKey(press(tea.KeyEnter)) // providers pane: no subchoice
+		a.handleKey(press(tea.KeyEnter))
+		a.handleKey(press(tea.KeyEscape))
 		if a.dlg.model().hasSubChoice {
-			t.Fatal("enter on the providers pane must not open the subchoice")
+			t.Fatalf("first esc must close the subchoice only")
 		}
-		a.handleKey(pressTab())
-		a.handleKey(press(tea.KeyEnter))
-		if !a.dlg.model().hasSubChoice {
-			t.Fatal("enter on the models pane must open the subchoice")
-		}
-	})
-
-	t.Run("subchoice a/b emit one cmd; other keys are ignored", func(t *testing.T) {
-		a := openModelAt()
-		a.handleKey(pressTab())
-		a.handleKey(press(tea.KeyEnter))
-		a.handleKey(press('x'))
-		if len(a.Cmds) != 0 {
-			t.Fatalf("key x in subchoice emitted %d cmds, want 0", len(a.Cmds))
-		}
-		a.handleKey(press('a'))
-		if len(a.Cmds) != 1 {
-			t.Fatalf("key a emitted %d cmds, want 1", len(a.Cmds))
-		}
-		a.Cmds = nil
-		a.handleKey(press('b'))
-		if len(a.Cmds) != 1 {
-			t.Fatalf("key b emitted %d cmds, want 1", len(a.Cmds))
-		}
-		// The dialog stays open until the patch msg is applied.
 		if a.dlg.empty() {
-			t.Fatal("dialog must stay open before the patch msg lands")
+			t.Fatalf("the dialog must stay open")
+		}
+		a.handleKey(press(tea.KeyEscape))
+		if !a.dlg.empty() {
+			t.Fatalf("second esc must close the dialog")
 		}
 	})
 
-	t.Run("esc closes the subchoice, then the dialog", func(t *testing.T) {
+	t.Run("a/b apply through the existing patch flow", func(t *testing.T) {
 		a := openModelAt()
-		a.handleKey(pressTab())
+		a.handleKey(press(tea.KeyDown)) // to the next model (GPT-5 Nano? no — next option: Claude Opus 4.7)
 		a.handleKey(press(tea.KeyEnter))
-		a.handleKey(press(tea.KeyEscape))
-		if a.dlg.model().hasSubChoice || a.dlg.empty() {
-			t.Fatalf(
-				"after esc: subChoice=%v dlg=%v, want subchoice closed and dialog open",
-				a.dlg.model().hasSubChoice, a.dlg.empty())
-		}
-		a.handleKey(press(tea.KeyEscape))
-		if !a.dlg.empty() || a.dlg.model() != nil {
-			t.Fatal("after second esc the dialog must be gone")
-		}
-	})
-
-	t.Run("list keys never fall through to the prompt", func(t *testing.T) {
-		a := openModelAt()
-		a.handleKey(press('z'))
-		if a.prompt.input.Value() != "" {
-			t.Fatalf("prompt input = %q, must stay empty while the dialog is open", a.prompt.input.Value())
-		}
-		if len(a.Cmds) != 0 {
-			t.Fatalf("key z emitted %d cmds, want 0", len(a.Cmds))
+		a.handleKey(press('b')) // set default
+		// the cmd chain is the existing patchDlgCmd (config patch)
+		if len(a.Cmds) == 0 {
+			t.Fatalf("b must emit the patch cmd")
 		}
 	})
 }
@@ -260,10 +180,9 @@ func TestModelDialogKeys(t *testing.T) {
 func TestModelDialogApply(t *testing.T) {
 	t.Run("session patch: success toasts, closes, and updates current", func(t *testing.T) {
 		a := openModelAt()
-		a.handleKey(press(tea.KeyDown)) // opencode
-		a.handleKey(pressTab())
-		a.handleKey(press(tea.KeyDown)) // gpt-5-nano
-		a.handleKey(press(tea.KeyEnter))
+		a.handleKey(press(tea.KeyDown))  // claude-opus-4-7
+		a.handleKey(press(tea.KeyDown))  // gpt-5-nano
+		a.handleKey(press(tea.KeyEnter)) // open the subchoice
 		a.handleKey(press('a'))
 		if len(a.Cmds) != 1 {
 			t.Fatalf("recorded %d cmds, want 1", len(a.Cmds))
@@ -284,7 +203,6 @@ func TestModelDialogApply(t *testing.T) {
 	t.Run("default patch: success updates the config model", func(t *testing.T) {
 		a := openModelAt()
 		a.handleKey(press(tea.KeyDown))
-		a.handleKey(pressTab())
 		a.handleKey(press(tea.KeyDown))
 		a.handleKey(press(tea.KeyEnter))
 		a.handleKey(press('b'))
@@ -306,7 +224,6 @@ func TestModelDialogApply(t *testing.T) {
 
 	t.Run("error toasts and keeps the dialog", func(t *testing.T) {
 		a := openModelAt()
-		a.handleKey(pressTab())
 		a.handleKey(press(tea.KeyEnter))
 		a.applyDlgPatch(dlgPatchMsg{field: "model", value: "opencode/gpt-5-nano", err: errors.New("boom")})
 		if !hasToast(a, "boom") {
@@ -324,7 +241,6 @@ func TestModelDialogApply(t *testing.T) {
 		a.store.Current = nil
 		a.openModelDialog()
 		a.Cmds = nil
-		a.handleKey(pressTab())
 		a.handleKey(press(tea.KeyEnter))
 		a.handleKey(press('a'))
 		if len(a.Cmds) != 0 {
@@ -377,8 +293,9 @@ func TestModelDialogOpen(t *testing.T) {
 		if len(a.store.Providers) != 2 || len(a.store.Agents) != 3 {
 			t.Fatalf("store = %d providers / %d agents, want 2 / 3", len(a.store.Providers), len(a.store.Agents))
 		}
-		if a.dlg.model().selProv != 0 {
-			t.Fatalf("after catalog selProv = %d, want 0 (config model kido/q)", a.dlg.model().selProv)
+		sel := a.dlg.model().sel
+		if sel == nil || sel.sel != 0 {
+			t.Fatalf("after catalog selection = %v, want 0 (config model kido/q)", sel)
 		}
 	})
 
@@ -393,8 +310,8 @@ func TestModelDialogOpen(t *testing.T) {
 }
 
 // TestTUIModelDialog is the teatest scenario: open the model dialog with
-// ctrl+p (the offline server fixture), navigate to opencode/gpt-5-nano, and
-// set it for this session with [a].
+// ctrl+p (the offline server fixture), filter to GPT-5 Nano, enter → the
+// subchoice, and set it for this session with [a].
 func TestTUIModelDialog(t *testing.T) {
 	ts := testutil.Boot(t)
 	c := client.New(ts.URL, ts.Dir)
@@ -412,12 +329,10 @@ func TestTUIModelDialog(t *testing.T) {
 	tm.Send(pressCtrlP())
 	teatest.WaitFor(t, tm.Output(), hasModelDialog, teatest.WithDuration(5*time.Second))
 
-	tm.Send(press(tea.KeyDown)) // opencode provider
+	// type the filter to GPT-5 Nano, enter → the subchoice, a = this session
+	tm.Send(press('g'))
 	tm.Send(press(tea.KeyEnter))
-	tm.Send(pressTab())
-	tm.Send(press(tea.KeyDown)) // gpt-5-nano
-	tm.Send(press(tea.KeyEnter))
-	tm.Send(press('a')) // this session
+	tm.Send(press('a'))
 
 	teatest.WaitFor(t, tm.Output(), hasLine("model set: opencode/gpt-5-nano"), teatest.WithDuration(5*time.Second))
 
@@ -436,10 +351,8 @@ func TestTUIModelDialog(t *testing.T) {
 func hasModelDialog(b []byte) bool {
 	s := stripANSI(string(b))
 	return strings.Contains(s, "Kido") &&
-		strings.Contains(s, "· not-required") &&
 		strings.Contains(s, "OpenCode Zen") &&
-		strings.Contains(s, "○ missing") &&
-		strings.Contains(s, "Qwen*") &&
+		strings.Contains(s, "● Qwen") &&
 		strings.Contains(s, "100k ctx")
 }
 
@@ -469,8 +382,7 @@ func TestModelDialogPatchPaths(t *testing.T) {
 	open := func() {
 		a.openModelDialog()
 		a.Cmds = nil
-		a.handleKey(pressTab())          // models pane
-		a.handleKey(press(tea.KeyEnter)) // open the subchoice
+		a.handleKey(press(tea.KeyEnter)) // open the subchoice on the current model
 	}
 
 	t.Run("b sets the config default model", func(t *testing.T) {

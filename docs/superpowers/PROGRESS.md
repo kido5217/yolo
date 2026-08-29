@@ -52,9 +52,20 @@ port over the part input (no request Meta on the wire) + the reply pills
 `partInput` + `view`/`permissionView` (the non-modal overlay path; wraps
 at w); `dialog.go` `syncPermDialog` push/pop against parked asks
 (idempotent) driven from `applyPermReply` (success only) + the
-`permission.*` events in `EventMsg`; deviations 179–182 logged).
-Deviations 122–182 logged.
-Next: S2.9 (bead `yolo-oae.3.12`) — model restyle.
+`permission.*` events in `EventMsg`; deviations 179–182 logged),
+S2.9 model restyle landed (`dialog.go`: the two-pane picker replaced by
+the flat `modelDlg{sel *selectModel, hasSubChoice, pick}` on the dlgLarge
+modal — flat catalog select (title = model name, category = provider
+name, description = ctx/cost tail, footer = provider status), ● gutter
+on the session/config model, the yolo-pinned [a]/[b] subchoice via
+`modelSelectPick`, `modelOptions`/`modelIsCurrentOpt`/`modelSelIndex` +
+`providerStatusText`; the two-pane machinery deleted (panes, tab key,
+move/modelCount/selectedRef/currentProv/modelCell/modelRow/styleSegment/
+modelIsCurrent); `select.go` `rowWithFooter` tail-wrap via `wrapTailRow`
+for over-wide footer rows — forced by the re-baselined overflow test,
+the fit path byte-identical; deviations 183–184 logged).
+Deviations 122–184 logged.
+Next: S2.10 (bead `yolo-oae.3.13`) — agent restyle.
 Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
 (PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
 + GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,

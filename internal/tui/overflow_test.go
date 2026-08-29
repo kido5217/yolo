@@ -84,14 +84,10 @@ func TestAgentDlgViewWraps(t *testing.T) {
 
 func TestModelDlgViewWraps(t *testing.T) {
 	a := openModelAt()
-	a.dlg.model().selProv = 1 // select the 2-model provider for cell coverage
-	// The fixture rows (27-col left pane + model cell) exceed 40 columns.
-	got := stripANSI(a.dlg.model().view(&a.store, 40, a.theme))
+	got := stripANSI(a.dlg.model().view(&a.store, 40, 24, a.theme))
 	fitsWidth(t, got, 40)
-	// Whitespace-normalized containment: wrapping inserts line breaks and
-	// hanging indents between the original words.
 	flat := strings.Join(strings.Fields(rejoined(got)), " ")
-	for _, tok := range []string{"Kido · not-required", "OpenCode Zen ○ missing", "Claude Opus 4.7 200k ctx $0/$0", "GPT-5 Nano 400k ctx $0/$0"} {
+	for _, tok := range []string{"Qwen", "Claude Opus 4.7", "GPT-5 Nano"} {
 		if !strings.Contains(flat, tok) {
 			t.Fatalf("model dialog lost %q in wrap:\n%q", tok, got)
 		}

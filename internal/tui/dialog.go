@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -281,7 +280,7 @@ func (a *App) dlgView(w int) string {
 	case !ok:
 		return ""
 	case d.kind == dlgModel && d.model != nil:
-		return d.model.view(&a.store, w, a.theme)
+		return d.model.view(&a.store, w, a.size.Height, a.theme)
 	case d.kind == dlgAgents && d.agent != nil:
 		return d.agent.view(&a.store, w, a.theme)
 	}
@@ -297,7 +296,7 @@ func (a *App) modalInner(d *dialog, w, h int) string {
 			return d.sel.view(w, h, a.theme)
 		}
 		if d.model != nil {
-			return d.model.view(&a.store, w, a.theme)
+			return d.model.view(&a.store, w, h, a.theme)
 		}
 	case dlgAgents:
 		if d.sel != nil {
@@ -465,38 +464,28 @@ func (a *App) applyDlgPatch(m dlgPatchMsg) tea.Cmd {
 	return nil
 }
 
-// modelPane selects which dialog pane the list keys drive.
-type modelPane int
-
-const (
-	paneProviders modelPane = iota
-	paneModels
-)
-
-// modelDlg is the ctrl+p / /model two-pane picker: providers on the left with
-// their auth dot, the selected provider's models on the right with context and
-// cost. Enter on a model opens the locked [a] this session / [b] set default
-// overlay.
+// modelDlg is the ctrl+p / /model picker (S2.9: the two-pane picker is
+// replaced by the flat select + the a/b subchoice — deviation 168).
 type modelDlg struct {
-	pane         modelPane
-	selProv      int
-	selModel     int
+	sel          *selectModel
 	hasSubChoice bool
+	pick         string // the "provider/id" the subchoice applies
 }
 
 var (
 	dlgModelKey  = key.NewBinding(key.WithKeys("ctrl+p"))
 	dlgAgentsKey = key.NewBinding(key.WithKeys("ctrl+a"))
-	dlgTabKey    = key.NewBinding(key.WithKeys("tab"))
 	choiceThis   = key.NewBinding(key.WithKeys("a"))
 	choiceDef    = key.NewBinding(key.WithKeys("b"))
 )
 
-// openModelDialog pushes the model dialog with its payload, seeds its
-// selection from the session (or config) model, and fetches the catalog.
+// openModelDialog pushes the model select modal (dlgLarge — upstream
+// dialog-model is size="large") and fetches the catalog. A nil sel = the
+// pre-catalog loading hint; syncModelSel builds the select once the catalog
+// is hydrated (open-time or on arrival).
 func (a *App) openModelDialog() []tea.Cmd {
 	mdl := &modelDlg{}
-	a.dlg.push(dialog{kind: dlgModel, model: mdl})
+	a.pushModal(dialog{kind: dlgModel, model: mdl}, dlgLarge, nil)
 	a.syncModelSel()
 	return a.emit(a.fetchCatalogCmd())
 }
@@ -506,41 +495,36 @@ func (a *App) closeModelDialog() {
 	a.dlg.pop()
 }
 
-// syncModelSel points the dialog at the session model, falling back to the
-// config model; nil-safe when the catalog is not hydrated yet.
+// syncModelSel (re)builds the open model select on the catalog: it builds
+// the select when the catalog first hydrates (nil sel = loading) and
+// re-points the selection at the session model (or the config default).
 func (a *App) syncModelSel() {
 	m := a.dlg.model()
 	if m == nil {
 		return
 	}
-	var ref protocol.ModelRef
-	if cur := a.store.Current; cur != nil && cur.Model != nil {
-		ref = *cur.Model
-	} else if s, ok := a.store.Config["model"].(string); ok {
-		if pid, mid, ok := splitModelRef(s); ok {
-			ref = protocol.ModelRef{ProviderID: pid, ID: mid}
+	if m.sel == nil {
+		if len(a.store.Providers) == 0 {
+			return
 		}
+		m.sel = selectNew("Model", "Search", modelOptions(&a.store),
+			modelIsCurrentOpt(&a.store), func(app *App, o selectOption) { app.modelSelectPick(o) }, nil)
 	}
-	for i, p := range a.store.Providers {
-		if p.ID != ref.ProviderID {
-			continue
-		}
-		m.selProv = i
-		for j, mm := range modelsOf(p) {
-			if mm.ID == ref.ID {
-				m.selModel = j
-			}
-		}
-		return
+	m.sel.options = modelOptions(&a.store)
+	if i := modelSelIndex(&a.store); i >= 0 {
+		m.sel.sel = i
 	}
 }
 
-// currentProv is the selected provider, if the index is in range.
-func (m *modelDlg) currentProv(st *store.State) (protocol.Provider, bool) {
-	if m.selProv >= 0 && m.selProv < len(st.Providers) {
-		return st.Providers[m.selProv], true
+// modelSelectPick is the select's onSelect: enter opens the a/b subchoice
+// (yolo pin — the model applies through it, never directly).
+func (a *App) modelSelectPick(o selectOption) {
+	if d, ok := a.dlg.top(); ok && d.kind == dlgModel && d.model != nil {
+		d.model.hasSubChoice = true
+		if v, okk := o.value.(string); okk {
+			d.model.pick = v
+		}
 	}
-	return protocol.Provider{}, false
 }
 
 // modelsOf returns the provider's models in stable (sorted id) order.
@@ -557,36 +541,6 @@ func modelsOf(p protocol.Provider) []protocol.Model {
 	return out
 }
 
-// selectedRef is the "provider/id" wire value of the selected model.
-func (m *modelDlg) selectedRef(st *store.State) string {
-	p, ok := m.currentProv(st)
-	if !ok {
-		return ""
-	}
-	ms := modelsOf(p)
-	if len(ms) == 0 {
-		return ""
-	}
-	if m.selModel < 0 || m.selModel >= len(ms) {
-		m.selModel = 0
-	}
-	return p.ID + "/" + ms[m.selModel].ID
-}
-
-// modelIsCurrent reports whether the model is the session model or the config
-// default (the row gets the "*" marker).
-func modelIsCurrent(st *store.State, p protocol.Provider, m protocol.Model) bool {
-	if cur := st.Current; cur != nil && cur.Model != nil && cur.Model.ProviderID == p.ID && cur.Model.ID == m.ID {
-		return true
-	}
-	if s, ok := st.Config["model"].(string); ok && s != "" {
-		if pid, mid, ok := splitModelRef(s); ok && pid == p.ID && mid == m.ID {
-			return true
-		}
-	}
-	return false
-}
-
 // splitModelRef splits a "provider/id" model ref.
 func splitModelRef(s string) (pid, mid string, ok bool) {
 	i := strings.IndexByte(s, '/')
@@ -596,18 +550,11 @@ func splitModelRef(s string) (pid, mid string, ok bool) {
 	return s[:i], s[i+1:], true
 }
 
-// handleKey drives the dialog while it owns the keys: esc closes (or cancels
-// the subchoice), tab switches panes (LOCKED), arrows move with wraparound,
-// enter opens the subchoice on the models pane, a/b apply (LOCKED overlay).
+// handleKey drives the dialog while it owns the keys: the subchoice owns a/b
+// (the locked overlay); esc on the subchoice is the S2.2 cancelInner veto
+// (the modal stack consumes it); everything else forwards to the select
+// (enter re-opens the subchoice via onSelect on a different model).
 func (m *modelDlg) handleKey(a *App, k tea.KeyPressMsg) []tea.Cmd {
-	if key.Matches(k, escBinding) {
-		if m.hasSubChoice {
-			m.hasSubChoice = false
-		} else {
-			a.closeModelDialog()
-		}
-		return nil
-	}
 	if m.hasSubChoice {
 		switch {
 		case key.Matches(k, choiceThis):
@@ -615,119 +562,85 @@ func (m *modelDlg) handleKey(a *App, k tea.KeyPressMsg) []tea.Cmd {
 				a.toast("no session")
 				return nil
 			}
-			return a.emit(a.patchDlgCmd("model", m.selectedRef(&a.store), true))
+			return a.emit(a.patchDlgCmd("model", m.pick, true))
 		case key.Matches(k, choiceDef):
-			return a.emit(a.patchDlgCmd("model", m.selectedRef(&a.store), false))
+			return a.emit(a.patchDlgCmd("model", m.pick, false))
 		}
 		return nil
 	}
-	switch {
-	case key.Matches(k, dlgTabKey):
-		if m.pane == paneProviders {
-			m.pane = paneModels
-		} else {
-			m.pane = paneProviders
-		}
-	case key.Matches(k, homeKeyMap.Up):
-		m.move(&a.store, -1)
-	case key.Matches(k, homeKeyMap.Down):
-		m.move(&a.store, 1)
-	case key.Matches(k, homeKeyMap.Enter):
-		if m.pane == paneModels && m.modelCount(&a.store) > 0 {
-			m.hasSubChoice = true
-		}
+	if m.sel == nil {
+		return nil // the loading hint: nothing to drive until the catalog lands
 	}
-	return nil
+	return m.sel.handleKey(a, k)
 }
 
-// move steps the focused pane's selection with wraparound.
-func (m *modelDlg) move(st *store.State, d int) {
-	if m.pane == paneProviders {
-		n := len(st.Providers)
-		if n == 0 {
-			return
-		}
-		m.selProv = ((m.selProv+d)%n + n) % n
-		return
+// view renders the select + the subchoice overlay (the modal stack draws
+// the frame; a nil sel — the pre-catalog open — renders the loading hint).
+func (m *modelDlg) view(st *store.State, w, h int, th theme.Theme) string {
+	if m.sel == nil {
+		return title.Render("Model") + "\n" + th.TextMuted().Render("  loading…")
 	}
-	n := m.modelCount(st)
-	if n == 0 {
-		return
-	}
-	m.selModel = ((m.selModel+d)%n + n) % n
-}
-
-// modelCount is the length of the selected provider's model list.
-func (m *modelDlg) modelCount(st *store.State) int {
-	if p, ok := m.currentProv(st); ok {
-		return len(modelsOf(p))
-	}
-	return 0
-}
-
-// view renders the two panes: provider rows (auth dot + status), the selected
-// provider's models in the right pane, the subchoice overlay and the keymap
-// hint. Rows word-wrap at the terminal width; wrapped continuations hang at
-// the cell column.
-func (m *modelDlg) view(st *store.State, w int, th theme.Theme) string {
 	var b strings.Builder
-	b.WriteString(title.Render("Model") + "\n")
-	provs := st.Providers
-	if len(provs) == 0 {
-		b.WriteString(th.TextMuted().Render("  loading…"))
-		return b.String()
-	}
-	if m.selProv >= len(provs) {
-		m.selProv = len(provs) - 1
-	}
-	curProv, ok := m.currentProv(st)
-	var models []protocol.Model
-	if ok {
-		models = modelsOf(curProv)
-	}
-	if m.selModel >= len(models) {
-		m.selModel = 0
-	}
-	leftCol := 0
-	for _, p := range provs {
-		sPlain, _ := providerStatus(th, p.Auth)
-		if l := len("  "+p.Name+"  ") + utf8.RuneCountInString(sPlain); l > leftCol {
-			leftCol = l
-		}
-	}
-	leftCol += 2
-	rows := make([]string, 0, len(provs)+len(models))
-	for i, p := range provs {
-		sPlain, sStyle := providerStatus(th, p.Auth)
-		name := "  " + p.Name + "  "
-		left := name + sPlain + strings.Repeat(" ", leftCol-len(name)-utf8.RuneCountInString(sPlain))
-		rowSty := th.TextMuted()
-		if i == m.selProv {
-			rowSty = cursorStyle(th)
-		}
-		switch {
-		case i == m.selProv && len(models) > 0:
-			// The cell follows the pad, so no trailing spaces to trim.
-			cell, cellSty := m.modelCell(th, st, curProv, models, 0)
-			rows = append(rows, modelRow(styleSegment(left, len(name), len(name)+len(sPlain), sStyle, rowSty), leftCol, cell, cellSty, w))
-		default:
-			// Trim before styling: the style's trailing SGR reset would
-			// otherwise survive TrimRight as a visible trailing space.
-			rows = append(rows, rowSty.Render(strings.TrimRight(left, " ")))
-		}
-		if i == m.selProv {
-			for j := 1; j < len(models); j++ {
-				cell, cellSty := m.modelCell(th, st, curProv, models, j)
-				rows = append(rows, modelRow(strings.Repeat(" ", leftCol), leftCol, cell, cellSty, w))
-			}
-		}
-	}
-	b.WriteString(strings.Join(rows, "\n"))
+	b.WriteString(m.sel.view(w, h, th))
 	if m.hasSubChoice {
 		b.WriteString("\n" + dimWrapped(th, "  [a] this session  [b] set default", w))
 	}
-	b.WriteString("\n" + dimWrapped(th, "  \u2191/\u2193 move \u00B7 tab pane \u00B7 enter set \u00B7 esc close", w))
 	return b.String()
+}
+
+// modelOptions flattens the catalog into select options (providers in
+// catalog order, their models in the stable sorted order — modelsOf):
+// title = the model name, category = the provider name, description = the
+// context + cost tail, footer = the provider status, value = "provider/id".
+func modelOptions(st *store.State) []selectOption {
+	var opts []selectOption
+	for _, p := range st.Providers {
+		for _, mm := range modelsOf(p) {
+			opts = append(opts, selectOption{
+				title:       mm.Name,
+				description: fmtCtx(mm.Limit.Context) + " ctx  " + usd(mm.Cost.Input) + "/" + usd(mm.Cost.Output),
+				footer:      providerStatusText(p.Auth),
+				category:    p.Name,
+				value:       p.ID + "/" + mm.ID,
+			})
+		}
+	}
+	return opts
+}
+
+// modelIsCurrentOpt is the select's isCurrent (value = "provider/id"; the
+// session model or the config default).
+func modelIsCurrentOpt(st *store.State) func(selectOption) bool {
+	var ref protocol.ModelRef
+	if cur := st.Current; cur != nil && cur.Model != nil {
+		ref = *cur.Model
+	} else if s, ok := st.Config["model"].(string); ok {
+		if pid, mid, ok := splitModelRef(s); ok {
+			ref = protocol.ModelRef{ProviderID: pid, ID: mid}
+		}
+	}
+	return func(o selectOption) bool {
+		v, _ := o.value.(string)
+		return ref.ProviderID != "" && v == ref.ProviderID+"/"+ref.ID
+	}
+}
+
+// modelSelIndex is the select index of the current model (-1 = none).
+func modelSelIndex(st *store.State) int {
+	var ref protocol.ModelRef
+	if cur := st.Current; cur != nil && cur.Model != nil {
+		ref = *cur.Model
+	} else if s, ok := st.Config["model"].(string); ok {
+		if pid, mid, ok := splitModelRef(s); ok {
+			ref = protocol.ModelRef{ProviderID: pid, ID: mid}
+		}
+	}
+	for i, o := range modelOptions(st) {
+		if v, _ := o.value.(string); v == ref.ProviderID+"/"+ref.ID {
+			return i
+		}
+	}
+	return -1
 }
 
 // dimWrapped word-wraps a plain line at w and renders each visual line in
@@ -744,82 +657,28 @@ func dimWrapped(th theme.Theme, s string, w int) string {
 	return b.String()
 }
 
-// modelRow renders the left part and the model cell on one line, word-wrapping
-// at the terminal width; continuation lines hang at the cell column (leftCol,
-// capped so they still fit).
-func modelRow(left string, leftCol int, cell string, cellSty lipgloss.Style, w int) string {
-	if runeWidth(left)+runeWidth(cell) <= w {
-		return left + cellSty.Render(cell)
+// providerStatusText is the locked dot + label (the select footer tail).
+func providerStatusText(auth *protocol.ProviderAuth) string {
+	switch {
+	case auth != nil && auth.Status == "loaded":
+		return "● loaded"
+	case auth != nil && auth.RequiresKey && auth.Status == "missing":
+		return "○ missing"
+	default:
+		return "· not-required"
 	}
-	// Degenerate: the left pane alone fills the line (terminal narrower than
-	// the pane). The cell moves to its own lines at the full width.
-	if runeWidth(left) >= w {
-		var b strings.Builder
-		b.WriteString(left)
-		for _, seg := range strings.Split(wrapLine(cell, w), "\n") {
-			b.WriteString("\n" + cellSty.Render(seg))
-		}
-		return b.String()
-	}
-	hang := leftCol
-	if hang > w-1 {
-		hang = w - 1
-	}
-	if hang < 0 {
-		hang = 0
-	}
-	avail := w - hang
-	if avail < 1 {
-		avail = 1
-	}
-	var b strings.Builder
-	for k, seg := range strings.Split(wrapLine(cell, avail), "\n") {
-		if k == 0 {
-			b.WriteString(left)
-		} else {
-			b.WriteString("\n" + strings.Repeat(" ", hang))
-		}
-		b.WriteString(cellSty.Render(seg))
-	}
-	return b.String()
 }
 
-// styleSegment applies segStyle to s[a:b] and rowSty to the rest.
-func styleSegment(s string, a, b int, segStyle, rowSty lipgloss.Style) string {
-	if a == 0 && b == len(s) {
-		return segStyle.Render(s)
-	}
-	return rowSty.Render(s[:a]) + segStyle.Render(s[a:b]) + rowSty.Render(s[b:])
-}
-
-// modelCell renders one right-pane model row (default marker, context, cost)
-// as plain text plus its style (a row may wrap, so the style is applied per
-// visual line).
-func (m *modelDlg) modelCell(th theme.Theme, st *store.State, p protocol.Provider, models []protocol.Model, j int) (string, lipgloss.Style) {
-	mm := models[j]
-	cell := mm.Name
-	if modelIsCurrent(st, p, mm) {
-		cell += "*"
-	}
-	cell += "  " + fmtCtx(mm.Limit.Context) + " ctx  " + usd(mm.Cost.Input) + "/" + usd(mm.Cost.Output)
-	if j == m.selModel {
-		return cell, cursorStyle(th)
-	}
-	return cell, th.TextMuted()
-}
-
-// providerStatus maps the wire auth state to the locked dot + label (plain
-// text plus its style; the row may wrap, so the style is applied per segment).
-// The dots follow the upstream status-dot semantics (footer.tsx:70,76,79):
-// loaded = success, missing = error.
+// providerStatus maps the wire auth state to the dot + label style (the
+// transcript surfaces; the select tail uses providerStatusText plain).
 func providerStatus(th theme.Theme, auth *protocol.ProviderAuth) (string, lipgloss.Style) {
 	switch {
 	case auth != nil && auth.Status == "loaded":
-		return "● loaded", th.Success()
+		return providerStatusText(auth), th.Success()
 	case auth != nil && auth.RequiresKey && auth.Status == "missing":
-		return "○ missing", th.Error()
+		return providerStatusText(auth), th.Error()
 	default:
-		return "· not-required", th.TextMuted()
+		return providerStatusText(auth), th.TextMuted()
 	}
 }
 

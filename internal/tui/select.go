@@ -466,13 +466,37 @@ func (m *selectModel) rowLine(o selectOption, active, cur bool, th theme.Theme, 
 	return line
 }
 
+// wrapTailRow renders an over-wide option row (yolo-ukc): the left (gutter +
+// title) stays on the first visual line, the tail (description and/or footer)
+// word-wraps at the remaining width and the continuation lines hang at the
+// left's column. The wrap runs on plain text before styling; leftRender and
+// tailRender style the left and each visual tail line.
+func wrapTailRow(left, tail string, w int, leftRender, tailRender func(string) string) string {
+	avail := w - runeWidth(left)
+	if avail < 1 {
+		avail = 1
+	}
+	var b strings.Builder
+	for i, l := range strings.Split(wrapLine(tail, avail), "\n") {
+		if i == 0 {
+			b.WriteString(leftRender(left))
+			b.WriteString(tailRender(l))
+		} else {
+			b.WriteByte('\n')
+			b.WriteString(tailRender(strings.Repeat(" ", runeWidth(left)) + l))
+		}
+	}
+	return b.String()
+}
+
 // rowWithFooter renders an option row with the per-option footer tail at the
 // right edge of the row width (the port of upstream Option's flex layout,
 // dialog-select.tsx:732-791): the plain content (gutter + title + description)
 // is built first, the tail gap is computed from the plain rune widths, and the
 // line renders in one pass — active: the S2.5 full-row paint with the footer
 // inside it (the footer in the row's selection fg); unselected: the S2.5
-// segment styles with the footer muted.
+// segment styles with the footer muted. An over-wide row wraps the tail at
+// the title column (yolo-ukc) instead of clipping past the panel.
 func (m *selectModel) rowWithFooter(o selectOption, active, cur bool, w int, th theme.Theme) string {
 	gutter := "  "
 	if cur {
@@ -482,31 +506,59 @@ func (m *selectModel) rowWithFooter(o selectOption, active, cur bool, w int, th 
 	if o.description != "" {
 		desc = "  " + o.description
 	}
+	// A right-aligned tail fits at gap >= 0 (the row lands at exactly w);
+	// an over-wide row wraps the tail, keeping one space before the footer
+	// so the dot never glues to the description.
 	gap := w - runeWidth(gutter+o.title+desc) - runeWidth(o.footer)
 	if gap < 0 {
-		gap = 0
+		gap = 1
 	}
 	pad := strings.Repeat(" ", gap)
+	tail := desc + pad + o.footer
+	if runeWidth(gutter+o.title)+runeWidth(tail) <= w {
+		if active {
+			bg, ok := th.Color("primary")
+			if !ok {
+				return cursorStyle(th).Render(gutter+o.title) + tail
+			}
+			sel := th.SelectedForeground()
+			fg := lipgloss.Color(sel.Hex()[:7])
+			bgC := lipgloss.Color(bg.Hex()[:7])
+			head := lipgloss.NewStyle().Foreground(fg).Background(bgC).Bold(true)
+			tailSty := lipgloss.NewStyle().Foreground(fg).Background(bgC)
+			return lipgloss.NewStyle().Background(bgC).Width(w).Render(head.Render(gutter+o.title) + tailSty.Render(tail))
+		}
+		gutterSty := th.TextMuted()
+		if cur {
+			gutterSty = th.Primary()
+		}
+		line := gutterSty.Render(gutter) + th.Text().Render(o.title)
+		if desc != "" {
+			line += th.TextMuted().Render(desc)
+		}
+		line += th.TextMuted().Render(pad + o.footer)
+		return line
+	}
+	left := gutter + o.title
 	if active {
 		bg, ok := th.Color("primary")
 		if !ok {
-			return cursorStyle(th).Render(gutter+o.title) + desc + pad + o.footer
+			return wrapTailRow(left, tail, w, func(s string) string { return cursorStyle(th).Render(s) }, func(s string) string { return s })
 		}
 		sel := th.SelectedForeground()
 		fg := lipgloss.Color(sel.Hex()[:7])
 		bgC := lipgloss.Color(bg.Hex()[:7])
 		head := lipgloss.NewStyle().Foreground(fg).Background(bgC).Bold(true)
-		tail := lipgloss.NewStyle().Foreground(fg).Background(bgC)
-		return lipgloss.NewStyle().Background(bgC).Width(w).Render(head.Render(gutter+o.title) + tail.Render(desc+pad+o.footer))
+		tailSty := lipgloss.NewStyle().Foreground(fg).Background(bgC)
+		return wrapTailRow(left, tail, w,
+			func(s string) string { return head.Render(s) },
+			func(s string) string { return tailSty.Render(s) })
 	}
 	gutterSty := th.TextMuted()
 	if cur {
 		gutterSty = th.Primary()
 	}
-	line := gutterSty.Render(gutter) + th.Text().Render(o.title)
-	if desc != "" {
-		line += th.TextMuted().Render(desc)
-	}
-	line += th.TextMuted().Render(pad + o.footer)
-	return line
+	return wrapTailRow(left, tail, w,
+		func(s string) string { return gutterSty.Render(gutter) + th.Text().Render(o.title) },
+		func(s string) string { return th.TextMuted().Render(s) })
 }
