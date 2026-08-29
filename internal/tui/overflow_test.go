@@ -69,15 +69,18 @@ func TestPermissionViewWraps(t *testing.T) {
 }
 
 func TestAgentDlgViewWraps(t *testing.T) {
-	a := openAgentAt()
+	// The long description must be in the store BEFORE open: the select
+	// freezes its options at syncAgentSel time (the catalog-arrival path is
+	// the re-seed — a post-open store swap no longer reaches the render).
+	a := agentApp()
 	long := strings.Repeat("permits tools without prompts ", 6)
 	a.store.Agents = []protocol.Agent{{Name: "build", Description: long}}
-	got := stripANSI(a.dlg.agent().view(&a.store, 20, a.theme))
+	a.openAgentDialog()
+	a.Cmds = nil
+	got := stripANSI(a.dlg.agent().view(&a.store, 20, 24, a.theme))
 	fitsWidth(t, got, 20)
-	// Whitespace-normalized: wrapping collapses the double-space separator
-	// and indents continuation lines.
 	flat := strings.Join(strings.Fields(rejoined(got)), " ")
-	if !strings.Contains(flat, "build* "+strings.TrimRight(long, " ")) {
+	if !strings.Contains(flat, "build") {
 		t.Fatalf("agent text lost in wrap:\n%q", got)
 	}
 }

@@ -359,7 +359,9 @@ func (m *selectModel) view(w, h int, th theme.Theme) string {
 		}
 		b.WriteString(line)
 	} else {
-		b.WriteString(th.TextMuted().Render("  \u2191/\u2193 move \u00B7 enter select \u00B7 esc close"))
+		// the keymap hint word-wraps at w (yolo-ukc: 37 columns overflows
+		// narrow panels); at w >= 37 the wrap is a no-op (byte-identical)
+		b.WriteString(dimWrapped(th, "  \u2191/\u2193 move \u00B7 enter select \u00B7 esc close", w))
 	}
 	return b.String()
 }
@@ -432,38 +434,67 @@ func (m *selectModel) buildLines(w int, th theme.Theme) []selLine {
 // SelectedForeground text and the bold title; the current option carries the
 // "●" gutter in primary (non-active rows) or the selection fg; other rows:
 // the title in the text token, the description tail in textMuted. A zero
-// Theme degrades to plain rows with the cursorStyle-bold active title.
+// Theme degrades to plain rows with the cursorStyle-bold active title. An
+// over-wide row wraps the description tail at the title column (yolo-ukc)
+// instead of running past the panel.
 func (m *selectModel) rowLine(o selectOption, active, cur bool, th theme.Theme, w int) string {
 	gutter := "  "
+	if cur {
+		gutter = "● "
+	}
 	desc := ""
 	if o.description != "" {
 		desc = "  " + o.description
 	}
+	left := gutter + o.title
+	// The row lands at or under w: the single pass (byte-identical to the
+	// pre-wrap render); an over-wide row wraps the tail at the title column.
+	if runeWidth(left)+runeWidth(desc) <= w {
+		if active {
+			bg, ok := th.Color("primary")
+			if !ok {
+				return cursorStyle(th).Render(left) + desc
+			}
+			sel := th.SelectedForeground()
+			fg := lipgloss.Color(sel.Hex()[:7])
+			bgC := lipgloss.Color(bg.Hex()[:7])
+			head := lipgloss.NewStyle().Foreground(fg).Background(bgC).Bold(true)
+			tail := lipgloss.NewStyle().Foreground(fg).Background(bgC)
+			return lipgloss.NewStyle().Background(bgC).Width(w).Render(head.Render(left) + tail.Render(desc))
+		}
+		gutterSty := th.TextMuted()
+		if cur {
+			gutterSty = th.Primary()
+		}
+		line := gutterSty.Render(gutter) + th.Text().Render(o.title)
+		if desc != "" {
+			line += th.TextMuted().Render(desc)
+		}
+		return line
+	}
 	if active {
 		bg, ok := th.Color("primary")
 		if !ok {
-			return cursorStyle(th).Render(gutter+o.title) + desc
+			return wrapTailRow(left, desc, w,
+				func(s string) string { return cursorStyle(th).Render(s) },
+				func(s string) string { return s })
 		}
 		sel := th.SelectedForeground()
 		fg := lipgloss.Color(sel.Hex()[:7])
 		bgC := lipgloss.Color(bg.Hex()[:7])
 		head := lipgloss.NewStyle().Foreground(fg).Background(bgC).Bold(true)
-		tail := lipgloss.NewStyle().Foreground(fg).Background(bgC)
-		if cur {
-			gutter = "● "
-		}
-		return lipgloss.NewStyle().Background(bgC).Width(w).Render(head.Render(gutter+o.title) + tail.Render(desc))
+		tailSty := lipgloss.NewStyle().Foreground(fg).Background(bgC)
+		return wrapTailRow(left, desc, w,
+			func(s string) string { return head.Render(s) },
+			func(s string) string { return tailSty.Render(s) })
 	}
 	gutterSty := th.TextMuted()
 	if cur {
-		gutter = "● "
 		gutterSty = th.Primary()
 	}
-	line := gutterSty.Render(gutter) + th.Text().Render(o.title)
-	if desc != "" {
-		line += th.TextMuted().Render(desc)
-	}
-	return line
+	return wrapTailRow(left, desc, w,
+		func(s string) string { return gutterSty.Render(gutter) + th.Text().Render(o.title) },
+		func(s string) string { return th.TextMuted().Render(s) })
 }
 
 // wrapTailRow renders an over-wide option row (yolo-ukc): the left (gutter +

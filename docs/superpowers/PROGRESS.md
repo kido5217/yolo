@@ -63,9 +63,21 @@ on the session/config model, the yolo-pinned [a]/[b] subchoice via
 move/modelCount/selectedRef/currentProv/modelCell/modelRow/styleSegment/
 modelIsCurrent); `select.go` `rowWithFooter` tail-wrap via `wrapTailRow`
 for over-wide footer rows — forced by the re-baselined overflow test,
-the fit path byte-identical; deviations 183–184 logged).
-Deviations 122–184 logged.
-Next: S2.10 (bead `yolo-oae.3.13`) — agent restyle.
+the fit path byte-identical; deviations 183–184 logged), S2.10 agent
+restyle landed (`dialog.go`: the plain list replaced by the flat
+`agentDlg{sel *selectModel, hasSubChoice, pick}` on the dlgMedium modal —
+select rows (title = name, description, value = name) with the ● gutter on
+the session/config agent, the yolo-pinned [a]/[b] subchoice via
+`agentSelectPick`, `agentOptions`/`agentIsCurrentOpt`; the list machinery
+deleted (the int sel, selectedName, the wraparound key handler, the
+row renderer); `select.go`: the `rowLine` description tail-wrap via
+`wrapTailRow` + the keymap hint's `dimWrapped` wrap (yolo-ukc, forced by
+the re-baselined overflow test — fit paths byte-identical, no select pin
+re-baselined; the overflow test's post-open store swap is a no-op against
+the select's frozen options — store set before open instead); deviations
+185–186 logged).
+Deviations 122–186 logged.
+Next: the S2 slice gate (checkpoint, then S3 detail pass).
 Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
 (PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
 + GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,

@@ -282,7 +282,7 @@ func (a *App) dlgView(w int) string {
 	case d.kind == dlgModel && d.model != nil:
 		return d.model.view(&a.store, w, a.size.Height, a.theme)
 	case d.kind == dlgAgents && d.agent != nil:
-		return d.agent.view(&a.store, w, a.theme)
+		return d.agent.view(&a.store, w, a.size.Height, a.theme)
 	}
 	return a.dlg.view(a.theme)
 }
@@ -303,7 +303,7 @@ func (a *App) modalInner(d *dialog, w, h int) string {
 			return d.sel.view(w, h, a.theme)
 		}
 		if d.agent != nil {
-			return d.agent.view(&a.store, w, a.theme)
+			return d.agent.view(&a.store, w, h, a.theme)
 		}
 	case dlgForm:
 		if d.form != nil {
@@ -693,19 +693,22 @@ func fmtCtx(n int) string {
 // usd renders a per-million price without trailing zeros: 2 → "$2".
 func usd(v float64) string { return "$" + strconv.FormatFloat(v, 'f', -1, 64) }
 
-// agentDlg is the ctrl+a / /agents picker: the server's agent list (name +
-// description + current marker). Enter opens the locked [a] this session /
-// [b] set default overlay.
+// agentDlg is the ctrl+a / /agents picker (S2.10: the plain list is the
+// select + the a/b subchoice — the yolo scope pin; upstream applies
+// directly).
 type agentDlg struct {
-	sel          int
+	sel          *selectModel
 	hasSubChoice bool
+	pick         string // the agent name the subchoice applies
 }
 
-// openAgentDialog pushes the agent dialog with its payload, seeds its
-// selection from the session (or config) agent, and fetches the catalog.
+// openAgentDialog pushes the agent select modal (dlgMedium — upstream
+// dialog-agent is size="medium") and fetches the catalog. A nil sel = the
+// pre-catalog loading hint; syncAgentSel builds the select once the catalog
+// is hydrated (open-time or on arrival).
 func (a *App) openAgentDialog() []tea.Cmd {
 	agd := &agentDlg{}
-	a.dlg.push(dialog{kind: dlgAgents, agent: agd})
+	a.pushModal(dialog{kind: dlgAgents, agent: agd}, dlgMedium, nil)
 	a.syncAgentSel()
 	return a.emit(a.fetchCatalogCmd())
 }
@@ -726,42 +729,71 @@ func currentAgentName(st *store.State) string {
 	return ""
 }
 
-// syncAgentSel points the dialog at the current agent; nil-safe when the
-// catalog is not hydrated yet.
+// agentOptions is the select's option list: title = the name, description
+// = the agent description, value = the name (the wire value).
+func agentOptions(st *store.State) []selectOption {
+	var opts []selectOption
+	for _, x := range st.Agents {
+		opts = append(opts, selectOption{
+			title:       x.Name,
+			description: x.Description,
+			value:       x.Name,
+		})
+	}
+	return opts
+}
+
+// agentIsCurrentOpt is the select's isCurrent (the session agent, falling
+// back to the config agent).
+func agentIsCurrentOpt(st *store.State) func(selectOption) bool {
+	name := currentAgentName(st)
+	return func(o selectOption) bool {
+		v, _ := o.value.(string)
+		return name != "" && v == name
+	}
+}
+
+// agentSelectPick is the select's onSelect: enter opens the a/b subchoice
+// (yolo pin — the agent applies through it, never directly).
+func (a *App) agentSelectPick(o selectOption) {
+	if d, ok := a.dlg.top(); ok && d.kind == dlgAgents && d.agent != nil {
+		d.agent.hasSubChoice = true
+		if v, okk := o.value.(string); okk {
+			d.agent.pick = v
+		}
+	}
+}
+
+// syncAgentSel (re)builds the open agent select on the catalog: it builds
+// the select when the catalog first hydrates (nil sel = loading) and
+// re-points the selection at the current agent.
 func (a *App) syncAgentSel() {
 	ag := a.dlg.agent()
 	if ag == nil {
 		return
 	}
+	if ag.sel == nil {
+		if len(a.store.Agents) == 0 {
+			return
+		}
+		ag.sel = selectNew("Agents", "Search", agentOptions(&a.store),
+			agentIsCurrentOpt(&a.store), func(app *App, o selectOption) { app.agentSelectPick(o) }, nil)
+	}
+	ag.sel.options = agentOptions(&a.store)
 	name := currentAgentName(&a.store)
 	for i, x := range a.store.Agents {
 		if x.Name == name {
-			ag.sel = i
+			ag.sel.sel = i
 			return
 		}
 	}
 }
 
-// selectedName is the name of the selected agent.
-func (m *agentDlg) selectedName(st *store.State) string {
-	if m.sel >= 0 && m.sel < len(st.Agents) {
-		return st.Agents[m.sel].Name
-	}
-	return ""
-}
-
-// handleKey drives the dialog while it owns the keys: esc closes (or cancels
-// the subchoice), arrows move with wraparound, enter opens the subchoice, a/b
-// apply (LOCKED overlay).
+// handleKey drives the dialog while it owns the keys: the subchoice owns a/b
+// (the locked overlay); esc on the subchoice is the S2.2 cancelInner veto
+// (the modal stack consumes it); everything else forwards to the select
+// (enter re-opens the subchoice via onSelect on a different agent).
 func (m *agentDlg) handleKey(a *App, k tea.KeyPressMsg) []tea.Cmd {
-	if key.Matches(k, escBinding) {
-		if m.hasSubChoice {
-			m.hasSubChoice = false
-		} else {
-			a.closeAgentDialog()
-		}
-		return nil
-	}
 	if m.hasSubChoice {
 		switch {
 		case key.Matches(k, choiceThis):
@@ -769,71 +801,28 @@ func (m *agentDlg) handleKey(a *App, k tea.KeyPressMsg) []tea.Cmd {
 				a.toast("no session")
 				return nil
 			}
-			return a.emit(a.patchDlgCmd("agent", m.selectedName(&a.store), true))
+			return a.emit(a.patchDlgCmd("agent", m.pick, true))
 		case key.Matches(k, choiceDef):
-			return a.emit(a.patchDlgCmd("agent", m.selectedName(&a.store), false))
+			return a.emit(a.patchDlgCmd("agent", m.pick, false))
 		}
 		return nil
 	}
-	n := len(a.store.Agents)
-	switch {
-	case key.Matches(k, homeKeyMap.Up):
-		if n > 0 {
-			m.sel = ((m.sel-1)%n + n) % n
-		}
-	case key.Matches(k, homeKeyMap.Down):
-		if n > 0 {
-			m.sel = (m.sel + 1) % n
-		}
-	case key.Matches(k, homeKeyMap.Enter):
-		if n > 0 {
-			m.hasSubChoice = true
-		}
+	if m.sel == nil {
+		return nil // the loading hint: nothing to drive until the catalog lands
 	}
-	return nil
+	return m.sel.handleKey(a, k)
 }
 
-// view renders the agent list, the subchoice overlay and the keymap hint.
-// Each agent row word-wraps at the terminal width (descriptions can be
-// long); the selection style stays on the row's first visual line.
-func (m *agentDlg) view(st *store.State, w int, th theme.Theme) string {
+// view renders the select + the subchoice overlay (the modal stack draws
+// the frame; a nil sel — the pre-catalog open — renders the loading hint).
+func (m *agentDlg) view(st *store.State, w, h int, th theme.Theme) string {
+	if m.sel == nil {
+		return title.Render("Agents") + "\n" + th.TextMuted().Render("  loading…")
+	}
 	var b strings.Builder
-	b.WriteString(title.Render("Agents") + "\n")
-	if len(st.Agents) == 0 {
-		b.WriteString(th.TextMuted().Render("  loading…"))
-		return b.String()
-	}
-	if m.sel >= len(st.Agents) {
-		m.sel = len(st.Agents) - 1
-	}
-	cur := currentAgentName(st)
-	muted := th.TextMuted()
-	rows := make([]string, 0, len(st.Agents))
-	for i, x := range st.Agents {
-		line := "  " + x.Name
-		if x.Name == cur {
-			line += "*"
-		}
-		if x.Description != "" {
-			line += "  " + x.Description
-		}
-		line = strings.TrimRight(line, " ")
-		sty := muted
-		if i == m.sel {
-			sty = cursorStyle(th)
-		}
-		for j, l := range strings.Split(wrapLine(line, w), "\n") {
-			if j > 0 {
-				rows = append(rows, muted.Render(l))
-			} else {
-				rows = append(rows, sty.Render(l))
-			}
-		}
-	}
-	b.WriteString(strings.Join(rows, "\n"))
+	b.WriteString(m.sel.view(w, h, th))
 	if m.hasSubChoice {
 		b.WriteString("\n" + dimWrapped(th, "  [a] this session  [b] set default", w))
 	}
-	b.WriteString("\n" + dimWrapped(th, "  \u2191/\u2193 move \u00B7 enter set \u00B7 esc close", w))
 	return b.String()
 }
