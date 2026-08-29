@@ -77,7 +77,10 @@ re-baselined; the overflow test's post-open store swap is a no-op against
 the select's frozen options — store set before open instead); deviations
 185–186 logged).
 Deviations 122–186 logged.
-Next: the S2 slice gate (checkpoint, then S3 detail pass).
+S2 done (10/10 child beads closed, slice gate green — the user-run TTY
+smoke is on-demand, pending).
+Next: S3 (bead `yolo-oae.4`) — remaining contract-backed dialogs
+(`s3-dialogs-2.md` detail pass before start).
 Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
 (PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
 + GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,
