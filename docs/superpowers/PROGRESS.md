@@ -76,9 +76,12 @@ the re-baselined overflow test — fit paths byte-identical, no select pin
 re-baselined; the overflow test's post-open store swap is a no-op against
 the select's frozen options — store set before open instead); deviations
 185–186 logged).
-Deviations 122–186 logged.
+Deviations 122–187 logged.
 S2 done (10/10 child beads closed, slice gate green — the user-run TTY
-smoke is on-demand, pending).
+smoke is on-demand, pending). The parked S2.8 wrap bug (yolo-kj6) is fixed:
+`wrapLine` is now ANSI-aware (SGR = zero-width glue, never split inside an
+escape) and the SGR golden's pill pin re-baselined to the un-wrapped layout
+(dev 187).
 Next: S3 (bead `yolo-oae.4`) — remaining contract-backed dialogs
 (`s3-dialogs-2.md` detail pass before start).
 Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
@@ -231,6 +234,17 @@ styled lines wrap before styling (`toolRow` returns style + plain);
 `WindowSizeMsg` re-wraps via `sess.isDirty`. Tests: `TestWrapLine`,
 `TestRenderMessagesWrapsLongLines`, `TestTUILongReplyWraps` (the last word
 of a 1000-word single-line fake reply reaches the screen).
+- `wrapLine` is ANSI-aware (2026-08-30, bead `yolo-kj6`): a CSI escape (SGR
+styling) is zero-width glue — it counts toward no display width and a hard-split
+never cuts inside it (`csiLen`/`ansiWidth`/`ansiCutWidth` in `wrap.go`), so a
+styled-then-wrapped row wraps on its VISIBLE width and no corrupted escape reaches
+the terminal; plain text wraps byte-identically (`ansiWidth` == `runeWidth`, so the
+plain-text `runeWidth`/`cutWidth` callers in `home.go`/`select.go`/`locale.go` are
+untouched). It matters for `permDlg.view`, which styles each row then wraps it
+(S2.8): pre-fix the reply-pill row (`runeWidth` 157, `ansiWidth` 34) was buggily
+wrapped at the 60-col panel — now one line; the SGR golden's pill pin re-baselined
+to the un-wrapped layout (dev 187). Tests: `TestWrapLineANSIAware`,
+`TestWrapLineANSIAwarePlainUnchanged`.
 - TUI below-viewport surface wrap (2026-08-24, bead `yolo-ukc`): toasts,
 the permission overlay, the slash menu, the model/agent dialogs (rows AND
 hint lines, via `dimWrapped`), the home session rows and the `!` error line

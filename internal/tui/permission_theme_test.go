@@ -22,13 +22,18 @@ import (
 )
 
 // permWarnHeaderRe / permPillBgRe are position-anchored: the CSI that OPENS
-// the styled run must carry the warning token (param order within the CSI
+// the styled run must carry the token (param order within the CSI
 // not pinned — the cell-diff renderer merges the changed params into ONE
 // CSI, deviation 141's substring convention; the brief's bare "38;5;215m"
 // substring is structurally unmatchable for the same reason, deviation 181).
+// permPillBgRe couples the warning-background CSI (which opens the pill ROW —
+// yolo-kj6's ANSI-aware wrapLine keeps the pill on one line, so the bg no
+// longer immediately precedes "Allow") with the selected-foreground CSI that
+// opens the "Allow once" run: together they pin the selected pill's warning
+// token (bg 215 + SelectedForeground-on-warning 232 + bold, deviation 182).
 var (
 	permWarnHeaderRe = regexp.MustCompile(`\x1b\[(?:[0-9]+;)*38;5;215(?:;[0-9]+)*m△ `)
-	permPillBgRe     = regexp.MustCompile(`\x1b\[(?:[0-9]+;)*48;5;215(?:;[0-9]+)*mAllow`)
+	permPillBgRe     = regexp.MustCompile(`\x1b\[(?:[0-9]+;)*48;5;215(?:;[0-9]+)*m[^\x1b]*\x1b\[(?:[0-9]+;)*38;5;232(?:;[0-9]+)*mAllow once`)
 )
 
 // TestPermissionDialogSGR pins the restyled permission dialog's paint
