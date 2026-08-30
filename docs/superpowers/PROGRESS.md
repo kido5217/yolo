@@ -76,14 +76,25 @@ the re-baselined overflow test — fit paths byte-identical, no select pin
 re-baselined; the overflow test's post-open store swap is a no-op against
 the select's frozen options — store set before open instead); deviations
 185–186 logged).
-Deviations 122–187 logged.
+Deviations 122–196 logged.
 S2 done (10/10 child beads closed, slice gate green — the user-run TTY
 smoke is on-demand, pending). The parked S2.8 wrap bug (yolo-kj6) is fixed:
 `wrapLine` is now ANSI-aware (SGR = zero-width glue, never split inside an
 escape) and the SGR golden's pill pin re-baselined to the un-wrapped layout
 (dev 187).
-Next: S3 (bead `yolo-oae.4`) — remaining contract-backed dialogs
-(`s3-dialogs-2.md` detail pass before start).
+S3 detail pass landed (`s3-dialogs-2.md` fully detailed, commit 8fb8bcc,
+bead `yolo-oae.4.1` closed): 9 task sections S3.1–S3.9 with full 5-step TDD
++ the detail-pass findings (upstream @ v1.18.18 read at detail time; the
+real `Engine` surface — `AllThemes`, `Set` persists the KV immediately,
+`setMode`===pin quirk) + binding design decisions; task beads land at
+`yolo-oae.4.2`–`.10` (id shift, dev 188) and the task-forced deviations are
+pre-logged at detail time (devs 189–196: S3.1 pin/slots deferred + no
+server-side search, S3.3 no workspace recovery, S3.4 no oauth
+auth-method, S3.5 status = providers+agents only, S3.7 in-memory retry
+gate + "Abort" pill, S3.6 `paletteShortcut()` accessor, S3.9 no default
+keys for mode switch/lock — upstream "none").
+Next: S3 execution (bead `yolo-oae.4`) — start at task S3.1 session-list
+dialog (bead `yolo-oae.4.2`).
 Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
 (PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
 + GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,
