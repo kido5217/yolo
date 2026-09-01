@@ -163,6 +163,9 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 		a.store.Live = true
 		a.store.Apply(m.Event)
 		a.syncPermDialog()
+		if m.Event.Type == protocol.EventTypeSessionUpdated || m.Event.Type == protocol.EventTypeSessionDeleted {
+			a.syncSessionSel()
+		}
 		// Any applied event may have changed the transcript (message/part
 		// family); re-render once instead of on every frame.
 		a.sess.isDirty = true
@@ -212,6 +215,10 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 		return a.applySend(m)
 	case commandExecMsg:
 		return a.applyCommandExec(m)
+	case statusSnapshotMsg:
+		return a.applySessionStatusSnapshot(m)
+	case sessionDeleteMsg:
+		return a.applySessionDelete(m)
 	case tea.KeyPressMsg:
 		cmds := a.handleKey(m)
 		if len(cmds) == 0 {

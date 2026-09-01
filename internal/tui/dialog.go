@@ -31,6 +31,7 @@ const (
 	dlgAgents
 	dlgForm
 	dlgPerm
+	dlgSessions
 )
 
 // dlgSize is the modal panel width (upstream DialogSize: medium 60, large
@@ -58,15 +59,16 @@ func (s dlgSize) width() int {
 // dialog is a stack item; the picker dialogs (model/agent) carry their live
 // state as the item's payload, so pop drops state with the item.
 type dialog struct {
-	kind    dialogKind
-	model   *modelDlg
-	agent   *agentDlg
-	form    *huhFormDlg  // dlgForm payload (S2.3)
-	sel     *selectModel // S2.5: the select payload (dlgModel/dlgAgents from S2.9/10)
-	perm    *permDlg     // S2.8: the permission payload (dlgPerm)
-	modal   bool         // true: rendered as the overlay frame (S2.2)
-	size    dlgSize      // the panel width, modal only
-	onClose func(*App)   // the stack-pop callback (upstream result callback)
+	kind     dialogKind
+	model    *modelDlg
+	agent    *agentDlg
+	form     *huhFormDlg  // dlgForm payload (S2.3)
+	sel      *selectModel // S2.5: the select payload (dlgModel/dlgAgents from S2.9/10)
+	perm     *permDlg     // S2.8: the permission payload (dlgPerm)
+	sessions *sessionsDlg // S3.1: the session picker payload (dlgSessions)
+	modal    bool         // true: rendered as the overlay frame (S2.2)
+	size     dlgSize      // the panel width, modal only
+	onClose  func(*App)   // the stack-pop callback (upstream result callback)
 }
 
 type dialogStack struct{ items []dialog }
@@ -115,6 +117,17 @@ func (d *dialogStack) agent() *agentDlg {
 	for i := range d.items {
 		if d.items[i].agent != nil {
 			return d.items[i].agent
+		}
+	}
+	return nil
+}
+
+// sessions returns the open session picker's payload (same invariant as
+// model).
+func (d *dialogStack) sessions() *sessionsDlg {
+	for i := range d.items {
+		if d.items[i].sessions != nil {
+			return d.items[i].sessions
 		}
 	}
 	return nil
@@ -313,6 +326,10 @@ func (a *App) modalInner(d *dialog, w, h int) string {
 		if d.perm != nil {
 			return d.perm.view(&a.store, w, a.theme)
 		}
+	case dlgSessions:
+		if d.sessions != nil {
+			return d.sessions.view(w, h)
+		}
 	}
 	return ""
 }
@@ -363,6 +380,12 @@ func (a *App) handleDialogKey(d dialog, k tea.KeyPressMsg) []tea.Cmd {
 			return nil
 		}
 		return d.form.handleKey(a, k)
+	case dlgSessions:
+		if d.sessions == nil {
+			a.dlg.pop()
+			return nil
+		}
+		return d.sessions.handleKey(a, k)
 	}
 	a.dlg.pop() // dlgHelp: any key closes
 	return nil

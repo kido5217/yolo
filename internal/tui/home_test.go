@@ -43,6 +43,11 @@ func press(r rune) tea.KeyPressMsg {
 
 var ctrlCKey = tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}
 
+var (
+	ctrlDKey = tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl}
+	ctrlRKey = tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl}
+)
+
 func TestRelTime(t *testing.T) {
 	tests := []struct {
 		name string

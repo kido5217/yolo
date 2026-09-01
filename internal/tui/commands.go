@@ -41,6 +41,21 @@ func (a *App) applySend(m sendMsg) tea.Cmd {
 	return nil
 }
 
+// localCommands is the TUI-local slash commands merged client-side into the
+// slash menu (the server catalog is frozen at 5 — spec §10; the S3.4/S3.5/
+// S3.8 openers append their entries as they land).
+func localCommands() []protocol.Command {
+	return []protocol.Command{
+		{Name: "/sessions", Description: "List all sessions"},
+	}
+}
+
+// mergedCommands is the slash menu's command list: the local ones first,
+// then the server catalog.
+func (a *App) mergedCommands() []protocol.Command {
+	return append(localCommands(), a.store.Commands...)
+}
+
 // runCommand executes a slash command from the menu. /new without a current
 // session issues CreateSession directly (LOCKED: the command endpoint needs a
 // session id); other commands open their dialogs.
@@ -55,6 +70,8 @@ func (a *App) runCommand(name string) []tea.Cmd {
 		return a.openModelDialog()
 	case "/agents":
 		return a.openAgentDialog()
+	case "/sessions":
+		return a.openSessionListDialog()
 	case "/new":
 		if a.curSessionID == "" {
 			return a.emit(a.createSessionCmd())

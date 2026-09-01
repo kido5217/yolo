@@ -57,9 +57,11 @@ func (a *App) handleKey(k tea.KeyPressMsg) []tea.Cmd {
 // handleMenuKey dispatches keys while the slash menu is open: arrows move
 // the selection with wraparound, enter executes the selection (or clears the
 // input on no match), esc closes the menu; everything else keeps filtering
-// through the live input.
+// through the live input. The menu items and the view (view.go) use the same
+// merged command list (local + server — spec §10) so the rendered row and
+// the executed row stay in step.
 func (a *App) handleMenuKey(k tea.KeyPressMsg) []tea.Cmd {
-	items := a.prompt.menuItems(a.store.Commands)
+	items := a.prompt.menuItems(a.mergedCommands())
 	switch {
 	case key.Matches(k, homeKeyMap.Up):
 		a.prompt.moveMenuSel(len(items), -1)

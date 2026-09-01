@@ -30,7 +30,7 @@ func (a *App) view() string {
 	perm := a.permissionView(w)
 	toasts := a.toastsView(w)
 	dlg := a.dlgView(w)
-	menu := a.prompt.menuView(a.store.Commands, w, a.theme)
+	menu := a.prompt.menuView(a.mergedCommands(), w, a.theme)
 	var b strings.Builder
 	if a.route == routeSession {
 		b.WriteString(a.viewSession(menu, perm, toasts, dlg))

@@ -7,6 +7,7 @@
 package tui
 
 import (
+	"image/color"
 	"sort"
 	"strings"
 
@@ -29,7 +30,9 @@ type selectOption struct {
 	footer      string
 	category    string
 	value       any
-	disabled    bool // excluded from the filtered list entirely (upstream)
+	disabled    bool   // excluded from the filtered list entirely (upstream)
+	bg          string // a token name ("error", …); "" = none — the armed row paints it regardless of the selection (S3.1)
+	gutter      string // a fixed 2-rune leading column; "" = the default "  " / "● " marker logic
 }
 
 // selectAction is a footer action (upstream DialogSelectAction): its key
@@ -63,6 +66,13 @@ type selectModel struct {
 	actions     []selectAction
 	hints       []footerHint
 	focAct      int // focused action index, -1 = none (S2.7)
+	// skipFilter (S3.1, upstream dialog-select.tsx:155): the input row still
+	// renders, but the typed text no longer feeds the fuzzy memo — the list
+	// shows all options and the raw value instead calls onFilter (the
+	// client-side filter, e.g. the session title substring). Zero values =
+	// today's behavior.
+	skipFilter bool
+	onFilter   func(string)
 }
 
 // selectNew builds a select (isCurrent/onMove/onSelect may be nil).
@@ -110,7 +120,7 @@ func (m *selectModel) filtered() []selectOption {
 			enabled = append(enabled, o)
 		}
 	}
-	if m.filter == "" {
+	if m.skipFilter || m.filter == "" {
 		return enabled
 	}
 	n := len(enabled)
@@ -146,10 +156,18 @@ func (m *selectModel) filtered() []selectOption {
 }
 
 // syncFilter reads the filter input and resets the selection when the needle
-// becomes non-empty (upstream: filter>0 → moveTo(0)).
+// becomes non-empty (upstream: filter>0 → moveTo(0)). With skipFilter the
+// fuzzy feed is skipped: the value change instead calls onFilter (no
+// selection reset — the client filter re-anchors through the callback).
 func (m *selectModel) syncFilter() {
 	if f := m.input.Value(); f != m.filter {
 		m.filter = f
+		if m.skipFilter {
+			if m.onFilter != nil {
+				m.onFilter(f)
+			}
+			return
+		}
 		if f != "" {
 			m.sel = 0
 		}
@@ -268,6 +286,11 @@ func (m *selectModel) submit(a *App) {
 	l := m.filtered()
 	if len(l) == 0 || m.onSelect == nil {
 		return
+	}
+	// The skipFilter client filter shrinks options without resetting sel:
+	// clamp so a narrowed list never indexes past the end.
+	if m.sel >= len(l) {
+		m.sel = len(l) - 1
 	}
 	m.onSelect(a, l[m.sel])
 }
@@ -428,6 +451,25 @@ func (m *selectModel) buildLines(w int, th theme.Theme) []selLine {
 	return lines
 }
 
+// armedRowStyles is the armed-row paint (selectOption.bg, S3.1): the token's
+// bg with the SelectedForeground-of-that-bg fg, the bold head — regardless
+// of the selection. An empty token or an absent theme token (the zero Theme)
+// yields ok=false and the row renders through the normal chain.
+func armedRowStyles(o selectOption, th theme.Theme) (head, tailSty lipgloss.Style, bgC color.Color, ok bool) {
+	if o.bg == "" {
+		return
+	}
+	bg, ok := th.Color(o.bg)
+	if !ok {
+		return
+	}
+	fg := lipgloss.Color(th.SelectedForeground(bg).Hex()[:7])
+	bgC = lipgloss.Color(bg.Hex()[:7])
+	head = lipgloss.NewStyle().Foreground(fg).Background(bgC).Bold(true)
+	tailSty = lipgloss.NewStyle().Foreground(fg).Background(bgC)
+	return
+}
+
 // rowLine renders one option row with the S0.9 home SELECT token chain
 // (dialog-select's active row 667-678 + Option 732-791): the active row is
 // the full-row paint in the selection background (theme primary) with the
@@ -442,6 +484,9 @@ func (m *selectModel) rowLine(o selectOption, active, cur bool, th theme.Theme, 
 	if cur {
 		gutter = "● "
 	}
+	if o.gutter != "" {
+		gutter = o.gutter
+	}
 	desc := ""
 	if o.description != "" {
 		desc = "  " + o.description
@@ -450,6 +495,9 @@ func (m *selectModel) rowLine(o selectOption, active, cur bool, th theme.Theme, 
 	// The row lands at or under w: the single pass (byte-identical to the
 	// pre-wrap render); an over-wide row wraps the tail at the title column.
 	if runeWidth(left)+runeWidth(desc) <= w {
+		if head, tailSty, bgC, ok := armedRowStyles(o, th); ok {
+			return lipgloss.NewStyle().Background(bgC).Width(w).Render(head.Render(left) + tailSty.Render(desc))
+		}
 		if active {
 			bg, ok := th.Color("primary")
 			if !ok {
@@ -471,6 +519,11 @@ func (m *selectModel) rowLine(o selectOption, active, cur bool, th theme.Theme, 
 			line += th.TextMuted().Render(desc)
 		}
 		return line
+	}
+	if head, tailSty, _, ok := armedRowStyles(o, th); ok {
+		return wrapTailRow(left, desc, w,
+			func(s string) string { return head.Render(s) },
+			func(s string) string { return tailSty.Render(s) })
 	}
 	if active {
 		bg, ok := th.Color("primary")
@@ -533,6 +586,9 @@ func (m *selectModel) rowWithFooter(o selectOption, active, cur bool, w int, th 
 	if cur {
 		gutter = "● "
 	}
+	if o.gutter != "" {
+		gutter = o.gutter
+	}
 	desc := ""
 	if o.description != "" {
 		desc = "  " + o.description
@@ -547,6 +603,9 @@ func (m *selectModel) rowWithFooter(o selectOption, active, cur bool, w int, th 
 	pad := strings.Repeat(" ", gap)
 	tail := desc + pad + o.footer
 	if runeWidth(gutter+o.title)+runeWidth(tail) <= w {
+		if head, tailSty, bgC, ok := armedRowStyles(o, th); ok {
+			return lipgloss.NewStyle().Background(bgC).Width(w).Render(head.Render(gutter+o.title) + tailSty.Render(tail))
+		}
 		if active {
 			bg, ok := th.Color("primary")
 			if !ok {
@@ -571,6 +630,11 @@ func (m *selectModel) rowWithFooter(o selectOption, active, cur bool, w int, th 
 		return line
 	}
 	left := gutter + o.title
+	if head, tailSty, _, ok := armedRowStyles(o, th); ok {
+		return wrapTailRow(left, tail, w,
+			func(s string) string { return head.Render(s) },
+			func(s string) string { return tailSty.Render(s) })
+	}
 	if active {
 		bg, ok := th.Color("primary")
 		if !ok {
