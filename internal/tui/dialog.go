@@ -32,6 +32,7 @@ const (
 	dlgForm
 	dlgPerm
 	dlgSessions
+	dlgDeleteFailed
 )
 
 // dlgSize is the modal panel width (upstream DialogSize: medium 60, large
@@ -59,16 +60,17 @@ func (s dlgSize) width() int {
 // dialog is a stack item; the picker dialogs (model/agent) carry their live
 // state as the item's payload, so pop drops state with the item.
 type dialog struct {
-	kind     dialogKind
-	model    *modelDlg
-	agent    *agentDlg
-	form     *huhFormDlg  // dlgForm payload (S2.3)
-	sel      *selectModel // S2.5: the select payload (dlgModel/dlgAgents from S2.9/10)
-	perm     *permDlg     // S2.8: the permission payload (dlgPerm)
-	sessions *sessionsDlg // S3.1: the session picker payload (dlgSessions)
-	modal    bool         // true: rendered as the overlay frame (S2.2)
-	size     dlgSize      // the panel width, modal only
-	onClose  func(*App)   // the stack-pop callback (upstream result callback)
+	kind         dialogKind
+	model        *modelDlg
+	agent        *agentDlg
+	form         *huhFormDlg      // dlgForm payload (S2.3)
+	sel          *selectModel     // S2.5: the select payload (dlgModel/dlgAgents from S2.9/10)
+	perm         *permDlg         // S2.8: the permission payload (dlgPerm)
+	sessions     *sessionsDlg     // S3.1: the session picker payload (dlgSessions)
+	deleteFailed *deleteFailedDlg // S3.3: the delete-failed payload (dlgDeleteFailed)
+	modal        bool             // true: rendered as the overlay frame (S2.2)
+	size         dlgSize          // the panel width, modal only
+	onClose      func(*App)       // the stack-pop callback (upstream result callback)
 }
 
 type dialogStack struct{ items []dialog }
@@ -128,6 +130,17 @@ func (d *dialogStack) sessions() *sessionsDlg {
 	for i := range d.items {
 		if d.items[i].sessions != nil {
 			return d.items[i].sessions
+		}
+	}
+	return nil
+}
+
+// deleteFailed returns the open delete-failed dialog's payload (same
+// invariant as model).
+func (d *dialogStack) deleteFailed() *deleteFailedDlg {
+	for i := range d.items {
+		if d.items[i].deleteFailed != nil {
+			return d.items[i].deleteFailed
 		}
 	}
 	return nil
@@ -330,6 +343,10 @@ func (a *App) modalInner(d *dialog, w, h int) string {
 		if d.sessions != nil {
 			return d.sessions.view(w, h)
 		}
+	case dlgDeleteFailed:
+		if d.deleteFailed != nil {
+			return d.deleteFailed.view(w, h, a.theme)
+		}
 	}
 	return ""
 }
@@ -386,6 +403,12 @@ func (a *App) handleDialogKey(d dialog, k tea.KeyPressMsg) []tea.Cmd {
 			return nil
 		}
 		return d.sessions.handleKey(a, k)
+	case dlgDeleteFailed:
+		if d.deleteFailed == nil {
+			a.dlg.pop()
+			return nil
+		}
+		return d.deleteFailed.handleKey(a, k)
 	}
 	a.dlg.pop() // dlgHelp: any key closes
 	return nil

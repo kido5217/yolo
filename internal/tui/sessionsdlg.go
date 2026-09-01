@@ -277,11 +277,46 @@ func (a *App) sessionDeleteCmd(id string) tea.Cmd {
 // armed toDelete — the pinned shape carries no id).
 type sessionDeleteMsg struct{ err error }
 
-// applySessionDelete lands the delete: success closes the dialog (and routes
-// home + hydrates when the current session died); an error toasts (the S3.3
-// delete-failed dialog wires the error path).
+// sessionTitle is the store session's title (before the delete), falling
+// back to Current (the rename.go convention).
+func (a *App) sessionTitle(id string) string {
+	for _, se := range a.store.Sessions {
+		if se.ID == id {
+			return se.Title
+		}
+	}
+	if a.store.Current != nil && a.store.Current.ID == id {
+		return a.store.Current.Title
+	}
+	return ""
+}
+
+// applySessionDelete lands the delete: success closes the dialog (and
+// routes home + hydrates when the current session died); an error opens the
+// S3.3 delete-failed dialog (the title from the store session before the
+// delete) — or, on a failed retry with that dialog on top, refreshes its
+// payload's errMsg in place (it stays open; a success closes it).
 func (a *App) applySessionDelete(m sessionDeleteMsg) tea.Cmd {
+	if failed := a.dlg.deleteFailed(); failed != nil {
+		if m.err != nil {
+			failed.errMsg = m.err.Error()
+			return nil
+		}
+		deleted := failed.id
+		a.closeTopModal()
+		if a.curSessionID == deleted {
+			a.route = routeHome
+			a.curSessionID = ""
+			return a.hydrateCmd()
+		}
+		return nil
+	}
 	if m.err != nil {
+		d := a.dlg.sessions()
+		if d != nil && d.toDelete != "" {
+			a.openDeleteFailedDialog(d.toDelete, a.sessionTitle(d.toDelete), m.err.Error())
+			return nil
+		}
 		a.toast(m.err.Error())
 		return nil
 	}
