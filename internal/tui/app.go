@@ -221,6 +221,8 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 		return a.applySessionDelete(m)
 	case renameMsg:
 		return a.applyRename(m)
+	case authMsg:
+		return a.applyAuth(m)
 	case tea.KeyPressMsg:
 		cmds := a.handleKey(m)
 		if len(cmds) == 0 {

@@ -17,7 +17,11 @@ var enterKey = tea.KeyPressMsg{Code: tea.KeyEnter}
 // form's SubmitCmd — each leg is a msg the app must deliver). BatchMsgs fan
 // out like the production bubbletea event loop does. Cmds the emit sink
 // appends mid-round (a test capture of cmds emitted from inside the update,
-// e.g. the form's onConfirm) are drained by the next round.
+// e.g. the form's onConfirm) are drained by the next round. The replay runs
+// the INTERNAL updateMsg (not App.Update): the toast TTL tick that Update
+// would drain is a UI-timing detail outside the functional cascade —
+// completing it during the replay would expire a toast raised mid-cascade
+// before the test can observe it (deviation 200).
 // updateKey mirrors the production event loop for one message: the cmd
 // Update returns is queued for execution (bubbletea runs it; the test
 // replays it in driveCmds).
@@ -46,7 +50,7 @@ func driveCmds(t *testing.T, a *recApp) {
 			case tea.Cmd:
 				next = append(next, m)
 			default:
-				if _, rc := a.Update(m); rc != nil {
+				if rc := a.updateMsg(m); rc != nil {
 					next = append(next, rc)
 				}
 			}

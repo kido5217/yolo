@@ -102,9 +102,9 @@ func TestPromptMenuKeys(t *testing.T) {
 		if a.prompt.sel != 1 {
 			t.Fatalf("sel = %d after up, want 1", a.prompt.sel)
 		}
-		// 6 items (the S3.1 local merge adds /sessions): down from 1 wraps
-		// after item 5
-		for i := 0; i < 5; i++ {
+		// 7 items (the S3.1/S3.4 local merge adds /sessions + /connect):
+		// down from 1 wraps after item 6
+		for i := 0; i < 6; i++ {
 			a.handleKey(press(tea.KeyDown))
 		}
 		if a.prompt.sel != 0 {

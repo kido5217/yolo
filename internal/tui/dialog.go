@@ -33,6 +33,7 @@ const (
 	dlgPerm
 	dlgSessions
 	dlgDeleteFailed
+	dlgProvider
 )
 
 // dlgSize is the modal panel width (upstream DialogSize: medium 60, large
@@ -68,6 +69,7 @@ type dialog struct {
 	perm         *permDlg         // S2.8: the permission payload (dlgPerm)
 	sessions     *sessionsDlg     // S3.1: the session picker payload (dlgSessions)
 	deleteFailed *deleteFailedDlg // S3.3: the delete-failed payload (dlgDeleteFailed)
+	provider     *providerDlg     // S3.4: the provider picker payload (dlgProvider)
 	modal        bool             // true: rendered as the overlay frame (S2.2)
 	size         dlgSize          // the panel width, modal only
 	onClose      func(*App)       // the stack-pop callback (upstream result callback)
@@ -141,6 +143,17 @@ func (d *dialogStack) deleteFailed() *deleteFailedDlg {
 	for i := range d.items {
 		if d.items[i].deleteFailed != nil {
 			return d.items[i].deleteFailed
+		}
+	}
+	return nil
+}
+
+// provider returns the open provider picker's payload (same invariant as
+// model).
+func (d *dialogStack) provider() *providerDlg {
+	for i := range d.items {
+		if d.items[i].provider != nil {
+			return d.items[i].provider
 		}
 	}
 	return nil
@@ -347,6 +360,10 @@ func (a *App) modalInner(d *dialog, w, h int) string {
 		if d.deleteFailed != nil {
 			return d.deleteFailed.view(w, h, a.theme)
 		}
+	case dlgProvider:
+		if d.provider != nil {
+			return d.provider.view(w, h)
+		}
 	}
 	return ""
 }
@@ -409,6 +426,12 @@ func (a *App) handleDialogKey(d dialog, k tea.KeyPressMsg) []tea.Cmd {
 			return nil
 		}
 		return d.deleteFailed.handleKey(a, k)
+	case dlgProvider:
+		if d.provider == nil {
+			a.dlg.pop()
+			return nil
+		}
+		return d.provider.handleKey(a, k)
 	}
 	a.dlg.pop() // dlgHelp: any key closes
 	return nil
@@ -452,6 +475,7 @@ func (a *App) applyCatalog(m catalogMsg) tea.Cmd {
 	}
 	a.syncModelSel()
 	a.syncAgentSel()
+	a.syncProviderSel()
 	return nil
 }
 
