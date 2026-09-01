@@ -132,6 +132,32 @@ onConfirm patch cmd lands inside the submit cascade; 198c the plan's Files
 list omits app.go's renameMsg case + the harness file). No pin re-baselined,
 no select golden touched.
 Next: S3.3 session-delete-failed (bead `yolo-oae.4.4`).
+S3.3 session-delete-failed landed (bead `yolo-oae.4.4`, commit afd81b9):
+`deletefailed.go` (the `deleteFailedDlg` payload — id/title/errMsg/active —
+`openDeleteFailedDialog` on `dlgMedium`: the session list REPLACED when it is
+on top, else pushed, active starts on retry; the 3-arg `view(w, h, th)`:
+header row (bold "Failed to Delete Session" left / muted "esc" right,
+space-between), the muted body (the session title + the wire error wrapped
+at w-4, blank, "Choose how to proceed.") and the two option rows —
+"Retry delete"/"Keep session" — the active row as the full-row primary-bg
+paint with the `SelectedForeground(bg)` fg (the select active-row chain),
+`handleKey`: left/up → retry, right/down → keep (two-row clamp, no wrap),
+enter on keep → `closeTopModal` + re-hydrate, enter on retry → re-emit the
+delete and STAY open); dialog.go wiring (the `dlgDeleteFailed` kind, the
+payload field, the `dialogStack.deleteFailed()` accessor, the `modalInner`
++ `handleDialogKey` cases); `applySessionDelete` rewired — first failure
+opens the dialog (title from `sessionTitle`: `store.Sessions` then
+`Current`), a failed retry refreshes `errMsg` in place, a successful retry
+closes it (and routes home + hydrates when the current session died).
+Deviations 191 (pre-logged: the option-text adaptation) + 199
+(test-accuracy/low: 199a the pinned test's 2-arg `view(80, 24)` call sites
+→ 3-arg `view(80, 24, a.theme)` per the last-stated Step 3 call; 199b the
+`press` harness (home_test.go) extended to `tea.KeyLeft`/`tea.KeyRight` —
+it set `Text: string(r)` for unlisted runes, so `String()` never returned
+"left"/"right" and the string-matched `key.Matches` could not fire; the
+pinned test body is unchanged). 4 pinned tests green (render, keys,
+failure leg, teatest SGR).
+Next: S3.4 provider-dialog restyle (bead `yolo-oae.4.5`).
 Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
 (PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
 + GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,
