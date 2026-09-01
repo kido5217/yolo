@@ -93,8 +93,28 @@ server-side search, S3.3 no workspace recovery, S3.4 no oauth
 auth-method, S3.5 status = providers+agents only, S3.7 in-memory retry
 gate + "Abort" pill, S3.6 `paletteShortcut()` accessor, S3.9 no default
 keys for mode switch/lock — upstream "none").
-Next: S3 execution (bead `yolo-oae.4`) — start at task S3.1 session-list
-dialog (bead `yolo-oae.4.2`).
+S3.1 session-list landed (bead `yolo-oae.4.2`, commit 28517c2): the
+additive select fields (`selectOption.bg`/`.gutter`,
+`selectModel.skipFilter`/`.onFilter` — zero values byte-identical, no S2
+golden re-baselined), the `sessionsDlg` modal on dlgMedium (options =
+`store.Sessions` updated-desc, "Today"/`Mon Jan 2 2006` category via
+`sessionCategory`, the current-session ● gutter + the busy/retry spinner
+gutter from the one-shot `client.Status()` snapshot at open, skipFilter +
+the client-side title substring filter per dev 190, two-step ctrl+d
+delete — armed row "Press ctrl+d again to confirm" + the error-bg row,
+`syncSessionSel` preserveSelection on session.updated/deleted, enter =
+openSession + close + hydrate), the `/sessions` opener via
+`localCommands()` merged client-side (`mergedCommands()` shared by the
+slash display AND the `handleMenuKey` execution path — the server
+catalog stays frozen at 5), and the teatest SGR golden with the armed
+row's bg `48;5;246` (the step-1 scratch Convert256 output won over the
+finding's 174 — deviation 143 corroborates the error token 246).
+Deviations 189–190 (pre-logged) + 197 (execution adaptations: the
+teatest-leg store seed, `CreateSession(ctx, title)`, the 2-arg
+`view(w,h)`, the merged-list execution path; `TestPromptMenuKeys` wrap
+count 5→6). The 9 S3 task beads were created on resume at the dev-188
+IDs `yolo-oae.4.2`–`.10` (the detail pass left them uncreated).
+Next: S3.2 session-rename (bead `yolo-oae.4.3`).
 Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
 (PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
 + GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,
