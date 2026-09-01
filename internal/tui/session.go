@@ -31,6 +31,7 @@ var sessKeyMap = struct {
 	PageDown key.Binding
 	Expand   key.Binding
 	Think    key.Binding
+	Rename   key.Binding
 }{
 	PageUp:   key.NewBinding(key.WithKeys("pgup")),
 	PageDown: key.NewBinding(key.WithKeys("pgdown")),
@@ -39,6 +40,9 @@ var sessKeyMap = struct {
 	// textinput's DefaultKeyMap).
 	Expand: key.NewBinding(key.WithKeys("alt+e")),
 	Think:  key.NewBinding(key.WithKeys("alt+t")),
+	// S3.2 (the upstream session_rename default; the S4.2 registry takes
+	// the binding over).
+	Rename: key.NewBinding(key.WithKeys("ctrl+r")),
 }
 
 func newSessionModel(w, h int) sessionModel {
@@ -610,6 +614,17 @@ func (a *App) handleSessionKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 		if expand {
 			a.sess.isDirty = true
 		}
+		return nil, true
+	// S3.2: the session-rename dialog (the upstream session_rename default).
+	// Only when a session is open (an empty curSessionID has no title to
+	// seed). The form's init cmds are consumed here (the pinned contract:
+	// ctrl+r is consumed with no cmds — the test sink captures them; the
+	// focus is set synchronously by form.Init).
+	case key.Matches(k, sessKeyMap.Rename):
+		if a.curSessionID == "" {
+			return nil, false
+		}
+		a.openSessionRenameDialog(a.curSessionID)
 		return nil, true
 	case key.Matches(k, escBinding):
 		if sessionBusy(&a.store) {

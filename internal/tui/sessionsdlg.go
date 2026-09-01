@@ -24,6 +24,10 @@ const sessionDeleteArmTitle = "Press ctrl+d again to confirm"
 // default).
 var sessionDeleteKey = key.NewBinding(key.WithKeys("ctrl+d"))
 
+// sessionRenameKey is the rename action binding (the upstream session_rename
+// default, S3.2).
+var sessionRenameKey = key.NewBinding(key.WithKeys("ctrl+r"))
+
 // sessionsDlg is the session picker payload: the select + the status
 // snapshot + the armed delete id. th is the theme at open (the pinned view
 // takes no theme arg — deviation 197).
@@ -171,6 +175,23 @@ func (a *App) openSessionListDialog() []tea.Cmd {
 			}
 			d.toDelete = id
 			app.rebuildSessionOptions(d)
+		},
+	}, {
+		// S3.2: the rename action (the upstream action label "rename") —
+		// closes the list and opens the rename form for the selected row.
+		key:   sessionRenameKey,
+		title: "rename",
+		run: func(app *App) {
+			l := sel.filtered()
+			if sel.sel >= len(l) {
+				return
+			}
+			id, _ := l[sel.sel].value.(string)
+			if id == "" {
+				return
+			}
+			app.closeTopModal()
+			app.openSessionRenameDialog(id)
 		},
 	}})
 	for i, o := range sel.options {

@@ -15,7 +15,9 @@ var enterKey = tea.KeyPressMsg{Code: tea.KeyEnter}
 // fixed point (huh v2's submit cascade: the key emits NextField, the form's
 // nextFieldMsg emits the nextGroup cmd, the group's nextGroupMsg emits the
 // form's SubmitCmd — each leg is a msg the app must deliver). BatchMsgs fan
-// out like the production bubbletea event loop does.
+// out like the production bubbletea event loop does. Cmds the emit sink
+// appends mid-round (a test capture of cmds emitted from inside the update,
+// e.g. the form's onConfirm) are drained by the next round.
 // updateKey mirrors the production event loop for one message: the cmd
 // Update returns is queued for execution (bubbletea runs it; the test
 // replays it in driveCmds).
@@ -50,7 +52,10 @@ func driveCmds(t *testing.T, a *recApp) {
 			}
 		}
 		if len(next) == 0 {
-			return
+			if len(a.Cmds) == 0 {
+				return
+			}
+			continue // the emit sink appended cmds this round: drain them
 		}
 		a.Cmds = append(a.Cmds, next...)
 	}
