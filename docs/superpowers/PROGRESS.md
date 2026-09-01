@@ -115,6 +115,23 @@ teatest-leg store seed, `CreateSession(ctx, title)`, the 2-arg
 count 5→6). The 9 S3 task beads were created on resume at the dev-188
 IDs `yolo-oae.4.2`–`.10` (the detail pass left them uncreated).
 Next: S3.2 session-rename (bead `yolo-oae.4.3`).
+S3.2 session-rename landed (bead `yolo-oae.4.3`, commit 96f839b):
+`rename.go` (`openSessionRenameDialog` — title seeded from `store.Sessions`
+fallback `Current`, `buildInputForm(... "Rename Session", "", "Title", title)`
+on the `dlgMedium` form modal, the empty-value no-op guard, `renameCmd` →
+`PatchSession`, `applyRename`: err → toast, success → in-place title on
+`store.Sessions` + `Current.Title`, NO success toast — upstream parity);
+the session-route `ctrl+r` binding (`sessKeyMap.Rename`, matched before the
+esc branch, gated on `curSessionID != ""`, the init cmds discarded so the
+key is consumed with zero returned cmds — deviation 198a) and the
+session-list `rename` action (ctrl+r, closes the list, opens the rename
+dialog for the selected row — the S3.1-stubbed action). Deviation 198
+(test-accuracy/plan-scope/low: 198a the discarded init cmds; 198b the
+`driveCmds` harness continues when the emit sink appends mid-round — the
+onConfirm patch cmd lands inside the submit cascade; 198c the plan's Files
+list omits app.go's renameMsg case + the harness file). No pin re-baselined,
+no select golden touched.
+Next: S3.3 session-delete-failed (bead `yolo-oae.4.4`).
 Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
 (PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
 + GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,
