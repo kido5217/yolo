@@ -158,6 +158,46 @@ it set `Text: string(r)` for unlisted runes, so `String()` never returned
 pinned test body is unchanged). 4 pinned tests green (render, keys,
 failure leg, teatest SGR).
 Next: S3.4 provider-dialog restyle (bead `yolo-oae.4.5`).
+S3.4 provider-dialog restyle landed (bead `yolo-oae.4.5`, commit 47cfaab):
+`providerdlg.go` (the `providerDlg` payload — the select + the th at open —
+`openProviderDialog` on `dlgMedium` mirroring `openModelDialog`: push modal
++ `syncProviderSel` + `fetchCatalogCmd`; `providerOptions`: the ported
+`PROVIDER_PRIORITY` (unknown → 99) + the (priority, name lc, ID) sort + the
+"Popular"|"Providers" categories + the known-id description map + the
+`providerStatusText` footer + the trailing "Other" custom option
+(`__yolo_custom_provider__`); `normalizeCustomProviderID` (the ported regex
+`^[a-z0-9][a-z0-9-_]*$` + the `@ai-sdk/` strip, "" when invalid); the flow:
+select pick → the API-key form (known) or the "Other" id prompt (custom) —
+deviation 192: no oauth, the key form opens directly; the id prompt:
+invalid → the verbatim error toast + the prompt re-opens (a push — the
+cascade already popped the submitted form); valid → the key form with the
+yolo.jsonc saved-credential description; the key form: empty value →
+re-open (the upstream `if (!value) return` guard), else `authCmd` →
+`applyAuth`: err → toast (the dialog stays), success + catalog id →
+`closeTopModal` + `openModelDialog` (the upstream `dialog.replace(DialogModel)`),
+success + custom → the saved-credential info toast + close); dialog.go
+wiring (the `dlgProvider` kind, the payload field, the
+`dialogStack.provider()` accessor, the `modalInner` + `handleDialogKey`
+cases, `applyCatalog` now also syncs `syncProviderSel`); commands.go: the
+`/connect` local entry + the `runCommand` case; app.go: the `authMsg` case.
+Deviations 192 (pre-logged: the oauth-method omission) + 200
+(test-accuracy/plan-scope/low: 200a the pinned test's unused "context"
+import dropped; 200b the plan's "localCommands already carries /connect from
+S3.1" note was stale — the entry + `runCommand` case land here, the
+`TestPromptMenuKeys` wrap count re-baselines 6→7; 200c the 2-arg `view(w,
+h)` + the th-at-open capture (the 197c convention); 200d the pinned order
+assertion's swapped priorities (the "anthropic (1) + openai (2)" comment)
+re-baselined to the plan's own pinned map (openai 2 < anthropic 4); 200e
+the render call `view(80, 24)` → `view(80, 26)` — the 7 built lines (2
+category headers + the between-group blank) overflow the `h/2-6` = 6-line
+select window, so the "Other" tail was unreachable; 200f the Fatalf's
+invalid `a.dlg.top().kind` → a `top, _ := a.dlg.top()` binding; plus the
+`applyCatalog`/`app.go` Files omissions (the 198c class), the re-open
+`replaceModal` → `openFormModal` push resolution, and the `driveCmds`
+replay switched to `a.updateMsg` — `Update` drains the toast TTL tick and
+would expire a mid-cascade toast before the pinned assertion). 4 pinned test
+functions green (normalize, render, flow, teatest /connect).
+Next: S3.5 status dialog (bead `yolo-oae.4.6`).
 Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
 (PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
 + GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,
