@@ -8,7 +8,7 @@ server over the wire contract only — it never reaches into core internals.
 ## Ownership
 
 Everything under `internal/tui/`: the app and its concern files (app,
-attention, commands, deletefailed, dialog, footer, frecency, home, huhdlg,
+attention, commands, deletefailed, destination, dialog, footer, frecency, home, huhdlg,
 hydrate, keymap, keys, locale, logo, mention, permission, prompt, providerdlg,
 rename, retrydlg, select, session, sessionsdlg, startup, statusdlg, style,
 themecmds, themedlg, tips, toast, view, whichkey, wrap), `client/` (HTTP + SSE client, backoff),
