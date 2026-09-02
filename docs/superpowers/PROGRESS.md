@@ -541,8 +541,17 @@ column math.
 - e2e/endpoint facts: `scripts/e2e-live.sh` (entry point `just e2e-live`),
   validated PASS against the REAL `https://ai.kido.ws/v1` on 2026-08-24
   (post Plan 1 merge; the pre-tag re-validation of spec §5) — success shape:
-  completed bash tool call + text reply; abort idle → `aborted:false`, busy
-  → `aborted:true`; SIGTERM → exit 0. `ai.kido.ws` accepts ANY bearer token
+  session list + rename round-trip (`GET /session` rows carry `.id`/`.title`/
+  `.agent`; `PATCH /session/{id} {"title":…}` returns the post-update row;
+  re-list shows the rename); config `theme` STRING round-trip
+  (`PATCH /config {"theme":"aura"}` → 200 + `.theme` string, re-`GET` shows it
+  persisted — the S0 map→string wire change); completed bash tool call + text
+  reply; abort idle → `aborted:false`, busy → `aborted:true`; SIGTERM → exit 0.
+  The new S3 wire-leg steps (3–4) were offline-validated 2026-09-02 via the
+  `YOLO_LLM=fake` + `YOLO_FAKE_SCRIPT` driver (scripted glob turn; the yolo
+  agent's catch-all permission allow means no prompt stall) — full run PASS,
+  exit 0; live re-validation of the new legs remains user-run (script contract
+  unchanged: on-demand, never CI). `ai.kido.ws` accepts ANY bearer token
   (private endpoint — key order env → auth.json → config).
   `GET /global/health` → `{"status":"ok"}`; `/session/{id}/message` rows =
   `{"info":{role,error:{type},...},"parts":[...]}` (jq: `.info.role`). Script
