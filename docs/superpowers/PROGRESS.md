@@ -552,9 +552,13 @@ column math.
   `YOLO_LLM=fake` + `YOLO_FAKE_SCRIPT` driver (scripted glob turn; the yolo
   agent's catch-all permission allow means no prompt stall) — full run PASS,
   exit 0; live re-validation ran against the real endpoint the same day —
-  full run PASS incl. the abort-while-busy leg (`aborted:true` observed live
-  for the first time; script contract unchanged: on-demand, never CI). `ai.kido.ws` accepts ANY bearer token
-  (private endpoint — key order env → auth.json → config).
+   full run PASS incl. the abort-while-busy leg (`aborted:true` observed live
+   for the first time; script contract unchanged: on-demand, never CI).
+   Re-run 2026-09-02 post-S4 (branch `new_tui` @ `1729dc2`, the S4-complete
+   tree): full live PASS again — the `main.go` `SetKeybinds` startup wiring +
+   the `keybinds` config field changed neither startup nor the wire shape.
+   `ai.kido.ws` accepts ANY bearer token
+   (private endpoint — key order env → auth.json → config).
   `GET /global/health` → `{"status":"ok"}`; `/session/{id}/message` rows =
   `{"info":{role,error:{type},...},"parts":[...]}` (jq: `.info.role`). Script
   mechanics: `req()` must set globals (never run inside `$(…)` — subshell
