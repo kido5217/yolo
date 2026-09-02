@@ -22,8 +22,12 @@ type homeModel struct {
 	now    func() int64
 	// tips is the S6.3 home tips line seam (wired by NewApp to
 	// App.homeTipsLine; nil in direct-construct runs — nil-guarded in
-	// renderClamped). The S6.4 footer seam lands alongside it.
+	// renderClamped).
 	tips func(w int) string
+	// footer is the S6.4 home footer line seam (wired by NewApp to
+	// App.homeFooterLine — the session-destination part, S6.5 joins the
+	// hint; nil in direct-construct runs — nil-guarded in renderClamped).
+	footer func(w int) string
 }
 
 var homeKeyMap = struct {
@@ -115,7 +119,9 @@ func (h *homeModel) render(s *store.State, w int, th theme.Theme) string {
 // logo (S0.8), the session rows word-wrapped at the terminal width (the
 // cursor stays one stop per session — continuation lines align under the
 // content), the theme borderSubtle divider, the dimmed help line and — when
-// the tips seam is wired and the tips are visible — the S6.3 tips line.
+// the tips seam is wired and the tips are visible — the S6.3 tips line,
+// and — when the footer seam is wired and the scope dir is known — the
+// S6.4 footer line (the session destination).
 func (h *homeModel) renderClamped(s *store.State, w int, th theme.Theme, maxRows int) string {
 	h.clampCursor(s)
 	rows := h.visible(s)
@@ -137,6 +143,12 @@ func (h *homeModel) renderClamped(s *store.State, w int, th theme.Theme, maxRows
 	b.WriteString(dimWrapped(th, helpText, w))
 	if h.tips != nil {
 		if line := h.tips(w); line != "" {
+			b.WriteByte('\n')
+			b.WriteString(line)
+		}
+	}
+	if h.footer != nil {
+		if line := h.footer(w); line != "" {
 			b.WriteByte('\n')
 			b.WriteString(line)
 		}

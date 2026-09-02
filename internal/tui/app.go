@@ -119,6 +119,9 @@ type App struct {
 	tipIdx     int
 	tipRand    func() float64
 	tipsHidden bool
+	// S6.4 home session destination (deviation 236): the test seam over
+	// the home dir (default os.UserHomeDir); App.homeDir reads it.
+	homeDirFunc func() string
 }
 
 // kvTipsHiddenKey is the KV key the tips-hidden flag persists under (the
@@ -154,6 +157,9 @@ func NewApp(c *client.Service, s store.State, startSessionID string, engine *the
 	}
 	// S6.3: the home tips line seam (the footer seam is S6.4).
 	a.home.tips = func(w int) string { return a.homeTipsLine(w) }
+	// S6.4: the home footer line seam (the destination part; S6.5 joins
+	// the hint part).
+	a.home.footer = func(w int) string { return a.homeFooterLine(w) }
 	in := textinput.New()
 	// textinput's View is prompt(2) + width + cursor(1): size the value
 	// area so the whole line fits the 80-column default terminal.
