@@ -223,7 +223,37 @@ S3.5 status dialog landed (bead `yolo-oae.4.6`, commit 4dc3cbe):
  plan's Files note names keys.go but the `handleDialogKey` case lives in
  dialog.go — keys.go unchanged, not in the commit). 3 pinned test functions
  green (render + fallback, esc/ctrl+c close).
-Next: S3.6 help-dialog restyle (bead `yolo-oae.4.7`).
+S3.6 help-dialog restyle landed (bead `yolo-oae.4.7`, commit 4a7ae96):
+ `dialog.go` (the `helpDialog` markdown table dropped — its `| key | action |`
+ rows are superseded by the S4.7 registry rendering; `helpDialogView(w, h,
+ th)`: the bold "Help" + muted "esc/enter" header row (space-between at the
+ panel width), the muted body — the palette line `Press ` +
+ `a.paletteShortcut()` + ` to see all available actions and commands in any
+ context.` + a blank line + the locked V1 note `pgup/pgdn scroll ·
+ \+enter newline` — and the right-aligned "ok" pill (pad 0 3, the primary
+ bg + the `SelectedForeground` fg — the opencode token has no
+ selectedListItemText → the fallback, 48;5;216 bg + 38;5;232 fg under the
+ pinned test env); `paletteShortcut() string` = the pre-S4 yolo constant
+ "ctrl+p" (S4.7 rewires it to the keymap registry)); the `dlgHelp` flip to
+ modal: the `modalInner` case → `a.helpDialogView(w, h, a.theme)`, the
+ `handleDialogKey` case — enter → `closeTopModal`, every other key ignored
+ (esc/ctrl+c via the stack; the pre-S3 "any key closes" dropped), the
+ `dlgHelp` case removed from `dialogStack.view` (the non-modal path);
+ `commands.go`: the `/help` `runCommand` case → `pushModal(dlgHelp,
+ dlgMedium)` (was the non-modal `dlg.push`); `help_test.go` re-written
+ (the table-gone + plain-key ignored + enter/esc close legs) + the teatest
+ SGR golden `TestTUIHelpDialog` (the "ok" pill's 48;5;216 bg + 38;5;232 fg,
+ the merged token condition); the `TestTUIDialogs` help leg re-baselined
+ (the markdown-table token → the palette line). Deviations 195 (pre-logged:
+ the paletteShortcut accessor) + 202 (test-accuracy/plan-scope/low: 202a the
+ pinned test line `a.helpDialogView(a, 80, 24)` + the Step-3 `modalInner`
+ `a.helpDialogView(a, w, h, a.theme)` both carry a redundant leading `a` +
+ omit `th` — the 3-arg `App.helpDialogView(w, h, th)` method is the codebase
+ convention, the test re-baselines to `a.helpDialogView(80, 24, a.theme)`;
+ 202b the plan's Files note names view.go + keys.go but both cases live in
+ dialog.go — view.go + keys.go unchanged, not in the commit). 3 pinned test
+ functions green (view + keys + teatest SGR).
+Next: S3.7 retry-action (bead `yolo-oae.4.8`).
 Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
 (PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
 + GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,
