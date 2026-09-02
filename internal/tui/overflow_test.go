@@ -12,7 +12,8 @@ import (
 // yolo-ukc: below-viewport surfaces (toasts, permission, slash menu, model /
 // agent dialogs, home rows, the error line) must word-wrap at the terminal
 // width instead of being clipped — the viewport only guards the transcript.
-// The footer and the locked quit/help dialogs stay single-line by design.
+// The footer and the locked quit dialog stay single-line by design (the help
+// dialog is modal since S3.6).
 
 // fitsWidth reports whether every line of s is at most w display columns
 // (the fixtures here are plain ASCII, so rune count is the width).

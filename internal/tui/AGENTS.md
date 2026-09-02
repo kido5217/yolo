@@ -58,7 +58,9 @@ and the teatest suites.
   route counts the wrapped help line's real line count in the viewport
   height budget. The model dialog cell hangs at the left-pane column
   (`modelRow`); when the left pane alone ≥ width, cell lines go full width.
-  Footer, divider and the locked quit/help dialogs stay single-line.
+   Footer, divider and the locked quit dialog stay single-line (the help
+   dialog is modal since S3.6 — the modal frame word-wraps its over-wide
+   body line at the panel width).
   Prompt line: bubbles v2 textinput `View` = prompt(2) + `SetWidth` +
   cursor(1) — `WindowSizeMsg` sets `SetWidth(w-3)` so the line fits.
 - SSE drop contract (v0.1.3): `client.Events` returns `(events, resync)` —
