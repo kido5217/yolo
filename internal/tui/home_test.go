@@ -104,6 +104,9 @@ func TestHomeRenderLockedLayout(t *testing.T) {
 	// NO_MODELS nudge after the help line — the testApp has sessions but
 	// no providers (!connected), so the forced NO_MODELS line is pinned
 	// regardless of tipIdx (one line, fits 80).
+	// S6.5 re-baseline: the footer seam's hint part (the S6.4 destination
+	// is omitted — Dir "") renders the hint-only line after the tips line
+	// (the default leader, the registry-rendered ctrl+x).
 	want := strings.Join(append(logoPlainLines(),
 		"  ▸ New session",
 		"  T1 · kido/q · 2m",
@@ -112,6 +115,7 @@ func TestHomeRenderLockedLayout(t *testing.T) {
 		div,
 		"↑/↓ move · enter open · n new · /help",
 		"● Tip Run /connect to add an AI provider and start coding",
+		"Show keyboard shortcuts with ctrl+x",
 	), "\n")
 	got := stripANSI(a.home.render(&a.store, 80, a.theme))
 	if got != want {
