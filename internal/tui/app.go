@@ -9,6 +9,7 @@ package tui
 import (
 	"context"
 	"encoding/json"
+	"math/rand"
 	"strconv"
 	"strings"
 	"time"
@@ -110,7 +111,19 @@ type App struct {
 	// S5.6 attention bell: the ported notifications.ts conditions (deviation
 	// 227), current-session-scoped.
 	attention attentionState
+	// S6.3 home tips: the current tip index (repicked per home entry — the
+	// upstream per-mount Math.random, no timer; deviation 235 note), the
+	// random seam (default math/rand.Float64 — tests seed it) and the
+	// hidden flag (persisted over the theme KV under kvTipsHiddenKey,
+	// deviation 223).
+	tipIdx     int
+	tipRand    func() float64
+	tipsHidden bool
 }
+
+// kvTipsHiddenKey is the KV key the tips-hidden flag persists under (the
+// S5.2 KV persistence surface, deviation 223).
+const kvTipsHiddenKey = "tips_hidden"
 
 // NewApp builds the root model. A non-empty startSessionID starts on that
 // session (resume); empty starts at home. A nil engine runs without the
@@ -137,7 +150,10 @@ func NewApp(c *client.Service, s store.State, startSessionID string, engine *the
 		keymap:          km,
 		pendingLeader:   false,
 		retrySuppressed: map[string]bool{},
+		tipRand:         rand.Float64,
 	}
+	// S6.3: the home tips line seam (the footer seam is S6.4).
+	a.home.tips = func(w int) string { return a.homeTipsLine(w) }
 	in := textinput.New()
 	// textinput's View is prompt(2) + width + cursor(1): size the value
 	// area so the whole line fits the 80-column default terminal.
@@ -154,6 +170,8 @@ func NewApp(c *client.Service, s store.State, startSessionID string, engine *the
 	a.retheme()
 	a.loadHistory()
 	a.loadFrecency()
+	a.loadTipsHidden()
+	a.repickTip()
 	return a
 }
 
@@ -494,6 +512,40 @@ func (a *App) saveFrecency() {
 		return
 	}
 	a.engine.KV().Set(kvFrecencyKey, a.freq)
+}
+
+// repickTip re-rolls the tip index (the per-home-entry re-pick — the
+// upstream per-mount Math.random, no timer; deviation 235 note).
+func (a *App) repickTip() { a.tipIdx = int(a.tipRand() * float64(len(tips))) }
+
+// loadTipsHidden restores the tips_hidden flag (the S5.2 KV seam).
+func (a *App) loadTipsHidden() {
+	if a.engine == nil {
+		return
+	}
+	a.tipsHidden = a.engine.KV().Get(kvTipsHiddenKey, false).(bool)
+}
+
+// tipsFirst/tipsConnected/tipsVisible port the upstream visibility
+// (tips.tsx:40-47) over the yolo store referents.
+func (a *App) tipsFirst() bool { return len(a.store.Sessions) == 0 }
+
+func (a *App) tipsConnected() bool {
+	for _, p := range a.store.Providers {
+		if p.ID != "opencode" {
+			return true
+		}
+		for _, m := range p.Models {
+			if m.Cost.Input != 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (a *App) tipsVisible() bool {
+	return !a.tipsHidden && (!a.tipsFirst() || !a.tipsConnected())
 }
 
 // afterApply arms the footer spinner when a just-applied event left the

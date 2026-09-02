@@ -100,6 +100,10 @@ func TestHomeRenderLockedLayout(t *testing.T) {
 		},
 	)
 	div := strings.Repeat("─", 28)
+	// S6.3 re-baseline: the tips seam (wired by NewApp) renders the
+	// NO_MODELS nudge after the help line — the testApp has sessions but
+	// no providers (!connected), so the forced NO_MODELS line is pinned
+	// regardless of tipIdx (one line, fits 80).
 	want := strings.Join(append(logoPlainLines(),
 		"  ▸ New session",
 		"  T1 · kido/q · 2m",
@@ -107,6 +111,7 @@ func TestHomeRenderLockedLayout(t *testing.T) {
 		"  old · kido/q · 4d",
 		div,
 		"↑/↓ move · enter open · n new · /help",
+		"● Tip Run /connect to add an AI provider and start coding",
 	), "\n")
 	got := stripANSI(a.home.render(&a.store, 80, a.theme))
 	if got != want {

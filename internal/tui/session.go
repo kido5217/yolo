@@ -643,6 +643,7 @@ func (a *App) handleSessionKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 			return a.emit(a.abortCmd()), true
 		}
 		a.route = routeHome
+		a.repickTip()
 		a.curSessionID = ""
 		return a.emit(a.hydrateCmd()), true
 	}

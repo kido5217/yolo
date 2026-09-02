@@ -144,6 +144,14 @@ func (a *App) dispatchCommand(name string) []tea.Cmd {
 		return a.openSessionListDialog()
 	case "provider_connect":
 		return a.openProviderDialog()
+	case "tips_toggle":
+		// S6.3: flip the hidden flag + persist over the theme KV (the
+		// S5.2 seam; a nil engine stays in-memory). No cmds — bubbletea
+		// re-renders after every Update.
+		a.tipsHidden = !a.tipsHidden
+		if a.engine != nil {
+			a.engine.KV().Set(kvTipsHiddenKey, a.tipsHidden)
+		}
 	case "help_show":
 		a.pushModal(dialog{kind: dlgHelp}, dlgMedium, nil)
 		// which_key_* (S4.6) is consumed but inert here.

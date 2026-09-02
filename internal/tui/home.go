@@ -20,6 +20,10 @@ import (
 type homeModel struct {
 	cursor int
 	now    func() int64
+	// tips is the S6.3 home tips line seam (wired by NewApp to
+	// App.homeTipsLine; nil in direct-construct runs — nil-guarded in
+	// renderClamped). The S6.4 footer seam lands alongside it.
+	tips func(w int) string
 }
 
 var homeKeyMap = struct {
@@ -110,7 +114,8 @@ func (h *homeModel) render(s *store.State, w int, th theme.Theme) string {
 // It produces the locked home layout for the store: the 4-line upstream
 // logo (S0.8), the session rows word-wrapped at the terminal width (the
 // cursor stays one stop per session — continuation lines align under the
-// content), the theme borderSubtle divider and the dimmed help line.
+// content), the theme borderSubtle divider, the dimmed help line and — when
+// the tips seam is wired and the tips are visible — the S6.3 tips line.
 func (h *homeModel) renderClamped(s *store.State, w int, th theme.Theme, maxRows int) string {
 	h.clampCursor(s)
 	rows := h.visible(s)
@@ -130,6 +135,12 @@ func (h *homeModel) renderClamped(s *store.State, w int, th theme.Theme, maxRows
 	b.WriteString(th.BorderSubtle().Render(dividerLine()))
 	b.WriteByte('\n')
 	b.WriteString(dimWrapped(th, helpText, w))
+	if h.tips != nil {
+		if line := h.tips(w); line != "" {
+			b.WriteByte('\n')
+			b.WriteString(line)
+		}
+	}
 	return b.String()
 }
 

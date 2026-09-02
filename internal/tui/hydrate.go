@@ -99,6 +99,7 @@ func (a *App) applyHydrate(m hydratedMsg) tea.Cmd {
 		// cmd layer, which maps this Quit to exit code 2 (T30).
 		a.lastErr = "session not found: " + m.sessID
 		a.route = routeHome
+		a.repickTip()
 		a.curSessionID = ""
 		return quitCmd()
 	case m.err != nil:

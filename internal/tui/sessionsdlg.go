@@ -306,6 +306,7 @@ func (a *App) applySessionDelete(m sessionDeleteMsg) tea.Cmd {
 		a.closeTopModal()
 		if a.curSessionID == deleted {
 			a.route = routeHome
+			a.repickTip()
 			a.curSessionID = ""
 			return a.hydrateCmd()
 		}
@@ -327,6 +328,7 @@ func (a *App) applySessionDelete(m sessionDeleteMsg) tea.Cmd {
 	}
 	if a.curSessionID == deleted {
 		a.route = routeHome
+		a.repickTip()
 		a.curSessionID = ""
 		return a.hydrateCmd()
 	}

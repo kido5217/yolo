@@ -2,6 +2,8 @@ package tui
 
 import (
 	"regexp"
+	"strconv"
+	"strings"
 
 	"github.com/kido5217/yolo/internal/tui/theme"
 )
@@ -104,4 +106,153 @@ func parseTip(s string) []tipPart {
 		parts = append(parts, tipPart{s[last:], false})
 	}
 	return parts
+}
+
+// tipWord is one word of a tips line tagged with its run kind (0 the
+// "● Tip " prefix, 1 muted, 2 the highlighted text).
+type tipWord struct {
+	word string
+	kind int
+}
+
+// tipRun is one styled run of a visual tips line; the runs stay in
+// SEQUENCE (the parts interleave — unlike rowLine's fixed-order
+// buckets, joinTipLine merges consecutive same-kind words in order).
+type tipRun struct {
+	text string
+	kind int
+}
+
+type tipLine struct {
+	runs []tipRun
+}
+
+// tipLines wraps the "● Tip " prefix + the parsed parts at w with the
+// rowLines word-wrap contract (word boundaries, over-long tokens
+// hard-split at the width, single-space rejoin). The prefix word carries
+// NO trailing space (the join space is the sole separator — the rowLines
+// contract: no word carries a trailing space, deviation 242).
+func tipLines(prefix string, parts []tipPart, w int) []tipLine {
+	words := []tipWord{{strings.TrimSuffix(prefix, " "), 0}}
+	for _, p := range parts {
+		kind := 1
+		if p.hi {
+			kind = 2
+		}
+		for _, f := range strings.Fields(p.text) {
+			words = append(words, tipWord{f, kind})
+		}
+	}
+	plain := prefix
+	for _, p := range parts {
+		plain += p.text
+	}
+	if w < 1 || plain == "" {
+		return []tipLine{{runs: []tipRun{{prefix, 0}}}}
+	}
+	effW := w
+	if effW < 1 {
+		effW = 1
+	}
+	var (
+		lines []tipLine
+		cur   []tipWord
+		curW  int
+	)
+	flush := func() {
+		if len(cur) == 0 {
+			return
+		}
+		lines = append(lines, joinTipLine(cur))
+		cur, curW = cur[:0], 0
+	}
+	for _, wd := range words {
+		fw := runeWidth(wd.word)
+		if fw > effW {
+			flush()
+			for rest := wd.word; len(rest) > 0; {
+				chunk, r := cutWidth(rest, effW)
+				lines = append(lines, joinTipLine([]tipWord{{chunk, wd.kind}}))
+				rest = r
+			}
+			continue
+		}
+		switch {
+		case len(cur) == 0:
+			cur, curW = append(cur, wd), fw
+		case curW+1+fw <= effW:
+			cur, curW = append(cur, wd), curW+1+fw
+		default:
+			flush()
+			cur, curW = append(cur, wd), fw
+		}
+	}
+	flush()
+	return lines
+}
+
+// joinTipLine joins one visual line's tagged words into its in-sequence
+// runs (a join space belongs to the PRECEDING word's run; a
+// line-boundary boundary drops it, the rowLine contract).
+func joinTipLine(ws []tipWord) tipLine {
+	var l tipLine
+	for i, wd := range ws {
+		r := tipRun{text: wd.word, kind: wd.kind}
+		if i < len(ws)-1 {
+			r.text += " "
+		}
+		if n := len(l.runs); n > 0 && l.runs[n-1].kind == wd.kind {
+			l.runs[n-1].text += r.text
+		} else {
+			l.runs = append(l.runs, r)
+		}
+	}
+	return l
+}
+
+// writeTipLine renders one visual line's runs: kind 0 the warning
+// prefix, 1 muted, 2 the bright text.
+func writeTipLine(b *strings.Builder, l tipLine, th theme.Theme) {
+	for _, r := range l.runs {
+		switch r.kind {
+		case 0:
+			b.WriteString(th.Warning().Render(r.text))
+		case 2:
+			b.WriteString(th.Text().Render(r.text))
+		default:
+			b.WriteString(th.TextMuted().Render(r.text))
+		}
+	}
+}
+
+// tipText is the token-substituted tip text (the <binding> tokens →
+// keymap.Format, {theme_count} → the theme count), or the NO_MODELS
+// force when !connected (the upstream connected === false force).
+func (a *App) tipText() string {
+	if !a.tipsConnected() {
+		return noModelsTip
+	}
+	t := tips[a.tipIdx%len(tips)]
+	for _, b := range tipBindings {
+		t = strings.ReplaceAll(t, "<"+b+">", a.keymap.Format(b))
+	}
+	return strings.ReplaceAll(t, "{theme_count}", strconv.Itoa(themeCount))
+}
+
+// homeTipsLine is the home tips line (the homeModel.tips seam body):
+// "" when hidden (the upstream (!first || !connected) && !hidden gate).
+func (a *App) homeTipsLine(w int) string {
+	if !a.tipsVisible() {
+		return ""
+	}
+	lines := tipLines("● Tip ", parseTip(a.tipText()), w)
+	var b strings.Builder
+	for i, l := range lines {
+		if i > 0 {
+			b.WriteByte('\n')
+			b.WriteString("●")
+		}
+		writeTipLine(&b, l, a.theme)
+	}
+	return b.String()
 }

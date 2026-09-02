@@ -816,7 +816,7 @@ var contextGroups = map[string][]string{
 	BaseMode: {
 		"which_key_toggle", "which_key_layout_toggle", "which_key_pending_toggle",
 		"command_list", "app_exit", "model_list", "agent_list", "status_view",
-		"theme_list", "session_new", "session_list",
+		"theme_list", "session_new", "session_list", "tips_toggle",
 	},
 	"session": {
 		"messages_page_up", "messages_page_down", "session_interrupt", "session_rename",
