@@ -37,6 +37,7 @@ const (
 	dlgStatus
 	dlgRetryAction
 	dlgThemes
+	dlgPalette
 )
 
 // dlgSize is the modal panel width (upstream DialogSize: medium 60, large
@@ -428,6 +429,10 @@ func (a *App) modalInner(d *dialog, w, h int) string {
 		}
 	case dlgHelp:
 		return a.helpDialogView(w, h, a.theme)
+	case dlgPalette:
+		if d.sel != nil {
+			return d.sel.view(w, h, a.theme)
+		}
 	}
 	return ""
 }
@@ -508,6 +513,12 @@ func (a *App) handleDialogKey(d dialog, k tea.KeyPressMsg) []tea.Cmd {
 			return nil
 		}
 		return d.themes.handleKey(a, k)
+	case dlgPalette:
+		if d.sel != nil {
+			return d.sel.handleKey(a, k)
+		}
+		a.dlg.pop()
+		return nil
 	case dlgStatus:
 		return nil // static view: the keys are ignored (esc/ctrl+c close via the stack)
 	case dlgHelp:

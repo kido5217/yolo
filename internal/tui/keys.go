@@ -118,11 +118,12 @@ func (a *App) matchBase(k tea.KeyPressMsg) (string, bool) {
 	return "", false
 }
 
-// dispatchCommand runs a referent-bearing registry command. The command_list
-// (S4.4) and which_key_* (S4.6) cases are consumed but inert at S4.2 time
-// (the cases land in those tasks).
+// dispatchCommand runs a referent-bearing registry command. The which_key_*
+// (S4.6) case is consumed but inert (the case lands in that task).
 func (a *App) dispatchCommand(name string) []tea.Cmd {
 	switch name {
+	case "command_list":
+		return a.openPaletteDialog()
 	case "app_exit":
 		a.dlg.push(dialog{kind: dlgQuit})
 	case "model_list":
@@ -141,7 +142,7 @@ func (a *App) dispatchCommand(name string) []tea.Cmd {
 		return a.openProviderDialog()
 	case "help_show":
 		a.pushModal(dialog{kind: dlgHelp}, dlgMedium, nil)
-		// command_list (S4.4) and which_key_* (S4.6) are consumed but inert here.
+		// which_key_* (S4.6) is consumed but inert here.
 	}
 	return nil
 }

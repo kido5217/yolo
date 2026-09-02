@@ -281,11 +281,12 @@ func TestKeymapDispatch(t *testing.T) {
 		}
 	})
 
-	t.Run("ctrl+p is consumed but inert at S4.2 (the palette remap)", func(t *testing.T) {
+	t.Run("ctrl+p opens the palette (the S4.4 remap lands)", func(t *testing.T) {
 		a := testApp()
 		a.handleKey(pressCtrlP())
-		if d, ok := a.dlg.top(); ok || a.pendingLeader {
-			t.Fatalf("ctrl+p must open no dialog at S4.2: top=%+v pending=%v", d, a.pendingLeader)
+		d, ok := a.dlg.top()
+		if !ok || d.kind != dlgPalette || a.pendingLeader {
+			t.Fatalf("after ctrl+p: top=%+v (ok=%v) pending=%v, want the palette", d, ok, a.pendingLeader)
 		}
 	})
 
