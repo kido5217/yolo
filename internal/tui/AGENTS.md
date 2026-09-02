@@ -9,7 +9,7 @@ server over the wire contract only — it never reaches into core internals.
 
 Everything under `internal/tui/`: the app and its concern files (app,
 hydrate, dialog, keys, logo, commands, view, footer, home, permission,
-prompt, session, style, toast, wrap, select, huhdlg, locale, sessionsdlg, rename, deletefailed, providerdlg, statusdlg, retrydlg, themedlg), `client/` (HTTP + SSE client, backoff),
+prompt, session, style, toast, wrap, select, huhdlg, locale, sessionsdlg, rename, deletefailed, providerdlg, statusdlg, retrydlg, themedlg, themecmds), `client/` (HTTP + SSE client, backoff),
 `store/` (display state), `theme/` (theme engine — 33 embedded upstream
 themes, resolution, system-theme generation, OSC palette detection, custom
 discovery, selection chain over the TUI-local KV file; TUI-local by root
