@@ -291,7 +291,49 @@ S3.7 retry-action dialog landed (bead `yolo-oae.4.8`, commit 2e600e7):
  `handleDialogKey` case lives in dialog.go; `commands.go` (the
  `applySend` home) in the commit). 4 pinned test functions green (render +
  keys + the 3-leg transition hook).
-Next: S3.8 theme-list (bead `yolo-oae.4.9`).
+S3.8 theme-list dialog landed (bead `yolo-oae.4.9`, commit 99e3650):
+ `themedlg.go` (`themeDlg{sel, th, initial, confirmed}` payload — `th`
+ is a LIVE theme accessor (`func() theme.Theme` over `a.theme`): the
+ pinned 2-arg `view(w, h)` takes no theme arg (the 197(c) class) and the
+ upstream dialog renders inside the theme context, so a preview move
+ re-themes the dialog's own rows; the at-open capture would keep the
+ list in the stale palette while the preview switches); `view(w, h)`
+ 2-arg, `handleKey` forwards to the select (esc/ctrl+c via the stack);
+ `themeOptions(e)` — the `AllThemes()` keys (builtins + customs +
+ "system") sorted case-insensitively (the upstream localeCompare port);
+ `openThemeListDialog` — `engine == nil` → toast "theme engine
+ unavailable" + no push; else `initial = engine.Active()`,
+ `selectNew("Themes", "Search", opts, isCurrent=engine.Active(),
+ onSelect, onMove)` with `skipFilter=true`: onMove → `Set(name)` +
+ `retheme` (the live preview — `Set` persists immediately, the upstream
+ `theme.set` behavior); onSelect → Set + retheme + `confirmed=true` +
+ `closeTopModal`; onFilter "" → restore `sel.options` + `Set(initial)`
+ + retheme + re-anchor the selection at the initial; onFilter non-empty
+ → the case-insensitive substring filter over the FULL list, `sel.sel=0`
+ + `Set(first match)` + retheme (empty match → no Set); the stack
+ onClose: `!confirmed` → `Set(initial)` + retheme (the upstream
+ onCleanup); `dialog.go`: the `dlgThemes` kind + the `themes` payload
+ field + the `themes()` accessor + the `modalInner` + `handleDialogKey`
+ cases; `commands.go`: `localCommands` gains the `{"/themes", "List
+ available themes"}` entry + the `runCommand` case; the `themeApp(t)`
+ harness (themedlg_test.go) wires a REAL engine (the t.TempDir KV) into
+ the recApp (consumed by S3.9). Deviation 204
+ (test-accuracy/plan-scope/low: 204a the pinned render `view(80, 24)`
+ re-baselined to `view(80, 80)` — 33 theme rows vs the 6-row select
+ window, the 200(e) class; 204b the substring order walk re-baselined
+ to the line-based gutter-stripped line match — the "orng" ⊂
+ "lucent-orng" name-substring collision; 204c `press(tea.KeyBackspace)`
+ special-cased in the harness (Code only, no Text — `Text: "\x7f"`
+ String()s to "\x7f", the string-based `key.Matches` never fires the
+ "backspace" binding, and the sanitizer drops the \x7f — a silent
+ no-op); 204d keys.go unchanged — the `handleDialogKey` case lives in
+ dialog.go (the 199/201(c) class); the `localCommands` entry landed
+ incrementally (the 197/200(b)/201(b) precedent) + the
+ `TestPromptMenuKeys` wrap count re-baselined 8→9 items; 204e the
+ live-theme-accessor payload field). 2 pinned test functions green
+ (render + the 4-leg flow); full gate green (`go vet ./... && go test
+ ./...` + `gofmt -l .`).
+Next: S3.9 theme commands (bead `yolo-oae.4.10`).
 Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
 (PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
 + GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,
