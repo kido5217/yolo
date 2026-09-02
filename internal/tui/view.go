@@ -70,6 +70,9 @@ func (a *App) view() string {
 			b.WriteString(a.theme.Error().Render(l))
 		}
 	}
+	if line := a.loadingView(w); line != "" {
+		b.WriteString("\n" + line)
+	}
 	b.WriteString("\n" + a.footerView())
 	return b.String()
 }

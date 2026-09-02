@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"strconv"
+	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/textinput"
@@ -71,6 +72,11 @@ type App struct {
 	engine  *theme.Engine
 	theme   theme.Theme
 	spinIdx int // footer spinner frame
+	// S6.1 startup loading spinner (deviation 237): the shown/ready
+	// state + the shown stamp (the min-hold origin).
+	loadShown bool
+	loadReady bool
+	loadStamp time.Time
 	// tea plumbing
 	size      tea.WindowSizeMsg
 	eventCh   chan protocol.Event
@@ -179,7 +185,7 @@ func (a *App) termWidth() int {
 
 // Init hydrates the starting route and arms the SSE + resync pumps.
 func (a *App) Init() tea.Cmd {
-	cmds := []tea.Cmd{a.hydrateCmd(), a.eventPump()}
+	cmds := []tea.Cmd{a.hydrateCmd(), a.eventPump(), a.loadArm()}
 	if c := a.resyncPump(); c != nil {
 		cmds = append(cmds, c)
 	}
@@ -248,9 +254,19 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 		return tea.Batch(a.hydrateCmd(), a.resyncPump())
 	case spinMsg:
 		a.spinIdx++
-		if a.statusSeg() != "" {
+		if a.statusSeg() != "" || a.loadShown {
 			return a.spinTick()
 		}
+		return nil
+	case loadShowMsg:
+		if a.loadReady {
+			return nil
+		}
+		a.loadShown = true
+		a.loadStamp = time.Now()
+		return a.spinTick()
+	case loadDoneMsg:
+		a.loadShown = false
 		return nil
 	case permReplyMsg:
 		return a.applyPermReply(m)
@@ -490,6 +506,58 @@ func (a *App) afterApply(cmd tea.Cmd) tea.Cmd {
 		return a.spinTick()
 	}
 	return tea.Batch(cmd, a.spinTick())
+}
+
+// loadArm arms the 500 ms show tick (Init batch; nil when already
+// ready — the hydrate raced the arm).
+func (a *App) loadArm() tea.Cmd {
+	if a.loadReady {
+		return nil
+	}
+	return tea.Tick(startupShowDelay, func(time.Time) tea.Msg { return loadShowMsg{} })
+}
+
+// loadDone marks hydration done: nil when already ready; when the
+// line never showed, hide-free no-op; else a hold so the shown span
+// is always >= startupMinHold.
+func (a *App) loadDone() tea.Cmd {
+	if a.loadReady {
+		return nil
+	}
+	a.loadReady = true
+	if !a.loadShown {
+		return nil
+	}
+	left := startupMinHold - time.Since(a.loadStamp)
+	if left <= 0 {
+		a.loadShown = false
+		return nil
+	}
+	return tea.Tick(left, func(time.Time) tea.Msg { return loadDoneMsg{} })
+}
+
+// loadingText is the two-state spinner text (deviation 237: the
+// upstream "Loading plugins..." has no yolo referent).
+func (a *App) loadingText() string {
+	if a.loadReady {
+		return startupTextReady
+	}
+	return startupTextLoading
+}
+
+// loadingView is the home-route-only bottom line (between lastErr and
+// the footer); "" = not shown.
+func (a *App) loadingView(w int) string {
+	if !a.loadShown || a.route != routeHome {
+		return ""
+	}
+	line := a.spinFrame() + " " + a.loadingText()
+	padded := a.theme.BackgroundPanel().Padding(0, 1).Render(a.theme.TextMuted().Render(line))
+	width := runeWidth(line) + 2
+	if w <= width {
+		return padded
+	}
+	return strings.Repeat(" ", (w-width)/2) + padded
 }
 
 // onSessionStatus is the S3.7 retry-action trigger: a session.status event
