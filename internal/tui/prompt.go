@@ -100,6 +100,53 @@ func (pm *promptModel) menuView(cmds []protocol.Command, w int, th theme.Theme) 
 // view renders the prompt line (the textinput carries the "> " prompt).
 func (pm *promptModel) view() string { return pm.input.View() }
 
+// mentionActive reports whether the input has an active @-trigger (S5.4).
+func (pm *promptModel) mentionActive() bool {
+	_, ok := mentionTriggerIndex(pm.input.Value())
+	return ok
+}
+
+// acQuery is the @-query: the value after the active @-trigger ("" when
+// there is none).
+func (pm *promptModel) acQuery() string {
+	idx, ok := mentionTriggerIndex(pm.input.Value())
+	if !ok {
+		return ""
+	}
+	return pm.input.Value()[idx+1:]
+}
+
+// acView renders the @-picker option rows, reusing the slash-menu rendering
+// (muted + cursorStyle on the selected row, each row word-wrapped). Nil opts
+// hide the picker; an empty list renders the "no match" line.
+func (pm *promptModel) acView(opts []selectOption, w int, th theme.Theme) string {
+	if opts == nil {
+		return ""
+	}
+	if len(opts) == 0 {
+		return th.TextMuted().Render("  no match")
+	}
+	muted := th.TextMuted()
+	var b strings.Builder
+	for i, o := range opts {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		sty := muted
+		if i == pm.sel {
+			sty = cursorStyle(th)
+		}
+		p, _ := o.value.(string)
+		for j, l := range strings.Split(wrapLine("  "+p, w), "\n") {
+			if j > 0 {
+				b.WriteByte('\n')
+			}
+			b.WriteString(sty.Render(l))
+		}
+	}
+	return b.String()
+}
+
 // moveMenuSel moves the selection by d with wraparound (n items).
 func (pm *promptModel) moveMenuSel(n, d int) {
 	if n == 0 {

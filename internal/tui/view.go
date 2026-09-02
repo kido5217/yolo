@@ -31,15 +31,22 @@ func (a *App) view() string {
 	toasts := a.toastsView(w)
 	dlg := a.dlgView(w)
 	menu := a.prompt.menuView(a.mergedCommands(), w, a.theme)
+	acMenu := ""
+	if a.prompt.mentionActive() {
+		acMenu = a.prompt.acView(a.mentionOptions(), w, a.theme)
+	}
 	wk := a.whichKeyView(w)
 	var b strings.Builder
 	if a.route == routeSession {
-		b.WriteString(a.viewSession(menu, perm, toasts, dlg, wk))
+		b.WriteString(a.viewSession(menu, acMenu, perm, toasts, dlg, wk))
 	} else {
 		b.WriteString(a.home.render(&a.store, w, a.theme))
 	}
 	if menu != "" {
 		b.WriteString("\n" + menu)
+	}
+	if acMenu != "" {
+		b.WriteString("\n" + acMenu)
 	}
 	if perm != "" {
 		b.WriteString("\n" + perm)
@@ -69,12 +76,13 @@ func (a *App) view() string {
 
 // viewSession renders the session route: title, the transcript viewport and
 // the locked help line. The viewport reserves a line for the prompt, one for
-// the footer, the open slash menu and every below-viewport overlay (perm,
-// toasts, dlg, lastErr), so the frame fits the terminal height — mandatory
-// under the alt screen, whose frame (unlike the normal-screen frame, which
-// grows with content) is the fixed terminal size. menu/perm/toasts/dlg are
-// the pre-built overlay strings from view() (rendered once per frame).
-func (a *App) viewSession(menu, perm, toasts, dlg, wk string) string {
+// the footer, the open slash menu + @-picker and every below-viewport
+// overlay (perm, toasts, dlg, lastErr), so the frame fits the terminal
+// height — mandatory under the alt screen, whose frame (unlike the
+// normal-screen frame, which grows with content) is the fixed terminal size.
+// menu/acMenu/perm/toasts/dlg are the pre-built overlay strings from view()
+// (rendered once per frame).
+func (a *App) viewSession(menu, acMenu, perm, toasts, dlg, wk string) string {
 	w := a.size.Width
 	if w < 1 {
 		w = 80
@@ -92,10 +100,14 @@ func (a *App) viewSession(menu, perm, toasts, dlg, wk string) string {
 	if menu != "" {
 		menuLines = 1 + strings.Count(menu, "\n")
 	}
+	acMenuLines := 0
+	if acMenu != "" {
+		acMenuLines = 1 + strings.Count(acMenu, "\n")
+	}
 	// The help line may wrap on narrow terminals; the viewport height must
 	// count its real line count so the frame stays within the terminal.
 	help := len(strings.Split(wrapLine(sessionHelp, w), "\n"))
-	vh := a.size.Height - 1 - 1 - help - 1 - 1 - menuLines - overlays
+	vh := a.size.Height - 1 - 1 - help - 1 - 1 - menuLines - acMenuLines - overlays
 	return a.sessionChrome(w, vh)
 }
 

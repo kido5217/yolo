@@ -96,6 +96,11 @@ type App struct {
 	// keys, deviation 224), persisted under kvFrecencyKey (deviation 223);
 	// the @-picker consumes the ranking (S5.4).
 	freq []frecencyEntry
+	// S5.4 @-picker: the cached walk of the scope dir (deviation 225) —
+	// walkRoot is the scope dir the cached walk was taken of ("" = never
+	// walked or the server work dir), walked its slash-relative paths.
+	walkRoot string
+	walked   []string
 }
 
 // NewApp builds the root model. A non-empty startSessionID starts on that

@@ -15,12 +15,13 @@ var escBinding = key.NewBinding(key.WithKeys("esc"))
 var dlgCtrlC = key.NewBinding(key.WithKeys("ctrl+c"))
 
 // handleKey is the app key dispatcher: permission > dialog > the keymap
-// registry (app-level bindings, S4.2) > slash menu > route > prompt. A
-// pending permission ask owns every key; while a dialog is open it owns the
-// keys; otherwise the keymap registry owns the app-level bindings (the leader
-// + the base context group); while the slash menu is open it owns the keys;
-// routes handle their navigation keys; everything else falls through to the
-// always-focused prompt input.
+// registry (app-level bindings, S4.2) > slash menu > @-picker > route >
+// prompt. A pending permission ask owns every key; while a dialog is open it
+// owns the keys; otherwise the keymap registry owns the app-level bindings
+// (the leader + the base context group); while the slash menu is open it
+// owns the keys; while the @-picker is open it owns the keys; routes handle
+// their navigation keys; everything else falls through to the always-focused
+// prompt input.
 func (a *App) handleKey(k tea.KeyPressMsg) []tea.Cmd {
 	if len(a.store.Pending) > 0 {
 		if d, ok := a.dlg.top(); ok && d.kind == dlgPerm && d.perm != nil {
@@ -38,6 +39,9 @@ func (a *App) handleKey(k tea.KeyPressMsg) []tea.Cmd {
 	}
 	if a.prompt.slashActive() {
 		return a.handleMenuKey(k)
+	}
+	if a.prompt.mentionActive() {
+		return a.handleAcKey(k)
 	}
 	switch a.route {
 	case routeSession:
@@ -170,6 +174,39 @@ func (a *App) handleMenuKey(k tea.KeyPressMsg) []tea.Cmd {
 		return nil
 	case key.Matches(k, escBinding):
 		a.clearPrompt()
+		return nil
+	}
+	return a.inputUpdate(k)
+}
+
+// handleAcKey dispatches keys while the @-picker is open: arrows move the
+// selection with wraparound, enter inserts the selected path (a no-op on no
+// selection — the upstream if (!selected) return), esc removes the @-trigger
+// keeping the prefix; everything else keeps filtering through the live input
+// (re-filtering the options).
+func (a *App) handleAcKey(k tea.KeyPressMsg) []tea.Cmd {
+	opts := a.mentionOptions()
+	switch {
+	case key.Matches(k, homeKeyMap.Up):
+		a.prompt.moveMenuSel(len(opts), -1)
+		return nil
+	case key.Matches(k, homeKeyMap.Down):
+		a.prompt.moveMenuSel(len(opts), 1)
+		return nil
+	case key.Matches(k, promptEnter):
+		if len(opts) > 0 && a.prompt.sel < len(opts) {
+			if p, ok := opts[a.prompt.sel].value.(string); ok {
+				a.acInsert(p)
+			}
+		}
+		return nil
+	case key.Matches(k, escBinding):
+		v := a.prompt.input.Value()
+		if idx, ok := mentionTriggerIndex(v); ok {
+			a.prompt.input.SetValue(v[:idx])
+			a.prompt.input.SetCursor(idx)
+		}
+		a.prompt.sel = 0
 		return nil
 	}
 	return a.inputUpdate(k)
