@@ -176,6 +176,7 @@ func (a *App) appendHistory(text string) {
 	}
 	a.histIdx = 0
 	a.histText = ""
+	a.saveHistory()
 }
 
 // clearPrompt clears the prompt input, retaining a trimmed draft of at least

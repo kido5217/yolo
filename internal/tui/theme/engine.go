@@ -390,6 +390,13 @@ func (e *Engine) KVPath() string {
 	return e.opts.KVPath
 }
 
+// KV exposes the engine's KV store (the additive S5.2 seam — the
+// engine stays the owner; the TUI-local persistence callers read and
+// write their own keys).
+func (e *Engine) KV() *KV {
+	return e.kv
+}
+
 // FlushKV synchronously flushes the KV store to the file (a barrier
 // before reading the file while the S0.7 writer goroutine is still
 // in flight — the promise-chain writer keeps its own schedule).

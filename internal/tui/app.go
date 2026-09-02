@@ -134,6 +134,7 @@ func NewApp(c *client.Service, s store.State, startSessionID string, engine *the
 		a.curSessionID = startSessionID
 	}
 	a.retheme()
+	a.loadHistory()
 	return a
 }
 
@@ -358,6 +359,48 @@ func (a *App) retheme() {
 			a.prompt.input.SetStyles(st)
 		}
 	}
+}
+
+// kvHistoryKey is the KV key the prompt history persists under (the
+// S5.2 KV persistence surface; deviation 223).
+const kvHistoryKey = "prompt_history"
+
+// coerceStrings coerces a reloaded KV value to []string — the in-run
+// []string or the JSON []any of string a process-restart reload yields
+// (deviation 223). Anything else (absent/nil) is no history.
+func coerceStrings(v any) []string {
+	switch s := v.(type) {
+	case []string:
+		return s
+	case []any:
+		out := make([]string, 0, len(s))
+		for _, e := range s {
+			if t, ok := e.(string); ok {
+				out = append(out, t)
+			}
+		}
+		return out
+	}
+	return nil
+}
+
+// loadHistory restores the persisted prompt history from the KV (the
+// S5.2 boot load, run in NewApp after retheme; a nil engine skips —
+// the history stays empty in-memory).
+func (a *App) loadHistory() {
+	if a.engine == nil {
+		return
+	}
+	a.hist = coerceStrings(a.engine.KV().Get(kvHistoryKey, nil))
+}
+
+// saveHistory persists the current prompt history to the KV (the
+// S5.2 write path, called from appendHistory; a nil engine skips).
+func (a *App) saveHistory() {
+	if a.engine == nil {
+		return
+	}
+	a.engine.KV().Set(kvHistoryKey, a.hist)
 }
 
 // afterApply arms the footer spinner when a just-applied event left the
