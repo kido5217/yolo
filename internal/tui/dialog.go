@@ -346,10 +346,11 @@ func (a *App) helpDialogView(w, h int, th theme.Theme) string {
 	return b.String()
 }
 
-// paletteShortcut is the palette keybind the help line reports (deviation
-// 195): the pre-S4 yolo constant "ctrl+p"; S4.7 rewires this accessor to the
-// keymap registry (the frozen S4 table row).
-func (a *App) paletteShortcut() string { return "ctrl+p" }
+// paletteShortcut is the palette keybind the hint surfaces report (the
+// registry-integration seam, deviation 195 resolved at S4.7): the
+// registry's command_list binding, formatted for display. The S4.1 default
+// is "ctrl+p", so the /help + teatest goldens are byte-identical.
+func (a *App) paletteShortcut() string { return a.keymap.Format("command_list") }
 
 func (d dialogStack) view(th theme.Theme) string {
 	top, ok := d.top()

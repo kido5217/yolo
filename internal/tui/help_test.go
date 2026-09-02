@@ -41,6 +41,30 @@ func TestHelpDialogView(t *testing.T) {
 	}
 }
 
+func TestHelpPaletteHintFromRegistry(t *testing.T) {
+	a := testApp()
+	// S4.7: the default palette hint is the registry's command_list binding
+	// (byte-identical to the pre-S4 "ctrl+p" — the existing goldens hold).
+	if got := a.paletteShortcut(); got != "ctrl+p" {
+		t.Fatalf("default palette hint = %q, want ctrl+p (the registry default)", got)
+	}
+	// A remap is reflected in the hint and in the /help body (registry-driven).
+	if err := a.keymap.Set("command_list", "ctrl+k"); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.paletteShortcut(); got != "ctrl+k" {
+		t.Fatalf("remapped palette hint = %q, want ctrl+k", got)
+	}
+	v := stripANSI(a.helpDialogView(80, 24, a.theme))
+	if !strings.Contains(v, "Press ctrl+k to see all available actions") {
+		t.Fatalf("the /help palette hint must reflect the remap:\n%s", v)
+	}
+	// The V1-pinned line is untouched (kept byte-identical).
+	if !strings.Contains(v, "pgup/pgdn scroll \u00B7 \\+enter newline") {
+		t.Fatalf("the V1-pinned help line must stay byte-identical:\n%s", v)
+	}
+}
+
 func TestHelpDialogKeys(t *testing.T) {
 	a := testApp()
 	a.pushModal(dialog{kind: dlgHelp}, dlgMedium, nil)
