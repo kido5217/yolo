@@ -333,7 +333,30 @@ S3.8 theme-list dialog landed (bead `yolo-oae.4.9`, commit 99e3650):
  live-theme-accessor payload field). 2 pinned test functions green
  (render + the 4-leg flow); full gate green (`go vet ./... && go test
  ./...` + `gofmt -l .`).
-Next: S3.9 theme commands (bead `yolo-oae.4.10`).
+S3.9 theme commands landed (bead `yolo-oae.4.10`, commit 3032022):
+  `themecmds.go` — `themeSwitchMode()` = `Pin(the opposite of the
+  current mode)` (the upstream `setMode` === pin quirk verbatim: the
+  switch both switches and locks — `Pin` applies the mode + persists
+  theme_mode_lock + theme_mode, then `retheme` refreshes the styles),
+  `themeModeLock()` = `locked() ? free() : pin(store.mode)` (lock =
+  pin the current mode — persists both keys; unlock clears both and
+  re-resolves the mode from the cached terminal luminance); nil
+  engine → toast "theme engine unavailable" + nil on both; dynamic
+  titles `switchModeTitle` (shows the NEXT mode — "Switch to light
+  mode"/"Switch to dark mode") + `modeLockTitle` ("Unlock theme mode"
+  / "Lock theme mode") for the S4 registry + the unit tests (no
+  dynamic command titles pre-S4); NO default keys (upstream "none" —
+  deviation 196; the S4.1 registry carries the defaults + the remap).
+  `theme/engine.go`: the `KVPath()` + `FlushKV()` seams;
+  `theme/kv.go`: `KV.Flush` — the synchronous log-and-continue barrier
+  (serialized with the writer via k.mu + the flock, idempotent — the
+  promise-chain writer design is unchanged; deviation 205). 3 pinned
+  test functions green (the pin-quirk switch + lock/unlock + KV
+  wiring — the fresh engine on the same KV file sees the persisted
+  theme, the raw file after Close carries the mode keys); full gate
+  green (`go vet ./... && go test ./...` + `gofmt -l .`).
+Next: S4 detail pass (keymap + command palette + which-key — slice
+bead `yolo-oae.5`).
 Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
 (PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
 + GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,
