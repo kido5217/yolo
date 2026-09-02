@@ -550,8 +550,9 @@ column math.
   The new S3 wire-leg steps (3–4) were offline-validated 2026-09-02 via the
   `YOLO_LLM=fake` + `YOLO_FAKE_SCRIPT` driver (scripted glob turn; the yolo
   agent's catch-all permission allow means no prompt stall) — full run PASS,
-  exit 0; live re-validation of the new legs remains user-run (script contract
-  unchanged: on-demand, never CI). `ai.kido.ws` accepts ANY bearer token
+  exit 0; live re-validation ran against the real endpoint the same day —
+  full run PASS incl. the abort-while-busy leg (`aborted:true` observed live
+  for the first time; script contract unchanged: on-demand, never CI). `ai.kido.ws` accepts ANY bearer token
   (private endpoint — key order env → auth.json → config).
   `GET /global/health` → `{"status":"ok"}`; `/session/{id}/message` rows =
   `{"info":{role,error:{type},...},"parts":[...]}` (jq: `.info.role`). Script
