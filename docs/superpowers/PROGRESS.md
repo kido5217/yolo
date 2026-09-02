@@ -253,7 +253,45 @@ S3.6 help-dialog restyle landed (bead `yolo-oae.4.7`, commit 4a7ae96):
  202b the plan's Files note names view.go + keys.go but both cases live in
  dialog.go — view.go + keys.go unchanged, not in the commit). 3 pinned test
  functions green (view + keys + teatest SGR).
-Next: S3.7 retry-action (bead `yolo-oae.4.8`).
+S3.7 retry-action dialog landed (bead `yolo-oae.4.8`, commit 2e600e7):
+ `retrydlg.go` (`retryDlg{title, message, actionLabel, selected, th}` —
+ 0 = dismiss / "don't show again", 1 = the action; `view(w, h)` 2-arg with
+ the theme captured at open (the 197(c) convention): the bold title + muted
+ "esc" header (space-between), the muted message wrapped via `wrapLine` at
+ `w-4`, the pills row "don't show again" left / the actionLabel right
+ (space-between; the active pill = the primary bg + the
+ `SelectedForeground` fg — the select active-row chain; the link line is
+ unused — no BgPulse dep); `handleKey`: left/right/tab toggle, enter on the
+ action → `closeTopModal` + `emit(abortCmd())` (the turn lands on the
+ existing aborted flow), enter on the dismiss → close silently,
+ esc/ctrl+c via the stack); `dialog.go`: the `dlgRetryAction` kind + the
+ `retry` payload field + the `retryAction()` accessor (any open retry
+ dialog, the model/precedent invariant) + the `modalInner` +
+ `handleDialogKey` cases; `app.go`: `retrySuppressed map[string]bool`
+ (initialized in `NewApp`; the S3.7 per-run gate — deviation 194): the
+ `EventMsg` case captures `prev := a.store.Status.Type` BEFORE
+ `store.Apply` and calls `onSessionStatus(prev, m.Event)` — the hook skips
+ on a non-`session.status` event, a non-current session, a non-retry type,
+ a non-idle prev (the idle→retry transition only), or an already-suppressed
+ session; on the transition it sets the suppression (ANY open — dismiss or
+ action — suppresses the rest of the run) and opens the dialog (title
+ "Request failed", message = the wire `Message` + ` (retrying, attempt
+ <n>)`, actionLabel "Abort"); the dialog opens even with other dialogs on
+ the stack (the upstream empty-stack gate has no yolo referent);
+ `commands.go`: the `applySend` SUCCESS path (after the `m.err != nil`
+ guard) clears the suppression via `delete(a.retrySuppressed,
+ a.curSessionID)` — `sendMsg` carries only the error, so the
+ current-session key is the contract. Deviation 203
+ (test-accuracy/plan-scope/low: 203a the pinned test called
+ `onSessionStatus` one-arg but the Step-3 last-stated call pins the 2-arg
+ `(prevType string, ev protocol.Event)` signature — the 2-arg wins, the
+ test call sites pass prev explicitly; 203b the pinned 3-arg `view`
+ interface loses to the pinned 2-arg test call; 203c the pinned test's
+ unused `store` import dropped; Files gaps: keys.go unchanged — the
+ `handleDialogKey` case lives in dialog.go; `commands.go` (the
+ `applySend` home) in the commit). 4 pinned test functions green (render +
+ keys + the 3-leg transition hook).
+Next: S3.8 theme-list (bead `yolo-oae.4.9`).
 Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
 (PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
 + GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,
