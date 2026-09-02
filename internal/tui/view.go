@@ -30,7 +30,7 @@ func (a *App) view() string {
 	perm := a.permissionView(w)
 	toasts := a.toastsView(w)
 	dlg := a.dlgView(w)
-	menu := a.prompt.menuView(a.mergedCommands(), w, a.theme)
+	menu := a.prompt.menuView(a.menuItems(), w, a.theme)
 	acMenu := ""
 	if a.prompt.mentionActive() {
 		acMenu = a.prompt.acView(a.mentionOptions(), w, a.theme)

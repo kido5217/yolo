@@ -1,10 +1,12 @@
 package tui
 
 import (
+	"sort"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
+	"github.com/sahilm/fuzzy"
 
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/tui/theme"
@@ -36,41 +38,74 @@ func (pm *promptModel) slashActive() bool {
 // are input forms only: the menu surfaces the canonical name.
 var commandAliases = map[string][]string{"/quit": {"/exit"}}
 
-// matchesAlias reports whether any of the command's accepted aliases starts
-// with the typed prefix (the canonical-name check stays in the caller).
-func matchesAlias(c protocol.Command, prefix string) bool {
-	for _, alias := range commandAliases[c.Name] {
-		if strings.HasPrefix(alias[1:], prefix) {
-			return true
-		}
-	}
-	return false
-}
-
-// menuItems filters the known commands by the typed "/prefix", matching both
-// canonical names and their aliases. It returns nil when the menu is closed,
-// else the filtered (possibly empty) list in server order.
-func (pm *promptModel) menuItems(cmds []protocol.Command) []protocol.Command {
-	if !pm.slashActive() {
+// menuItems is the /-picker (S5.5 — the ported upstream /-autocomplete): the
+// fuzzy-ranked merged commands. Nil when the menu is closed; an empty query
+// (input == "/") returns the merged list in order (deviation 226); otherwise
+// fuzzy.Find over the canonical + alias names, each score x2 for a prefix
+// match, sorted desc, capped at maxPickerOptions, deduped by the canonical
+// name (an alias match maps to the canonical command).
+func (a *App) menuItems() []protocol.Command {
+	if !a.prompt.slashActive() {
 		return nil
 	}
-	prefix := pm.input.Value()[1:]
-	out := []protocol.Command{}
-	for _, c := range cmds {
+	merged := a.mergedCommands()
+	cmds := make([]protocol.Command, 0, len(merged))
+	for _, c := range merged {
 		if len(c.Name) < 2 {
 			continue // wire input: skip malformed (empty) command names
 		}
-		if strings.HasPrefix(c.Name[1:], prefix) || matchesAlias(c, prefix) {
-			out = append(out, c)
+		cmds = append(cmds, c)
+	}
+	if len(cmds) == 0 {
+		return []protocol.Command{}
+	}
+	q := a.prompt.input.Value()[1:]
+	if q == "" {
+		return cmds // deviation 226: the empty query lists all merged, in order
+	}
+	names := make([]string, 0, len(cmds))
+	byName := make(map[string]protocol.Command, len(cmds))
+	for _, c := range cmds {
+		byName[c.Name] = c
+		names = append(names, c.Name)
+		for _, alias := range commandAliases[c.Name] {
+			byName[alias] = c
+			names = append(names, alias)
 		}
+	}
+	type scored struct {
+		cmd   protocol.Command
+		score int
+	}
+	seen := make(map[string]bool, len(cmds))
+	var ranked []scored
+	for _, m := range fuzzy.Find(q, names) {
+		c := byName[m.Str]
+		if seen[c.Name] {
+			continue
+		}
+		seen[c.Name] = true
+		s := m.Score
+		if strings.HasPrefix(m.Str[1:], q) {
+			s *= 2
+		}
+		ranked = append(ranked, scored{cmd: c, score: s})
+	}
+	sort.SliceStable(ranked, func(i, j int) bool { return ranked[i].score > ranked[j].score })
+	if len(ranked) > maxPickerOptions {
+		ranked = ranked[:maxPickerOptions]
+	}
+	out := make([]protocol.Command, 0, len(ranked))
+	for _, r := range ranked {
+		out = append(out, r.cmd)
 	}
 	return out
 }
 
-// menuView renders the filtered slash menu; each item word-wraps at the
-// terminal width (custom command descriptions can be long).
-func (pm *promptModel) menuView(cmds []protocol.Command, w int, th theme.Theme) string {
-	items := pm.menuItems(cmds)
+// menuView renders the slash menu's items directly (S5.5: the filtering is
+// App.menuItems); each item word-wraps at the terminal width (custom command
+// descriptions can be long).
+func (pm *promptModel) menuView(items []protocol.Command, w int, th theme.Theme) string {
 	if items == nil {
 		return ""
 	}

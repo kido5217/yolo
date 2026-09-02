@@ -48,13 +48,9 @@ func TestPromptMenuFilter(t *testing.T) {
 	}{
 		{"", nil},
 		{"hello", nil},
-		{"/", []string{"/help", "/new", "/model", "/agents", "/quit"}},
-		{"/m", []string{"/model"}},
-		{"/n", []string{"/new"}},
-		{"/h", []string{"/help"}},
+		{"/", []string{"/sessions", "/connect", "/status", "/themes", "/help", "/new", "/model", "/agents", "/quit"}},
+		{"/model", []string{"/model"}},
 		{"/quit", []string{"/quit"}},
-		{"/exit", []string{"/quit"}}, // alias: canonical /quit is surfaced
-		{"/ex", []string{"/quit"}},
 		{"/zz", []string{}},
 	}
 	for _, tt := range tests {
@@ -62,7 +58,7 @@ func TestPromptMenuFilter(t *testing.T) {
 			a := testApp()
 			a.store.Commands = testCommands()
 			a.prompt.input.SetValue(tt.in)
-			got := a.prompt.menuItems(a.store.Commands)
+			got := a.menuItems()
 			gotNames := []string(nil)
 			if got != nil {
 				gotNames = make([]string, 0, len(got))
@@ -71,14 +67,35 @@ func TestPromptMenuFilter(t *testing.T) {
 				}
 			}
 			if len(gotNames) != len(tt.want) {
-				t.Fatalf("menuItems(%q) = %v, want %v", tt.in, gotNames, tt.want)
+				t.Fatalf("in=%q got %v, want %v", tt.in, gotNames, tt.want)
 			}
 			for i := range tt.want {
 				if gotNames[i] != tt.want[i] {
-					t.Fatalf("menuItems(%q) = %v, want %v", tt.in, gotNames, tt.want)
+					t.Fatalf("in=%q got %v, want %v", tt.in, gotNames, tt.want)
 				}
 			}
 		})
+	}
+}
+
+func TestPromptMenuFuzzy(t *testing.T) {
+	a := testApp()
+	a.store.Commands = testCommands()
+	// "m" is a prefix of "model" and a subsequence of "themes": the prefix
+	// match (x2 boost) ranks first.
+	a.prompt.input.SetValue("/m")
+	got := a.menuItems()
+	if len(got) == 0 {
+		t.Fatal("no matches for /m")
+	}
+	if got[0].Name != "/model" {
+		t.Fatalf("top match = %q, want /model (the prefix boost)", got[0].Name)
+	}
+	// the alias is preserved: /exit maps to the canonical /quit
+	a.prompt.input.SetValue("/exit")
+	got = a.menuItems()
+	if len(got) == 0 || got[0].Name != "/quit" {
+		t.Fatalf("alias /exit -> /quit, got %v", got)
 	}
 }
 
@@ -126,7 +143,7 @@ func TestPromptMenuKeys(t *testing.T) {
 		a := testApp()
 		a.store.Commands = testCommands()
 		typeStr(a, "/zz")
-		if !a.prompt.slashActive() || len(a.prompt.menuItems(a.store.Commands)) != 0 {
+		if !a.prompt.slashActive() || len(a.menuItems()) != 0 {
 			t.Fatal("menu must be open with no match")
 		}
 		a.handleKey(press(tea.KeyEnter))

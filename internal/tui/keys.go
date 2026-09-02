@@ -158,7 +158,7 @@ func (a *App) dispatchCommand(name string) []tea.Cmd {
 // merged command list (local + server — spec §10) so the rendered row and
 // the executed row stay in step.
 func (a *App) handleMenuKey(k tea.KeyPressMsg) []tea.Cmd {
-	items := a.prompt.menuItems(a.mergedCommands())
+	items := a.menuItems()
 	switch {
 	case key.Matches(k, homeKeyMap.Up):
 		a.prompt.moveMenuSel(len(items), -1)
