@@ -97,8 +97,10 @@ messages are unchanged. No code or wire impact.
      (themedlg_test.go:20), `stripANSI` (home_test.go:20) /
      `stripANSITest` (app_test.go:32), `driveCmds`/`updateKey` (huhdlg_test.go),
      `suiteType` (tui_suite_test.go:27), `hasLine` (permission_test.go:256),
-     `hasLines` (tui_suite_test.go:161), `agentFixture()` (model_test.go:61),
-     `modelFixture()` (model_test.go:70), `teatest` SGR legs pin
+      `hasLines` (tui_suite_test.go:161), `agentFixture()` (model_test.go:61 —
+      the `[]protocol.Agent` data fixture), `agentApp()` (agent_test.go:24 —
+      the session-route agent-dialog app the S4.2 remap test drives),
+      `modelFixture()` (model_test.go:70), `teatest` SGR legs pin
      TTY_FORCE=1 + TERM=xterm-256color.
 
 2. **Upstream `config/keybind.ts` (v1.18.18, read in full at detail time):**
@@ -312,8 +314,11 @@ messages are unchanged. No code or wire impact.
 - `Definitions map[string]keybindDef` — the 184 upstream entries ported
   VERBATIM (name, default, description) + the yolo-specific
   `prompt_soft_newline` display entry (deviation 208) = 185 entries;
-  `CommandMap map[string]string` — the ported binding→command map (the 184
-  upstream entries).
+   `CommandMap map[string]string` — the ported binding→command map (the 163
+   upstream command bindings; the 21 non-command bindings — `leader`, the 13
+   `dialog.*` + 5 `prompt.autocomplete.*` navigation bindings,
+   `permission.prompt.fullscreen`, `plugins.toggle` — are absent from the
+   upstream CommandMap by design).
 - `BindingValue` = the raw upstream value shape (`any`: bool | string |
   `[]any` | `map[string]any`); `resolveValue` normalizes it to
    `bindingValue{enabled bool, seqs []string}`: `false`/`"none"`/empty →
@@ -500,7 +505,7 @@ messages are unchanged. No code or wire impact.
 
 **Files:** new `internal/tui/keymap.go`; new `internal/tui/keymap_test.go`.
 
-**Interfaces:** produces: the `LeaderDefault`/`LeaderToken`/`LeaderTimeout`/`BaseMode` constants; `BindingValue` (the raw value shape); `keybindDef` + the `keybind()` helper; `Definitions` (185 entries); `CommandMap` (184 entries); `bindingValue{enabled, seqs}`; `resolveValue(BindingValue) (bindingValue, error)`; `stringifyKeyStroke(map[string]any) (string, error)`; `keyMatchesSeq(tea.KeyPressMsg, string) bool`; `formatKeySequence(seq, leader string) string`; `leaderSplit(seq string) (has, rest bool)`. No app wiring yet (S4.2).
+**Interfaces:** produces: the `LeaderDefault`/`LeaderToken`/`LeaderTimeout`/`BaseMode` constants; `BindingValue` (the raw value shape); `keybindDef` + the `keybind()` helper; `Definitions` (185 entries); `CommandMap` (163 entries — the upstream command set; the 21 non-command bindings are absent); `bindingValue{enabled, seqs}`; `resolveValue(BindingValue) (bindingValue, error)`; `stringifyKeyStroke(map[string]any) (string, error)`; `keyMatchesSeq(tea.KeyPressMsg, string) bool`; `formatKeySequence(seq, leader string) string`; `leaderSplit(seq string) (has, rest bool)`. No app wiring yet (S4.2).
 
 **Upstream parity notes:** `config/keybind.ts` ported verbatim (findings §2): the 184 entries' names, defaults and descriptions are unchanged; the value-shape decoder is the port of `BindingValueSchema` + `parse`'s per-value decode (the unknown-key check lands in S4.2's `NewKeymap` — the same message shape). The object flags are data-only (deviation 209). The base key compares case-insensitively (a port simplification — the upstream keymap-library case handling is not visible from the repo).
 
@@ -559,14 +564,19 @@ func TestKeymapDefinitionsVerbatim(t *testing.T) {
 			t.Errorf("Definitions[%q].Description is empty", name)
 		}
 	}
-	// The ported CommandMap covers every upstream binding name
-	// (keybind.ts:256-420).
-	for name := range Definitions {
-		if name == "prompt_soft_newline" {
-			continue
-		}
-		if CommandMap[name] == "" {
-			t.Errorf("CommandMap[%q] is empty", name)
+	// The ported CommandMap is the upstream's 163-entry binding→command map
+	// (keybind.ts:256-420) — verbatim. The 21 non-command bindings (leader,
+	// the 13 dialog.* + 5 prompt.autocomplete.* navigation bindings,
+	// permission.prompt.fullscreen, plugins.toggle) have no command and are
+	// absent from the upstream CommandMap by design, so the assertion is
+	// scoped to the CommandMap's own set (not the 184 Definitions names);
+	// every ported command key must be a ported Definitions name.
+	if len(CommandMap) != 163 {
+		t.Fatalf("CommandMap = %d entries, want 163 (the upstream set)", len(CommandMap))
+	}
+	for name := range CommandMap {
+		if _, ok := Definitions[name]; !ok {
+			t.Errorf("CommandMap[%q] has no Definitions entry", name)
 		}
 	}
 }
@@ -2213,7 +2223,8 @@ func TestPaletteSelectPick(t *testing.T) {
 	a := testApp()
 	a.store.Commands = []protocol.Command{{Name: "/help", Description: "Show help"}}
 	a.openPaletteDialog()
-	sel := a.dlg.top().sel
+	d, _ := a.dlg.top()
+	sel := d.sel
 	sel.sel = 0 // the local /sessions (first)
 	sel.submit(a)
 	d, ok := a.dlg.top()
@@ -2232,7 +2243,8 @@ func TestPaletteNav(t *testing.T) {
 		{Name: "/new", Description: "New session"},
 	}
 	a.openPaletteDialog()
-	sel := a.dlg.top().sel
+	d, _ := a.dlg.top()
+	sel := d.sel
 	n := len(sel.filtered())
 	if sel.sel != 0 {
 		t.Fatalf("initial sel = %d, want 0", sel.sel)
@@ -2253,8 +2265,8 @@ func TestPaletteEsc(t *testing.T) {
 	a.store.Commands = []protocol.Command{{Name: "/help", Description: "Show help"}}
 	a.openPaletteDialog()
 	a.handleKey(press(tea.KeyEscape))
-	if !a.dlg.empty() {
-		t.Fatalf("after esc: top=%+v, want the palette closed", a.dlg.top())
+	if d, ok := a.dlg.top(); ok {
+		t.Fatalf("after esc: top=%+v, want the palette closed", d)
 	}
 }
 
@@ -2321,7 +2333,7 @@ func (a *App) paletteSelectPick(o selectOption) {
 
 **Interfaces:** produces: `whichKeyEntry{key, label, group string, continues bool}`; `whichKeyGroup{label string, entries []whichKeyEntry}`; `whichKeyCategory(name string) string` (binding-name prefix → group label, deviation 213); `whichKeyGrouped(entries []whichKeyEntry) []whichKeyGroup` (group by label, groups sorted by label, entries within a group sorted continues-desc/label/key — the upstream `grouped`, which-key.tsx:144-156); `(*Keymap).whichKeyEntries() []whichKeyEntry` (the held leader's continuation bindings for the current context — registry-driven); `(*App).whichKeyView(w int) string` (the overlay string, `""` when the leader is not pending / a modal is open / no entries).
 
-**Upstream parity notes:** the overlay is the port of the upstream which-key feature (which-key.tsx) — the `Entry`/`Group` types (which-key.tsx:66-77), `activeKeyEntry`/`grouped` (which-key.tsx:132-156). Three yolo divergences (deviation 207, behavior/low): (1) the overlay is **always available** (the upstream `enabled:false` feature flag + KV-gated layout are dropped — no KV, the layout is the in-memory overlay); (2) the overlay is **in-memory** (no `which_key_layout`/`which_key_pending_preview` KV — the toggles `which_key_toggle`/`which_key_layout_toggle`/`which_key_pending_toggle` are registry-defined but INERT in yolo: the overlay appears when the leader is *held*, not toggled); (3) the overlay is **context-filtered** — it lists only the current context group's leader-continuation bindings (the upstream `active()` is context-aware; the yolo referent is the S4.2 `contextGroups` map), so the inert unwired bindings (the 9 `session_quick_switch_*`, `messages_*`, the `session_timeline`/`export`/`compact`/`queued_prompts`) do not clutter the base overlay. Deviation 213 (render/low): the group label is the binding-name prefix (the upstream `commandAttrs.category` is not a yolo field); the entry label is the binding's `Definitions` description (the upstream `commandAttrs.title ?? bindingAttrs.desc`). The `continues` flag is carried (the upstream `+key` continuation label, which-key.tsx:138) but the default bindings are all leaf continuations (`continues=false`); it is future-proofing for a nested prefix. The overlay is **non-interactive** (a passive display dismissed by the leader timeout / continuation — the upstream group-nav/scroll/page bindings are not wired). Geometry (which-key.tsx constants MIN8/MAX16/0.3, MIN_COL/MAX_COL) is referenced but the v1 overlay is a compact line-per-group panel (the context filter bounds the entry count, so the upstream multi-column/scroll layout is not needed).
+**Upstream parity notes:** the overlay is the port of the upstream which-key feature (which-key.tsx) — the `Entry`/`Group` types (which-key.tsx:66-77), `activeKeyEntry`/`grouped` (which-key.tsx:126-156). Three yolo divergences (deviation 207, behavior/low): (1) the overlay is **always available** (the upstream `enabled:false` feature flag + KV-gated layout are dropped — no KV, the layout is the in-memory overlay); (2) the overlay is **in-memory** (no `which_key_layout`/`which_key_pending_preview` KV — the toggles `which_key_toggle`/`which_key_layout_toggle`/`which_key_pending_toggle` are registry-defined but INERT in yolo: the overlay appears when the leader is *held*, not toggled); (3) the overlay is **context-filtered** — it lists only the current context group's leader-continuation bindings (the upstream `active()` is context-aware; the yolo referent is the S4.2 `contextGroups` map), so the inert unwired bindings (the 9 `session_quick_switch_*`, `messages_*`, the `session_timeline`/`export`/`compact`/`queued_prompts`) do not clutter the base overlay. Deviation 213 (render/low): the group label is the binding-name prefix (the upstream `commandAttrs.category` is not a yolo field); the entry label is the binding's `Definitions` description (the upstream `commandAttrs.title ?? bindingAttrs.desc`). The `continues` flag is carried (the upstream `+key` continuation label, which-key.tsx:138) but the default bindings are all leaf continuations (`continues=false`); it is future-proofing for a nested prefix. The overlay is **non-interactive** (a passive display dismissed by the leader timeout / continuation — the upstream group-nav/scroll/page bindings are not wired). Geometry (which-key.tsx constants MIN8/MAX16/0.3, MIN_COL/MAX_COL) is referenced but the v1 overlay is a compact line-per-group panel (the context filter bounds the entry count, so the upstream multi-column/scroll layout is not needed).
 
 **Step 1 — write the failing tests.** New `internal/tui/whichkey_test.go`:
 
