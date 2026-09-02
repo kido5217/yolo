@@ -8,6 +8,8 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
+	"strconv"
 	"time"
 
 	"charm.land/bubbles/v2/textinput"
@@ -72,6 +74,10 @@ type App struct {
 	resyncing bool          // a transient SSE drop's re-hydrate is in flight
 	stop      context.CancelFunc
 	emitSink  func(cmds ...tea.Cmd) // test seam, set from _test.go only
+	// S3.7 retry-action per-run gate (deviation 194): sessionID → true after
+	// ANY open (dismiss or action), cleared on the next send for that
+	// session (the applySend success path).
+	retrySuppressed map[string]bool
 }
 
 // NewApp builds the root model. A non-empty startSessionID starts on that
@@ -82,16 +88,17 @@ func NewApp(c *client.Service, s store.State, startSessionID string, engine *the
 	ctx, cancel := context.WithCancel(context.Background())
 	eventCh, resyncCh := c.Events(ctx)
 	a := &App{
-		Service:  c,
-		store:    s,
-		route:    routeHome,
-		home:     homeModel{now: nowMillis},
-		sess:     newSessionModel(80, 21),
-		size:     tea.WindowSizeMsg{Width: 80, Height: 24},
-		eventCh:  eventCh,
-		resyncCh: resyncCh,
-		stop:     cancel,
-		engine:   engine,
+		Service:         c,
+		store:           s,
+		route:           routeHome,
+		home:            homeModel{now: nowMillis},
+		sess:            newSessionModel(80, 21),
+		size:            tea.WindowSizeMsg{Width: 80, Height: 24},
+		eventCh:         eventCh,
+		resyncCh:        resyncCh,
+		stop:            cancel,
+		engine:          engine,
+		retrySuppressed: map[string]bool{},
 	}
 	in := textinput.New()
 	// textinput's View is prompt(2) + width + cursor(1): size the value
@@ -161,11 +168,15 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 		return nil
 	case EventMsg:
 		a.store.Live = true
+		// The previous status type (store.Apply already lands the new value
+		// by the time the hook runs — S3.7 reads prev, not the store).
+		prev := a.store.Status.Type
 		a.store.Apply(m.Event)
 		a.syncPermDialog()
 		if m.Event.Type == protocol.EventTypeSessionUpdated || m.Event.Type == protocol.EventTypeSessionDeleted {
 			a.syncSessionSel()
 		}
+		a.onSessionStatus(prev, m.Event)
 		// Any applied event may have changed the transcript (message/part
 		// family); re-render once instead of on every frame.
 		a.sess.isDirty = true
@@ -322,6 +333,36 @@ func (a *App) afterApply(cmd tea.Cmd) tea.Cmd {
 		return a.spinTick()
 	}
 	return tea.Batch(cmd, a.spinTick())
+}
+
+// onSessionStatus is the S3.7 retry-action trigger: a session.status event
+// for the current session on the idle->retry transition opens the
+// retry-action dialog once per run (the per-run suppression — deviation 194).
+// prevType is the store status type BEFORE the event applied (store.Apply
+// already landed the new value by the time this hook runs).
+func (a *App) onSessionStatus(prevType string, ev protocol.Event) {
+	if ev.Type != protocol.EventTypeSessionStatus {
+		return
+	}
+	var p protocol.SessionStatusProps
+	if json.Unmarshal(ev.Properties, &p) != nil {
+		return
+	}
+	if p.SessionID != a.curSessionID {
+		return
+	}
+	if p.Status.Type != protocol.SessionStatusRetry {
+		return
+	}
+	if prevType != protocol.SessionStatusIdle {
+		return
+	}
+	if a.retrySuppressed[p.SessionID] {
+		return
+	}
+	a.retrySuppressed[p.SessionID] = true
+	a.openRetryActionDialog("Request failed",
+		p.Status.Message+" (retrying, attempt "+strconv.Itoa(p.Status.Attempt)+")", "Abort")
 }
 
 // eventPump blocks on the SSE channel and delivers the next event. It re-arms

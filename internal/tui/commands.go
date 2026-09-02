@@ -38,6 +38,9 @@ func (a *App) applySend(m sendMsg) tea.Cmd {
 	}
 	a.prompt.input.SetValue("")
 	a.prompt.draft.Reset()
+	// The next send re-arms the S3.7 retry-action per-run gate (deviation
+	// 194): the suppression for this session clears on a successful send.
+	delete(a.retrySuppressed, a.curSessionID)
 	return nil
 }
 

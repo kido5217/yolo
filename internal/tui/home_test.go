@@ -48,6 +48,8 @@ var (
 	ctrlRKey = tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl}
 )
 
+func pressTab() tea.KeyPressMsg { return tea.KeyPressMsg{Code: '\t'} }
+
 func TestRelTime(t *testing.T) {
 	tests := []struct {
 		name string
