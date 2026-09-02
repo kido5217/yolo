@@ -65,7 +65,7 @@ func (a *App) runCommand(name string) []tea.Cmd {
 	a.prompt.input.SetValue("")
 	switch name {
 	case "/help":
-		a.dlg.push(dialog{kind: dlgHelp})
+		a.pushModal(dialog{kind: dlgHelp}, dlgMedium, nil)
 	case "/quit", "/exit": // /exit is the alias of /quit
 		a.dlg.push(dialog{kind: dlgQuit})
 	case "/model":

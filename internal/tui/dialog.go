@@ -277,25 +277,53 @@ var (
 	quitDialogRendered  = title.Render("quit? [Y/n]")
 )
 
-// helpDialog renders the locked help block in the theme's textMuted token
-// (S0.9: the static dim was removed — the block is short, the per-frame
-// render is negligible).
-func helpDialog(th theme.Theme) string {
-	muted := th.TextMuted()
-	return title.Render("Help") +
-		"\n" + muted.Render("  | Key | Action |") +
-		"\n" + muted.Render("  |---|---|") +
-		"\n" + muted.Render("  | enter | send prompt |") +
-		"\n" + muted.Render("  | esc | abort turn (busy) / close dialog |") +
-		"\n" + muted.Render("  | ctrl+c | quit (confirm) |") +
-		"\n" + muted.Render("  | ctrl+p | model dialog |") +
-		"\n" + muted.Render("  | ctrl+a | agent dialog |") +
-		"\n" + muted.Render("  | / | command menu |") +
-		"\n" + muted.Render("  | pgup/pgdn | viewport scroll |") +
-		"\n" + muted.Render("  | 1/2/3 | permission reply |") +
-		"\n" + muted.Render("  | alt+e / alt+t | expand tool part / toggle reasoning |") +
-		"\n" + muted.Render("  pgup/pgdn scroll \u00B7 \\+enter newline")
+// helpHeaderRow is the help dialog header: the bold "Help" left, the muted
+// "esc/enter" right, space-between at the panel width.
+func (a *App) helpHeaderRow(w int, th theme.Theme) string {
+	const t = "Help"
+	pad := w - runeWidth(t) - runeWidth("esc/enter")
+	if pad < 0 {
+		pad = 0
+	}
+	return title.Render(t) + strings.Repeat(" ", pad) + th.TextMuted().Render("esc/enter")
 }
+
+// helpOKPill renders the right-aligned "ok" pill: pad 0 3, the primary bg and
+// the SelectedForeground fg (the opencode token has no selectedListItemText
+// → the fallback; 48;5;216 bg + 38;5;232 fg under the pinned test env).
+func (a *App) helpOKPill(w int, th theme.Theme) string {
+	const label = "ok"
+	pill := cursorStyle(th).Padding(0, 3).Render(label)
+	if bg, ok := th.Color("primary"); ok {
+		fg := lipgloss.Color(th.SelectedForeground(bg).Hex()[:7])
+		pill = lipgloss.NewStyle().Foreground(fg).
+			Background(lipgloss.Color(bg.Hex()[:7])).Padding(0, 3).Render(label)
+	}
+	pad := w - ansiWidth(pill)
+	if pad < 0 {
+		pad = 0
+	}
+	return strings.Repeat(" ", pad) + pill
+}
+
+// helpDialogView renders the modal help (S3.6, the upstream dialog-help.tsx
+// shape): the header row, the muted body (the palette line + the locked V1
+// note) and the right-aligned "ok" pill. The pre-S3 markdown table is dropped.
+func (a *App) helpDialogView(w, h int, th theme.Theme) string {
+	var b strings.Builder
+	b.WriteString(a.helpHeaderRow(w, th))
+	muted := th.TextMuted()
+	b.WriteString("\n" + muted.Render("Press "+a.paletteShortcut()+" to see all available actions and commands in any context."))
+	b.WriteString("\n")
+	b.WriteString(muted.Render("pgup/pgdn scroll \u00B7 \\+enter newline"))
+	b.WriteString("\n" + a.helpOKPill(w, th))
+	return b.String()
+}
+
+// paletteShortcut is the palette keybind the help line reports (deviation
+// 195): the pre-S4 yolo constant "ctrl+p"; S4.7 rewires this accessor to the
+// keymap registry (the frozen S4 table row).
+func (a *App) paletteShortcut() string { return "ctrl+p" }
 
 func (d dialogStack) view(th theme.Theme) string {
 	top, ok := d.top()
@@ -305,8 +333,6 @@ func (d dialogStack) view(th theme.Theme) string {
 	switch top.kind {
 	case dlgQuit:
 		return quitDialogRendered
-	case dlgHelp:
-		return helpDialog(th)
 	}
 	return ""
 }
@@ -367,6 +393,8 @@ func (a *App) modalInner(d *dialog, w, h int) string {
 		}
 	case dlgStatus:
 		return a.statusView(w, h, a.theme)
+	case dlgHelp:
+		return a.helpDialogView(w, h, a.theme)
 	}
 	return ""
 }
@@ -437,8 +465,13 @@ func (a *App) handleDialogKey(d dialog, k tea.KeyPressMsg) []tea.Cmd {
 		return d.provider.handleKey(a, k)
 	case dlgStatus:
 		return nil // static view: the keys are ignored (esc/ctrl+c close via the stack)
+	case dlgHelp:
+		if key.Matches(k, promptEnter) {
+			a.closeTopModal()
+		}
+		return nil // enter closes; every other key ignored (esc/ctrl+c via the stack)
 	}
-	a.dlg.pop() // dlgHelp: any key closes
+	a.dlg.pop() // defensive: an unhandled non-modal dialog kind is closed
 	return nil
 }
 

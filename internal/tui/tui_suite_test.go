@@ -289,7 +289,7 @@ func TestTUIDialogs(t *testing.T) {
 	tm.Send(press(tea.KeyEscape))
 	suiteType(tm, "/help")
 	tm.Send(press(tea.KeyEnter))
-	capture("Help", "| enter | send prompt |", "pgup/pgdn scroll \u00B7 \\+enter newline")
+	capture("Help", "Press ctrl+p to see all available actions", "pgup/pgdn scroll \u00B7 \\+enter newline")
 	tm.Send(press(tea.KeyEscape))
 	tm.Send(ctrlCKey)
 	capture("quit? [Y/n]")
