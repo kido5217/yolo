@@ -119,6 +119,12 @@ type App struct {
 	tipIdx     int
 	tipRand    func() float64
 	tipsHidden bool
+	// S7.2 todo sidebar: the visibility mode ("auto" | "hide", persisted
+	// over the theme KV under kvSidebarModeKey — the S6.3 theme-KV seam,
+	// deviation 223's class) + the forced-open flag (the toggle's visible
+	// branch; the auto mode shows only at a wide terminal, >120 columns).
+	sidebarMode string
+	sidebarOpen bool
 	// S6.4 home session destination (deviation 236): the test seam over
 	// the home dir (default os.UserHomeDir); App.homeDir reads it.
 	homeDirFunc func() string
@@ -127,6 +133,10 @@ type App struct {
 // kvTipsHiddenKey is the KV key the tips-hidden flag persists under (the
 // S5.2 KV persistence surface, deviation 223).
 const kvTipsHiddenKey = "tips_hidden"
+
+// kvSidebarModeKey is the KV key the sidebar mode persists under (the S6.3
+// theme-KV seam, deviation 223's class): "auto" | "hide".
+const kvSidebarModeKey = "sidebar_mode"
 
 // NewApp builds the root model. A non-empty startSessionID starts on that
 // session (resume); empty starts at home. A nil engine runs without the
@@ -177,6 +187,7 @@ func NewApp(c *client.Service, s store.State, startSessionID string, engine *the
 	a.loadHistory()
 	a.loadFrecency()
 	a.loadTipsHidden()
+	a.loadSidebarMode()
 	a.repickTip()
 	return a
 }
@@ -530,6 +541,45 @@ func (a *App) loadTipsHidden() {
 		return
 	}
 	a.tipsHidden = a.engine.KV().Get(kvTipsHiddenKey, false).(bool)
+}
+
+// loadSidebarMode restores the sidebar mode (the S7.2 KV seam; a nil
+// engine stays at the "auto" default).
+func (a *App) loadSidebarMode() {
+	a.sidebarMode = "auto"
+	if a.engine == nil {
+		return
+	}
+	if m, ok := a.engine.KV().Get(kvSidebarModeKey, "auto").(string); ok && m == "hide" {
+		a.sidebarMode = "hide"
+	}
+}
+
+// sidebarVisible ports the upstream sidebarVisible (index.tsx:272-276)
+// minus the subagent parentID gate (no Session.ParentID on the wire — the
+// S7 detail finding): the forced open, or the auto mode at a wide
+// terminal (>120 columns).
+func (a *App) sidebarVisible() bool {
+	if a.sidebarOpen {
+		return true
+	}
+	return a.sidebarMode == "auto" && a.size.Width > 120
+}
+
+// toggleSidebar ports the session.sidebar.toggle command flip
+// (index.tsx:674-681) + the KV persist (the S6.3 tips_toggle pattern — no
+// cmds; bubbletea re-renders after every Update).
+func (a *App) toggleSidebar() {
+	if a.sidebarVisible() {
+		a.sidebarMode = "hide"
+		a.sidebarOpen = false
+	} else {
+		a.sidebarMode = "auto"
+		a.sidebarOpen = true
+	}
+	if a.engine != nil {
+		a.engine.KV().Set(kvSidebarModeKey, a.sidebarMode)
+	}
 }
 
 // tipsFirst/tipsConnected/tipsVisible port the upstream visibility

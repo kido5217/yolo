@@ -127,20 +127,36 @@ func (a *App) modalChromeMin() int {
 }
 
 // sessionChrome renders the session route's chrome for a viewport of vh
-// lines: title, transcript viewport, divider, the (possibly wrapped) help.
+// lines: title, the transcript viewport (the todo sidebar — S7.2 — as the
+// right sidebarWidth columns of the viewport lines, deviation 246),
+// divider, the (possibly wrapped) help.
 func (a *App) sessionChrome(w, vh int) string {
 	if vh < 1 {
 		vh = 1
 	}
-	a.sess.sync(&a.store, w, vh, a.theme, a.spinFrame())
+	var side []string
+	leftW := w
+	if a.sidebarVisible() && w > sidebarWidth {
+		side = a.sidebarLines(vh)
+		leftW = w - sidebarWidth
+	}
+	a.sess.sync(&a.store, leftW, vh, a.theme, a.spinFrame())
 	t := "session"
 	if a.store.Current != nil {
 		t = a.store.Current.Title
 	}
 	var b strings.Builder
-	b.WriteString(title.Render(t) +
-		"\n" + a.sess.vm.View() +
-		"\n" + dividerLineRendered)
+	b.WriteString(title.Render(t) + "\n")
+	for i, row := range strings.Split(a.sess.vm.View(), "\n") {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		if side != nil && i < len(side) {
+			row += side[i]
+		}
+		b.WriteString(row)
+	}
+	b.WriteString("\n" + dividerLineRendered)
 	for _, l := range strings.Split(wrapLine(sessionHelp, w), "\n") {
 		b.WriteString("\n" + a.theme.TextMuted().Render(l))
 	}

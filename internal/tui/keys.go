@@ -152,6 +152,14 @@ func (a *App) dispatchCommand(name string) []tea.Cmd {
 		if a.engine != nil {
 			a.engine.KV().Set(kvTipsHiddenKey, a.tipsHidden)
 		}
+	case "sidebar_toggle":
+		// S7.2: the sidebar only exists on the session route (the upstream
+		// home has no session.sidebar.toggle command — a no-op elsewhere).
+		// No cmds — bubbletea re-renders after the flip.
+		if a.route != routeSession {
+			return nil
+		}
+		a.toggleSidebar()
 	case "help_show":
 		a.pushModal(dialog{kind: dlgHelp}, dlgMedium, nil)
 		// which_key_* (S4.6) is consumed but inert here.

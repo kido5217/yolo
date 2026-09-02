@@ -1,11 +1,23 @@
 package tui
 
 import (
+	"context"
+	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/exp/teatest/v2"
+
+	"github.com/kido5217/yolo/internal/llm"
+	"github.com/kido5217/yolo/internal/llm/fake"
 	"github.com/kido5217/yolo/internal/protocol"
+	"github.com/kido5217/yolo/internal/server/testutil"
+	"github.com/kido5217/yolo/internal/tui/client"
 	"github.com/kido5217/yolo/internal/tui/store"
+	"github.com/kido5217/yolo/internal/tui/theme"
 )
 
 // todowritePart builds the wire-shape todowrite part: the JSON-decoded
@@ -157,4 +169,198 @@ func TestTodoSidebarLines(t *testing.T) {
 	if wrapped[1] != "[ ] alpha beta" || wrapped[2] != "    gamma" {
 		t.Fatalf("wrap = %q / %q, want the 4-column continuation indent", wrapped[1], wrapped[2])
 	}
+}
+
+// TestSidebarToggle pins the ported session.sidebar.toggle flip (upstream
+// index.tsx:674-681): visible → "hide" + open=false; invisible → "auto" +
+// open=true; the >120 auto-show rule; the home-route no-op (the dispatch
+// guard). Driven through the real <leader>b dispatch (the S4.2
+// leader-continuation idiom).
+func TestSidebarToggle(t *testing.T) {
+	// a narrow terminal (100 < 120): auto alone does not show.
+	a := testApp()
+	a.route = routeSession
+	a.size = tea.WindowSizeMsg{Width: 100, Height: 30}
+	if a.sidebarVisible() {
+		t.Fatal("narrow + auto must be hidden (the >120 auto-show rule)")
+	}
+	a.handleKey(pressLeader())
+	a.handleKey(press('b'))
+	if !a.sidebarOpen || a.sidebarMode != "auto" || !a.sidebarVisible() {
+		t.Fatalf("after <leader>b: open=%v mode=%q visible=%v, want auto+open+visible",
+			a.sidebarOpen, a.sidebarMode, a.sidebarVisible())
+	}
+	a.handleKey(pressLeader())
+	a.handleKey(press('b'))
+	if a.sidebarOpen || a.sidebarMode != "hide" || a.sidebarVisible() {
+		t.Fatalf("after the 2nd toggle: open=%v mode=%q visible=%v, want hide+closed+hidden",
+			a.sidebarOpen, a.sidebarMode, a.sidebarVisible())
+	}
+
+	// a wide terminal (140 > 120): auto alone shows; the toggle hides.
+	b := testApp()
+	b.route = routeSession
+	b.size = tea.WindowSizeMsg{Width: 140, Height: 30}
+	if !b.sidebarVisible() {
+		t.Fatal("wide + auto must show (the upstream wide() rule)")
+	}
+	b.toggleSidebar()
+	if b.sidebarMode != "hide" || b.sidebarOpen || b.sidebarVisible() {
+		t.Fatalf("wide toggle: mode=%q open=%v visible=%v, want hide+closed+hidden",
+			b.sidebarMode, b.sidebarOpen, b.sidebarVisible())
+	}
+
+	// the home route: the dispatch is a no-op (the route guard — the state
+	// is untouched; sidebarVisible() itself is route-INDEPENDENT arithmetic,
+	// so it is not asserted here — the sidebar simply does not render on
+	// home, sessionChrome is session-route-only).
+	c := testApp()
+	c.size = tea.WindowSizeMsg{Width: 140, Height: 30}
+	c.handleKey(pressLeader())
+	c.handleKey(press('b'))
+	if c.sidebarOpen || c.sidebarMode != "auto" {
+		t.Fatalf("home toggle: open=%v mode=%q, want the untouched auto state (the no-op)",
+			c.sidebarOpen, c.sidebarMode)
+	}
+}
+
+// TestSidebarTogglePersists pins the KV round-trip (the S6.3 theme-KV
+// seam): the toggle writes sidebar_mode over the engine KV; a second app
+// over the SAME KV file (the TestTipsTogglePersists idiom) reloads the
+// "hide" mode in NewApp's loadSidebarMode.
+func TestSidebarTogglePersists(t *testing.T) {
+	a, e := themeApp(t)
+	a.route = routeSession
+	a.size = tea.WindowSizeMsg{Width: 140, Height: 30}
+	a.dispatchCommand("sidebar_toggle")
+	if a.sidebarMode != "hide" {
+		t.Fatalf("toggle must persist the hide mode (got %q)", a.sidebarMode)
+	}
+	_ = e.Close() // drains the writer + final flush (idempotent; themeApp's cleanup re-closes)
+	dir := filepath.Dir(kvPathOf(e))
+	e2, err := theme.New(theme.EngineOptions{
+		KVPath:        filepath.Join(dir, "kv.json"),
+		GlobalYoloDir: dir,
+		CWD:           dir,
+		Palette:       func(context.Context) (theme.TerminalColors, bool) { return theme.TerminalColors{}, false },
+	})
+	if err != nil {
+		t.Fatalf("theme.New (second): %v", err)
+	}
+	t.Cleanup(func() { _ = e2.Close() })
+	if err := e2.Resolve(context.Background()); err != nil {
+		t.Fatalf("theme.Resolve (second): %v", err)
+	}
+	b := &recApp{App: NewApp(client.New("http://127.0.0.1:9", ""), store.State{}, "", e2)}
+	b.emitSink = func(cmds ...tea.Cmd) { b.Cmds = append(b.Cmds, cmds...) }
+	if b.sidebarMode != "hide" {
+		t.Fatalf("the sidebar mode must persist across restart (got %q, want hide)", b.sidebarMode)
+	}
+}
+
+// TestSidebarLayout pins the sessionChrome composition: the sidebar is the
+// right sidebarWidth columns of the viewport lines (the title / divider /
+// help lines stay full width), the viewport wraps at w-42 (padded to the
+// width by the bubbles viewport), and the panel carries the session title
+// + the todo block.
+func TestSidebarLayout(t *testing.T) {
+	a := testApp()
+	a.route = routeSession
+	a.size = tea.WindowSizeMsg{Width: 140, Height: 30}
+	a.store.Current = &protocol.Session{ID: "ses_1", Title: "my session"}
+	a.store.Messages = []protocol.MessageWithParts{
+		{Info: protocol.Message{ID: "m1", Role: "user"}, Parts: []protocol.Part{{Type: "text", Text: "plan it"}}},
+		{Info: protocol.Message{ID: "m2", Role: "assistant"}, Parts: []protocol.Part{
+			todowritePart(map[string]any{"content": "one", "status": "in_progress"}),
+		}},
+	}
+	vh := 8
+	helpRows := len(strings.Split(wrapLine(sessionHelp, 140), "\n"))
+	got := a.sessionChrome(140, vh)
+	rows := strings.Split(got, "\n")
+	if len(rows) != 1+vh+1+helpRows {
+		t.Fatalf("line count = %d, want %d (title + %d viewport + divider + help)",
+			len(rows), 1+vh+1+helpRows, vh)
+	}
+	// every viewport row is exactly 140 columns (the w-42 left viewport,
+	// padded to its width, + the 42-column panel).
+	for i := 0; i < vh; i++ {
+		if w := runeWidth(stripANSI(rows[1+i])); w != 140 {
+			t.Fatalf("viewport row %d width = %d, want 140 (the w-42 left + 42 panel)", i, w)
+		}
+	}
+	// the Todo header + the [•] item land in the viewport rows (the
+	// right 42 columns; the 1-todo fixture gets the S7.1 bare header —
+	// the ▼ glyph is the len > 2 rule only, deviation 250).
+	found := 0
+	for i := 0; i < vh; i++ {
+		l := stripANSI(rows[1+i])
+		if strings.Contains(l, "Todo") {
+			found++
+		}
+		if strings.Contains(l, "[•] one") {
+			found++
+		}
+	}
+	if found != 2 {
+		t.Fatalf("sidebar content rows: found=%d, want the Todo header + the [•] item\n%s", found, got)
+	}
+	// the session title lands in the panel (right of the transcript).
+	if !strings.Contains(stripANSI(got), "my session") {
+		t.Fatalf("the session title must render in the panel\n%s", got)
+	}
+	// the hidden case (the toggle off at the narrow width): the full-width
+	// viewport, no panel.
+	b := testApp()
+	b.route = routeSession
+	b.size = tea.WindowSizeMsg{Width: 100, Height: 30}
+	b.store.Current = &protocol.Session{ID: "ses_1", Title: "my session"}
+	rowsB := strings.Split(b.sessionChrome(100, 4), "\n")
+	for i := 0; i < 4; i++ {
+		if w := runeWidth(stripANSI(rowsB[1+i])); w != 100 {
+			t.Fatalf("hidden-sidebar viewport row %d width = %d, want 100 (no panel)", i, w)
+		}
+	}
+}
+
+// TestSidebarTeatestPresence drives a real turn (the scripted fake driver
+// emits a todowrite tool part) at the wide terminal size (140 > 120 → the
+// auto-show): the ▼ Todo header + the 3 status-glyph items render. The
+// merged WaitFor honors the buffer-drain rule (one condition, not two).
+func TestSidebarTeatestPresence(t *testing.T) {
+	drv := fake.New(
+		fake.Turn{Parts: []llm.Part{{
+			Kind:   "tool",
+			Name:   "todowrite",
+			CallID: "call_todo",
+			Args:   json.RawMessage(`{"todos":[{"content":"file the beads","status":"in_progress"},{"content":"run the gate","status":"pending"},{"content":"design the sidebar","status":"completed"}]}`),
+			Finish: "tool_calls",
+		}}},
+		fake.Turn{Parts: []llm.Part{{Kind: "text", Text: "all done"}}},
+	)
+	ts := testutil.BootWithDriver(t, drv)
+	c := client.New(ts.URL, ts.Dir)
+	a := newRecApp(c, store.State{}, "")
+	t.Cleanup(a.Close)
+	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(140, 24))
+
+	teatest.WaitFor(t, tm.Output(), hasLine("New session"), teatest.WithDuration(5*time.Second))
+	tm.Send(press('n'))
+	teatest.WaitFor(t, tm.Output(), hasLine("esc abort/back"), teatest.WithDuration(5*time.Second))
+	suiteType(tm, "plan it")
+	tm.Send(press(tea.KeyEnter))
+
+	var full string
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		full = stripANSI(string(b))
+		return strings.Contains(full, "all done") &&
+			strings.Contains(full, "▼ Todo") &&
+			strings.Contains(full, "[•] file the beads") &&
+			strings.Contains(full, "[ ] run the gate") &&
+			strings.Contains(full, "[✓] design the sidebar")
+	}, teatest.WithDuration(10*time.Second))
+
+	tm.Send(ctrlCKey) // quit confirm
+	tm.Send(press('y'))
+	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 }
