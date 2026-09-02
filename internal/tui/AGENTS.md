@@ -8,8 +8,10 @@ server over the wire contract only — it never reaches into core internals.
 ## Ownership
 
 Everything under `internal/tui/`: the app and its concern files (app,
-hydrate, dialog, keys, logo, commands, view, footer, home, permission,
-prompt, session, style, toast, wrap, select, huhdlg, locale, sessionsdlg, rename, deletefailed, providerdlg, statusdlg, retrydlg, themedlg, themecmds), `client/` (HTTP + SSE client, backoff),
+attention, commands, deletefailed, dialog, footer, frecency, home, huhdlg,
+hydrate, keymap, keys, locale, logo, mention, permission, prompt, providerdlg,
+rename, retrydlg, select, session, sessionsdlg, startup, statusdlg, style,
+themecmds, themedlg, tips, toast, view, whichkey, wrap), `client/` (HTTP + SSE client, backoff),
 `store/` (display state), `theme/` (theme engine — 33 embedded upstream
 themes, resolution, system-theme generation, OSC palette detection, custom
 discovery, selection chain over the TUI-local KV file; TUI-local by root
