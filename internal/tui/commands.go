@@ -45,13 +45,13 @@ func (a *App) applySend(m sendMsg) tea.Cmd {
 }
 
 // localCommands is the TUI-local slash commands merged client-side into the
-// slash menu (the server catalog is frozen at 5 — spec §10; the S3.8 /themes
-// opener appends its entry as it lands).
+// slash menu (the server catalog is frozen at 5 — spec §10).
 func localCommands() []protocol.Command {
 	return []protocol.Command{
 		{Name: "/sessions", Description: "List all sessions"},
 		{Name: "/connect", Description: "Connect a provider"},
 		{Name: "/status", Description: "View status"},
+		{Name: "/themes", Description: "List available themes"},
 	}
 }
 
@@ -81,6 +81,8 @@ func (a *App) runCommand(name string) []tea.Cmd {
 		return a.openProviderDialog()
 	case "/status":
 		return a.openStatusDialog()
+	case "/themes":
+		return a.openThemeListDialog()
 	case "/new":
 		if a.curSessionID == "" {
 			return a.emit(a.createSessionCmd())

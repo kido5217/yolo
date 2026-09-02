@@ -35,7 +35,7 @@ func testApp(sessions ...protocol.Session) *recApp {
 
 func press(r rune) tea.KeyPressMsg {
 	switch r {
-	case tea.KeyUp, tea.KeyDown, tea.KeyEnter, tea.KeyEscape, tea.KeyLeft, tea.KeyRight:
+	case tea.KeyUp, tea.KeyDown, tea.KeyEnter, tea.KeyEscape, tea.KeyLeft, tea.KeyRight, tea.KeyBackspace:
 		return tea.KeyPressMsg{Code: r}
 	}
 	return tea.KeyPressMsg{Code: r, Text: string(r)}

@@ -36,6 +36,7 @@ const (
 	dlgProvider
 	dlgStatus
 	dlgRetryAction
+	dlgThemes
 )
 
 // dlgSize is the modal panel width (upstream DialogSize: medium 60, large
@@ -73,6 +74,7 @@ type dialog struct {
 	deleteFailed *deleteFailedDlg // S3.3: the delete-failed payload (dlgDeleteFailed)
 	provider     *providerDlg     // S3.4: the provider picker payload (dlgProvider)
 	retry        *retryDlg        // S3.7: the retry-action payload (dlgRetryAction)
+	themes       *themeDlg        // S3.8: the theme picker payload (dlgThemes)
 	modal        bool             // true: rendered as the overlay frame (S2.2)
 	size         dlgSize          // the panel width, modal only
 	onClose      func(*App)       // the stack-pop callback (upstream result callback)
@@ -168,6 +170,16 @@ func (d *dialogStack) retryAction() *retryDlg {
 	for i := range d.items {
 		if d.items[i].retry != nil {
 			return d.items[i].retry
+		}
+	}
+	return nil
+}
+
+// themes returns the open theme picker's payload (same invariant as model).
+func (d *dialogStack) themes() *themeDlg {
+	for i := range d.items {
+		if d.items[i].themes != nil {
+			return d.items[i].themes
 		}
 	}
 	return nil
@@ -410,6 +422,10 @@ func (a *App) modalInner(d *dialog, w, h int) string {
 		if d.retry != nil {
 			return d.retry.view(w, h)
 		}
+	case dlgThemes:
+		if d.themes != nil {
+			return d.themes.view(w, h)
+		}
 	case dlgHelp:
 		return a.helpDialogView(w, h, a.theme)
 	}
@@ -486,6 +502,12 @@ func (a *App) handleDialogKey(d dialog, k tea.KeyPressMsg) []tea.Cmd {
 			return nil
 		}
 		return d.retry.handleKey(a, k)
+	case dlgThemes:
+		if d.themes == nil {
+			a.dlg.pop()
+			return nil
+		}
+		return d.themes.handleKey(a, k)
 	case dlgStatus:
 		return nil // static view: the keys are ignored (esc/ctrl+c close via the stack)
 	case dlgHelp:
