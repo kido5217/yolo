@@ -31,9 +31,10 @@ func (a *App) view() string {
 	toasts := a.toastsView(w)
 	dlg := a.dlgView(w)
 	menu := a.prompt.menuView(a.mergedCommands(), w, a.theme)
+	wk := a.whichKeyView(w)
 	var b strings.Builder
 	if a.route == routeSession {
-		b.WriteString(a.viewSession(menu, perm, toasts, dlg))
+		b.WriteString(a.viewSession(menu, perm, toasts, dlg, wk))
 	} else {
 		b.WriteString(a.home.render(&a.store, w, a.theme))
 	}
@@ -49,6 +50,9 @@ func (a *App) view() string {
 	}
 	if dlg != "" {
 		b.WriteString("\n" + dlg)
+	}
+	if wk != "" {
+		b.WriteString("\n" + wk)
 	}
 	if a.lastErr != "" {
 		b.WriteByte('\n')
@@ -70,13 +74,13 @@ func (a *App) view() string {
 // under the alt screen, whose frame (unlike the normal-screen frame, which
 // grows with content) is the fixed terminal size. menu/perm/toasts/dlg are
 // the pre-built overlay strings from view() (rendered once per frame).
-func (a *App) viewSession(menu, perm, toasts, dlg string) string {
+func (a *App) viewSession(menu, perm, toasts, dlg, wk string) string {
 	w := a.size.Width
 	if w < 1 {
 		w = 80
 	}
 	overlays := 0
-	for _, v := range []string{perm, toasts, dlg} {
+	for _, v := range []string{perm, toasts, dlg, wk} {
 		if v != "" {
 			overlays += 1 + strings.Count(v, "\n")
 		}
