@@ -81,6 +81,27 @@ func TestGlobalProjectYoloDiscoveryAndMerge(t *testing.T) {
 	}
 }
 
+func TestKeybindsFieldParsesAndMerges(t *testing.T) {
+	global := t.TempDir()
+	work := t.TempDir()
+	write(t, filepath.Join(global, "yolo.jsonc"), `{"keybinds":{"command_list":"ctrl+k"}}`)
+	mid := filepath.Join(work, "mid")
+	write(t, filepath.Join(mid, "yolo.jsonc"), `{"keybinds":{"model_list":"<leader>m"}}`)
+	cfg, err := config.Loader{Env: nil}.LoadAt(global, mid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Keybinds) != 2 {
+		t.Fatalf("keybinds = %d entries, want 2 (the deep merge of the two maps)", len(cfg.Keybinds))
+	}
+	if got := cfg.Keybinds["command_list"]; got != "ctrl+k" {
+		t.Fatalf("keybinds.command_list = %v, want ctrl+k (global kept)", got)
+	}
+	if got := cfg.Keybinds["model_list"]; got != "<leader>m" {
+		t.Fatalf("keybinds.model_list = %v, want <leader>m (project added)", got)
+	}
+}
+
 func TestJSONCCommentsAndUnknownFieldsIgnored(t *testing.T) {
 	work := t.TempDir()
 	write(t, filepath.Join(work, "yolo.jsonc"), `

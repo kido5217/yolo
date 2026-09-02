@@ -233,6 +233,14 @@ func tuiCmd(args []string) int {
 	}
 
 	app := tui.NewApp(cl, store.State{}, sessionID, engine)
+	// the keybinds config (S4.3): apply the yolo.jsonc keybinds overrides to
+	// the keymap registry (an unknown keybind is a config error — fail the
+	// start, matching the other config-load failures above).
+	if err := app.SetKeybinds(cfg.Keybinds); err != nil {
+		fmt.Fprintf(os.Stderr, "yolo: %v\n", err)
+		drain(deps, srv)
+		return 1
+	}
 	deps.Log.Info("tui start", "workdir", wd)
 	program := tea.NewProgram(app)
 	// The theme watcher (S0.6) sends ThemeRefreshMsg into the running

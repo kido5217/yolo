@@ -129,6 +129,20 @@ func NewApp(c *client.Service, s store.State, startSessionID string, engine *the
 	return a
 }
 
+// SetKeybinds applies the yolo.jsonc keybinds overrides to the keymap
+// registry (S4.3): it rebuilds the keymap from the defaults + the overrides.
+// An unknown keybind name is a config error (returned to the caller — the
+// CLI fails the start, matching the other config-load failures). A nil
+// overrides map is a no-op rebuild of the defaults.
+func (a *App) SetKeybinds(overrides map[string]any) error {
+	km, err := NewKeymap(overrides)
+	if err != nil {
+		return err
+	}
+	a.keymap = km
+	return nil
+}
+
 // Close stops the SSE pump. Call it once the program exits.
 func (a *App) Close() { a.stop() }
 

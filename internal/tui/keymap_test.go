@@ -333,3 +333,22 @@ func TestKeymapDispatch(t *testing.T) {
 		}
 	})
 }
+
+func TestAppSetKeybinds(t *testing.T) {
+	a := testApp()
+	if got := a.keymap.Format("command_list"); got != "ctrl+p" {
+		t.Fatalf("default command_list = %q, want ctrl+p", got)
+	}
+	if err := a.SetKeybinds(map[string]any{"command_list": "ctrl+k"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.keymap.Format("command_list"); got != "ctrl+k" {
+		t.Fatalf("command_list after SetKeybinds = %q, want ctrl+k", got)
+	}
+	if !a.keymap.Match("command_list", tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl}) {
+		t.Fatal("the SetKeybinds override must match ctrl+k")
+	}
+	if err := a.SetKeybinds(map[string]any{"nope": "ctrl+z"}); err == nil {
+		t.Fatal("SetKeybinds on an unknown key must error (a config error)")
+	}
+}

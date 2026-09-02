@@ -41,6 +41,10 @@ type Config struct {
 	Theme        string                    `json:"theme,omitempty"`
 	ToolOutput   *ToolOutput               `json:"tool_output,omitempty"`
 	Agents       map[string]CustomAgent    `json:"agents,omitempty"`
+	// Keybinds is the yolo.jsonc keybinds overrides (S4.3): the binding name
+	// → the raw binding value (string | keystroke object | array |
+	// false/"none"). omitempty keeps the GET /config goldens byte-identical.
+	Keybinds map[string]any `json:"keybinds,omitempty"`
 }
 
 // ParsePerms converts the config `permission` object into an ordered rule list:
