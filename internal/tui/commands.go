@@ -82,12 +82,22 @@ var commandBindings = map[string]string{
 // GET /command catalog — the slash-menu convention; an empty pre-hydrate
 // catalog degrades to the locals). Each option's footer = the registry
 // binding's Format (the commandBindings referent subset; blank when "none").
-// The onSelect is wired in S4.5 (the run-on-enter) — at S4.4 the palette
-// opens and filters (the S2.5 fuzzy) but enter is inert.
+// The onSelect (S4.5) runs the selected command (the run-on-enter contract).
 func (a *App) openPaletteDialog() []tea.Cmd {
-	m := selectNew("Commands", "Filter commands", paletteOptions(a), nil, nil, nil)
+	m := selectNew("Commands", "Filter commands", paletteOptions(a), nil,
+		func(app *App, o selectOption) { app.paletteSelectPick(o) }, nil)
 	a.pushModal(dialog{kind: dlgPalette, sel: m}, dlgMedium, nil)
 	return nil
+}
+
+// paletteSelectPick is the palette's onSelect (S4.5): it closes the palette
+// and runs the selected command (the run-on-enter contract — the port of the
+// upstream dialog.clear() + dispatchCommand).
+func (a *App) paletteSelectPick(o selectOption) {
+	a.closeTopModal()
+	if v, ok := o.value.(string); ok {
+		a.runCommand(v)
+	}
 }
 
 // paletteOptions builds the palette select options from the merged command

@@ -19,8 +19,8 @@ import (
 // model_test.go — the S2.9 restyle: the flat model select (deviation 168)
 // + the yolo-pinned a/b subchoice.
 
-// pressCtrlP builds the S4.2-remapped command_list key (ctrl+p — consumed
-// but inert at S4.2; the palette lands in S4.4). The pre-S4.2 dialog openers
+// pressCtrlP builds the S4.2-remapped command_list key (ctrl+p — opens the
+// command palette, S4.4; run-on-enter, S4.5). The pre-S4.2 dialog openers
 // (ctrl+p model, ctrl+a agent) are freed to the registry/prompt (deviation
 // 211).
 func pressCtrlP() tea.KeyPressMsg { return tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl} }
