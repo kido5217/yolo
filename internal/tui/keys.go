@@ -166,18 +166,29 @@ func (a *App) handleMenuKey(k tea.KeyPressMsg) []tea.Cmd {
 		if len(items) > 0 && a.prompt.sel < len(items) {
 			return a.runCommand(items[a.prompt.sel].Name)
 		}
-		a.prompt.input.SetValue("")
+		a.clearPrompt()
 		return nil
 	case key.Matches(k, escBinding):
-		a.prompt.input.SetValue("")
+		a.clearPrompt()
 		return nil
 	}
 	return a.inputUpdate(k)
 }
 
-// handlePromptKey is the prompt fallback: enter sends (or soft-enters a
-// trailing backslash), everything else feeds the input.
+// handlePromptKey is the prompt fallback: up/down recall the prompt history
+// (S5.1 — the session-route prompt behavior: the home route's up/down is
+// consumed by handleHomeKey and the slash menu owns up/down while open),
+// enter sends (or soft-enters a trailing backslash), everything else feeds
+// the input.
 func (a *App) handlePromptKey(k tea.KeyPressMsg) []tea.Cmd {
+	if key.Matches(k, homeKeyMap.Up) {
+		a.recallHistory(-1)
+		return nil
+	}
+	if key.Matches(k, homeKeyMap.Down) {
+		a.recallHistory(1)
+		return nil
+	}
 	if key.Matches(k, promptEnter) {
 		return a.promptEnter()
 	}

@@ -20,13 +20,17 @@ func (a *App) sendMessageCmd(text string) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_, err := a.SendMessage(ctx, id, text)
-		return sendMsg{err: err}
+		return sendMsg{text: text, err: err}
 	}
 }
 
-// sendMsg reports the result of a prompt send. On success the input clears;
-// on error the line is kept for retry.
-type sendMsg struct{ err error }
+// sendMsg reports the result of a prompt send. On success the input clears
+// and the sent text appends to the prompt history (S5.1); on error the line
+// is kept for retry.
+type sendMsg struct {
+	text string
+	err  error
+}
 
 func (a *App) applySend(m sendMsg) tea.Cmd {
 	if m.err != nil {
@@ -39,6 +43,9 @@ func (a *App) applySend(m sendMsg) tea.Cmd {
 	}
 	a.prompt.input.SetValue("")
 	a.prompt.draft.Reset()
+	// A successful send appends to the prompt history (S5.1 — the ported
+	// history.append after every send).
+	a.appendHistory(m.text)
 	// The next send re-arms the S3.7 retry-action per-run gate (deviation
 	// 194): the suppression for this session clears on a successful send.
 	delete(a.retrySuppressed, a.curSessionID)

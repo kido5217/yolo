@@ -84,6 +84,14 @@ type App struct {
 	retrySuppressed map[string]bool
 	keymap          *Keymap // the keymap registry (S4.2)
 	pendingLeader   bool    // the leader pending state is armed
+	// S5.1 prompt history: the entries (most-recent LAST, in-memory until
+	// S5.2's KV load), the recall index (0 = present, -1 = newest, -len =
+	// oldest), the text last set by a recall (the dirty guard), and the
+	// draft captured on the first up-press (restored at present).
+	hist     []string
+	histIdx  int
+	histText string
+	histOrig string
 }
 
 // NewApp builds the root model. A non-empty startSessionID starts on that

@@ -338,7 +338,7 @@ func (a *App) handleHomeKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 	case key.Matches(k, homeKeyMap.NewSess):
 		return a.emit(a.createSessionCmd()), true
 	case key.Matches(k, escBinding):
-		a.prompt.input.SetValue("")
+		a.clearPrompt()
 		return nil, true
 	}
 	return nil, false

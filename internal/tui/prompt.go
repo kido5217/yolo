@@ -108,3 +108,83 @@ func (pm *promptModel) moveMenuSel(n, d int) {
 	}
 	pm.sel = ((pm.sel+d)%n + n) % n
 }
+
+// maxHistoryEntries caps the prompt history (the ported
+// MAX_HISTORY_ENTRIES); draftRetentionMin is the trimmed-draft length a
+// prompt clear retains in the history (the ported DRAFT_RETENTION_MIN_CHARS).
+const (
+	maxHistoryEntries = 50
+	draftRetentionMin = 20
+)
+
+// recallHistory walks the prompt history by dir (-1 up/older, +1 down/newer).
+// The index runs 0 (present) … -len (oldest); at present the input restores
+// the draft captured on the first up-press. The ported upstream move guard:
+// a recall is aborted when the input was edited away from the recall text at
+// the current index and is non-empty.
+func (a *App) recallHistory(dir int) {
+	if len(a.hist) == 0 {
+		return
+	}
+	if a.histIdx == 0 && dir < 0 {
+		a.histOrig = a.prompt.input.Value()
+	}
+	input := a.prompt.input.Value()
+	if a.historyTextAt(a.histIdx) != input && input != "" {
+		return
+	}
+	next := a.histIdx + dir
+	if next < -len(a.hist) || next > 0 {
+		return
+	}
+	a.histIdx = next
+	if next == 0 {
+		a.prompt.input.SetValue(a.histOrig)
+		a.histText = ""
+		return
+	}
+	text := a.hist[len(a.hist)+next]
+	a.prompt.input.SetValue(text)
+	a.histText = text
+}
+
+// historyTextAt is the recall text at index i: present (0) → the captured
+// draft (histOrig), else hist[len(hist)+i] (-1 = newest … -len = oldest).
+func (a *App) historyTextAt(i int) string {
+	if i == 0 {
+		return a.histOrig
+	}
+	return a.hist[len(a.hist)+i]
+}
+
+// appendHistory records a sent (or retained) prompt in the history (the
+// ported upstream append): a duplicate of the newest resets the recall to
+// present without re-adding, the cap keeps the LAST maxHistoryEntries, and
+// the recall state resets.
+func (a *App) appendHistory(text string) {
+	if strings.TrimSpace(text) == "" {
+		return
+	}
+	if n := len(a.hist); n > 0 && a.hist[n-1] == text {
+		a.histIdx = 0
+		a.histText = ""
+		return
+	}
+	a.hist = append(a.hist, text)
+	if len(a.hist) > maxHistoryEntries {
+		a.hist = a.hist[len(a.hist)-maxHistoryEntries:]
+	}
+	a.histIdx = 0
+	a.histText = ""
+}
+
+// clearPrompt clears the prompt input, retaining a trimmed draft of at least
+// draftRetentionMin chars in the history (the ported clearPrompt retention).
+func (a *App) clearPrompt() {
+	if d := strings.TrimSpace(a.prompt.input.Value()); len(d) >= draftRetentionMin {
+		a.appendHistory(d)
+	}
+	a.prompt.input.SetValue("")
+	a.histIdx = 0
+	a.histText = ""
+}
