@@ -19,10 +19,11 @@ import (
 // model_test.go — the S2.9 restyle: the flat model select (deviation 168)
 // + the yolo-pinned a/b subchoice.
 
-// pressCtrlP / pressCtrlA build the locked dialog openers (ctrl modifiers, no
-// Text).
+// pressCtrlP builds the S4.2-remapped command_list key (ctrl+p — consumed
+// but inert at S4.2; the palette lands in S4.4). The pre-S4.2 dialog openers
+// (ctrl+p model, ctrl+a agent) are freed to the registry/prompt (deviation
+// 211).
 func pressCtrlP() tea.KeyPressMsg { return tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl} }
-func pressCtrlA() tea.KeyPressMsg { return tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl} }
 
 // providerFixture mirrors the offline server fixture (provider.
 // NewStaticForTest): kido (key-less, Qwen 100k) and opencode (key-required,
@@ -253,15 +254,17 @@ func TestModelDialogApply(t *testing.T) {
 }
 
 func TestModelDialogOpen(t *testing.T) {
-	t.Run("ctrl+p opens the model dialog", func(t *testing.T) {
+	t.Run("leader+m opens the model dialog", func(t *testing.T) {
 		a := modelFixture()
-		a.handleKey(pressCtrlP())
+		a.handleKey(pressLeader())
+		a.Cmds = nil
+		a.handleKey(press('m'))
 		d, ok := a.dlg.top()
 		if !ok || d.kind != dlgModel || d.model == nil {
-			t.Fatalf("after ctrl+p: top=%+v modelDlg=%v, want the model dialog", d, d.model)
+			t.Fatalf("after leader+m: top=%+v modelDlg=%v, want the model dialog", d, d.model)
 		}
 		if len(a.Cmds) != 1 {
-			t.Fatalf("ctrl+p emitted %d cmds, want the catalog fetch", len(a.Cmds))
+			t.Fatalf("leader+m emitted %d cmds, want the catalog fetch", len(a.Cmds))
 		}
 	})
 
@@ -274,13 +277,16 @@ func TestModelDialogOpen(t *testing.T) {
 		}
 	})
 
-	t.Run("ctrl+p is ignored while a dialog is on top", func(t *testing.T) {
+	t.Run("leader is ignored while a dialog is on top", func(t *testing.T) {
 		a := modelFixture()
 		a.dlg.push(dialog{kind: dlgQuit})
-		a.handleKey(pressCtrlP())
+		a.handleKey(pressLeader())
+		if a.pendingLeader {
+			t.Fatal("the leader must not arm while a dialog is open")
+		}
 		d, _ := a.dlg.top()
 		if d.kind != dlgQuit || a.dlg.model() != nil {
-			t.Fatalf("ctrl+p must not stack dialogs: top=%+v modelDlg=%v", d, a.dlg.model())
+			t.Fatalf("leader must not stack dialogs: top=%+v modelDlg=%v", d, a.dlg.model())
 		}
 	})
 
@@ -309,9 +315,10 @@ func TestModelDialogOpen(t *testing.T) {
 	})
 }
 
-// TestTUIModelDialog is the teatest scenario: open the model dialog with
-// ctrl+p (the offline server fixture), filter to GPT-5 Nano, enter → the
-// subchoice, and set it for this session with [a].
+// TestTUIModelDialog is the teatest scenario: open the model dialog with the
+// /model slash command (S4.2 remap: the ctrl+p opener frees to the command
+// palette, deviation 211; the offline server fixture), filter to GPT-5 Nano,
+// enter → the subchoice, and set it for this session with [a].
 func TestTUIModelDialog(t *testing.T) {
 	ts := testutil.Boot(t)
 	c := client.New(ts.URL, ts.Dir)
@@ -326,7 +333,10 @@ func TestTUIModelDialog(t *testing.T) {
 
 	teatest.WaitFor(t, tm.Output(), hasLine("New session"), teatest.WithDuration(5*time.Second))
 
-	tm.Send(pressCtrlP())
+	for _, r := range "/model" {
+		tm.Send(press(r))
+	}
+	tm.Send(press(tea.KeyEnter))
 	teatest.WaitFor(t, tm.Output(), hasModelDialog, teatest.WithDuration(5*time.Second))
 
 	// type the filter to GPT-5 Nano, enter → the subchoice, a = this session

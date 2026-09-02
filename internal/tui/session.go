@@ -26,6 +26,10 @@ type sessionModel struct {
 	content   string
 }
 
+// sessKeyMap: PageUp/PageDown/Rename are superseded by the S4.2 keymap
+// registry (messages_page_up/down, session_rename — kept as the V1-pin
+// documentation); Expand/Think remain the yolo surface toggles (deviation
+// 211's scope).
 var sessKeyMap = struct {
 	PageUp   key.Binding
 	PageDown key.Binding
@@ -564,17 +568,22 @@ func lastToolPartID(st *store.State) string {
 	return id
 }
 
-// handleSessionKey dispatches session-route keys: pgup/pgdn scroll, alt+e
-// expands the most recent tool part, alt+t toggles reasoning, esc aborts
-// while busy and returns to home when idle. It reports whether the key was
-// consumed; unhandled keys fall through to the prompt input.
+// handleSessionKey dispatches session-route keys: pgup/pgdn scroll (the
+// registry's messages_page_up/down, S4.2), alt+e expands the most recent tool
+// part, alt+t toggles reasoning (the yolo surface toggles, deviation 211),
+// ctrl+r opens the rename dialog (the registry's session_rename), esc aborts
+// while busy and returns to home when idle (the registry's
+// session_interrupt). It reports whether the key was consumed; unhandled keys
+// fall through to the prompt input.
 func (a *App) handleSessionKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 	switch {
-	case key.Matches(k, sessKeyMap.PageUp):
+	// S4.2: the registry-backed session keys (the messages_page_up/down
+	// defaults add ctrl+alt+b/f; the V1 pgup/pgdn pins are the first seqs).
+	case a.keymap.Match("messages_page_up", k):
 		a.sess.vm.PageUp()
 		a.sess.following = false
 		return nil, true
-	case key.Matches(k, sessKeyMap.PageDown):
+	case a.keymap.Match("messages_page_down", k):
 		a.sess.vm.PageDown()
 		a.sess.following = a.sess.vm.AtBottom()
 		return nil, true
@@ -615,18 +624,21 @@ func (a *App) handleSessionKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 			a.sess.isDirty = true
 		}
 		return nil, true
-	// S3.2: the session-rename dialog (the upstream session_rename default).
-	// Only when a session is open (an empty curSessionID has no title to
-	// seed). The form's init cmds are consumed here (the pinned contract:
-	// ctrl+r is consumed with no cmds — the test sink captures them; the
-	// focus is set synchronously by form.Init).
-	case key.Matches(k, sessKeyMap.Rename):
+	// S4.2: the registry-backed rename (the upstream session_rename default
+	// ctrl+r). Only when a session is open (an empty curSessionID has no
+	// title to seed). The form's init cmds are consumed here (the pinned
+	// contract: ctrl+r is consumed with no cmds — the test sink captures
+	// them; the focus is set synchronously by form.Init).
+	case a.keymap.Match("session_rename", k):
 		if a.curSessionID == "" {
 			return nil, false
 		}
 		a.openSessionRenameDialog(a.curSessionID)
 		return nil, true
-	case key.Matches(k, escBinding):
+	// S4.2: the registry-backed interrupt (the upstream session_interrupt
+	// default escape); the esc-when-idle return-home is the yolo surface
+	// behavior (deviation 211's scope).
+	case a.keymap.Match("session_interrupt", k):
 		if sessionBusy(&a.store) {
 			return a.emit(a.abortCmd()), true
 		}

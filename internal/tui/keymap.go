@@ -8,6 +8,7 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -662,4 +663,162 @@ func formatSequences(seqs []string, leader string) string {
 		formatted = append(formatted, formatKeySequence(seq, leader))
 	}
 	return strings.Join(formatted, formatJoin)
+}
+
+// modeEntry is one mode-stack frame (the ported createOpencodeModeStack
+// entry: the identity id + the mode name).
+type modeEntry struct {
+	id   int
+	mode string
+}
+
+// Keymap is the runtime keymap (S4.2): the resolved bindings (the single
+// source for every ported upstream binding), the mode stack, and the display
+// helpers. Every keypress re-reads the table, so a Set is immediately
+// effective (the ported runtime-remap semantics).
+type Keymap struct {
+	bindings map[string]bindingValue
+	modes    []modeEntry
+	nextID   int
+}
+
+// NewKeymap is the port of the upstream parse (keybind.ts:449-458): the
+// unknown keys error (sorted, the Go lowercase convention), then every
+// default with its override. A nil/empty overrides map = the defaults.
+func NewKeymap(overrides map[string]any) (*Keymap, error) {
+	if overrides != nil {
+		var unknown []string
+		for name := range overrides {
+			if _, ok := Definitions[name]; !ok {
+				unknown = append(unknown, name)
+			}
+		}
+		if len(unknown) > 0 {
+			sort.Strings(unknown)
+			return nil, fmt.Errorf("unrecognized keybind(s): %s", strings.Join(unknown, ", "))
+		}
+	}
+	km := &Keymap{bindings: make(map[string]bindingValue, len(Definitions))}
+	for name, def := range Definitions {
+		v := def.Default
+		if overrides != nil {
+			if ov, ok := overrides[name]; ok {
+				v = ov
+			}
+		}
+		bv, err := resolveValue(v)
+		if err != nil {
+			return nil, fmt.Errorf("keybind %q: %w", name, err)
+		}
+		km.bindings[name] = bv
+	}
+	return km, nil
+}
+
+// Set is the runtime remap: it re-resolves the named binding to v (immediately
+// effective — every keypress re-reads the table). An unknown name errors (the
+// same unrecognized message as NewKeymap).
+func (km *Keymap) Set(name string, v BindingValue) error {
+	if _, ok := Definitions[name]; !ok {
+		return fmt.Errorf("unrecognized keybind: %s", name)
+	}
+	bv, err := resolveValue(v)
+	if err != nil {
+		return fmt.Errorf("keybind %q: %w", name, err)
+	}
+	km.bindings[name] = bv
+	return nil
+}
+
+// Seqs returns the named binding's matchable seqs (the <leader> seqs included;
+// the caller filters — Match/MatchPending do).
+func (km *Keymap) Seqs(name string) []string { return km.bindings[name].seqs }
+
+// Match reports whether k matches any seq of the named binding (keyMatchesSeq
+// already rejects the <leader> seqs — the pending mechanism owns them).
+func (km *Keymap) Match(name string, k tea.KeyPressMsg) bool {
+	for _, seq := range km.bindings[name].seqs {
+		if keyMatchesSeq(k, seq) {
+			return true
+		}
+	}
+	return false
+}
+
+// MatchPending reports whether k matches the named binding's <leader>
+// continuation (the remainder after the token — the second key of the pending
+// sequence).
+func (km *Keymap) MatchPending(name string, k tea.KeyPressMsg) bool {
+	for _, seq := range km.bindings[name].seqs {
+		has, rest := leaderSplit(seq)
+		if !has || rest == "" {
+			continue
+		}
+		if keyMatchesSeq(k, rest) {
+			return true
+		}
+	}
+	return false
+}
+
+// Format is the display form of the named binding: "none" when disabled, else
+// the formatted seqs joined by the formatJoin (" / ").
+func (km *Keymap) Format(name string) string {
+	bv := km.bindings[name]
+	if !bv.enabled || len(bv.seqs) == 0 {
+		return "none"
+	}
+	return formatSequences(bv.seqs, km.leaderDisplay())
+}
+
+// leaderDisplay is the resolved leader key display (the "leader" binding's
+// first seq; the default "ctrl+x"). It does NOT recurse through Format (which
+// would be circular for the leader itself).
+func (km *Keymap) leaderDisplay() string {
+	bv := km.bindings["leader"]
+	if !bv.enabled || len(bv.seqs) == 0 {
+		return LeaderDefault
+	}
+	return formatKeySequence(bv.seqs[0], LeaderDefault)
+}
+
+// Current is the top mode or base (the ported createOpencodeModeStack
+// current).
+func (km *Keymap) Current() string {
+	if n := len(km.modes); n > 0 {
+		return km.modes[n-1].mode
+	}
+	return BaseMode
+}
+
+// Push registers a mode and returns its release func (the ported identity
+// splice — it removes THAT frame by id, not by mode name).
+func (km *Keymap) Push(mode string) func() {
+	id := km.nextID
+	km.nextID++
+	km.modes = append(km.modes, modeEntry{id: id, mode: mode})
+	return func() {
+		for i := range km.modes {
+			if km.modes[i].id == id {
+				km.modes = append(km.modes[:i], km.modes[i+1:]...)
+				return
+			}
+		}
+	}
+}
+
+// contextGroups is the yolo context→binding-name groups (the upstream
+// context/mode-scoped bindings have no single referent file — the groups are
+// the yolo port; deviation 211). The base group is the app-level openers (any
+// route, no dialog, no pending permission) in match order; the session group
+// is the session-route registry keys.
+var contextGroups = map[string][]string{
+	BaseMode: {
+		"which_key_toggle", "which_key_layout_toggle", "which_key_pending_toggle",
+		"command_list", "app_exit", "model_list", "agent_list", "status_view",
+		"theme_list", "session_new", "session_list",
+	},
+	"session": {
+		"messages_page_up", "messages_page_down", "session_interrupt", "session_rename",
+	},
 }

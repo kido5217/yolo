@@ -242,15 +242,17 @@ func TestAgentDialogApply(t *testing.T) {
 }
 
 func TestAgentDialogOpen(t *testing.T) {
-	t.Run("ctrl+a opens the agent dialog", func(t *testing.T) {
+	t.Run("leader+a opens the agent dialog", func(t *testing.T) {
 		a := agentApp()
-		a.handleKey(pressCtrlA())
+		a.handleKey(pressLeader())
+		a.Cmds = nil
+		a.handleKey(press('a'))
 		d, ok := a.dlg.top()
 		if !ok || d.kind != dlgAgents || d.agent == nil {
-			t.Fatalf("after ctrl+a: top=%+v agentDlg=%v, want the agent dialog", d, d.agent)
+			t.Fatalf("after leader+a: top=%+v agentDlg=%v, want the agent dialog", d, d.agent)
 		}
 		if len(a.Cmds) != 1 {
-			t.Fatalf("ctrl+a emitted %d cmds, want the catalog fetch", len(a.Cmds))
+			t.Fatalf("leader+a emitted %d cmds, want the catalog fetch", len(a.Cmds))
 		}
 	})
 
@@ -263,13 +265,16 @@ func TestAgentDialogOpen(t *testing.T) {
 		}
 	})
 
-	t.Run("ctrl+a is ignored while a dialog is on top", func(t *testing.T) {
+	t.Run("leader is ignored while a dialog is on top", func(t *testing.T) {
 		a := agentApp()
 		a.dlg.push(dialog{kind: dlgQuit})
-		a.handleKey(pressCtrlA())
+		a.handleKey(pressLeader())
+		if a.pendingLeader {
+			t.Fatal("the leader must not arm while a dialog is open")
+		}
 		d, _ := a.dlg.top()
 		if d.kind != dlgQuit || a.dlg.agent() != nil {
-			t.Fatalf("ctrl+a must not stack dialogs: top=%+v agentDlg=%v", d, a.dlg.agent())
+			t.Fatalf("leader must not stack dialogs: top=%+v agentDlg=%v", d, a.dlg.agent())
 		}
 	})
 
@@ -285,9 +290,10 @@ func TestAgentDialogOpen(t *testing.T) {
 	})
 }
 
-// TestTUIAgentDialog is the teatest scenario: open the agent dialog with
-// ctrl+a, filter to the yolo agent (typed letter), enter → the subchoice,
-// and set it for this session with [a].
+// TestTUIAgentDialog is the teatest scenario: open the agent dialog with the
+// /agents slash command (S4.2 remap: the ctrl+a opener frees to the prompt
+// input, deviation 211), filter to the yolo agent (typed letter), enter → the
+// subchoice, and set it for this session with [a].
 func TestTUIAgentDialog(t *testing.T) {
 	ts := testutil.Boot(t)
 	c := client.New(ts.URL, ts.Dir)
@@ -302,7 +308,10 @@ func TestTUIAgentDialog(t *testing.T) {
 
 	teatest.WaitFor(t, tm.Output(), hasLine("New session"), teatest.WithDuration(5*time.Second))
 
-	tm.Send(pressCtrlA())
+	for _, r := range "/agents" {
+		tm.Send(press(r))
+	}
+	tm.Send(press(tea.KeyEnter))
 	teatest.WaitFor(t, tm.Output(), hasAgentDialog, teatest.WithDuration(5*time.Second))
 
 	tm.Send(press('y')) // filter: only yolo matches

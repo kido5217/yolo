@@ -617,8 +617,9 @@ func (a *App) applyDlgPatch(m dlgPatchMsg) tea.Cmd {
 	return nil
 }
 
-// modelDlg is the ctrl+p / /model picker (S2.9: the two-pane picker is
-// replaced by the flat select + the a/b subchoice — deviation 168).
+// modelDlg is the <leader>m / /model picker (S4.2: the ctrl+p opener frees to
+// the command palette; S2.9: the two-pane picker is replaced by the flat
+// select + the a/b subchoice — deviation 168).
 type modelDlg struct {
 	sel          *selectModel
 	hasSubChoice bool
@@ -626,10 +627,8 @@ type modelDlg struct {
 }
 
 var (
-	dlgModelKey  = key.NewBinding(key.WithKeys("ctrl+p"))
-	dlgAgentsKey = key.NewBinding(key.WithKeys("ctrl+a"))
-	choiceThis   = key.NewBinding(key.WithKeys("a"))
-	choiceDef    = key.NewBinding(key.WithKeys("b"))
+	choiceThis = key.NewBinding(key.WithKeys("a"))
+	choiceDef  = key.NewBinding(key.WithKeys("b"))
 )
 
 // openModelDialog pushes the model select modal (dlgLarge — upstream
@@ -846,9 +845,9 @@ func fmtCtx(n int) string {
 // usd renders a per-million price without trailing zeros: 2 → "$2".
 func usd(v float64) string { return "$" + strconv.FormatFloat(v, 'f', -1, 64) }
 
-// agentDlg is the ctrl+a / /agents picker (S2.10: the plain list is the
-// select + the a/b subchoice — the yolo scope pin; upstream applies
-// directly).
+// agentDlg is the <leader>a / /agents picker (S4.2: the ctrl+a opener frees to
+// the prompt input; S2.10: the plain list is the select + the a/b subchoice —
+// the yolo scope pin; upstream applies directly).
 type agentDlg struct {
 	sel          *selectModel
 	hasSubChoice bool

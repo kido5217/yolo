@@ -281,10 +281,12 @@ func TestTUIDialogs(t *testing.T) {
 	}
 
 	capture("New session")
-	tm.Send(pressCtrlP())
+	suiteType(tm, "/model")
+	tm.Send(press(tea.KeyEnter))
 	capture("Model", "Kido", "\u00B7 not-required", "\u25CB missing")
 	tm.Send(press(tea.KeyEscape))
-	tm.Send(pressCtrlA())
+	suiteType(tm, "/agents")
+	tm.Send(press(tea.KeyEnter))
 	capture("Agents", "build", "yolo", "Yolo agent. Permits everything")
 	tm.Send(press(tea.KeyEscape))
 	suiteType(tm, "/help")

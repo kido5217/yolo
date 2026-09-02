@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -171,4 +172,164 @@ func TestKeymapFormatKeySequence(t *testing.T) {
 	if got := formatKeySequence("ctrl+p", "ctrl+x"); got != "ctrl+p" {
 		t.Errorf("formatKeySequence(ctrl+p) = %q, want ctrl+p", got)
 	}
+}
+
+// pressLeader is the default leader keypress (ctrl+x, LeaderDefault).
+func pressLeader() tea.KeyPressMsg { return tea.KeyPressMsg{Code: 'x', Mod: tea.ModCtrl} }
+
+func TestKeymapNew(t *testing.T) {
+	// The unknown-key error (the ported parse).
+	if _, err := NewKeymap(map[string]any{"nope": "ctrl+z"}); err == nil ||
+		!strings.Contains(err.Error(), "unrecognized keybind(s): nope") {
+		t.Fatalf("unknown key err = %v, want the unrecognized message", err)
+	}
+	// The present name is overridden; the absent name keeps its default.
+	km, err := NewKeymap(map[string]any{"command_list": "ctrl+k"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !km.Match("command_list", tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl}) {
+		t.Fatal("the override command_list=ctrl+k must match ctrl+k")
+	}
+	if km.Match("command_list", tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl}) {
+		t.Fatal("the override must REPLACE the default (ctrl+p no longer matches)")
+	}
+	if !km.Match("leader", pressLeader()) {
+		t.Fatal("the leader default must survive an unrelated override")
+	}
+}
+
+func TestKeymapSet(t *testing.T) {
+	km, _ := NewKeymap(nil)
+	if err := km.Set("command_list", "ctrl+j"); err != nil {
+		t.Fatal(err)
+	}
+	if !km.Match("command_list", tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl}) {
+		t.Fatal("Set must take effect immediately")
+	}
+	if km.Match("command_list", tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl}) {
+		t.Fatal("the old binding must no longer match after Set")
+	}
+	if err := km.Set("nope", "ctrl+z"); err == nil {
+		t.Fatal("Set on an unknown name must error")
+	}
+	if err := km.Set("command_list", "none"); err != nil {
+		t.Fatal(err)
+	}
+	if km.Match("command_list", tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl}) {
+		t.Fatal("a none Set must disable the binding")
+	}
+}
+
+func TestKeymapMatchPending(t *testing.T) {
+	km, _ := NewKeymap(nil)
+	if !km.MatchPending("model_list", press('m')) {
+		t.Fatal("model_list <leader>m must match the continuation 'm'")
+	}
+	if km.MatchPending("model_list", press('a')) {
+		t.Fatal("model_list must not match the continuation 'a'")
+	}
+	if km.MatchPending("command_list", press('p')) {
+		t.Fatal("command_list (ctrl+p, no <leader>) must have no continuation")
+	}
+}
+
+func TestKeymapModes(t *testing.T) {
+	km, _ := NewKeymap(nil)
+	if got := km.Current(); got != BaseMode {
+		t.Fatalf("Current() = %q, want base (the empty stack)", got)
+	}
+	release := km.Push("session")
+	if got := km.Current(); got != "session" {
+		t.Fatalf("Current() after push = %q, want session", got)
+	}
+	release()
+	if got := km.Current(); got != BaseMode {
+		t.Fatalf("Current() after release = %q, want base", got)
+	}
+	// The identity splice: two pushes of the SAME mode, releasing the first
+	// leaves the second (identity, not mode-name, matching).
+	r1 := km.Push("session")
+	r2 := km.Push("session")
+	r1()
+	if got := km.Current(); got != "session" {
+		t.Fatalf("Current() after releasing the first of two = %q, want session (identity splice)", got)
+	}
+	r2()
+}
+
+func TestKeymapFormat(t *testing.T) {
+	km, _ := NewKeymap(nil)
+	if got := km.Format("app_exit"); got != "ctrl+c / ctrl+d / ctrl+x q" {
+		t.Fatalf("Format(app_exit) = %q, want the comma-list display", got)
+	}
+	if got := km.Format("help_show"); got != "none" {
+		t.Fatalf("Format(help_show) = %q, want none", got)
+	}
+	if got := km.Format("model_list"); got != "ctrl+x m" {
+		t.Fatalf("Format(model_list) = %q, want ctrl+x m", got)
+	}
+}
+
+func TestKeymapDispatch(t *testing.T) {
+	t.Run("ctrl+c opens the quit dialog (app_exit)", func(t *testing.T) {
+		a := testApp()
+		a.handleKey(ctrlCKey)
+		d, ok := a.dlg.top()
+		if !ok || d.kind != dlgQuit {
+			t.Fatalf("after ctrl+c: top=%+v (ok=%v), want the quit dialog", d, ok)
+		}
+	})
+
+	t.Run("ctrl+p is consumed but inert at S4.2 (the palette remap)", func(t *testing.T) {
+		a := testApp()
+		a.handleKey(pressCtrlP())
+		if d, ok := a.dlg.top(); ok || a.pendingLeader {
+			t.Fatalf("ctrl+p must open no dialog at S4.2: top=%+v pending=%v", d, a.pendingLeader)
+		}
+	})
+
+	t.Run("leader+m opens the model dialog", func(t *testing.T) {
+		a := modelFixture()
+		a.handleKey(pressLeader())
+		a.Cmds = nil
+		a.handleKey(press('m'))
+		d, ok := a.dlg.top()
+		if !ok || d.kind != dlgModel || d.model == nil {
+			t.Fatalf("after leader+m: top=%+v, want the model dialog", d)
+		}
+	})
+
+	t.Run("leader+a opens the agent dialog", func(t *testing.T) {
+		a := agentApp()
+		a.handleKey(pressLeader())
+		a.Cmds = nil
+		a.handleKey(press('a'))
+		d, ok := a.dlg.top()
+		if !ok || d.kind != dlgAgents || d.agent == nil {
+			t.Fatalf("after leader+a: top=%+v, want the agent dialog", d)
+		}
+	})
+
+	t.Run("a non-matching second key clears the leader and is not lost", func(t *testing.T) {
+		a := testApp()
+		a.handleKey(pressLeader())
+		a.Cmds = nil
+		a.handleKey(press('z'))
+		if a.pendingLeader {
+			t.Fatal("the leader must clear on a non-matching second key")
+		}
+		if a.prompt.input.Value() != "z" {
+			t.Fatalf("prompt = %q, want z (the key was not lost)", a.prompt.input.Value())
+		}
+	})
+
+	t.Run("leader is ignored while a dialog is on top", func(t *testing.T) {
+		a := modelFixture()
+		a.dlg.push(dialog{kind: dlgQuit})
+		a.handleKey(pressLeader())
+		if a.pendingLeader {
+			t.Fatal("the leader must not arm while a dialog is open")
+		}
+	})
 }

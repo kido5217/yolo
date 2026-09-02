@@ -35,6 +35,10 @@ type ThemeRefreshMsg struct{}
 type themeReapplyMsg struct{} // 250 ms leg: regenerate the system theme
 type themeCustomsMsg struct{} // 1000 ms leg: system theme + customs re-discovery
 
+// leaderTimeoutMsg clears the pending leader (the ported registerTimedLeader
+// timeout — the pending sequence expires after LeaderTimeout).
+type leaderTimeoutMsg struct{}
+
 // themeRefreshDelays mirrors upstream THEME_REFRESH_DELAYS
 // (theme.tsx:82): the 250 ms leg re-generates the system theme; the
 // 1000 ms leg (the last) also re-discovers customs.
@@ -78,6 +82,8 @@ type App struct {
 	// ANY open (dismiss or action), cleared on the next send for that
 	// session (the applySend success path).
 	retrySuppressed map[string]bool
+	keymap          *Keymap // the keymap registry (S4.2)
+	pendingLeader   bool    // the leader pending state is armed
 }
 
 // NewApp builds the root model. A non-empty startSessionID starts on that
@@ -87,6 +93,10 @@ type App struct {
 func NewApp(c *client.Service, s store.State, startSessionID string, engine *theme.Engine) *App {
 	ctx, cancel := context.WithCancel(context.Background())
 	eventCh, resyncCh := c.Events(ctx)
+	// the keymap registry (S4.2): the defaults (the config overrides are
+	// applied by SetKeybinds, S4.3). NewKeymap(nil) never errors (no unknown
+	// keys; the defaults are valid).
+	km, _ := NewKeymap(nil)
 	a := &App{
 		Service:         c,
 		store:           s,
@@ -98,6 +108,8 @@ func NewApp(c *client.Service, s store.State, startSessionID string, engine *the
 		resyncCh:        resyncCh,
 		stop:            cancel,
 		engine:          engine,
+		keymap:          km,
+		pendingLeader:   false,
 		retrySuppressed: map[string]bool{},
 	}
 	in := textinput.New()
@@ -216,6 +228,9 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 		return a.applySessionCreated(m)
 	case toastExpireMsg:
 		a.removeToast(m.id)
+		return nil
+	case leaderTimeoutMsg:
+		a.pendingLeader = false
 		return nil
 	case abortedMsg:
 		if m.err != nil {
