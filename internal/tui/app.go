@@ -101,6 +101,9 @@ type App struct {
 	// walked or the server work dir), walked its slash-relative paths.
 	walkRoot string
 	walked   []string
+	// S5.6 attention bell: the ported notifications.ts conditions (deviation
+	// 227), current-session-scoped.
+	attention attentionState
 }
 
 // NewApp builds the root model. A non-empty startSessionID starts on that
@@ -225,7 +228,13 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 		// Any applied event may have changed the transcript (message/part
 		// family); re-render once instead of on every frame.
 		a.sess.isDirty = true
-		return a.afterApply(a.eventPump())
+		cmd := a.eventPump()
+		// S5.6 attention bell (deviation 227): batch the bell cmd into the
+		// applied event's cmd.
+		if b := a.onAttention(m.Event); b != nil {
+			cmd = tea.Batch(cmd, b)
+		}
+		return a.afterApply(cmd)
 	case connLostMsg:
 		a.store.Live = false
 		return nil
