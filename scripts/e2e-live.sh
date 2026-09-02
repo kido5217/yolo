@@ -23,8 +23,9 @@
 #   6. abort test (deterministic: abort while idle -> aborted:false, then a
 #      best-effort abort of a busy turn)
 #   7. SIGTERM the server -> expect graceful shutdown, exit 0
-# The TTY-only S3 smoke legs (help, retry-action dialog, theme-list UI, mode
-# switch/lock) remain user-run; this script covers the wire side only.
+# The TTY-only smoke legs (S3: help, retry-action dialog, theme-list UI,
+# mode switch/lock; S4: keybind remap, command palette, which-key overlay)
+# remain user-run; this script covers the wire side only.
 # Exits 0 with PASS, 1 with FAIL.
 
 set -uo pipefail
