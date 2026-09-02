@@ -62,7 +62,7 @@ Read it before acting. Task state: beads (`bd ready`). Verified facts:
 4. **TUI is a pure client.** Non-test files under `internal/tui/` import only `internal/protocol` + `internal/tui/*` (+ stdlib/charm deps). `_test.go` may use `internal/server/testutil` (escape hatch). Enforced by `TestImportsDirection` (`internal/tui/imports_test.go`).
 5. **Tests define the contract.** When the plan contradicts itself (or its own test code is buggy), resolve per the last-stated call, fix the test, and **log the deviation in `docs/superpowers/DEVIATIONS.md`** with severity.
 6. **Task state in beads; proven knowledge in docs.** Track task state in beads — never duplicate it in files. When a fact is proven or a deviation is logged, update `docs/superpowers/PROGRESS.md` (facts) / `docs/superpowers/DEVIATIONS.md` (audit) before moving on — a stale audit log is a broken resume. File shapes: "Commit & branch discipline."
-7. **Subagents one at a time.** Never dispatch more than one subagent concurrently (via the `task` tool): dispatch one, wait for it to fully return, then dispatch the next. This supersedes any plan/spec wording permitting parallel subagents.
+7. **Subagents, at most two at a time.** Never dispatch more than two subagents concurrently (via the `task` tool): at most two independent subagents in flight; wait for their full return before dispatching the next. (Raised from one to two on user instruction 2026-09-02.) This supersedes any plan/spec wording permitting more parallel subagents.
 8. **YOLO spawns only YOLO.** If the root agent is `YOLO`, any subagent it spawns MUST also be `YOLO` — never dispatch a subagent of a different agent type.
 
 ## Commands & verification
@@ -98,13 +98,13 @@ Entries live under `superpowers:` skills; invoke a skill **before** acting when 
 | Committing changes | `git-commit` — conventional message from the actual diff |
 | Milestone finished / before merge | `requesting-code-review` — and `receiving-code-review` when feedback arrives. **Wiki gate first:** run `just wiki-stale`; if it exits 1, refresh `openwiki/` via the `openwiki` skill's host-driven update (MCP `openwiki_begin` mode=update) before review |
 | A new spec needs an implementation plan | `writing-plans` — specs → `docs/superpowers/specs/`, plans → `docs/superpowers/plans/`, progress → `docs/superpowers/PROGRESS.md` |
-| 2+ independent tasks with no shared state | `dispatching-parallel-agents` — apply sequentially: one subagent at a time (core principle 7) |
+| 2+ independent tasks with no shared state | `dispatching-parallel-agents` — at most two subagents in flight at once (core principle 7) |
 | Feature work needing workspace isolation | `using-git-worktrees` |
 | Implementation complete, deciding integration | `finishing-a-development-branch` |
 
 - **One subagent per bead (preferred workflow):** execute each bead in a freshly
-  spawned subagent — one at a time (core principle 7); if the root is `YOLO`, the
-  subagent must be `YOLO` too (core principle 8). The root session only plans,
+  spawned subagent — at most two beads in flight at once (core principle 7); if
+  the root is `YOLO`, the subagent must be `YOLO` too (core principle 8). The root session only plans,
   dispatches, and reviews. A bead done inline triggers the compaction discipline below.
 - **Subagent thinking level:** dispatch bead subagents with `thinking=medium` —
   the dispatch prompt states the requirement so the subagent calibrates its
