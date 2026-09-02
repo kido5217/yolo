@@ -198,6 +198,32 @@ replay switched to `a.updateMsg` — `Update` drains the toast TTL tick and
 would expire a mid-cascade toast before the pinned assertion). 4 pinned test
 functions green (normalize, render, flow, teatest /connect).
 Next: S3.5 status dialog (bead `yolo-oae.4.6`).
+S3.5 status dialog landed (bead `yolo-oae.4.6`, commit 4dc3cbe):
+ `statusdlg.go` (the `openStatusDialog` opener on `dlgMedium` — push modal,
+ no payload; `statusView(w, h int, th theme.Theme)`: the bold "Status" +
+ muted "esc" header row (space-between at the panel width), then the
+ Providers section (the count header `N Providers` text token, a bullet row
+ per provider — the status-colored bullet via `providerStatus`
+ (loaded→success, missing→error, else→textMuted) + the bold name — and the
+ "No Providers" fallback) and the Agents section (the count header
+ `N Agents`, a bullet row per agent — the success bullet + the bold name +
+ the muted description wrapped at w-4, continuation lines indented under the
+ name — and the "No Agents" fallback); no session section — the footer owns
+ the session status); dialog.go wiring (the `dlgStatus` kind, the
+ `modalInner` case → `a.statusView(w, h, a.theme)`, the `handleDialogKey`
+ case — every key ignored, esc/ctrl+c close via the stack); commands.go:
+ the `/status` local entry + the `runCommand` case. Deviations 193
+ (pre-logged: content = providers + agents only, no session section) + 201
+ (test-accuracy/plan-scope/low: 201a the pinned test's 2-arg
+ `statusView(80, 24)` vs the interface/Step-3 3-arg — the last-stated call
+ (the `modalInner` case) wins, the test's two call sites fixed to
+ `statusView(80, 24, a.theme)`; 201b the plan's "localCommands already
+ carries /status from S3.1" note was stale — the entry + `runCommand` case
+ land here, the `TestPromptMenuKeys` wrap count re-baselines 7→8; 201c the
+ plan's Files note names keys.go but the `handleDialogKey` case lives in
+ dialog.go — keys.go unchanged, not in the commit). 3 pinned test functions
+ green (render + fallback, esc/ctrl+c close).
+Next: S3.6 help-dialog restyle (bead `yolo-oae.4.7`).
 Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
 (PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
 + GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,
