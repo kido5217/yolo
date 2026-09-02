@@ -92,6 +92,10 @@ type App struct {
 	histIdx  int
 	histText string
 	histOrig string
+	// S5.3 prompt frecency: the file-path ranking entries (scope-relative
+	// keys, deviation 224), persisted under kvFrecencyKey (deviation 223);
+	// the @-picker consumes the ranking (S5.4).
+	freq []frecencyEntry
 }
 
 // NewApp builds the root model. A non-empty startSessionID starts on that
@@ -135,6 +139,7 @@ func NewApp(c *client.Service, s store.State, startSessionID string, engine *the
 	}
 	a.retheme()
 	a.loadHistory()
+	a.loadFrecency()
 	return a
 }
 
@@ -401,6 +406,64 @@ func (a *App) saveHistory() {
 		return
 	}
 	a.engine.KV().Set(kvHistoryKey, a.hist)
+}
+
+// kvFrecencyKey is the KV key the prompt frecency persists under (the
+// S5.3 KV persistence surface, deviation 223).
+const kvFrecencyKey = "prompt_frecency"
+
+// coerceFrecency coerces a reloaded KV value to []frecencyEntry — the
+// in-run []frecencyEntry or the JSON []any of map[string]any a
+// process-restart reload yields (deviation 223). Anything else
+// (absent/nil) is no frecency.
+func coerceFrecency(v any) []frecencyEntry {
+	switch s := v.(type) {
+	case []frecencyEntry:
+		return s
+	case []any:
+		out := make([]frecencyEntry, 0, len(s))
+		for _, e := range s {
+			m, ok := e.(map[string]any)
+			if !ok {
+				continue
+			}
+			f := frecencyEntry{}
+			if p, ok := m["path"].(string); ok {
+				f.Path = p
+			} else {
+				continue
+			}
+			if n, ok := m["frequency"].(float64); ok {
+				f.Frequency = int(n)
+			}
+			if t, ok := m["lastOpen"].(float64); ok {
+				f.LastOpen = int64(t)
+			}
+			out = append(out, f)
+		}
+		return out
+	}
+	return nil
+}
+
+// loadFrecency restores the persisted prompt frecency from the KV (the
+// S5.3 boot load, run in NewApp after loadHistory; a nil engine skips —
+// the frecency stays empty in-memory).
+func (a *App) loadFrecency() {
+	if a.engine == nil {
+		return
+	}
+	a.freq = parseFrecency(coerceFrecency(a.engine.KV().Get(kvFrecencyKey, nil)))
+}
+
+// saveFrecency persists the current prompt frecency to the KV (the
+// S5.3 write path, called from the @-picker selection in S5.4; a nil
+// engine skips).
+func (a *App) saveFrecency() {
+	if a.engine == nil {
+		return
+	}
+	a.engine.KV().Set(kvFrecencyKey, a.freq)
 }
 
 // afterApply arms the footer spinner when a just-applied event left the
