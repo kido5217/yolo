@@ -101,6 +101,22 @@ func (k *KV) Set(key string, val any) {
 	k.mu.Unlock()
 }
 
+// Flush synchronously writes the current store to the file — a
+// barrier for callers that must read the file before the writer's
+// next turn. The writer also flushes on its own schedule; the two
+// are serialized by k.mu + the flock, so a racing double-write is
+// idempotent (the same store, the atomic rename). Log-and-continue,
+// like the writer (a failed flush is warned, not returned). A no-op
+// after Close.
+func (k *KV) Flush() {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if k.closed {
+		return
+	}
+	k.writeLocked()
+}
+
 // Close marks the store closed, stops the writer, and is idempotent.
 // Because the queue is never closed, an in-flight Set cannot panic on a
 // closed channel: the writer exits via done, and its final drain+flush

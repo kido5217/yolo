@@ -384,6 +384,19 @@ func (e *Engine) RefreshCustoms(ctx context.Context) error {
 	return nil
 }
 
+// KVPath is the KV file path (the S0.7 persistence surface) — the
+// minimal seam for the KV-wiring assertions.
+func (e *Engine) KVPath() string {
+	return e.opts.KVPath
+}
+
+// FlushKV synchronously flushes the KV store to the file (a barrier
+// before reading the file while the S0.7 writer goroutine is still
+// in flight — the promise-chain writer keeps its own schedule).
+func (e *Engine) FlushKV() {
+	e.kv.Flush()
+}
+
 // Close flushes the KV (pending writes drain + writer stops).
 func (e *Engine) Close() error {
 	return e.kv.Close()
