@@ -13,7 +13,7 @@ import (
 // the pin records the current intended content; an intentional change
 // re-baselines the pin in the same commit). Canonical form: logoLeft[0..3]
 // then logoRight[0..3], each line followed by "\n".
-const wantLogoBlockSHA256 = "3132b81006fa6290b45fef72e39cd451c7d06c90aa333109e9a88eac2c79e2ee"
+const wantLogoBlockSHA256 = "28e0cc7552c758278e14383691c19889e010f1f41c2911b7e25ea76f3f3ff681"
 
 func logoBlockText() string {
 	var b strings.Builder
@@ -50,10 +50,10 @@ func TestRenderLogoZeroThemeIsPlain(t *testing.T) {
 	var zero theme.Theme
 	got := renderLogo(zero)
 	want := strings.Join([]string{
-		"                   " + " " + "             ▄     ",
-		"█▀▀█ █▀▀█ █▀▀█ █▀▀▄" + " " + "█▀▀▀ █▀▀█ █▀▀█ █▀▀█",
-		"█  █ █  █ █▀▀▀ █  █" + " " + "█    █  █ █  █ █▀▀▀",
-		"▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀▀▀▀" + " " + "▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀",
+		"         " + " " + "         ",
+		"█  █ █▀▀█" + " " + "█    █▀▀█",
+		" ██  █  █" + " " + "█    █  █",
+		" ██  ▀▀▀▀" + " " + "█▀▀▀ ▀▀▀▀",
 	}, "\n")
 	if got != want {
 		t.Fatalf("zero-theme logo = %q, want the plain translated glyphs:\n%q", got, want)

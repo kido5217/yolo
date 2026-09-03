@@ -83,7 +83,7 @@ func TestDetectPaletteRGBScaling(t *testing.T) {
 
 func TestDetectPaletteNoResponseUnsupported(t *testing.T) {
 	// no probe answer within ProbeTimeout → unsupported (spec §3: no system
-	// theme, active falls back to "opencode").
+	// theme, active falls back to "yolo").
 	in := func() io.Reader {
 		pr, pw := io.Pipe()
 		go func() { time.Sleep(120 * time.Millisecond); pw.Close() }()

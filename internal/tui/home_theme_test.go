@@ -21,7 +21,7 @@ import (
 // logoSGRTokens are the logo + divider SGR color parameters under the
 // pinned TTY_FORCE=1 + TERM=xterm-256color env (ANSI256 profile: the
 // 24-bit hex tokens quantize onto the xterm-256 gray ramp 232–255).
-// Derived from the opencode dark-mode tokens (the S0.2 goldens):
+// Derived from the yolo dark-mode tokens (the S0.2 goldens):
 //
 //	textMuted      #808080 -> 244  (128 = (244-232)*10+8, exact)
 //	text           #eeeeee -> 255  (238 = (255-232)*10+8, exact)
@@ -63,8 +63,8 @@ func TestHomeLogoThemeSGR(t *testing.T) {
 	if err := e.Resolve(context.Background()); err != nil {
 		t.Fatalf("theme.Resolve: %v", err)
 	}
-	if got := e.Active(); got != "opencode" {
-		t.Fatalf("active theme = %s, want opencode (no config, no KV)", got)
+	if got := e.Active(); got != "yolo" {
+		t.Fatalf("active theme = %s, want yolo (no config, no KV)", got)
 	}
 
 	ts := testutil.Boot(t)
@@ -106,7 +106,7 @@ func TestHomeLogoThemeSGR(t *testing.T) {
 // charmbracelet/x/ansi color.go: to6Cube (v<48→0, v<115→1, else (v-35)/40 →
 // 0x00/0x5f/0x87/0xaf/0xd7/0xff), an exact cube hit returns early, else the
 // grey index (avg-3)/10 with avg>238 → 23 (avg = (r+g+b)/3) and a
-// DistanceHSLuv cube-vs-grey tie-break. Derived from the opencode
+// DistanceHSLuv cube-vs-grey tie-break. Derived from the yolo
 // dark-mode tokens:
 //
 //	text (non-selected row title)       #eeeeee (238):
@@ -160,8 +160,8 @@ func TestHomeFooterThemeSGR(t *testing.T) {
 	if err := e.Resolve(context.Background()); err != nil {
 		t.Fatalf("theme.Resolve: %v", err)
 	}
-	if got := e.Active(); got != "opencode" {
-		t.Fatalf("active theme = %s, want opencode (no config, no KV)", got)
+	if got := e.Active(); got != "yolo" {
+		t.Fatalf("active theme = %s, want yolo (no config, no KV)", got)
 	}
 
 	ts := testutil.Boot(t)

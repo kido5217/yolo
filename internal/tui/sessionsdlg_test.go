@@ -190,7 +190,7 @@ func TestTUISessionListDialog(t *testing.T) {
 	tm.Send(ctrlDKey)
 	tm.Send(ctrlDKey)
 	// ONE merged condition: the armed title (plain) + the error-background
-	// SGR param (48;5;246 = opencode dark error #e06c75 under the pinned
+	// SGR param (48;5;246 = yolo dark error #e06c75 under the pinned
 	// env — the Convert256 scratch output wins over findings §6's 174).
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
 		return strings.Contains(stripANSI(string(b)), "Press ctrl+d again to confirm") &&

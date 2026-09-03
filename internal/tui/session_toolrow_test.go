@@ -8,18 +8,18 @@ import (
 )
 
 // TestToolRowGlyphs pins the S1.7 per-tool icon + pending/complete/error
-// row forms (the opencode dark tokens; the SGR quantization is the
+// row forms (the yolo dark tokens; the SGR quantization is the
 // teatest layer's job).
 func TestToolRowGlyphs(t *testing.T) {
 	all, err := theme.AllThemes()
 	if err != nil {
 		t.Fatalf("AllThemes: %v", err)
 	}
-	r, err := theme.ResolveTheme(all["opencode"], "dark")
+	r, err := theme.ResolveTheme(all["yolo"], "dark")
 	if err != nil {
 		t.Fatalf("ResolveTheme: %v", err)
 	}
-	th := theme.Theme{R: r, Name: "opencode", Mode: "dark"}
+	th := theme.Theme{R: r, Name: "yolo", Mode: "dark"}
 	part := func(tool string, status, title, errMsg string) protocol.Part {
 		return protocol.Part{ID: "t", Type: "tool", Tool: tool, CallID: "c",
 			State: &protocol.ToolState{Status: status, Title: title, Error: errMsg}}

@@ -20,11 +20,11 @@ func testTheme(t *testing.T) Theme {
 	if err != nil {
 		t.Fatalf("AllThemes: %v", err)
 	}
-	r, err := ResolveTheme(themes["opencode"], "dark")
+	r, err := ResolveTheme(themes["yolo"], "dark")
 	if err != nil {
 		t.Fatalf("ResolveTheme: %v", err)
 	}
-	return Theme{R: r, Name: "opencode", Mode: "dark"}
+	return Theme{R: r, Name: "yolo", Mode: "dark"}
 }
 
 func TestThemeForegroundAccessors(t *testing.T) {

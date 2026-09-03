@@ -106,7 +106,7 @@ func TestDiscover(t *testing.T) {
 
 // TestDiscoverCorruptFileIsHardError: an unparseable .json fails the whole
 // discover (upstream JSON.parse throws; the caller's catch sets active to
-// "opencode" — S0.7). Never a per-file skip.
+// "yolo" — S0.7). Never a per-file skip.
 func TestDiscoverCorruptFileIsHardError(t *testing.T) {
 	dir := t.TempDir()
 	writeThemeFile(t, dir, "good.json", `{"theme":{"primary":"#ffffff"}}`)

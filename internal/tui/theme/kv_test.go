@@ -51,8 +51,8 @@ func TestKVMissingFileIsEmpty(t *testing.T) {
 		t.Fatalf("OpenKV on missing file must not error: %v", err)
 	}
 	defer kv.Close()
-	if got := kv.Get("theme", "opencode"); got != "opencode" {
-		t.Errorf("Get = %v, want opencode (missing file = empty store)", got)
+	if got := kv.Get("theme", "yolo"); got != "yolo" {
+		t.Errorf("Get = %v, want yolo (missing file = empty store)", got)
 	}
 }
 
@@ -66,8 +66,8 @@ func TestKVCorruptFileIsLoggedAndEmpty(t *testing.T) {
 		t.Fatalf("corrupt file must not error (upstream catch → continue): %v", err)
 	}
 	defer kv.Close()
-	if got := kv.Get("theme", "opencode"); got != "opencode" {
-		t.Errorf("Get = %v, want opencode (corrupt file = empty store)", got)
+	if got := kv.Get("theme", "yolo"); got != "yolo" {
+		t.Errorf("Get = %v, want yolo (corrupt file = empty store)", got)
 	}
 	kv.Set("theme", "nord")
 	if got := kv.Get("theme", "dflt"); got != "nord" {

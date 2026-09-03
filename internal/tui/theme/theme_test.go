@@ -13,8 +13,8 @@ var wantThemeNames = []string{
 	"catppuccin-macchiato", "cobalt2", "cursor", "dracula", "everforest",
 	"flexoki", "github", "gruvbox", "kanagawa", "lucent-orng", "material",
 	"matrix", "mercury", "monokai", "nightowl", "nord", "one-dark",
-	"opencode", "orng", "osaka-jade", "palenight", "rosepine", "solarized",
-	"synthwave84", "tokyonight", "vercel", "vesper", "zenburn",
+	"orng", "osaka-jade", "palenight", "rosepine", "solarized",
+	"synthwave84", "tokyonight", "vercel", "vesper", "yolo", "zenburn",
 }
 
 func TestAllThemesEmbeds33UpstreamThemes(t *testing.T) {
@@ -53,7 +53,7 @@ func TestParseOpencodeThemeShape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AllThemes: %v", err)
 	}
-	oc := themes["opencode"]
+	oc := themes["yolo"]
 	if oc.Schema != "https://opencode.ai/theme.json" {
 		t.Errorf("$schema = %q", oc.Schema)
 	}

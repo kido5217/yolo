@@ -32,7 +32,7 @@ import (
 // (v-35)/40 → 0x00/0x5f/0x87/0xaf/0xd7/0xff), an exact cube hit returns
 // early, else the grey index (avg-3)/10 with avg>238 → 23 (avg =
 // (r+g+b)/3) and a DistanceHSLuv cube-vs-grey tie-break, the cube winning
-// ties). Derived from the opencode dark-mode tokens (the S0.2 goldens):
+// ties). Derived from the yolo dark-mode tokens (the S0.2 goldens):
 //
 //	text (running tool row, prompt cursor)  #eeeeee (238,238,238):
 //	    grey 23 exact (238 = 8+10*23) -> 255
@@ -116,8 +116,8 @@ func TestSessionChromeThemeSGR(t *testing.T) {
 	if err := e.Resolve(context.Background()); err != nil {
 		t.Fatalf("theme.Resolve: %v", err)
 	}
-	if got := e.Active(); got != "opencode" {
-		t.Fatalf("active theme = %s, want opencode (no config, no KV)", got)
+	if got := e.Active(); got != "yolo" {
+		t.Fatalf("active theme = %s, want yolo (no config, no KV)", got)
 	}
 
 	c := client.New(ts.URL, ts.Dir)
@@ -191,7 +191,7 @@ func TestSessionChromeThemeSGR(t *testing.T) {
 }
 
 // TestToolRowLineTheme pins the state->token chain at the lipgloss level
-// (pure render, no renderer): the resolved opencode dark tokens emit their
+// (pure render, no renderer): the resolved yolo dark tokens emit their
 // 24-bit hex as the foreground (the 38;5;N quantization is pinned by the
 // teatest golden above).
 func TestToolRowLineTheme(t *testing.T) {
@@ -199,11 +199,11 @@ func TestToolRowLineTheme(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AllThemes: %v", err)
 	}
-	r, err := theme.ResolveTheme(themes["opencode"], "dark")
+	r, err := theme.ResolveTheme(themes["yolo"], "dark")
 	if err != nil {
 		t.Fatalf("ResolveTheme: %v", err)
 	}
-	th := theme.Theme{R: r, Name: "opencode", Mode: "dark"}
+	th := theme.Theme{R: r, Name: "yolo", Mode: "dark"}
 	tests := []struct {
 		name   string
 		part   protocol.Part

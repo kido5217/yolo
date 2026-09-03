@@ -30,7 +30,7 @@ type EngineOptions struct {
 }
 
 // Engine is the theme selection store (port of context/theme.tsx):
-// active = config > KV "theme" > default "opencode";
+// active = config > KV "theme" > default "yolo";
 // mode = KV lock > terminal luminance > "dark".
 type Engine struct {
 	opts EngineOptions
@@ -59,7 +59,7 @@ type Engine struct {
 // props.mode` half has no init-time counterpart — the palette is
 // probed in Resolve, S0 scoping rule); the one-shot theme_mode is
 // cleared when unlocked (only when it holds a valid mode,
-// theme.tsx:118); active = config > KV "theme" > "opencode". The KV
+// theme.tsx:118); active = config > KV "theme" > "yolo". The KV
 // is loaded synchronously so the first Get is race-free.
 func New(opts EngineOptions) (*Engine, error) {
 	kv, err := OpenKV(opts.KVPath)
@@ -204,7 +204,7 @@ func (e *Engine) resolveThemeJson(name string, tj ThemeJson) (Theme, error) {
 }
 
 // ActiveTheme is the values memo (theme.tsx:256-267):
-// themes[active] ?? themes[KV "theme"] ?? themes[opencode].
+// themes[active] ?? themes[KV "theme"] ?? themes[yolo].
 func (e *Engine) ActiveTheme() (Theme, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -366,7 +366,7 @@ func (e *Engine) Reapply() {
 
 // RefreshCustoms is the 1000 ms refresh leg (upstream
 // syncCustomThemes, theme.tsx:132-144). On error it returns the error
-// and takes the upstream catch path: active "opencode", customs
+// and takes the upstream catch path: active "yolo", customs
 // emptied (the upstream catch touches only `active`; the Go port also
 // empties customs so a later successful refresh re-discovers from
 // scratch — the custom set is derived state, never persisted).

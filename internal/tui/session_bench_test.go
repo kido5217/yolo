@@ -240,11 +240,11 @@ func TestRenderMessages100KBBudget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AllThemes: %v", err)
 	}
-	r, err := theme.ResolveTheme(all["opencode"], "dark")
+	r, err := theme.ResolveTheme(all["yolo"], "dark")
 	if err != nil {
 		t.Fatalf("ResolveTheme: %v", err)
 	}
-	th := theme.Theme{R: r, Name: "opencode", Mode: "dark"}
+	th := theme.Theme{R: r, Name: "yolo", Mode: "dark"}
 	st := bigPartState(hundredKBPart())
 	const (
 		warmups = 3
@@ -270,8 +270,8 @@ func TestRenderMessages100KBBudget(t *testing.T) {
 // above is the CI assertion; this tracks drift in `go test -bench`).
 func BenchmarkRenderMessages_100KBPart(b *testing.B) {
 	all, _ := theme.AllThemes()
-	r, _ := theme.ResolveTheme(all["opencode"], "dark")
-	th := theme.Theme{R: r, Name: "opencode", Mode: "dark"}
+	r, _ := theme.ResolveTheme(all["yolo"], "dark")
+	th := theme.Theme{R: r, Name: "yolo", Mode: "dark"}
 	st := bigPartState(hundredKBPart())
 	b.ReportAllocs()
 	b.ResetTimer()

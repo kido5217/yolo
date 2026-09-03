@@ -28,17 +28,17 @@ var (
 	}
 )
 
-func resolveOpencodeDark(t *testing.T) Theme {
+func resolveYoloDark(t *testing.T) Theme {
 	t.Helper()
 	all, err := AllThemes()
 	if err != nil {
 		t.Fatalf("AllThemes: %v", err)
 	}
-	r, err := ResolveTheme(all["opencode"], "dark")
+	r, err := ResolveTheme(all["yolo"], "dark")
 	if err != nil {
 		t.Fatalf("ResolveTheme: %v", err)
 	}
-	return Theme{R: r, Name: "opencode", Mode: "dark"}
+	return Theme{R: r, Name: "yolo", Mode: "dark"}
 }
 
 // TestAllThemesHaveMarkdownSyntaxTokens pins the token matrix: every
@@ -65,10 +65,10 @@ func TestAllThemesHaveMarkdownSyntaxTokens(t *testing.T) {
 }
 
 // TestStyleConfigMapping pins the markdown* → ansi.StyleConfig field map
-// (the opencode.dark goldens; the SGR quantization is pinned by the S1.3
+// (the yolo.dark goldens; the SGR quantization is pinned by the S1.3
 // teatest golden, the 24-bit hex here).
 func TestStyleConfigMapping(t *testing.T) {
-	cfg := resolveOpencodeDark(t).StyleConfig("markdownText", 77)
+	cfg := resolveYoloDark(t).StyleConfig("markdownText", 77)
 	check := func(name string, got *string, want string) {
 		t.Helper()
 		if got == nil || *got != want {
@@ -124,7 +124,7 @@ func TestStyleConfigMapping(t *testing.T) {
 // TestStyleConfigReasoningBase pins the reasoning base token (S1.6 consumes
 // it): the Text style takes the base TOKEN NAME, not a hard-coded color.
 func TestStyleConfigReasoningBase(t *testing.T) {
-	cfg := resolveOpencodeDark(t).StyleConfig("textMuted", 77)
+	cfg := resolveYoloDark(t).StyleConfig("textMuted", 77)
 	if cfg.Text.Color == nil || *cfg.Text.Color != "#808080" {
 		t.Errorf("reasoning base Text.Color = %v, want #808080", cfg.Text.Color)
 	}
@@ -144,7 +144,7 @@ func TestZeroThemeStyleConfigIsNilColors(t *testing.T) {
 // SGR, a zero-Theme renderer degrades to plain output (no SGR). The exact
 // 38;5;N parameters are pinned by the S1.3 teatest golden (xterm-256color).
 func TestTranscriptRendererRenders(t *testing.T) {
-	r, err := NewTranscriptRenderer(resolveOpencodeDark(t), 77)
+	r, err := NewTranscriptRenderer(resolveYoloDark(t), 77)
 	if err != nil {
 		t.Fatalf("NewTranscriptRenderer: %v", err)
 	}
@@ -172,9 +172,9 @@ func TestTranscriptRendererRenders(t *testing.T) {
 }
 
 // TestChromaMapping pins the syntax* → ansi.Chroma field map (finding: the
-// upstream getSyntaxRules scope table; opencode.dark hexes).
+// upstream getSyntaxRules scope table; yolo.dark hexes).
 func TestChromaMapping(t *testing.T) {
-	ch := resolveOpencodeDark(t).Chroma()
+	ch := resolveYoloDark(t).Chroma()
 	check := func(name string, p ansi.StylePrimitive, want string) {
 		t.Helper()
 		if p.Color == nil || *p.Color != want {
@@ -216,9 +216,9 @@ func TestChromaMapping(t *testing.T) {
 
 // TestSubtleChroma pins the pre-blend (finding 3): fg = round(fg*α +
 // bg*(1-α)) over the theme background, α = ThinkingOpacity (0.6 for
-// opencode dark; bg #0a0a0a).
+// yolo dark; bg #0a0a0a).
 func TestSubtleChroma(t *testing.T) {
-	th := resolveOpencodeDark(t)
+	th := resolveYoloDark(t)
 	if th.R.ThinkingOpacity != 0.6 {
 		t.Fatalf("ThinkingOpacity = %v, want 0.6", th.R.ThinkingOpacity)
 	}
@@ -248,7 +248,7 @@ func TestSubtleChroma(t *testing.T) {
 // different chroma maps, rendered in EITHER order, each get their own
 // colors (the global "charm" slot is deleted before every Render).
 func TestChromaSlotWorkaround(t *testing.T) {
-	th := resolveOpencodeDark(t)
+	th := resolveYoloDark(t)
 	full, err := NewTranscriptRenderer(th, 77)
 	if err != nil {
 		t.Fatalf("full renderer: %v", err)
@@ -296,9 +296,9 @@ func TestChromaSlotWorkaround(t *testing.T) {
 	}
 }
 
-// TestStyleConfigGFM pins the S1.5 GFM trio (opencode.dark).
+// TestStyleConfigGFM pins the S1.5 GFM trio (yolo.dark).
 func TestStyleConfigGFM(t *testing.T) {
-	cfg := resolveOpencodeDark(t).StyleConfig("markdownText", 77)
+	cfg := resolveYoloDark(t).StyleConfig("markdownText", 77)
 	if cfg.Strikethrough.CrossedOut == nil || !*cfg.Strikethrough.CrossedOut {
 		t.Error("Strikethrough.CrossedOut = false/nil, want true")
 	}
@@ -314,7 +314,7 @@ func TestStyleConfigGFM(t *testing.T) {
 	}
 }
 
-// TestGFMRender pins the three GFM features end-to-end (theme opencode
+// TestGFMRender pins the three GFM features end-to-end (theme yolo
 // dark; the 24-bit SGR is asserted directly — the 38;5;N quantization is
 // the teatest layer's job). Verified against glamour v2.0.1 behavior:
 // the Task element's StylePrimitive styles only the checkbox (the item
@@ -329,7 +329,7 @@ func TestStyleConfigGFM(t *testing.T) {
 // SGR-stripped copy; every other assertion stays on the raw output
 // (deviation 154).
 func TestGFMRender(t *testing.T) {
-	r, err := NewTranscriptRenderer(resolveOpencodeDark(t), 77)
+	r, err := NewTranscriptRenderer(resolveYoloDark(t), 77)
 	if err != nil {
 		t.Fatalf("NewTranscriptRenderer: %v", err)
 	}
