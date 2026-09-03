@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kido5217/yolo/internal/config"
 	"github.com/kido5217/yolo/internal/llm"
 	"github.com/kido5217/yolo/internal/llm/fake"
 	"github.com/kido5217/yolo/internal/protocol"
@@ -385,6 +386,33 @@ func TestCommandEndpoint(t *testing.T) {
 	resp, _ = testutil.Req(t, s, "POST", "/session/"+ses.ID+"/command", d, `{"command":"/bogus"}`)
 	if resp.StatusCode != 400 {
 		t.Fatalf("/bogus = %d", resp.StatusCode)
+	}
+}
+
+// TestStartTwiceErrors pins the listener-leak guard: a second Start on the
+// same Server fails instead of leaking the first listener's goroutine.
+func TestStartTwiceErrors(t *testing.T) {
+	s := server.NewServer(server.Deps{WorkDir: t.TempDir(), Dirs: config.Dirs{Data: t.TempDir()}})
+	if _, err := s.Start("127.0.0.1:0"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer s.Close()
+	if _, err := s.Start("127.0.0.1:0"); err == nil {
+		t.Fatal("second Start succeeded, want error")
+	}
+}
+
+// TestOversizedBodyRejected pins the request-body cap: a body over
+// maxBodyBytes (10 MiB) is rejected with 4xx instead of being buffered
+// unbounded (the listen address is user-overridable).
+func TestOversizedBodyRejected(t *testing.T) {
+	t.Parallel()
+	s := testutil.Boot(t)
+	d := t.TempDir()
+	id := mkSession(t, s, d, "Big")
+	resp, b := testutil.Req(t, s, "POST", "/session/"+id+"/message", d, `{"text":"`+strings.Repeat("a", 11<<20)+`"}`)
+	if resp.StatusCode/100 != 4 {
+		t.Fatalf("oversized body = %d %s, want 4xx", resp.StatusCode, b)
 	}
 }
 

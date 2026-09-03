@@ -89,7 +89,7 @@ func TestSSEOrdering(t *testing.T) {
 	// The rest, by relative order:
 	//   assistant message (round start) < first assistant part < last delta
 	//   < final assistant part < last assistant message < idle (last frame)
-	var ai, pi, di, mi, lastPart, lastDelta int
+	var ai, pi, di, mi, lastPart int
 	ai, pi, di, mi, lastPart = -1, -1, -1, -1, -1
 	for i, f := range frames {
 		switch f.Type {
@@ -109,7 +109,6 @@ func TestSSEOrdering(t *testing.T) {
 			}
 		case "message.part.delta":
 			di = i
-			lastDelta = i
 		}
 	}
 	for name, idx := range map[string]int{"assistantMsg": ai, "assistantPart": pi, "delta": di, "assistantFinal": mi, "finalPart": lastPart} {
@@ -134,7 +133,6 @@ func TestSSEOrdering(t *testing.T) {
 	if last.Type != "session.status" || last.String("status") != "idle" {
 		t.Fatalf("last frame = %s %v, want session.status idle", last.Type, last.Properties["status"])
 	}
-	_ = lastDelta
 }
 
 func lpText(p map[string]any) string {
