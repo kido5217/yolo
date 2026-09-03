@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/kido5217/yolo/internal/glob"
@@ -63,11 +64,8 @@ func (globTool) External(raw json.RawMessage) ([]string, error) {
 }
 
 func globPattern(raw json.RawMessage) (string, error) {
-	var m map[string]any
-	if len(raw) == 0 {
-		raw = []byte("{}")
-	}
-	if err := json.Unmarshal(raw, &m); err != nil {
+	m, err := argsMap(raw)
+	if err != nil {
 		return "", err
 	}
 	v, ok := m["pattern"].(string)
@@ -78,11 +76,8 @@ func globPattern(raw json.RawMessage) (string, error) {
 }
 
 func globPathArg(raw json.RawMessage) (pattern, path string) {
-	var m map[string]any
-	if len(raw) == 0 {
-		raw = []byte("{}")
-	}
-	if err := json.Unmarshal(raw, &m); err != nil {
+	m, err := argsMap(raw)
+	if err != nil {
 		return
 	}
 	pattern, _ = m["pattern"].(string)
@@ -117,7 +112,7 @@ func (globTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 		env.Log.Info("glob", "pattern", pattern, "path", search)
 	}
 
-	var files []string
+	files := []string{}
 	truncated := false
 	werr := filepath.WalkDir(search, func(dpath string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -163,7 +158,7 @@ func (globTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 		text = strings.Join(files, "\n")
 		if truncated {
 			text += "\n\n(Results are truncated: showing first " +
-				fmt.Sprint(globLimit) +
+				strconv.Itoa(globLimit) +
 				" results. Consider using a more specific path or pattern.)"
 		}
 	}

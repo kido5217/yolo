@@ -79,11 +79,8 @@ func (grepTool) External(raw json.RawMessage) ([]string, error) {
 }
 
 func grepPattern(raw json.RawMessage) (string, error) {
-	var m map[string]any
-	if len(raw) == 0 {
-		raw = []byte("{}")
-	}
-	if err := json.Unmarshal(raw, &m); err != nil {
+	m, err := argsMap(raw)
+	if err != nil {
 		return "", err
 	}
 	v, ok := m["pattern"].(string)
@@ -96,11 +93,8 @@ func grepPattern(raw json.RawMessage) (string, error) {
 // grepArgPath extracts the optional path param (as given, Task 11
 // interface: no env here).
 func grepArgPath(raw json.RawMessage) (string, error) {
-	var m map[string]any
-	if len(raw) == 0 {
-		raw = []byte("{}")
-	}
-	if err := json.Unmarshal(raw, &m); err != nil {
+	m, err := argsMap(raw)
+	if err != nil {
 		return "", err
 	}
 	p, _ := m["path"].(string)
@@ -116,11 +110,8 @@ func (grepTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 	if err != nil {
 		return Output{}, err
 	}
-	var m map[string]any
-	if len(raw) == 0 {
-		raw = []byte("{}")
-	}
-	if err = json.Unmarshal(raw, &m); err != nil {
+	m, err := argsMap(raw)
+	if err != nil {
 		return Output{}, err
 	}
 	path, _ := m["path"].(string)

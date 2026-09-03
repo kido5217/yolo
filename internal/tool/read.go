@@ -70,11 +70,8 @@ func (readTool) External(raw json.RawMessage) ([]string, error) {
 }
 
 func readArgs(raw json.RawMessage) (fp string, offset, limit int, err error) {
-	if len(raw) == 0 {
-		raw = []byte("{}")
-	}
-	var m map[string]any
-	if err = json.Unmarshal(raw, &m); err != nil {
+	m, err := argsMap(raw)
+	if err != nil {
 		return
 	}
 	v, ok := m["filePath"].(string)
@@ -376,7 +373,9 @@ func notFoundWithSuggestions(fp string) error {
 	return fmt.Errorf("file not found: %s", fp)
 }
 
-// isBinaryFile sniffs NUL bytes in the first binarySniffBytes.
+// isBinaryFile sniffs NUL bytes in the first binarySniffBytes. A file that
+// cannot be read past sniff setup is not binary: the later readLines fails
+// and surfaces the read error.
 func isBinaryFile(fp string) bool {
 	f, err := os.Open(fp)
 	if err != nil {
@@ -384,7 +383,10 @@ func isBinaryFile(fp string) bool {
 	}
 	defer f.Close()
 	buf := make([]byte, binarySniffBytes)
-	n, _ := io.ReadFull(f, buf)
+	n, rerr := io.ReadFull(f, buf)
+	if rerr != nil && !errors.Is(rerr, io.EOF) && !errors.Is(rerr, io.ErrUnexpectedEOF) {
+		return false
+	}
 	for i := 0; i < n; i++ {
 		if buf[i] == 0 {
 			return true

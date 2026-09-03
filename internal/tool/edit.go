@@ -67,11 +67,8 @@ func (editTool) External(raw json.RawMessage) ([]string, error) {
 // editFilePath extracts just the filePath (upstream builds permission
 // patterns from it alone); full arg validation happens in Run.
 func editFilePath(raw json.RawMessage) (string, error) {
-	var m map[string]any
-	if len(raw) == 0 {
-		raw = []byte("{}")
-	}
-	if err := json.Unmarshal(raw, &m); err != nil {
+	m, err := argsMap(raw)
+	if err != nil {
 		return "", err
 	}
 	v, ok := m["filePath"].(string)
@@ -88,8 +85,9 @@ func editArgs(raw json.RawMessage) (fp, oldText, newText string, replaceAll bool
 	if fp, err = editFilePath(raw); err != nil {
 		return
 	}
-	var m map[string]any
-	if err = json.Unmarshal(raw, &m); err != nil {
+	m, uerr := argsMap(raw)
+	if uerr != nil {
+		err = uerr
 		return
 	}
 	v, ok := m["oldString"].(string)
@@ -184,7 +182,12 @@ func editApply(fp, oldText, newText string, replaceAll bool) (contentOld, conten
 	}
 	fi, serr := os.Stat(fp)
 	if serr != nil {
-		return "", "", fmt.Errorf("file %s not found", fp)
+		// The missing-file text is model-facing and test-pinned; other stat
+		// failures (e.g. permission) keep their context via %w.
+		if errors.Is(serr, os.ErrNotExist) {
+			return "", "", fmt.Errorf("file %s not found", fp)
+		}
+		return "", "", fmt.Errorf("stat %s: %w", fp, serr)
 	}
 	if fi.IsDir() {
 		return "", "", fmt.Errorf("path is a directory, not a file: %s", fp)

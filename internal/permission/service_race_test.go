@@ -18,6 +18,7 @@ import (
 // SetDataDir was removed (39a196e): dataDir is a constructor constant. This
 // test guards the invariant. Run with -race.
 func TestConcurrentSessionsNoRace(t *testing.T) {
+	t.Parallel()
 	db, err := storage.Open(filepath.Join(t.TempDir(), "yolo.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -45,10 +46,8 @@ func TestConcurrentSessionsNoRace(t *testing.T) {
 
 	var wg sync.WaitGroup
 	ctx := context.Background()
-	for i := 0; i < 32; i++ {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
+	for i := range 32 {
+		wg.Go(func() {
 			sid := sessions[i%2]
 			req := Request{
 				// PreDecision empty -> decisionFor runs (builtins + db
@@ -62,7 +61,7 @@ func TestConcurrentSessionsNoRace(t *testing.T) {
 			if _, err := svc.Ask(ctx, req); err != nil {
 				t.Errorf("Ask: %v", err)
 			}
-		}(i)
+		})
 	}
 	wg.Wait()
 }

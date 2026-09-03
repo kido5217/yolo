@@ -50,6 +50,7 @@ func (e *env) req(id string) Request {
 }
 
 func TestAskPreAllowNoBlock(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	if err := e.db.CreateSession(t.Context(), storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Agent: "build", Model: "k"}); err != nil {
 		t.Fatal(err)
@@ -74,6 +75,7 @@ func TestAskPreAllowNoBlock(t *testing.T) {
 }
 
 func TestAskAskBlocksThenOnce(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	if err := e.db.CreateSession(t.Context(), storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Agent: "build", Model: "k"}); err != nil {
 		t.Fatal(err)
@@ -106,7 +108,47 @@ func TestAskAskBlocksThenOnce(t *testing.T) {
 	}
 }
 
+// TestAskCancelStoresAborted pins Ask's cancel path: cancelling the asker's
+// ctx resolves the parked ask with Deny AND stores response='aborted'. The
+// abort write runs on a detached context — reusing the cancelled ctx would
+// fail the DB write and leave the row pending (the doc comment's contract).
+func TestAskCancelStoresAborted(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	if err := e.db.CreateSession(t.Context(), storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Agent: "build", Model: "k"}); err != nil {
+		t.Fatal(err)
+	}
+	req := e.req("per_cancel")
+	req.Permission = "custom" // no rule -> parks
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan Decision, 1)
+	go func() {
+		d, err := e.svc.Ask(ctx, req)
+		if err == nil {
+			done <- d
+		}
+	}()
+	e.awaitPending(t, 1)
+	cancel()
+	select {
+	case d := <-done:
+		if d != Deny {
+			t.Fatalf("d = %v, want Deny", d)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("cancel did not unblock the ask")
+	}
+	rows, err := e.db.ListPermissions(t.Context(), "ses_1", false)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("rows = %+v err=%v", rows, err)
+	}
+	if rows[0].Response != "aborted" {
+		t.Fatalf("stored response = %q, want %q", rows[0].Response, "aborted")
+	}
+}
+
 func TestAlwaysPersistsRuleAndCoveredAutoAnswer(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	_ = e.db.CreateSession(t.Context(), storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Agent: "build", Model: "k"})
 	// two parked asks, same permission, second fully covered by first's always pattern
@@ -134,6 +176,7 @@ func TestAlwaysPersistsRuleAndCoveredAutoAnswer(t *testing.T) {
 }
 
 func TestReplyUnblocksAndPublishesWhenPersistFails(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	if err := e.db.CreateSession(t.Context(), storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Agent: "build", Model: "k"}); err != nil {
 		t.Fatal(err)
@@ -182,6 +225,7 @@ func TestReplyUnblocksAndPublishesWhenPersistFails(t *testing.T) {
 }
 
 func TestCustomAgentFallsBackToBuildMatrix(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	if err := e.db.CreateSession(t.Context(), storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Agent: "build", Model: "k"}); err != nil {
 		t.Fatal(err)
@@ -202,6 +246,7 @@ func TestCustomAgentFallsBackToBuildMatrix(t *testing.T) {
 }
 
 func TestRejectCascade(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	_ = e.db.CreateSession(t.Context(), storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Agent: "build", Model: "k"})
 	r1 := e.req("per_5")
@@ -233,6 +278,7 @@ func TestRejectCascade(t *testing.T) {
 // sets in the same request stream — each request is evaluated against its
 // own rules, so a later request cannot bleed into an earlier evaluation.
 func TestDecisionForUsesRequestCfgRules(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	denyRead := []protocol.Rule{{Permission: "read", Pattern: "/a/*", Action: RuleDeny}}
 	allowBash := []protocol.Rule{{Permission: "bash", Pattern: "*", Action: RuleAllow}}
@@ -256,20 +302,17 @@ func TestDecisionForUsesRequestCfgRules(t *testing.T) {
 	// future re-introduction of shared per-request state stays -race clean
 	// and does not change per-request verdicts. Run under -race.
 	var wg sync.WaitGroup
-	for i := 0; i < 50; i++ {
-		wg.Add(2)
-		go func() {
-			defer wg.Done()
+	for range 50 {
+		wg.Go(func() {
 			if d := e.svc.decisionFor(t.Context(), reqA); d != Deny {
 				t.Errorf("concurrent reqA = %v, want Deny", d)
 			}
-		}()
-		go func() {
-			defer wg.Done()
+		})
+		wg.Go(func() {
 			if d := e.svc.decisionFor(t.Context(), reqB); d != Allow {
 				t.Errorf("concurrent reqB = %v, want Allow", d)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }
@@ -280,6 +323,7 @@ func TestDecisionForUsesRequestCfgRules(t *testing.T) {
 // once: one permission.replied event, one row flip. Only the remover
 // settles; the lost claim is a no-op.
 func TestResolveSettlesExactlyOnce(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	if err := e.db.CreateSession(t.Context(), storage.SessionRow{ID: "ses_1", ProjectDir: "/w", Agent: "build", Model: "k"}); err != nil {
 		t.Fatal(err)
@@ -298,9 +342,8 @@ func TestResolveSettlesExactlyOnce(t *testing.T) {
 	e.awaitPending(t, 1)
 
 	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() { defer wg.Done(); e.svc.resolve(t.Context(), "per_ds", Allow, "once", "once", false) }()
-	go func() { defer wg.Done(); e.svc.resolve(t.Context(), "per_ds", Deny, "aborted", "reject", false) }()
+	wg.Go(func() { e.svc.resolve(t.Context(), "per_ds", Allow, "once", "once", false) })
+	wg.Go(func() { e.svc.resolve(t.Context(), "per_ds", Deny, "aborted", "reject", false) })
 	wg.Wait()
 
 	replied := 0
