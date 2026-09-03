@@ -2,11 +2,11 @@
 
 This file is loaded by any agent (opencode, yolo itself, …) working in this repo.
 Read it before acting. Task state: beads (`bd ready`). Verified facts:
-`docs/superpowers/PROGRESS.md`. Deviation audit: `docs/superpowers/DEVIATIONS.md`.
+`PROGRESS.md`. Deviation audit: `DEVIATIONS.md`.
 
 ## Project
 
-**yolo** is a Go TUI + core-server harness in the lineage of [opencode](https://github.com/anomalyco/opencode) **v1.18.18** (TUI + core server only; web/desktop/slack/console dropped). It began as a faithful port whose purpose was to test the capabilities of **Qwen3.8-27B** on a single RTX 5090 behind `https://ai.kido.ws/v1` — that goal is complete (local Qwen 3.8 tested, stable, optimized; the v0.3.0 tree is the stable baseline). From v0.4.0 the project's purpose is to **test various LLM harnesses and frameworks** (yolo drives and evaluates other harnesses). opencode remains a **reference** for how things should be done, not a binding contract (core principle 2; spec `docs/superpowers/specs/2026-08-24-v0.4.0-design.md`).
+**yolo** is a Go TUI + core-server harness in the lineage of [opencode](https://github.com/anomalyco/opencode) **v1.18.18** (TUI + core server only; web/desktop/slack/console dropped). It began as a faithful port whose purpose was to test the capabilities of **Qwen3.8-27B** on a single RTX 5090 behind `https://ai.kido.ws/v1` — that goal is complete (local Qwen 3.8 tested, stable, optimized; the v0.3.0 tree is the stable baseline). From v0.4.0 the project's purpose is to **test various LLM harnesses and frameworks** (yolo drives and evaluates other harnesses). opencode remains a **reference** for how things should be done, not a binding contract (core principle 2; spec `specs/2026-08-24-v0.4.0-design.md`).
 
 - Module `github.com/kido5217/yolo`, binary `yolo`, Go ≥ 1.25 (installed 1.26.7).
 - Single binary: starts the core HTTP server (REST + SSE) **in-process**, then runs the bubbletea v2 TUI which talks to it **only** via the wire contract.
@@ -46,22 +46,22 @@ Read it before acting. Task state: beads (`bd ready`). Verified facts:
 | Topic | Source of truth |
 |---|---|
 | Task state (active, next, blocked) | **beads epic (`bd ready`) — read first on resume.** No file |
-| Verified facts (do not re-litigate) | `docs/superpowers/PROGRESS.md` |
-| Deviation audit (append-only, principle 5) | `docs/superpowers/DEVIATIONS.md` |
-| 0.3.0 work list (deferred findings) | `docs/superpowers/DEFERRED.md` |
-| Implementation plan | `docs/superpowers/plans/` — dated, one active at a time (named in the beads epic). **Read ONLY the active task slice** |
-| Approved design | `docs/superpowers/specs/` — dated, the active one is named in the beads epic. Zero-telemetry statement: `2026-08-17-yolo-go-port-design.md` §1 |
+| Verified facts (do not re-litigate) | `PROGRESS.md` |
+| Deviation audit (append-only, principle 5) | `DEVIATIONS.md` |
+| 0.3.0 work list (deferred findings) | `DEFERRED.md` |
+| Implementation plan | `plans/` — dated, one active at a time (named in the beads epic). **Read ONLY the active task slice** |
+| Approved design | `specs/` — dated, the active one is named in the beads epic. Zero-telemetry statement: `2026-08-17-yolo-go-port-design.md` §1 |
 | Upstream reference | `/tmp/opencode-upstream` — clone at tag `v1.18.18`. If missing: `git clone --depth 1 --branch v1.18.18 https://github.com/anomalyco/opencode /tmp/opencode-upstream`. **Never touch `/tmp/opencode`** — pre-existing user data |
 | Golang skills | `.agents/skills/` + `skills-lock.json` — 15 hash-locked (samber/cc-skills-golang) — see Skills below |
 
 ## Core principles (non-negotiable)
 
 1. **Zero telemetry.** yolo runs on the end user's machine and must contain zero telemetry: no usage data ever sent to any remote server, no opt-in telemetry. Upstream telemetry surfaces are **skipped, not deferred**: OTEL/OTLP exporter (`packages/core/src/observability/otlp.ts`), OpenTelemetry spans on LLM calls (`experimental.openTelemetry` / `experimental_telemetry` in `packages/opencode/src/session/llm.ts`), telemetry-identity field. `OTEL_*` env vars are inert; the ported config schema omits `experimental.openTelemetry`. Full statement: spec §1.
-2. **Reference, not contract.** opencode v1.18.18 is a *reference* for how things should be done, not a binding contract. The legacy REST paths/JSON shapes and the legacy SSE event set remain mirrored so the baseline stays verifiable against opencode's OpenAPI contract, but yolo may deviate from upstream (wire shapes, behavior, pinned text) on explicit user instruction — every such deviation is logged in `docs/superpowers/DEVIATIONS.md` with severity. Standing baseline deviation: the scoping header is **`x-yolo-directory`** (upstream: `x-opencode-directory`).
+2. **Reference, not contract.** opencode v1.18.18 is a *reference* for how things should be done, not a binding contract. The legacy REST paths/JSON shapes and the legacy SSE event set remain mirrored so the baseline stays verifiable against opencode's OpenAPI contract, but yolo may deviate from upstream (wire shapes, behavior, pinned text) on explicit user instruction — every such deviation is logged in `DEVIATIONS.md` with severity. Standing baseline deviation: the scoping header is **`x-yolo-directory`** (upstream: `x-opencode-directory`).
 3. **Pins are change gates, not upstream locks.** The 14 session prompt files and all tool `desc/*.txt` files are guarded by sha256 pins in tests. The pins record current intended content, not an upstream lock: pinned text may change in normal work, and an intentional change re-baselines the sha256 pin in the same commit. Never leave a pin dangling.
 4. **TUI is a pure client.** Non-test files under `internal/tui/` import only `internal/protocol` + `internal/tui/*` (+ stdlib/charm deps). `_test.go` may use `internal/server/testutil` (escape hatch). Enforced by `TestImportsDirection` (`internal/tui/imports_test.go`).
-5. **Tests define the contract.** When the plan contradicts itself (or its own test code is buggy), resolve per the last-stated call, fix the test, and **log the deviation in `docs/superpowers/DEVIATIONS.md`** with severity.
-6. **Task state in beads; proven knowledge in docs.** Track task state in beads — never duplicate it in files. When a fact is proven or a deviation is logged, update `docs/superpowers/PROGRESS.md` (facts) / `docs/superpowers/DEVIATIONS.md` (audit) before moving on — a stale audit log is a broken resume. File shapes: "Commit & branch discipline."
+5. **Tests define the contract.** When the plan contradicts itself (or its own test code is buggy), resolve per the last-stated call, fix the test, and **log the deviation in `DEVIATIONS.md`** with severity.
+6. **Task state in beads; proven knowledge in docs.** Track task state in beads — never duplicate it in files. When a fact is proven or a deviation is logged, update `PROGRESS.md` (facts) / `DEVIATIONS.md` (audit) before moving on — a stale audit log is a broken resume. File shapes: "Commit & branch discipline."
 7. **Subagents, at most two at a time.** Never dispatch more than two subagents concurrently (via the `task` tool): at most two independent subagents in flight; wait for their full return before dispatching the next. (Raised from one to two on user instruction 2026-09-02.) This supersedes any plan/spec wording permitting more parallel subagents.
 8. **YOLO spawns only YOLO.** If the root agent is `YOLO`, any subagent it spawns MUST also be `YOLO` — never dispatch a subagent of a different agent type.
 
@@ -80,38 +80,22 @@ Read it before acting. Task state: beads (`bd ready`). Verified facts:
   reaches `main` only via a merged PR (branch → commit → push → PR → user merge).
 - Work happens inline on the current task branch (named with the active plan), **one task at a time**.
 - Conventional commits (`feat:`/`fix:`/`docs:`/`test:`/…, imperative, ≤ 72-char subject). Task commits use **the commit message pinned in the plan**. Between tasks: `docs: checkpoint — Task N (...) done, next is Task N+1`.
-- Update `PROGRESS.md` / `DEVIATIONS.md` when facts or deviations change. **No per-task history in files, no plan-slice copies:** task state is beads; `git log --oneline` and the plan file are the archive. Deviations are append-only in `DEVIATIONS.md` (pre-v0.1.2 items 1–66 frozen in `docs/superpowers/deviations-archive-v0.1.0.md`).
+- Update `PROGRESS.md` / `DEVIATIONS.md` when facts or deviations change. **No per-task history in files, no plan-slice copies:** task state is beads; `git log --oneline` and the plan file are the archive. Deviations are append-only in `DEVIATIONS.md` (pre-v0.1.2 items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 - **Tags ONLY with explicit user go-ahead.** Versioning: **semantic versioning** — `MAJOR.MINOR.PATCH`, MAJOR = breaking changes, MINOR = new features, PATCH = fixes.
 
-## Superpowers workflow (required)
+## Agent skills
 
-Entries live under `superpowers:` skills; invoke a skill **before** acting when it applies — not as a formality.
+### Issue tracker
 
-| Situation | Skill |
-|---|---|
-| Any new conversation | `using-superpowers` — establishes skill usage; check for skills before ANY response or action |
-| New design requirement, behavior change, or "build X" | `brainstorming` — classify spike / bounded / architectural; **approval gate before any implementation** |
-| Executing the plan, task-by-task | `executing-plans` or `subagent-driven-development` (recommended) — **strict 5-step TDD per plan task**: (1) write failing test → (2) confirm FAIL → (3) minimal implementation → (4) `go vet ./... && go test ./...` green → (5) commit with the plan's message |
-| Writing any implementation code | `test-driven-development` — failing test first, always |
-| Bug, crash, deadlock, unexpected behavior | `systematic-debugging` — root cause before proposing a fix |
-| Before claiming "done / fixed / passing", before committing | `verification-before-completion` — run the gate, read the output, then claim |
-| Committing changes | `git-commit` — conventional message from the actual diff |
-| Milestone finished / before merge | `requesting-code-review` — and `receiving-code-review` when feedback arrives |
-| A new spec needs an implementation plan | `writing-plans` — specs → `docs/superpowers/specs/`, plans → `docs/superpowers/plans/`, progress → `docs/superpowers/PROGRESS.md` |
-| 2+ independent tasks with no shared state | `dispatching-parallel-agents` — at most two subagents in flight at once (core principle 7) |
-| Feature work needing workspace isolation | `using-git-worktrees` |
-| Implementation complete, deciding integration | `finishing-a-development-branch` |
+Issues live in beads (`bd` CLI / beads MCP) — local Dolt-backed store. See `docs/agents/issue-tracker.md`.
 
-- **One subagent per bead (preferred workflow):** execute each bead in a freshly
-  spawned subagent — at most two beads in flight at once (core principle 7); if
-  the root is `YOLO`, the subagent must be `YOLO` too (core principle 8). The root session only plans,
-  dispatches, and reviews. A bead done inline triggers the compaction discipline below.
-- **Subagent thinking level:** dispatch bead subagents with `thinking=medium` —
-  the dispatch prompt states the requirement so the subagent calibrates its
-  reasoning effort accordingly (medium depth, not maximum, not minimal).
-- **Compaction discipline:** after finishing each task/bead that was not delegated to a
-  subagent, compact the session (opencode: `/compact`) before starting the next task —
-  inline work accumulates root context. Work delegated to a subagent is exempt.
+### Triage labels
+
+Five canonical roles, label strings equal to role names. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` + `docs/adr/` at the repo root, created lazily. See `docs/agents/domain.md`.
 
 ## Golang skills (15, in `.agents/skills/`, hash-locked in `skills-lock.json`)
 
@@ -222,8 +206,8 @@ Default section order:
 ## Child DOX Index
 
 - `internal/AGENTS.md` — core packages: package map, layering, pinned text, in-code zero telemetry (children: `internal/protocol`, `internal/tui`)
-- `docs/superpowers/AGENTS.md` — process memory: verified facts (PROGRESS.md), deviation audit (DEVIATIONS.md), 0.3.0 work list (DEFERRED.md), plans/specs/reviews layout
-- Root-owned files: `README.md`, `LICENSE`, `go.mod`, `justfile`, `.golangci.yml`, `.gitignore`, `skills-lock.json`, `cmd/`, `scripts/`, `.agents/skills/` (hash-locked golang skills — do not edit; `.agents/skills/beads/` is bd-managed), and root-level project documentation.
+- `AGENTS.md` (process memory) — verified facts (PROGRESS.md), deviation audit (DEVIATIONS.md), 0.3.0 work list (DEFERRED.md), plans/specs/reviews layout
+- Root-owned files: `README.md`, `LICENSE`, `go.mod`, `justfile`, `.golangci.yml`, `.gitignore`, `skills-lock.json`, `cmd/`, `scripts/`, `.agents/skills/` (hash-locked golang skills — do not edit; `.agents/skills/beads/` is bd-managed), `docs/agents/` (engineering-skill config), and root-level project documentation.
 
 
 
