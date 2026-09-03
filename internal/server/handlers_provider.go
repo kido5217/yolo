@@ -2,7 +2,7 @@ package server
 
 import (
 	"net/http"
-	"sort"
+	"slices"
 
 	"github.com/kido5217/yolo/internal/auth"
 	"github.com/kido5217/yolo/internal/protocol"
@@ -39,7 +39,7 @@ func (s *Server) providerEntries(dir string) ([]protocol.Provider, error) {
 			ids = append(ids, id)
 		}
 	}
-	sort.Strings(ids)
+	slices.Sort(ids)
 	for _, id := range ids {
 		p := provider.FromConfig(id, cfg.Provider[id])
 		st, _ := s.authState(id, p.Auth.RequiresKey, store, cfg)
@@ -148,7 +148,7 @@ func (s *Server) handleAuthPut(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Key string `json:"key"`
 	}
-	if err := decode(r, &body); err != nil || body.Key == "" {
+	if err := decode(w, r, &body); err != nil || body.Key == "" {
 		envelope(w, http.StatusBadRequest, "invalid key", nil)
 		return
 	}

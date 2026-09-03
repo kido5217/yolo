@@ -117,6 +117,40 @@ func TestConfigGetPatchRoundtrip(t *testing.T) {
 	}
 }
 
+// TestConfigFilesAreOwnerOnly pins that yolo.jsonc lands 0600 (not the
+// default 0644): the config may carry provider apiKeys, so it follows the
+// auth.json secret-file convention (auth.SaveTo: 0700 dir / 0600 file),
+// including re-writes over a pre-existing 0644 file.
+func TestConfigFilesAreOwnerOnly(t *testing.T) {
+	t.Parallel()
+	s := testutil.Boot(t)
+	d := t.TempDir()
+	// pre-existing world-readable file: the re-write must normalize it
+	testutil.WriteCfg(t, d, `{"model":"kido/old"}`)
+	resp, b := testutil.Req(t, s, "PATCH", "/config", d, `{"model": "kido/m"}`)
+	if resp.StatusCode != 200 {
+		t.Fatalf("patch: %d %s", resp.StatusCode, b)
+	}
+	st, err := os.Stat(filepath.Join(d, "yolo.jsonc"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := st.Mode().Perm(); got != 0o600 {
+		t.Fatalf("project yolo.jsonc mode = %o, want 600", got)
+	}
+	resp, b = testutil.Req(t, s, "PATCH", "/global/config", "", `{"model": "kido/m"}`)
+	if resp.StatusCode != 200 {
+		t.Fatalf("global patch: %d %s", resp.StatusCode, b)
+	}
+	st, err = os.Stat(filepath.Join(s.Home, "yolo", "default", "yolo.jsonc"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := st.Mode().Perm(); got != 0o600 {
+		t.Fatalf("global yolo.jsonc mode = %o, want 600", got)
+	}
+}
+
 func TestGlobalConfig(t *testing.T) {
 	t.Parallel()
 	s := testutil.Boot(t)

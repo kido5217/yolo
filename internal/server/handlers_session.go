@@ -125,7 +125,7 @@ func (s *Server) handleSessionCreate(w http.ResponseWriter, r *http.Request) {
 		Agent string `json:"agent"`
 		Model string `json:"model"`
 	}
-	if err := decode(r, &in); err != nil {
+	if err := decode(w, r, &in); err != nil {
 		envelope(w, http.StatusBadRequest, "invalid body", nil)
 		return
 	}
@@ -163,7 +163,7 @@ func (s *Server) handleSessionPatch(w http.ResponseWriter, r *http.Request) {
 		Model *string `json:"model"`
 		Time  *int64  `json:"time"`
 	}
-	if err := decode(r, &in); err != nil {
+	if err := decode(w, r, &in); err != nil {
 		envelope(w, http.StatusBadRequest, "invalid body", nil)
 		return
 	}
@@ -270,7 +270,7 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Text string `json:"text"`
 	}
-	if err := decode(r, &in); err != nil {
+	if err := decode(w, r, &in); err != nil {
 		envelope(w, http.StatusBadRequest, "invalid body", nil)
 		return
 	}
@@ -311,11 +311,37 @@ func (s *Server) handleAbort(w http.ResponseWriter, r *http.Request) {
 	}
 	aborted := s.Engine.Abort(row.ID)
 	// settle until the turn reports idle so status reads agree right away
-	deadline := time.Now().Add(2 * time.Second)
-	for s.Engine.Status(row.ID) != protocol.SessionStatusIdle && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
+	// (only when a running turn was aborted; an idle session publishes no
+	// idle event and would stall the wait to its deadline)
+	if aborted {
+		s.settleIdle(r, row.ID)
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"aborted": aborted})
+}
+
+// settleIdle waits (bounded to 2 s) for the session to report idle. A
+// started turn always publishes an idle session.status on its deferred exit,
+// so the wait is event-driven on the bus instead of a status poll; the
+// per-iteration status re-check covers the idle published before the
+// subscription. A client disconnect ends the wait early.
+func (s *Server) settleIdle(r *http.Request, sessionID string) {
+	events, done := s.Bus.Subscribe()
+	defer done()
+	deadline := time.After(2 * time.Second)
+	for s.Engine.Status(sessionID) != protocol.SessionStatusIdle {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-deadline:
+			return
+		case _, ok := <-events:
+			if !ok {
+				// the bus dropped this subscriber (overflow): the idle may be
+				// unobservable — degrade to a bounded poll until the deadline
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+	}
 }
 
 func (s *Server) handleSessionStatus(w http.ResponseWriter, r *http.Request) {
@@ -343,7 +369,7 @@ func (s *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Command string `json:"command"`
 	}
-	if err := decode(r, &in); err != nil {
+	if err := decode(w, r, &in); err != nil {
 		envelope(w, http.StatusBadRequest, "invalid body", nil)
 		return
 	}

@@ -1,7 +1,6 @@
 package server
 
 import (
-	"encoding/json"
 	"net/http"
 	"runtime/debug"
 
@@ -26,9 +25,7 @@ func recoverMiddleware(logger *log.Logger, next http.Handler) http.Handler {
 
 // envelope writes the wire error shape: {"error":{"message":...,"data"?}}.
 func envelope(w http.ResponseWriter, code int, msg string, data any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	writeJSON(w, code, map[string]any{
 		"error": protocol.Error{Message: msg, Data: data},
 	})
 }
