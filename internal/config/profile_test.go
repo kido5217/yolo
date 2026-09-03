@@ -558,6 +558,55 @@ func TestCopy(t *testing.T) {
 	})
 }
 
+// TestProfileConfigWritesAre0600 pins the secret-safe write mode of the
+// profile config writers: yolo.jsonc is written 0600 (and upgraded from a
+// pre-existing 0644) because the config may carry provider API keys.
+func TestProfileConfigWritesAre0600(t *testing.T) {
+	tests := []struct {
+		name string
+		mk   func(t *testing.T, root string) string // returns the profile id owning the written yolo.jsonc
+	}{
+		{"add", func(t *testing.T, root string) string {
+			p, err := config.Add(root, "work", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			return p.ID
+		}},
+		{"copy", func(t *testing.T, root string) string {
+			seedProfile(t, root, "11111111", map[string]string{"yolo.jsonc": `{"model":"kido/q"}`})
+			p, err := config.Copy(root, "11111111", "work-copy", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			return p.ID
+		}},
+		{"edit upgrades a pre-existing 0644 file", func(t *testing.T, root string) string {
+			seedProfile(t, root, "22222222", map[string]string{"yolo.jsonc": `{"model":"kido/q"}`})
+			if err := os.Chmod(filepath.Join(root, "22222222", "yolo.jsonc"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := config.Edit(root, "22222222", "work-edit", "d", true, true); err != nil {
+				t.Fatal(err)
+			}
+			return "22222222"
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			id := tc.mk(t, root)
+			fi, err := os.Stat(filepath.Join(root, id, "yolo.jsonc"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := fi.Mode().Perm(); got != 0o600 {
+				t.Fatalf("yolo.jsonc mode = %o, want 600 (secrets may live here)", got)
+			}
+		})
+	}
+}
+
 func TestProfileEdit(t *testing.T) {
 	tests := []struct {
 		name     string

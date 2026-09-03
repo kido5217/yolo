@@ -237,9 +237,12 @@ func needsQuote(s string) bool {
 	return strings.ContainsAny(s, " \t\n\r\"\\")
 }
 
+// escapeReplacer is built once: escape runs on every quoted value (the
+// handler is on the log hot path) and NewReplacer allocates.
+var escapeReplacer = strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`, "\r", `\r`, "\t", `\t`)
+
 func escape(s string) string {
-	r := strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`, "\r", `\r`, "\t", `\t`)
-	return r.Replace(s)
+	return escapeReplacer.Replace(s)
 }
 
 // Debug logs at DEBUG level.

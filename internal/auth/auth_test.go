@@ -9,15 +9,21 @@ import (
 )
 
 func TestEnvName(t *testing.T) {
-	cases := map[string]string{
-		"opencode": "OPENCODE_API_KEY",
-		"kido":     "KIDO_API_KEY",
-		"myprov":   "MYPROV_API_KEY",
+	cases := []struct {
+		provider, want string
+	}{
+		{"opencode", "OPENCODE_API_KEY"},
+		{"kido", "KIDO_API_KEY"},
+		{"myprov", "MYPROV_API_KEY"},
+		{"my-prov", "MY_PROV_API_KEY"}, // non-alphanumerics map to _
+		{"a.b", "A_B_API_KEY"},         // dots map to _ too
 	}
-	for p, want := range cases {
-		if got := auth.EnvName(p); got != want {
-			t.Fatalf("EnvName(%q) = %q, want %q", p, got, want)
-		}
+	for _, tc := range cases {
+		t.Run(tc.provider, func(t *testing.T) {
+			if got := auth.EnvName(tc.provider); got != tc.want {
+				t.Fatalf("EnvName(%q) = %q, want %q", tc.provider, got, tc.want)
+			}
+		})
 	}
 }
 

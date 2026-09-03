@@ -212,7 +212,8 @@ func Resolve(root, ref string) (string, error) {
 
 // Add creates a new profile with an auto-generated id. name and description
 // (both optional) are stored in the new profile's yolo.jsonc "profile"
-// element; a duplicate effective name is ErrNameTaken.
+// element (mode 0600 — the config may carry provider API keys); a
+// duplicate effective name is ErrNameTaken.
 func Add(root, name, description string) (Profile, error) {
 	name = strings.TrimSpace(name)
 	description = strings.TrimSpace(description)
@@ -239,7 +240,13 @@ func Add(root, name, description string) (Profile, error) {
 		if err != nil {
 			return Profile{}, err
 		}
-		if err := os.WriteFile(filepath.Join(dir, yoloFileJSONC), append(b, '\n'), 0o644); err != nil {
+		p := filepath.Join(dir, yoloFileJSONC)
+		if err := os.WriteFile(p, append(b, '\n'), 0o600); err != nil {
+			return Profile{}, err
+		}
+		// 0600: the config may carry provider API keys; the explicit
+		// Chmod also upgrades a pre-existing 0644 file.
+		if err := os.Chmod(p, 0o600); err != nil {
 			return Profile{}, err
 		}
 	}
@@ -285,7 +292,8 @@ func Remove(root, id string) error {
 // (including the source's). description, when set, overrides the source's
 // description; otherwise the source's description is carried over. The
 // destination config is the source's merged config rewritten as a single
-// yolo.jsonc (comment loss, same as SaveGlobal).
+// yolo.jsonc (comment loss, same as SaveGlobal; mode 0600 — the config may
+// carry provider API keys).
 func Copy(root, srcID, name, description string) (Profile, error) {
 	name = strings.TrimSpace(name)
 	description = strings.TrimSpace(description)
@@ -320,7 +328,13 @@ func Copy(root, srcID, name, description string) (Profile, error) {
 	if err != nil {
 		return Profile{}, err
 	}
-	if err := os.WriteFile(filepath.Join(dir, yoloFileJSONC), append(b, '\n'), 0o644); err != nil {
+	p := filepath.Join(dir, yoloFileJSONC)
+	if err := os.WriteFile(p, append(b, '\n'), 0o600); err != nil {
+		return Profile{}, err
+	}
+	// 0600: the config may carry provider API keys; the explicit Chmod
+	// also upgrades a pre-existing 0644 file.
+	if err := os.Chmod(p, 0o600); err != nil {
 		return Profile{}, err
 	}
 	return Profile{ID: id, Name: name, Description: desc}, nil
@@ -332,8 +346,9 @@ func Copy(root, srcID, name, description string) (Profile, error) {
 // a successful no-op; a name matching another profile's effective name is
 // ErrNameTaken. When the resulting element has both fields empty, the
 // "profile" element is dropped from the config. The config is rewritten as
-// a single yolo.jsonc (same write pattern as Copy); the id (directory name)
-// and the active marker are never touched.
+// a single yolo.jsonc (same write pattern as Copy, mode 0600 — the config
+// may carry provider API keys); the id (directory name) and the active
+// marker are never touched.
 func Edit(root, id, name, description string, hasName, hasDesc bool) (Profile, error) {
 	if err := checkProfileDir(root, id); err != nil {
 		return Profile{}, err
@@ -368,7 +383,13 @@ func Edit(root, id, name, description string, hasName, hasDesc bool) (Profile, e
 	if err != nil {
 		return Profile{}, err
 	}
-	if err := os.WriteFile(filepath.Join(root, id, yoloFileJSONC), append(b, '\n'), 0o644); err != nil {
+	p := filepath.Join(root, id, yoloFileJSONC)
+	if err := os.WriteFile(p, append(b, '\n'), 0o600); err != nil {
+		return Profile{}, err
+	}
+	// 0600: the config may carry provider API keys; the explicit Chmod
+	// also upgrades a pre-existing 0644 file.
+	if err := os.Chmod(p, 0o600); err != nil {
 		return Profile{}, err
 	}
 	effective := id

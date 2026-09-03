@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 )
 
 // PartRow is one stored part; StateJSON per PartToProtocol/ProtocolToPart.
@@ -60,6 +61,40 @@ func (d *DB) listPartsBy(ctx context.Context, messageID, typ string) ([]PartRow,
 		args = append(args, typ)
 	}
 	q += ` ORDER BY time_created ASC, rowid ASC`
+	rows, err := d.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []PartRow{}
+	for rows.Next() {
+		var r PartRow
+		var tool sql.NullString
+		if err := rows.Scan(&r.ID, &r.MessageID, &r.SessionID, &r.Type, &tool, &r.StateJSON, &r.TimeCreated); err != nil {
+			return nil, err
+		}
+		r.Tool = tool.String
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// ListPartsByMessageIDs fetches the parts of every given message in one
+// parameterized query (batched N+1 replacement for per-message ListParts
+// calls). The global order is message_id ASC, then time_created ASC,
+// rowid ASC — so each message's parts come back earliest first, exactly
+// ListParts' per-message order; unknown ids simply contribute no rows.
+// An empty input returns an empty slice, not an error.
+func (d *DB) ListPartsByMessageIDs(ctx context.Context, messageIDs []string) ([]PartRow, error) {
+	if len(messageIDs) == 0 {
+		return []PartRow{}, nil
+	}
+	q := `SELECT id, message_id, session_id, type, tool, state_json, time_created FROM part WHERE message_id IN (` +
+		strings.Repeat(`?,`, len(messageIDs)-1) + `?) ORDER BY message_id ASC, time_created ASC, rowid ASC`
+	args := make([]any, len(messageIDs))
+	for i, id := range messageIDs {
+		args[i] = id
+	}
 	rows, err := d.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err

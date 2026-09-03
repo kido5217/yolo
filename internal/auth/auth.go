@@ -116,7 +116,12 @@ func EnvName(providerID string) string {
 }
 
 // ResolveKeyWithSource is ResolveKey plus the winning source
-// ("env" | "auth.json" | "config"); never the key itself in logs.
+// ("env" | "auth.json" | "config"); never the key itself in logs. A
+// read/parse failure of auth.json is a deliberate degradation to the next
+// source (config), not a hard error: key resolution must never fail the
+// turn over a corrupt store, and the fallback still yields a key. (The
+// package has no logger by design; surfacing the error would be an API
+// change for the two call sites.)
 func ResolveKeyWithSource(providerID string, cfg *protocol.Config, env func(string) (string, bool)) (string, string, bool) {
 	if k, ok := env(EnvName(providerID)); ok && k != "" {
 		return k, "env", true

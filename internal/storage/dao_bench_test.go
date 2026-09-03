@@ -63,7 +63,7 @@ func BenchmarkProtocolToPart(b *testing.B) {
 			var sink storage.PartRow
 			b.ReportAllocs()
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				sink = benchRow(b, c.p)
 			}
 			_ = sink
@@ -96,7 +96,7 @@ func BenchmarkUpsertPart(b *testing.B) {
 			}
 			b.ReportAllocs()
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				if err := db.UpsertPart(b.Context(), row); err != nil {
 					b.Fatal(err)
 				}
@@ -110,9 +110,11 @@ func BenchmarkUpsertPart(b *testing.B) {
 		}
 		b.ReportAllocs()
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		i := 0
+		for b.Loop() {
 			r := row
 			r.ID = fmt.Sprintf("prt_bench_%04d", i&1023)
+			i++
 			if err := db.UpsertPart(b.Context(), r); err != nil {
 				b.Fatal(err)
 			}
@@ -137,7 +139,7 @@ func BenchmarkPartToProtocol(b *testing.B) {
 			var sink protocol.Part
 			b.ReportAllocs()
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				p, err := storage.PartToProtocol(c.row)
 				if err != nil {
 					b.Fatal(err)

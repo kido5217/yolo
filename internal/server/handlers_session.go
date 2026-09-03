@@ -240,15 +240,28 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, http.StatusInternalServerError, "list messages", err)
 		return
 	}
+	// One batched query for every message's parts (was: one ListParts call
+	// per message row — N+1 against local SQLite). The query orders by
+	// message_id, time_created, rowid, so each message's slice is
+	// earliest-first, byte-identical to the per-message ListParts order.
+	messageIDs := make([]string, len(rows))
+	for i, m := range rows {
+		messageIDs[i] = m.ID
+	}
+	partRows, err := s.DB.ListPartsByMessageIDs(r.Context(), messageIDs)
+	if err != nil {
+		s.fail(w, http.StatusInternalServerError, "list parts", err)
+		return
+	}
+	partsByMessage := make(map[string][]storage.PartRow, len(rows))
+	for _, p := range partRows {
+		partsByMessage[p.MessageID] = append(partsByMessage[p.MessageID], p)
+	}
 	out := make([]protocol.MessageWithParts, 0, len(rows))
 	for _, m := range rows {
-		partRows, err := s.DB.ListParts(r.Context(), m.ID)
-		if err != nil {
-			s.fail(w, http.StatusInternalServerError, "list parts", err)
-			return
-		}
-		mp := protocol.MessageWithParts{Info: messageWire(m), Parts: make([]protocol.Part, 0, len(partRows))}
-		for _, p := range partRows {
+		msgParts := partsByMessage[m.ID]
+		mp := protocol.MessageWithParts{Info: messageWire(m), Parts: make([]protocol.Part, 0, len(msgParts))}
+		for _, p := range msgParts {
 			wire, err := storage.PartToProtocol(p)
 			if err != nil {
 				s.fail(w, http.StatusInternalServerError, "decode part", err)

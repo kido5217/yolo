@@ -158,8 +158,9 @@ func LoadGlobal(globalDir string) (*protocol.Config, error) {
 
 // SaveGlobal merges cfg over the existing global config in globalDir and
 // rewrites <globalDir>/yolo.jsonc (highest-precedence global file; created
-// if absent). JSONC comments are NOT preserved (parse -> merge ->
-// MarshalIndent 2-space; flagged deviation, TUI never relies on comments).
+// if absent, mode 0600 — the config may carry provider API keys). JSONC
+// comments are NOT preserved (parse -> merge -> MarshalIndent 2-space;
+// flagged deviation, TUI never relies on comments).
 func SaveGlobal(globalDir string, cfg *protocol.Config) error {
 	cur, err := LoadGlobal(globalDir)
 	if err != nil {
@@ -181,7 +182,14 @@ func SaveGlobal(globalDir string, cfg *protocol.Config) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(globalDir, yoloFileJSONC), b, 0o644)
+	p := filepath.Join(globalDir, yoloFileJSONC)
+	if err := os.WriteFile(p, b, 0o600); err != nil {
+		return err
+	}
+	// Chmod upgrades a pre-existing file written before the 0600 mode;
+	// WriteFile only applies the mode at creation (same pattern as
+	// auth.SaveTo).
+	return os.Chmod(p, 0o600)
 }
 
 func cfgFromMap(merged map[string]any) (*protocol.Config, error) {
@@ -252,7 +260,12 @@ func (l Loader) LoadAt(globalDir, startDir string) (*protocol.Config, error) {
 		merged = Merge(merged, m)
 	}
 
-	merged = Substitute(merged, l.EnvVal).(map[string]any)
+	// A map in is a map out; the ok check keeps the assertion safe.
+	substituted := Substitute(merged, l.EnvVal)
+	merged, ok := substituted.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("env substitution: unexpected result type %T", substituted)
+	}
 
 	b, err := json.Marshal(merged)
 	if err != nil {
