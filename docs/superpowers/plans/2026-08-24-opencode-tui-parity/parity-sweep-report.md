@@ -1,6 +1,6 @@
 # Parity sweep report (S8.3)
 
-- yolo HEAD: `badbffcba51585b319575dda652f218c80d9cb8d`
+- yolo HEAD: `cba350b466d9115224e5714ecbc8149f4ed84009`
 - fixture manifest sha256: `9cc0a1d44f738c50c69980f8e42348fcc30e04bdc1214b92e8453e68b163a349`
 - npm opencode-ai: 1.18.18
 

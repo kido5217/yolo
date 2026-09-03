@@ -9,7 +9,6 @@
 package tui
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -107,8 +106,12 @@ func paritySurfaces() []paritySurface {
 			turn(textTurn), parityStep{text: "/", cond: hasLine("/help"), d: 10 * time.Second})},
 		{name: "prompt-mention", width: 80, height: 24, turn: "text", steps: append(
 			turn(textTurn), parityStep{text: "@par", cond: hasLine("parity-a.txt"), d: 10 * time.Second})},
+		// The ctrl+c is fire-and-forget: the alt-screen exit byte only
+		// reaches the teatest stream during the harness teardown (after
+		// tm.Quit/WaitFinished), so it cannot be a step terminal condition
+		// — the settle is the shared 2 s appendPump + the post-Quit drain.
 		{name: "epilogue", width: 80, height: 24, turn: "text", steps: append(
-			turn(textTurn), parityStep{keys: []tea.KeyPressMsg{pressCtrlC()}, cond: hasAltExit(), d: 5 * time.Second})},
+			turn(textTurn), parityStep{keys: []tea.KeyPressMsg{pressCtrlC()}})},
 	}
 }
 
@@ -256,17 +259,6 @@ func appendPump(t *testing.T, tm *teatest.TestModel, raw []byte, d time.Duration
 func drain(tm *teatest.TestModel) []byte {
 	b, _ := io.ReadAll(tm.Output())
 	return b
-}
-
-// hasAltExit is the epilogue step's completion condition: the alt-screen
-// exit byte has been written (the exit sequence terminates the yolo stream
-// — dev 260), so the step's deadline actually bounds the wait for exit
-// instead of passing unobserved (the always-true cond made the 5 s
-// deadline dead).
-func hasAltExit() func([]byte) bool {
-	return func(raw []byte) bool {
-		return bytes.Contains(raw, []byte("\x1b[?1049l"))
-	}
 }
 
 // dumpSurface boots ONE surface, drives its key script, and writes the
