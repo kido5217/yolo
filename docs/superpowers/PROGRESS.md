@@ -5,6 +5,23 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
+**Status (2026-09-04):** v0.6.0 map (epic `yolo-o75`) complete — the P4
+backlog ships as minor v0.6.0 on top of v0.5.1 (`9f4c340`): cobra v1.10.2
+command tree (X1, PR #37 — root TUI / `serve` / `auth` / `profile` /
+`version` + static `completion`; the dep-policy checklist wording is now
+"MIT/BSD/Apache-2.0"), `--output json` on the data-reporting leaves (X2,
+PR #39 — `auth list` / `profile list` / `version`, bare 2-space-indented
+JSON with the D2 shapes pinned byte-for-byte, exit 2 on unsupported
+commands checked before any side effect), goleak v1.3.0 `VerifyTestMain` in
+session/server/bus (X3, PR #38), and the `CleanOutputDir` startup-sweep
+error logged (X4, PR #36). Release-tail diff-scoped re-review
+(Standards + Spec axes over `9f4c340..main`): no hard standard violations,
+every D1/D2 ruling implemented and test-pinned; one sweep finding (the
+spec-literal doubled "yolo" prefix in the TUI-root `--output` error
+message) is a HITL ticket `yolo-sti` pending a v0.6.1 wording call, and the
+single-dash normalization's dash-leading positional-arg drift is logged as
+deviation 269. Gate green on main.
+
 **Status (2026-09-03):** v0.5.1 skill-review map (epic `yolo-3r8`) complete —
 the whole codebase under `cmd/` + `internal/` is reviewed against the 15
 hash-pinned golang skills and every finding fixed, shipping as patch v0.5.1
