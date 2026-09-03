@@ -43,7 +43,7 @@ func resolveYoloDark(t *testing.T) Theme {
 
 // TestAllThemesHaveMarkdownSyntaxTokens pins the token matrix: every
 // embedded theme × both modes resolves all 23 markdown*/syntax* tokens
-// (finding 5: no ThemeJson model change needed).
+// (finding 5: no ThemeJSON model change needed).
 func TestAllThemesHaveMarkdownSyntaxTokens(t *testing.T) {
 	all, err := AllThemes()
 	if err != nil {
@@ -51,15 +51,18 @@ func TestAllThemesHaveMarkdownSyntaxTokens(t *testing.T) {
 	}
 	for name, tj := range all {
 		for _, mode := range []string{"dark", "light"} {
-			r, err := ResolveTheme(tj, mode)
-			if err != nil {
-				t.Fatalf("%s/%s: %v", name, mode, err)
-			}
-			for _, tok := range append(append([]string{}, markdownTokens...), syntaxTokens...) {
-				if _, ok := r.Color(tok); !ok {
-					t.Errorf("%s/%s: missing token %s", name, mode, tok)
+			t.Run(name+"-"+mode, func(t *testing.T) {
+				t.Parallel()
+				r, err := ResolveTheme(tj, mode)
+				if err != nil {
+					t.Fatalf("%s/%s: %v", name, mode, err)
 				}
-			}
+				for _, tok := range append(append([]string{}, markdownTokens...), syntaxTokens...) {
+					if _, ok := r.Color(tok); !ok {
+						t.Errorf("%s/%s: missing token %s", name, mode, tok)
+					}
+				}
+			})
 		}
 	}
 }
@@ -68,6 +71,7 @@ func TestAllThemesHaveMarkdownSyntaxTokens(t *testing.T) {
 // (the yolo.dark goldens; the SGR quantization is pinned by the S1.3
 // teatest golden, the 24-bit hex here).
 func TestStyleConfigMapping(t *testing.T) {
+	t.Parallel()
 	cfg := resolveYoloDark(t).StyleConfig("markdownText", 77)
 	check := func(name string, got *string, want string) {
 		t.Helper()
@@ -124,6 +128,7 @@ func TestStyleConfigMapping(t *testing.T) {
 // TestStyleConfigReasoningBase pins the reasoning base token (S1.6 consumes
 // it): the Text style takes the base TOKEN NAME, not a hard-coded color.
 func TestStyleConfigReasoningBase(t *testing.T) {
+	t.Parallel()
 	cfg := resolveYoloDark(t).StyleConfig("textMuted", 77)
 	if cfg.Text.Color == nil || *cfg.Text.Color != "#808080" {
 		t.Errorf("reasoning base Text.Color = %v, want #808080", cfg.Text.Color)
@@ -133,6 +138,7 @@ func TestStyleConfigReasoningBase(t *testing.T) {
 // TestZeroThemeStyleConfigIsNilColors pins the S0.7 zero-Theme contract on
 // the markdown path: absent tokens → nil *string → glamour defaults.
 func TestZeroThemeStyleConfigIsNilColors(t *testing.T) {
+	t.Parallel()
 	var th Theme
 	cfg := th.StyleConfig("markdownText", 77)
 	if cfg.Text.Color != nil || cfg.Heading.Color != nil {
@@ -174,6 +180,7 @@ func TestTranscriptRendererRenders(t *testing.T) {
 // TestChromaMapping pins the syntax* → ansi.Chroma field map (finding: the
 // upstream getSyntaxRules scope table; yolo.dark hexes).
 func TestChromaMapping(t *testing.T) {
+	t.Parallel()
 	ch := resolveYoloDark(t).Chroma()
 	check := func(name string, p ansi.StylePrimitive, want string) {
 		t.Helper()
@@ -218,6 +225,7 @@ func TestChromaMapping(t *testing.T) {
 // bg*(1-α)) over the theme background, α = ThinkingOpacity (0.6 for
 // yolo dark; bg #0a0a0a).
 func TestSubtleChroma(t *testing.T) {
+	t.Parallel()
 	th := resolveYoloDark(t)
 	if th.R.ThinkingOpacity != 0.6 {
 		t.Fatalf("ThinkingOpacity = %v, want 0.6", th.R.ThinkingOpacity)
@@ -298,6 +306,7 @@ func TestChromaSlotWorkaround(t *testing.T) {
 
 // TestStyleConfigGFM pins the S1.5 GFM trio (yolo.dark).
 func TestStyleConfigGFM(t *testing.T) {
+	t.Parallel()
 	cfg := resolveYoloDark(t).StyleConfig("markdownText", 77)
 	if cfg.Strikethrough.CrossedOut == nil || !*cfg.Strikethrough.CrossedOut {
 		t.Error("Strikethrough.CrossedOut = false/nil, want true")

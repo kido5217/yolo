@@ -18,6 +18,7 @@ var wantThemeNames = []string{
 }
 
 func TestAllThemesEmbeds33UpstreamThemes(t *testing.T) {
+	t.Parallel()
 	themes, err := AllThemes()
 	if err != nil {
 		t.Fatalf("AllThemes: %v", err)
@@ -33,6 +34,7 @@ func TestAllThemesEmbeds33UpstreamThemes(t *testing.T) {
 }
 
 func TestAllThemesCached(t *testing.T) {
+	t.Parallel()
 	first, err := AllThemes()
 	if err != nil {
 		t.Fatalf("AllThemes: %v", err)
@@ -43,12 +45,14 @@ func TestAllThemesCached(t *testing.T) {
 			t.Fatalf("AllThemes (call %d): %v", i+2, err)
 		}
 		if reflect.ValueOf(got).Pointer() != reflect.ValueOf(first).Pointer() {
-			t.Fatalf("AllThemes (call %d) returned a different map; the embedded assets are immutable and the parsed map must be cached", i+2)
+			t.Fatalf("AllThemes (call %d) returned a different map; the embedded assets are immutable and the parsed map must be cached",
+				i+2)
 		}
 	}
 }
 
 func TestParseOpencodeThemeShape(t *testing.T) {
+	t.Parallel()
 	themes, err := AllThemes()
 	if err != nil {
 		t.Fatalf("AllThemes: %v", err)
@@ -83,8 +87,11 @@ func TestIsTheme(t *testing.T) {
 		{"ok", map[string]any{"theme": map[string]any{"primary": "#fff"}}, true},
 	}
 	for _, c := range cases {
-		if got := IsTheme(c.v); got != c.want {
-			t.Errorf("IsTheme(%s) = %v, want %v", c.name, got, c.want)
-		}
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			if got := IsTheme(c.v); got != c.want {
+				t.Errorf("IsTheme(%s) = %v, want %v", c.name, got, c.want)
+			}
+		})
 	}
 }

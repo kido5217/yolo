@@ -34,6 +34,7 @@ func primaryOf(v any) string {
 // the filesystem root (the /.yolo entry); no dedupe. ThemeDirs is a pure
 // string walk (no FS access), so a fixed absolute path is fully hermetic.
 func TestThemeDirs(t *testing.T) {
+	t.Parallel()
 	got := ThemeDirs("/home/u/.config/yolo", "/home/u/proj/pkg")
 	want := []string{
 		"/home/u/.config/yolo",
@@ -58,6 +59,7 @@ func TestThemeDirs(t *testing.T) {
 // returned raw (the IsTheme filter is the caller's job — theme.tsx:137-140);
 // non-.json files ignored; missing themes dirs skipped without error.
 func TestDiscover(t *testing.T) {
+	t.Parallel()
 	global := t.TempDir()
 	base := t.TempDir()
 	mid := filepath.Join(base, "mid")
@@ -108,6 +110,7 @@ func TestDiscover(t *testing.T) {
 // discover (upstream JSON.parse throws; the caller's catch sets active to
 // "yolo" — S0.7). Never a per-file skip.
 func TestDiscoverCorruptFileIsHardError(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	writeThemeFile(t, dir, "good.json", `{"theme":{"primary":"#ffffff"}}`)
 	writeThemeFile(t, dir, "bad.json", `{not json`)
@@ -119,6 +122,7 @@ func TestDiscoverCorruptFileIsHardError(t *testing.T) {
 // TestDiscoverNoThemesDirs: a missing <dir>/themes is skipped (upstream
 // Glob.scan yields nothing) — the common case on a clean machine.
 func TestDiscoverNoThemesDirs(t *testing.T) {
+	t.Parallel()
 	got, err := Discover([]string{t.TempDir(), t.TempDir()})
 	if err != nil {
 		t.Fatalf("Discover: %v", err)

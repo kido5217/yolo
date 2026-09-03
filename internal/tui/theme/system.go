@@ -23,7 +23,10 @@ func Tint(base, overlay Rgba, alpha float64) Rgba {
 
 // generateGrayScale is the port of upstream generateGrayScale
 // (theme/index.ts:471-523): 12 steps derived from the background luminance,
-// branch on luminance < 10 (dark) / > 245 (light).
+// branch on luminance < 10 (dark) / > 245 (light). The non-branch sides
+// divide by luminance: a pure-black background in light mode (luminance 0)
+// yields NaN, which converts to 0 grays — upstream parity, deliberately
+// not guarded (the branch pins are the S0 golden).
 func generateGrayScale(bg Rgba, isDark bool) [13]Rgba {
 	var grays [13]Rgba
 	luminance := 0.299*float64(bg.R) + 0.587*float64(bg.G) + 0.114*float64(bg.B)
@@ -82,10 +85,10 @@ func generateMutedTextColor(bg Rgba, isDark bool) Rgba {
 
 // GenerateSystem is the port of upstream generateSystem
 // (theme/index.ts:360-469): terminal palette + default fg/bg → generated
-// ThemeJson. Theme values are Rgba (ResolveTheme's Rgba branch), mirroring
+// ThemeJSON. Theme values are Rgba (ResolveTheme's Rgba branch), mirroring
 // upstream's RGBA-instance values; missing palette entries fall back to the
 // ANSI table, missing default bg/fg to palette[0]/palette[7].
-func GenerateSystem(colors TerminalColors, mode string) ThemeJson {
+func GenerateSystem(colors TerminalColors, mode string) ThemeJSON {
 	isDark := mode == "dark"
 	col := func(i int) Rgba {
 		if colors.Palette[i] != "" {
@@ -118,20 +121,24 @@ func GenerateSystem(colors TerminalColors, mode string) ThemeJson {
 	diffContextBg := grays[2]
 	diffAddedLineNumberBg := Tint(diffContextBg, ansiColors["green"], diffAlpha)
 	diffRemovedLineNumberBg := Tint(diffContextBg, ansiColors["red"], diffAlpha)
-	return ThemeJson{Theme: map[string]any{
+	return ThemeJSON{Theme: map[string]any{
 		"primary": ansiColors["cyan"], "secondary": ansiColors["magenta"], "accent": ansiColors["cyan"],
-		"error": ansiColors["red"], "warning": ansiColors["yellow"], "success": ansiColors["green"], "info": ansiColors["cyan"],
+		"error": ansiColors["red"], "warning": ansiColors["yellow"],
+		"success": ansiColors["green"], "info": ansiColors["cyan"],
 		"text": fg, "textMuted": textMuted, "selectedListItemText": bg,
 		"background": transparent, "backgroundPanel": grays[2], "backgroundElement": grays[3], "backgroundMenu": grays[3],
 		"borderSubtle": grays[6], "border": grays[7], "borderActive": grays[8],
-		"diffAdded": ansiColors["green"], "diffRemoved": ansiColors["red"], "diffContext": grays[7], "diffHunkHeader": grays[7],
+		"diffAdded": ansiColors["green"], "diffRemoved": ansiColors["red"],
+		"diffContext": grays[7], "diffHunkHeader": grays[7],
 		"diffHighlightAdded": ansiColors["greenBright"], "diffHighlightRemoved": ansiColors["redBright"],
-		"diffAddedBg": diffAddedBg, "diffRemovedBg": diffRemovedBg, "diffContextBg": diffContextBg, "diffLineNumber": textMuted,
+		"diffAddedBg": diffAddedBg, "diffRemovedBg": diffRemovedBg,
+		"diffContextBg": diffContextBg, "diffLineNumber": textMuted,
 		"diffAddedLineNumberBg": diffAddedLineNumberBg, "diffRemovedLineNumberBg": diffRemovedLineNumberBg,
 		"markdownText": fg, "markdownHeading": fg, "markdownLink": ansiColors["blue"], "markdownLinkText": ansiColors["cyan"],
 		"markdownCode": ansiColors["green"], "markdownBlockQuote": ansiColors["yellow"], "markdownEmph": ansiColors["yellow"],
 		"markdownStrong": fg, "markdownHorizontalRule": grays[7], "markdownListItem": ansiColors["blue"],
-		"markdownListEnumeration": ansiColors["cyan"], "markdownImage": ansiColors["blue"], "markdownImageText": ansiColors["cyan"],
+		"markdownListEnumeration": ansiColors["cyan"],
+		"markdownImage":           ansiColors["blue"], "markdownImageText": ansiColors["cyan"],
 		"markdownCodeBlock": fg,
 		"syntaxComment":     textMuted, "syntaxKeyword": ansiColors["magenta"], "syntaxFunction": ansiColors["blue"],
 		"syntaxVariable": fg, "syntaxString": ansiColors["green"], "syntaxNumber": ansiColors["yellow"],

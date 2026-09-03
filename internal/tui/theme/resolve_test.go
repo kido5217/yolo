@@ -2,6 +2,7 @@ package theme
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -19,15 +20,27 @@ func (e *goldenEntry) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
-	e.Colors = make(map[string]string)
+	e.Colors = make(map[string]string, len(raw))
 	for k, v := range raw {
 		switch k {
 		case "thinkingOpacity":
-			e.ThinkingOpacity = v.(float64)
+			f, ok := v.(float64)
+			if !ok {
+				return fmt.Errorf("golden %q: thinkingOpacity is %T, want number", k, v)
+			}
+			e.ThinkingOpacity = f
 		case "_hasSelectedListItemText":
-			e.HasSelectedListItemText = v.(bool)
+			b, ok := v.(bool)
+			if !ok {
+				return fmt.Errorf("golden %q: _hasSelectedListItemText is %T, want bool", k, v)
+			}
+			e.HasSelectedListItemText = b
 		default:
-			e.Colors[k] = v.(string)
+			s, ok := v.(string)
+			if !ok {
+				return fmt.Errorf("golden %q: color value is %T, want string", k, v)
+			}
+			e.Colors[k] = s
 		}
 	}
 	return nil
@@ -61,37 +74,41 @@ func TestResolveThemeGoldenMatrix(t *testing.T) {
 	for name, tj := range themes {
 		for _, mode := range []string{"dark", "light"} {
 			key := name + "." + mode
-			want, ok := golden[key]
-			if !ok {
-				t.Errorf("golden missing %s", key)
-				continue
-			}
-			got, err := ResolveTheme(tj, mode)
-			if err != nil {
-				t.Errorf("%s: %v", key, err)
-				continue
-			}
-			if got.ThinkingOpacity != want.ThinkingOpacity {
-				t.Errorf("%s: thinkingOpacity = %v, want %v", key, got.ThinkingOpacity, want.ThinkingOpacity)
-			}
-			if got.HasSelectedListItemText != want.HasSelectedListItemText {
-				t.Errorf("%s: _hasSelectedListItemText = %v, want %v", key, got.HasSelectedListItemText, want.HasSelectedListItemText)
-			}
-			for token, wantHex := range want.Colors {
-				c, ok := got.Colors[token]
+			t.Run(name+"-"+mode, func(t *testing.T) {
+				t.Parallel()
+				want, ok := golden[key]
 				if !ok {
-					t.Errorf("%s: token %s missing", key, token)
-					continue
+					t.Errorf("golden missing %s", key)
+					return
 				}
-				if c.Hex() != wantHex {
-					t.Errorf("%s: %s = %s, want %s", key, token, c.Hex(), wantHex)
+				got, err := ResolveTheme(tj, mode)
+				if err != nil {
+					t.Errorf("%s: %v", key, err)
+					return
 				}
-			}
-			for token := range got.Colors {
-				if _, ok := want.Colors[token]; !ok {
-					t.Errorf("%s: unexpected token %s", key, token)
+				if got.ThinkingOpacity != want.ThinkingOpacity {
+					t.Errorf("%s: thinkingOpacity = %v, want %v", key, got.ThinkingOpacity, want.ThinkingOpacity)
 				}
-			}
+				if got.HasSelectedListItemText != want.HasSelectedListItemText {
+					t.Errorf("%s: _hasSelectedListItemText = %v, want %v",
+						key, got.HasSelectedListItemText, want.HasSelectedListItemText)
+				}
+				for token, wantHex := range want.Colors {
+					c, ok := got.Colors[token]
+					if !ok {
+						t.Errorf("%s: token %s missing", key, token)
+						continue
+					}
+					if c.Hex() != wantHex {
+						t.Errorf("%s: %s = %s, want %s", key, token, c.Hex(), wantHex)
+					}
+				}
+				for token := range got.Colors {
+					if _, ok := want.Colors[token]; !ok {
+						t.Errorf("%s: unexpected token %s", key, token)
+					}
+				}
+			})
 		}
 	}
 }
@@ -101,7 +118,8 @@ func TestResolveThemeGoldenMatrix(t *testing.T) {
 // errors with the upstream message).
 func TestResolveEdgeCases(t *testing.T) {
 	t.Run("ansi-int", func(t *testing.T) {
-		tj := ThemeJson{Theme: map[string]any{"primary": float64(196), "background": "#000000"}}
+		t.Parallel()
+		tj := ThemeJSON{Theme: map[string]any{"primary": float64(196), "background": "#000000"}}
 		got, err := ResolveTheme(tj, "dark")
 		if err != nil {
 			t.Fatalf("resolve: %v", err)
@@ -111,6 +129,7 @@ func TestResolveEdgeCases(t *testing.T) {
 		}
 	})
 	t.Run("ansi-cube-and-ramp", func(t *testing.T) {
+		t.Parallel()
 		if got, want := AnsiToRgba(16), FromHex("#000000"); got != want {
 			t.Errorf("ansi 16 = %v, want %v", got, want)
 		}
@@ -128,7 +147,8 @@ func TestResolveEdgeCases(t *testing.T) {
 		}
 	})
 	t.Run("none", func(t *testing.T) {
-		tj := ThemeJson{Theme: map[string]any{"primary": "none", "background": "#000000"}}
+		t.Parallel()
+		tj := ThemeJSON{Theme: map[string]any{"primary": "none", "background": "#000000"}}
 		got, err := ResolveTheme(tj, "dark")
 		if err != nil {
 			t.Fatalf("resolve: %v", err)
@@ -138,20 +158,23 @@ func TestResolveEdgeCases(t *testing.T) {
 		}
 	})
 	t.Run("circular-ref", func(t *testing.T) {
-		tj := ThemeJson{Defs: map[string]any{"a": "b"}, Theme: map[string]any{"primary": "a", "background": "#000000"}}
+		t.Parallel()
+		tj := ThemeJSON{Defs: map[string]any{"a": "b"}, Theme: map[string]any{"primary": "a", "background": "#000000"}}
 		tj.Theme = map[string]any{"a": "b", "b": "a", "background": "#000000"}
 		if _, err := ResolveTheme(tj, "dark"); err == nil {
 			t.Fatal("circular ref must error")
 		}
 	})
 	t.Run("missing-ref", func(t *testing.T) {
-		tj := ThemeJson{Theme: map[string]any{"primary": "ghost", "background": "#000000"}}
+		t.Parallel()
+		tj := ThemeJSON{Theme: map[string]any{"primary": "ghost", "background": "#000000"}}
 		if _, err := ResolveTheme(tj, "dark"); err == nil {
 			t.Fatal("missing ref must error")
 		}
 	})
 	t.Run("selectedListItemText-fallback-to-background", func(t *testing.T) {
-		tj := ThemeJson{Theme: map[string]any{"background": "#112233"}}
+		t.Parallel()
+		tj := ThemeJSON{Theme: map[string]any{"background": "#112233"}}
 		got, err := ResolveTheme(tj, "dark")
 		if err != nil {
 			t.Fatalf("resolve: %v", err)
@@ -163,7 +186,8 @@ func TestResolveEdgeCases(t *testing.T) {
 			t.Errorf("selectedListItemText = %v, want %v (background)", got.Colors["selectedListItemText"], want)
 		}
 		if want := FromHex("#112233"); got.Colors["backgroundMenu"] != want {
-			t.Errorf("backgroundMenu = %v, want %v (backgroundElement fallback of absent element = background)", got.Colors["backgroundMenu"], want)
+			t.Errorf("backgroundMenu = %v, want %v (backgroundElement fallback of absent element = background)",
+				got.Colors["backgroundMenu"], want)
 		}
 	})
 }

@@ -9,6 +9,7 @@ import (
 )
 
 func TestKVGetSetAndNilDelete(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "kv.json")
 	kv, err := OpenKV(path)
 	if err != nil {
@@ -45,6 +46,7 @@ func TestKVGetSetAndNilDelete(t *testing.T) {
 }
 
 func TestKVMissingFileIsEmpty(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "kv.json")
 	kv, err := OpenKV(path)
 	if err != nil {
@@ -57,6 +59,7 @@ func TestKVMissingFileIsEmpty(t *testing.T) {
 }
 
 func TestKVCorruptFileIsLoggedAndEmpty(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "kv.json")
 	if err := os.WriteFile(path, []byte("{not json"), 0o644); err != nil {
 		t.Fatal(err)
@@ -76,6 +79,7 @@ func TestKVCorruptFileIsLoggedAndEmpty(t *testing.T) {
 }
 
 func TestKVRapidSetsFlushOrderedOnClose(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "deep", "nested", "kv.json")
 	kv, err := OpenKV(path)
 	if err != nil {
@@ -106,6 +110,7 @@ func TestKVRapidSetsFlushOrderedOnClose(t *testing.T) {
 }
 
 func TestKVReloadPersists(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "kv.json")
 	kv, err := OpenKV(path)
 	if err != nil {

@@ -18,8 +18,10 @@ import (
 // Response shapes (verbatim from @opentui/core 0.4.5 terminal-palette.ts:
 // OSC4_RESPONSE / OSC_SPECIAL_RESPONSE).
 var (
-	osc4Response       = regexp.MustCompile(`\x1b]4;(\d+);(?:(?:rgb:)([0-9a-fA-F]+)/([0-9a-fA-F]+)/([0-9a-fA-F]+)|#([0-9a-fA-F]{6}))(?:\x07|\x1b\\)`)
-	oscSpecialResponse = regexp.MustCompile(`\x1b](\d+);(?:(?:rgb:)([0-9a-fA-F]+)/([0-9a-fA-F]+)/([0-9a-fA-F]+)|#([0-9a-fA-F]{6}))(?:\x07|\x1b\\)`)
+	osc4Response = regexp.MustCompile(`\x1b]4;(\d+);` +
+		`(?:(?:rgb:)([0-9a-fA-F]+)/([0-9a-fA-F]+)/([0-9a-fA-F]+)|#([0-9a-fA-F]{6}))(?:\x07|\x1b\\)`)
+	oscSpecialResponse = regexp.MustCompile(`\x1b](\d+);` +
+		`(?:(?:rgb:)([0-9a-fA-F]+)/([0-9a-fA-F]+)/([0-9a-fA-F]+)|#([0-9a-fA-F]{6}))(?:\x07|\x1b\\)`)
 )
 
 // toHex8 is the port of toHex (terminal-palette.ts:10065): #hex6 verbatim
@@ -123,7 +125,11 @@ func newIdle(d time.Duration) chan struct{} {
 // the hard timeout, and the 8192/4096 buffer cap. in/out are injected; the
 // TTY preconditions are the caller's job (DetectStd). The caller must ensure
 // in eventually returns EOF or an error, otherwise its reader goroutine
-// lingers in the read.
+// lingers in the read. The probe and query loops stay in one function on
+// purpose: a strict port of the upstream detect state machine whose
+// observable behavior is pinned by the golden matrix + the idle/hard-timer
+// tests — splitting the loops into helpers is a dedicated-refactor item,
+// not a style pass.
 func DetectPalette(in io.Reader, out io.Writer, opts PaletteOptions) (TerminalColors, bool) {
 	opts.fill()
 	ch := make(chan readEvent, 8)
@@ -132,6 +138,10 @@ func DetectPalette(in io.Reader, out io.Writer, opts PaletteOptions) (TerminalCo
 	go readLoop(in, ch, quit)
 
 	var colors TerminalColors
+
+	// buffer is a string (not a strings.Builder) because the port's
+	// consumed-prefix drop (buffer = buffer[lastEnd:]) and the 8192→4096
+	// cap are string re-slices; a Builder cannot be re-sliced.
 
 	// Probe phase: the support probe is OSC 4;0; the terminal's answer is the
 	// value of palette index 0, retained as palette[0] (first-wins below).

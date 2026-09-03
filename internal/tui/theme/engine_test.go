@@ -12,7 +12,7 @@ import (
 // default bg/fg ("" = unknown).
 func testPalette(bg, fg string) TerminalColors {
 	var p [16]string
-	copy(p[:], hex16)
+	copy(p[:], hex16[:])
 	return TerminalColors{Palette: p, DefaultForeground: fg, DefaultBackground: bg}
 }
 
@@ -80,6 +80,7 @@ func TestEngineSelectionChain(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
 			dir, kvPath := engineDir(t)
 			if c.kv != "" {
 				seedKV(t, kvPath, `{"theme":"`+c.kv+`"}`)
@@ -146,6 +147,7 @@ func TestEngineSelectionChain(t *testing.T) {
 // (theme.tsx:117, 165; S0 scoping rule: the luminance half applies in
 // Resolve, after the palette probe).
 func TestEngineModeChain(t *testing.T) {
+	t.Parallel()
 	// (a) No lock + light-luminance bg → "light".
 	dir, kvPath := engineDir(t)
 	e := newTestEngine(t, EngineOptions{
@@ -197,6 +199,7 @@ func TestEngineModeChain(t *testing.T) {
 // cleared at init when unlocked (theme.tsx:118) — read back from the KV
 // file; retained while locked.
 func TestEngineStaleThemeModeClearedWhenUnlocked(t *testing.T) {
+	t.Parallel()
 	dark := paletteFunc(testPalette("#000000", "#ffffff"), true)
 
 	dir, kvPath := engineDir(t)
@@ -238,6 +241,7 @@ func TestEngineStaleThemeModeClearedWhenUnlocked(t *testing.T) {
 // empty → no "system" + active "system" falls back to "yolo" (the
 // upstream catch path, theme.tsx:159-163, 174-178).
 func TestEngineSystemTheme(t *testing.T) {
+	t.Parallel()
 	dir, kvPath := engineDir(t)
 	e := newTestEngine(t, EngineOptions{
 		KVPath: kvPath, GlobalYoloDir: dir, CWD: dir,
@@ -294,6 +298,7 @@ func TestEngineSystemTheme(t *testing.T) {
 // TestEngineSet: unknown name → false, KV untouched; known name → active +
 // persisted (theme.tsx:293-298).
 func TestEngineSet(t *testing.T) {
+	t.Parallel()
 	dark := paletteFunc(testPalette("#000000", "#ffffff"), true)
 	dir, kvPath := engineDir(t)
 	e := newTestEngine(t, EngineOptions{
@@ -337,6 +342,7 @@ func TestEnginePinFreeApplyAndModeEvents(t *testing.T) {
 	dark := paletteFunc(testPalette("#000000", "#ffffff"), true)
 
 	t.Run("pin-locked-apply-and-theme-mode-event", func(t *testing.T) {
+		t.Parallel()
 		dir, kvPath := engineDir(t)
 		e := newTestEngine(t, EngineOptions{
 			KVPath: kvPath, GlobalYoloDir: dir, CWD: dir, Palette: dark,
@@ -372,6 +378,7 @@ func TestEnginePinFreeApplyAndModeEvents(t *testing.T) {
 	})
 
 	t.Run("free-clears-lock-and-keys", func(t *testing.T) {
+		t.Parallel()
 		dir, kvPath := engineDir(t)
 		seedKV(t, kvPath, `{"theme_mode_lock":"light","theme_mode":"light"}`)
 		e := newTestEngine(t, EngineOptions{
@@ -409,6 +416,7 @@ func TestEnginePinFreeApplyAndModeEvents(t *testing.T) {
 	})
 
 	t.Run("unlocked-apply-and-theme-mode-event", func(t *testing.T) {
+		t.Parallel()
 		dir, kvPath := engineDir(t)
 		e := newTestEngine(t, EngineOptions{
 			KVPath: kvPath, GlobalYoloDir: dir, CWD: dir, Palette: dark,
@@ -431,6 +439,7 @@ func TestEnginePinFreeApplyAndModeEvents(t *testing.T) {
 // custom appears; a corrupt file is the error path: active "yolo",
 // customs emptied, error returned (the theme.tsx:132-144 catch).
 func TestEngineRefreshCustoms(t *testing.T) {
+	t.Parallel()
 	dark := paletteFunc(testPalette("#000000", "#ffffff"), true)
 	dir, kvPath := engineDir(t)
 	themesDir := filepath.Join(dir, "themes")
@@ -482,6 +491,7 @@ func TestEngineRefreshCustoms(t *testing.T) {
 // theme from the cached palette at the current mode (no re-probe, S0
 // scoping rule).
 func TestEngineReapply(t *testing.T) {
+	t.Parallel()
 	dir, kvPath := engineDir(t)
 	e := newTestEngine(t, EngineOptions{
 		KVPath: kvPath, GlobalYoloDir: dir, CWD: dir,
