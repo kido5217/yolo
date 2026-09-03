@@ -269,8 +269,14 @@ func TestRenderMessages100KBBudget(t *testing.T) {
 // BenchmarkRenderMessages_100KBPart is the standing measurement (the gate
 // above is the CI assertion; this tracks drift in `go test -bench`).
 func BenchmarkRenderMessages_100KBPart(b *testing.B) {
-	all, _ := theme.AllThemes()
-	r, _ := theme.ResolveTheme(all["yolo"], "dark")
+	all, err := theme.AllThemes()
+	if err != nil {
+		b.Fatalf("AllThemes: %v", err)
+	}
+	r, err := theme.ResolveTheme(all["yolo"], "dark")
+	if err != nil {
+		b.Fatalf("ResolveTheme: %v", err)
+	}
 	th := theme.Theme{R: r, Name: "yolo", Mode: "dark"}
 	st := bigPartState(hundredKBPart())
 	b.ReportAllocs()

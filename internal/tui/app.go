@@ -156,10 +156,12 @@ func NewApp(c *client.Service, s store.State, startSessionID string, engine *the
 	// keys; the defaults are valid).
 	km, _ := NewKeymap(nil)
 	a := &App{
-		Service:         c,
-		store:           s,
-		route:           routeHome,
-		home:            homeModel{now: nowMillis},
+		Service: c,
+		store:   s,
+		route:   routeHome,
+		home:    homeModel{now: nowMillis},
+		// pre-WindowSizeMsg defaults: the 80x24 size below, the session
+		// viewport = 24 - the 3 chrome lines (title, divider, help).
 		sess:            newSessionModel(80, 21),
 		size:            tea.WindowSizeMsg{Width: 80, Height: 24},
 		eventCh:         eventCh,
@@ -548,7 +550,9 @@ func (a *App) loadTipsHidden() {
 	if a.engine == nil {
 		return
 	}
-	a.tipsHidden = a.engine.KV().Get(kvTipsHiddenKey, false).(bool)
+	if v, ok := a.engine.KV().Get(kvTipsHiddenKey, false).(bool); ok {
+		a.tipsHidden = v
+	}
 }
 
 // loadSidebarMode restores the sidebar mode (the S7.2 KV seam; a nil

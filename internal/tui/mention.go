@@ -89,7 +89,9 @@ func ignoredByGitignore(patterns []string, rel string) bool {
 // slash-relative paths (deviation 225).
 func walkFiles(root string) []string {
 	patterns := gitignorePatterns(root)
-	var out []string
+	out := []string{}
+	// the walk callback swallows every per-path error (returns nil), so the
+	// outer WalkDir error is structurally always nil.
 	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil

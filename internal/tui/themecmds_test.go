@@ -93,11 +93,6 @@ func TestThemeKVWiring(t *testing.T) {
 			t.Fatalf("active = %s, want %s", e.Active(), target)
 		}
 		e.FlushKV() // barrier: the S0.7 writer is async — flush before the fresh engine reads the file
-		// the KV file carries the persisted theme (the S0.7 writer has
-		// flushed — the synchronous in-memory store + the writer goroutine;
-		// the engine's Close flushes, but the KV read goes through the
-		// in-memory store, so the file may lag: assert through the engine
-		// re-read instead).
 		// a fresh engine on the same KV file sees the persisted theme:
 		dir := filepath.Dir(kvPathOf(e))
 		e2, err := theme.New(theme.EngineOptions{

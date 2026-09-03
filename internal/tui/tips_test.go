@@ -27,6 +27,7 @@ func tipsPinnedText() string {
 }
 
 func TestTipsPinned(t *testing.T) {
+	t.Parallel()
 	sum := sha256.Sum256([]byte(tipsPinnedText()))
 	if got := hex.EncodeToString(sum[:]); got != wantTipsPinnedSHA256 {
 		t.Fatalf("tips sha256 = %s, want %s — re-baseline the pin in the same commit", got, wantTipsPinnedSHA256)
@@ -36,6 +37,7 @@ func TestTipsPinned(t *testing.T) {
 // TestTipsShape pins the ported-set size (a silent drop/insert would be a
 // data regression the pin catches too — the count is the cheap leg).
 func TestTipsShape(t *testing.T) {
+	t.Parallel()
 	if len(tips) != 37 {
 		t.Fatalf("tips = %d entries, want 37", len(tips))
 	}
@@ -48,6 +50,7 @@ func TestTipsShape(t *testing.T) {
 // resolves to a keymap binding (a dangling token would render "none"
 // mid-sentence) and that every tipBindings entry is actually used.
 func TestTipsTokenIntegrity(t *testing.T) {
+	t.Parallel()
 	all := noModelsTip + "\n" + strings.Join(tips, "\n")
 	for _, m := range tipTokenRe.FindAllStringSubmatch(all, -1) {
 		if _, ok := Definitions[m[1]]; !ok {
@@ -66,6 +69,7 @@ func TestTipsTokenIntegrity(t *testing.T) {
 
 // TestParseTip pins the {highlight} markup port (upstream parse()).
 func TestParseTip(t *testing.T) {
+	t.Parallel()
 	parts := parseTip("Run {highlight}/connect{/highlight} to add an AI provider and start coding")
 	if len(parts) != 3 || parts[0].hi || !parts[1].hi || parts[2].hi ||
 		parts[0].text != "Run " || parts[1].text != "/connect" || parts[2].text != " to add an AI provider and start coding" {

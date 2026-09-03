@@ -60,7 +60,7 @@ func (c *Service) stream(ctx context.Context, ch chan<- protocol.Event) error {
 		return err
 	}
 	c.dirHeader(req)
-	resp, err := c.HC.Do(req)
+	resp, err := c.hc.Do(req)
 	if err != nil {
 		return err
 	}
@@ -97,5 +97,5 @@ func (c *Service) stream(ctx context.Context, ch chan<- protocol.Event) error {
 	if sc.Err() != nil {
 		return sc.Err()
 	}
-	return errors.New("event stream closed")
+	return errors.New("client: event stream closed")
 }

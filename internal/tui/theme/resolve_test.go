@@ -130,19 +130,19 @@ func TestResolveEdgeCases(t *testing.T) {
 	})
 	t.Run("ansi-cube-and-ramp", func(t *testing.T) {
 		t.Parallel()
-		if got, want := AnsiToRgba(16), FromHex("#000000"); got != want {
+		if got, want := AnsiToRGBA(16), FromHex("#000000"); got != want {
 			t.Errorf("ansi 16 = %v, want %v", got, want)
 		}
-		if got, want := AnsiToRgba(195), FromHex("#d7ffff"); got != want {
+		if got, want := AnsiToRGBA(195), FromHex("#d7ffff"); got != want {
 			t.Errorf("ansi 195 = %v, want %v", got, want)
 		}
-		if got, want := AnsiToRgba(231), FromHex("#ffffff"); got != want {
+		if got, want := AnsiToRGBA(231), FromHex("#ffffff"); got != want {
 			t.Errorf("ansi 231 = %v, want %v", got, want)
 		}
-		if got, want := AnsiToRgba(255), FromHex("#eeeeee"); got != want {
+		if got, want := AnsiToRGBA(255), FromHex("#eeeeee"); got != want {
 			t.Errorf("ansi 255 = %v, want %v", got, want)
 		}
-		if got, want := AnsiToRgba(256), FromHex("#000000"); got != want {
+		if got, want := AnsiToRGBA(256), FromHex("#000000"); got != want {
 			t.Errorf("ansi 256 (invalid) = %v, want %v", got, want)
 		}
 	})
@@ -153,7 +153,7 @@ func TestResolveEdgeCases(t *testing.T) {
 		if err != nil {
 			t.Fatalf("resolve: %v", err)
 		}
-		if want := (Rgba{0, 0, 0, 0}); got.Colors["primary"] != want {
+		if want := (RGBA{0, 0, 0, 0}); got.Colors["primary"] != want {
 			t.Errorf("primary = %v, want transparent", got.Colors["primary"])
 		}
 	})

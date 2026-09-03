@@ -124,7 +124,6 @@ func TestThemeListDialogFlow(t *testing.T) {
 		a, e := themeApp(t)
 		initial := e.Active()
 		a.openThemeListDialog()
-		names := themeOptions(e)
 		// move off the initial, then clear the filter -> the initial comes back
 		a.handleKey(press(tea.KeyDown))
 		if e.Active() == initial {
@@ -137,7 +136,6 @@ func TestThemeListDialogFlow(t *testing.T) {
 		a.handleKey(press(tea.KeyEnter))
 		moved := e.Active()
 		a.openThemeListDialog()
-		_ = names
 		// type then delete the filter text: the onFilter("") restores the
 		// dialog's initial (the active-at-open = moved)
 		a.handleKey(press('a'))

@@ -372,6 +372,7 @@ func TestPermissionKeyReplyWiring(t *testing.T) {
 		t.Run(tc.want, func(t *testing.T) {
 			var mu sync.Mutex
 			var got string
+			var decodeErr error
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				switch {
 				case r.URL.Path == "/event":
@@ -383,7 +384,13 @@ func TestPermissionKeyReplyWiring(t *testing.T) {
 					var body struct {
 						Response string `json:"response"`
 					}
-					_ = json.NewDecoder(r.Body).Decode(&body)
+					if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+						mu.Lock()
+						decodeErr = err
+						mu.Unlock()
+						w.WriteHeader(http.StatusBadRequest)
+						return
+					}
 					mu.Lock()
 					got = body.Response
 					mu.Unlock()
@@ -407,6 +414,9 @@ func TestPermissionKeyReplyWiring(t *testing.T) {
 			cmds[0]() // runs the reply POST synchronously
 			mu.Lock()
 			defer mu.Unlock()
+			if decodeErr != nil {
+				t.Fatalf("reply body decode: %v", decodeErr)
+			}
 			if got != tc.want {
 				t.Fatalf("key %q replied %q, want %q", tc.key, got, tc.want)
 			}

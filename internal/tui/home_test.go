@@ -51,6 +51,7 @@ var (
 func pressTab() tea.KeyPressMsg { return tea.KeyPressMsg{Code: '\t'} }
 
 func TestRelTime(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		d    int64 // ms before testNow
@@ -71,6 +72,7 @@ func TestRelTime(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if got := relTime(testNow-tt.d, testNow); got != tt.want {
 				t.Errorf("relTime = %q, want %q", got, tt.want)
 			}
@@ -79,6 +81,7 @@ func TestRelTime(t *testing.T) {
 }
 
 func TestHomeRenderLockedLayout(t *testing.T) {
+	t.Parallel()
 	a := testApp(
 		protocol.Session{
 			ID:    "ses_0",
@@ -133,6 +136,7 @@ func TestAppHandleKeyHome(t *testing.T) {
 	}
 
 	t.Run("cursor wraps down and up", func(t *testing.T) {
+		t.Parallel()
 		a := testApp(three()...)
 		a.handleKey(press(tea.KeyDown))
 		if a.home.cursor != 1 {
@@ -154,6 +158,7 @@ func TestAppHandleKeyHome(t *testing.T) {
 	})
 
 	t.Run("enter on session opens it and hydrates", func(t *testing.T) {
+		t.Parallel()
 		a := testApp(three()...)
 		a.home.cursor = 2 // T2
 		a.handleKey(press(tea.KeyEnter))
@@ -166,6 +171,7 @@ func TestAppHandleKeyHome(t *testing.T) {
 	})
 
 	t.Run("enter on new session row creates without opening", func(t *testing.T) {
+		t.Parallel()
 		a := testApp(three()...)
 		a.handleKey(press(tea.KeyEnter)) // cursor 0
 		if a.route != routeHome {
@@ -177,6 +183,7 @@ func TestAppHandleKeyHome(t *testing.T) {
 	})
 
 	t.Run("n issues create cmd", func(t *testing.T) {
+		t.Parallel()
 		a := testApp()
 		a.handleKey(press('n'))
 		if len(a.Cmds) != 1 {
@@ -188,6 +195,7 @@ func TestAppHandleKeyHome(t *testing.T) {
 	})
 
 	t.Run("ctrl+c opens quit dialog, y confirms, esc cancels", func(t *testing.T) {
+		t.Parallel()
 		a := testApp()
 		a.handleKey(ctrlCKey)
 		if a.dlg.empty() {
@@ -209,6 +217,7 @@ func TestAppHandleKeyHome(t *testing.T) {
 	// T25 (deviation 52): the T23 auto-open command buffer is replaced by the
 	// slash menu — typing "/help" opens the menu, enter executes it.
 	t.Run("typing /help + enter opens help dialog", func(t *testing.T) {
+		t.Parallel()
 		a := testApp()
 		a.store.Commands = testCommands()
 		for _, r := range "/help" {

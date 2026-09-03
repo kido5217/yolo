@@ -76,13 +76,13 @@ func TestGenerateSystemPaletteFallbacks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if c, _ := got.Color("error"); c != AnsiToRgba(1) {
+	if c, _ := got.Color("error"); c != AnsiToRGBA(1) {
 		t.Errorf("error (ansi 1 fallback) = %v", c)
 	}
-	if c, _ := got.Color("text"); c != AnsiToRgba(7) {
+	if c, _ := got.Color("text"); c != AnsiToRGBA(7) {
 		t.Errorf("text (fg = palette[7] fallback) = %v", c)
 	}
-	if c, _ := got.Color("background"); c != (Rgba{0, 0, 0, 0}) {
+	if c, _ := got.Color("background"); c != (RGBA{0, 0, 0, 0}) {
 		t.Errorf("background (transparent, bg = palette[0]) = %v", c)
 	}
 }

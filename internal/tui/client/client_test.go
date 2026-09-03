@@ -85,6 +85,7 @@ func TestClientScopingAndErrors(t *testing.T) {
 // errors (naming-3, deviation 110): the text is what the user sees in the
 // status line, so origin must survive wrapping.
 func TestSentinelPrefixes(t *testing.T) {
+	t.Parallel()
 	for _, e := range []error{client.ErrNotFound, client.ErrBusy, client.ErrBadRequest} {
 		if !strings.HasPrefix(e.Error(), "client: ") {
 			t.Fatalf("sentinel %q lacks the \"client: \" prefix", e.Error())

@@ -212,6 +212,7 @@ func TestHomeFooterThemeSGR(t *testing.T) {
 // space on the title run, a line-boundary boundary drops it (wrapLine drops
 // leading spaces on continuation lines).
 func TestHomeRowLines(t *testing.T) {
+	t.Parallel()
 	got := rowLines("  ▸ ", "New session", "", 80)
 	if len(got) != 1 || got[0].cur != "▸ " || got[0].title != "New session" || got[0].meta != "" {
 		t.Fatalf("fast path = %+v, want one verbatim line", got)
@@ -247,6 +248,7 @@ func TestHomeRowLines(t *testing.T) {
 // bold on the "▸" run with plain content, and a wrapped continuation line
 // indents 2 (4 for the cursor row).
 func TestHomeRenderRowZeroTheme(t *testing.T) {
+	t.Parallel()
 	var zero theme.Theme
 	h := homeModel{cursor: 0}
 	if got := stripANSI(h.renderRow(0, "New session", "", 80, zero)); got != "  ▸ New session" {

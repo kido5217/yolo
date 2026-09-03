@@ -306,7 +306,7 @@ func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool, w in
 // rgbaHex is the 6-digit hex of a resolved token (the theme package's
 // hex6 stays unexported — the TUI keeps its own one-liner; the surface
 // stays S1.2/S1.4-locked).
-func rgbaHex(c theme.Rgba) string {
+func rgbaHex(c theme.RGBA) string {
 	return fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B)
 }
 

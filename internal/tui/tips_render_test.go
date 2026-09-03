@@ -23,6 +23,7 @@ import (
 // tips.tsx:40-47): first = no sessions, connected = a non-opencode
 // provider or an opencode model with input cost, hidden gates all.
 func TestTipsVisibilityMatrix(t *testing.T) {
+	t.Parallel()
 	kido := []protocol.Provider{{ID: "kido", Models: map[string]protocol.Model{"q": {ID: "q", Cost: protocol.ModelCost{Input: 0.5}}}}}
 	opencodeZero := []protocol.Provider{{ID: "opencode", Models: map[string]protocol.Model{"z": {ID: "z", Cost: protocol.ModelCost{}}}}}
 	opencodePaid := []protocol.Provider{{ID: "opencode", Models: map[string]protocol.Model{"z": {ID: "z", Cost: protocol.ModelCost{Input: 1}}}}}
@@ -68,6 +69,7 @@ func TestTipsVisibilityMatrix(t *testing.T) {
 // disabled), {theme_count} → the theme count, and the NO_MODELS
 // force when !connected.
 func TestTipTextSubstitutions(t *testing.T) {
+	t.Parallel()
 	a := testApp() // 0 providers → !connected → the NO_MODELS force
 	if got := a.tipText(); got != noModelsTip {
 		t.Fatalf("tipText = %q, want the NO_MODELS force", got)
@@ -117,6 +119,7 @@ func TestTipTextSubstitutions(t *testing.T) {
 // SEQUENCE (prefix → muted → text → muted …); a wrapped line keeps the
 // order per visual line.
 func TestTipLinesWrap(t *testing.T) {
+	t.Parallel()
 	parts := parseTip("Run {highlight}/connect{/highlight} to add an AI provider and start coding")
 	lines := tipLines("● Tip ", parts, 80)
 	if len(lines) != 1 {
@@ -153,6 +156,7 @@ func TestTipLinesWrap(t *testing.T) {
 // (persisted over the theme KV when the engine is present) and the group
 // wiring reaches dispatchCommand.
 func TestTipsToggle(t *testing.T) {
+	t.Parallel()
 	a := testApp()
 	a.store.Sessions = []protocol.Session{{Title: "s1"}}
 	if !a.tipsVisible() {
@@ -185,6 +189,7 @@ func TestTipsToggle(t *testing.T) {
 // (the themecmds_test.go fresh-engine idiom: e.Close() drains + flushes, then
 // theme.New over the same dir) reloads it in NewApp's loadTipsHidden.
 func TestTipsTogglePersists(t *testing.T) {
+	t.Parallel()
 	a, e := themeApp(t)
 	a.tipsHidden = false
 	a.dispatchCommand("tips_toggle")
@@ -218,10 +223,10 @@ func TestTipsTogglePersists(t *testing.T) {
 // per-mount Math.random, no timer): each entry re-rolls with the seeded
 // tipRand; the render picks tips[tipIdx % len].
 func TestTipsHomeEntryRepick(t *testing.T) {
+	t.Parallel()
 	a := testApp()
 	a.store.Sessions = []protocol.Session{{Title: "s1"}}
 	a.store.Providers = []protocol.Provider{{ID: "kido", Models: map[string]protocol.Model{"q": {ID: "q", Cost: protocol.ModelCost{Input: 0.5}}}}}
-	var picks []float64
 	i := 0
 	a.tipRand = func() float64 {
 		defer func() { i++ }()
@@ -236,13 +241,13 @@ func TestTipsHomeEntryRepick(t *testing.T) {
 	if a.tipIdx < 0 || a.tipIdx >= len(tips) {
 		t.Fatalf("tipIdx out of range: %d", a.tipIdx)
 	}
-	_ = picks
 }
 
 // TestHomeTipsLineRender pins the seam + the line shape (the ● Tip prefix
 // in the warning tone, the parts wrapped at w) and the hidden/first
 // gating through homeTipsLine.
 func TestHomeTipsLineRender(t *testing.T) {
+	t.Parallel()
 	a := testApp() // fresh: visible (NO_MODELS), tipIdx seeded
 	line := a.homeTipsLine(80)
 	if !strings.HasPrefix(stripANSI(line), "● Tip ") {

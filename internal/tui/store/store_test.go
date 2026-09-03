@@ -35,7 +35,9 @@ func seed(t *testing.T) *store.State {
 }
 
 func TestApply(t *testing.T) {
+	t.Parallel()
 	t.Run("message.updated upserts current session messages", func(t *testing.T) {
+		t.Parallel()
 		s := seed(t)
 		s.Apply(ev(t, protocol.EventTypeMessageUpdated, protocol.MessageUpdatedProps{
 			SessionID: "ses_1",
@@ -54,6 +56,7 @@ func TestApply(t *testing.T) {
 	})
 
 	t.Run("message.part.updated upserts parts", func(t *testing.T) {
+		t.Parallel()
 		s := seed(t)
 		s.Apply(ev(t, protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
 			SessionID: "ses_1",
@@ -74,6 +77,7 @@ func TestApply(t *testing.T) {
 	})
 
 	t.Run("message.part.delta appends", func(t *testing.T) {
+		t.Parallel()
 		s := seed(t)
 		s.Apply(ev(t, protocol.EventTypeMessagePartDelta, protocol.MessagePartDeltaProps{
 			SessionID: "ses_1", MessageID: "msg_1", PartID: "prt_1",
@@ -85,6 +89,7 @@ func TestApply(t *testing.T) {
 	})
 
 	t.Run("message.part.delta re-seeds after full part update", func(t *testing.T) {
+		t.Parallel()
 		s := seed(t)
 		s.Apply(ev(t, protocol.EventTypeMessagePartDelta, protocol.MessagePartDeltaProps{
 			SessionID: "ses_1", MessageID: "msg_1", PartID: "prt_1",
@@ -108,6 +113,7 @@ func TestApply(t *testing.T) {
 	})
 
 	t.Run("message.part.delta input field accumulates in State.Input", func(t *testing.T) {
+		t.Parallel()
 		s := seed(t)
 		for _, d := range []string{"pa", "rt"} {
 			s.Apply(ev(t, protocol.EventTypeMessagePartDelta, protocol.MessagePartDeltaProps{
@@ -125,6 +131,7 @@ func TestApply(t *testing.T) {
 	})
 
 	t.Run("message.removed clears the part shadows", func(t *testing.T) {
+		t.Parallel()
 		s := seed(t)
 		s.Apply(ev(t, protocol.EventTypeMessagePartDelta, protocol.MessagePartDeltaProps{
 			SessionID: "ses_1", MessageID: "msg_1", PartID: "prt_1",
@@ -148,6 +155,7 @@ func TestApply(t *testing.T) {
 	})
 
 	t.Run("message.part.delta fast path across messages", func(t *testing.T) {
+		t.Parallel()
 		s := seed(t)
 		delta := func(partID, msgID, d string) {
 			s.Apply(ev(t, protocol.EventTypeMessagePartDelta, protocol.MessagePartDeltaProps{
@@ -179,6 +187,7 @@ func TestApply(t *testing.T) {
 	})
 
 	t.Run("message.part.delta part removal keeps index valid", func(t *testing.T) {
+		t.Parallel()
 		s := seed(t)
 		s.Apply(ev(t, protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
 			SessionID: "ses_1",
@@ -202,6 +211,7 @@ func TestApply(t *testing.T) {
 	})
 
 	t.Run("message.removed drops the message", func(t *testing.T) {
+		t.Parallel()
 		s := seed(t)
 		s.Apply(ev(t, protocol.EventTypeMessageRemoved, protocol.MessageRemovedProps{
 			SessionID: "ses_1", MessageID: "msg_1",
@@ -212,6 +222,7 @@ func TestApply(t *testing.T) {
 	})
 
 	t.Run("message.part.removed drops the part", func(t *testing.T) {
+		t.Parallel()
 		s := seed(t)
 		s.Apply(ev(t, protocol.EventTypeMessagePartRemoved, protocol.MessagePartRemovedProps{
 			SessionID: "ses_1", MessageID: "msg_1", PartID: "prt_1",
@@ -222,6 +233,7 @@ func TestApply(t *testing.T) {
 	})
 
 	t.Run("session.updated updates list and current", func(t *testing.T) {
+		t.Parallel()
 		s := seed(t)
 		s.Apply(ev(t, protocol.EventTypeSessionUpdated, protocol.SessionUpdatedProps{
 			SessionID: "ses_1",
@@ -233,6 +245,7 @@ func TestApply(t *testing.T) {
 	})
 
 	t.Run("session.deleted clears list and current", func(t *testing.T) {
+		t.Parallel()
 		s := seed(t)
 		s.Apply(ev(t, protocol.EventTypeSessionDeleted, protocol.SessionDeletedProps{
 			SessionID: "ses_1",
@@ -244,6 +257,7 @@ func TestApply(t *testing.T) {
 	})
 
 	t.Run("session.status updates current session status", func(t *testing.T) {
+		t.Parallel()
 		s := seed(t)
 		s.Apply(ev(t, protocol.EventTypeSessionStatus, protocol.SessionStatusProps{
 			SessionID: "ses_1",
@@ -255,6 +269,7 @@ func TestApply(t *testing.T) {
 	})
 
 	t.Run("permission asked then replied", func(t *testing.T) {
+		t.Parallel()
 		s := seed(t)
 		s.Apply(ev(t, protocol.EventTypePermissionAsked, protocol.PermissionAskedProps{
 			ID: "perm_1", SessionID: "ses_1", Permission: "edit",
@@ -272,7 +287,9 @@ func TestApply(t *testing.T) {
 }
 
 func TestApplyIgnoresOtherSessions(t *testing.T) {
+	t.Parallel()
 	t.Run("foreign message ignored", func(t *testing.T) {
+		t.Parallel()
 		s := seed(t)
 		s.Apply(ev(t, protocol.EventTypeMessageUpdated, protocol.MessageUpdatedProps{
 			SessionID: "ses_9",
@@ -283,6 +300,7 @@ func TestApplyIgnoresOtherSessions(t *testing.T) {
 		}
 	})
 	t.Run("foreign status ignored", func(t *testing.T) {
+		t.Parallel()
 		s := seed(t)
 		s.Apply(ev(t, protocol.EventTypeSessionStatus, protocol.SessionStatusProps{
 			SessionID: "ses_9",
@@ -293,6 +311,7 @@ func TestApplyIgnoresOtherSessions(t *testing.T) {
 		}
 	})
 	t.Run("own session.updated updates title", func(t *testing.T) {
+		t.Parallel()
 		s := seed(t)
 		s.Apply(ev(t, protocol.EventTypeSessionUpdated, protocol.SessionUpdatedProps{
 			SessionID: "ses_1",

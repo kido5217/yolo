@@ -255,7 +255,7 @@ func (a *App) handlePromptKey(k tea.KeyPressMsg) []tea.Cmd {
 
 // inputUpdate feeds a key to the prompt input and collects any emitted cmds.
 func (a *App) inputUpdate(k tea.KeyPressMsg) []tea.Cmd {
-	var cmds []tea.Cmd
+	cmds := []tea.Cmd{}
 	var c tea.Cmd
 	a.prompt.input, c = a.prompt.input.Update(k)
 	if c != nil {

@@ -23,7 +23,7 @@ func (t Theme) Zero() bool { return t.Name == "" }
 // hex6 is the 6-digit RGB hex of c. lipgloss v2 parseHex takes #rrggbb or
 // #rgb only — 8-digit alpha is unparseable, so subtle (pre-blended) colors
 // always land as 6-digit hex (finding 3).
-func hex6(c Rgba) string { return fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B) }
+func hex6(c RGBA) string { return fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B) }
 
 // md returns the color string for a token (nil when absent: glamour falls
 // back to its own defaults for unset styles).
@@ -76,7 +76,7 @@ func (t Theme) SubtleChroma() ansi.Chroma {
 	if alpha <= 0 || alpha >= 1 {
 		return full
 	}
-	bg := Rgba{0, 0, 0, 255}
+	bg := RGBA{0, 0, 0, 255}
 	if c, ok := t.R.Color("background"); ok {
 		bg = c
 	}
@@ -105,7 +105,7 @@ func (t Theme) SubtleChroma() ansi.Chroma {
 		if !ok {
 			continue
 		}
-		out := Rgba{
+		out := RGBA{
 			R: uint8(math.Round(float64(fg.R)*alpha + float64(bg.R)*(1-alpha))),
 			G: uint8(math.Round(float64(fg.G)*alpha + float64(bg.G)*(1-alpha))),
 			B: uint8(math.Round(float64(fg.B)*alpha + float64(bg.B)*(1-alpha))),

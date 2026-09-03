@@ -7,14 +7,14 @@ import (
 	"strings"
 )
 
-// Rgba is a 0-255 color with alpha. Upstream RGBA is float 0-1 but every
+// RGBA is a 0-255 color with alpha. Upstream RGBA is float 0-1 but every
 // color is int-derived (hex/int/ANSI) or produced by float ops on 0-255
 // values rounded at the end (tint, grays), so uint8 storage is exact and the
 // operation ORDER is preserved for bit-identical results (strict-copy bar).
-type Rgba struct{ R, G, B, A uint8 }
+type RGBA struct{ R, G, B, A uint8 }
 
 // Hex is the golden-matrix form "#rrggbbaa".
-func (c Rgba) Hex() string {
+func (c RGBA) Hex() string {
 	return fmt.Sprintf("#%02x%02x%02x%02x", c.R, c.G, c.B, c.A)
 }
 
@@ -34,7 +34,7 @@ func isHex(h string, n int) bool {
 // 3→6 and 4→8 digits, accepts 6/8-digit hex; invalid input → magenta
 // (upstream additionally console.warns — a non-visual log side effect,
 // skipped).
-func FromHex(s string) Rgba {
+func FromHex(s string) RGBA {
 	h := strings.TrimPrefix(s, "#")
 	switch len(h) {
 	case 3:
@@ -43,13 +43,13 @@ func FromHex(s string) Rgba {
 		h = h[0:1] + h[0:1] + h[1:2] + h[1:2] + h[2:3] + h[2:3] + h[3:4] + h[3:4]
 	}
 	if !isHex(h, 6) && !isHex(h, 8) {
-		return Rgba{255, 0, 255, 255}
+		return RGBA{255, 0, 255, 255}
 	}
 	a := uint8(255)
 	if len(h) == 8 {
 		a = hexByte(h[6:8])
 	}
-	return Rgba{hexByte(h[0:2]), hexByte(h[2:4]), hexByte(h[4:6]), a}
+	return RGBA{hexByte(h[0:2]), hexByte(h[2:4]), hexByte(h[4:6]), a}
 }
 
 func hexByte(s string) uint8 {
@@ -66,10 +66,10 @@ var ansi16 = []string{
 	"#0000ff", "#ff00ff", "#00ffff", "#ffffff",
 }
 
-// AnsiToRgba is the port of upstream ansiToRgba (theme/index.ts:301):
+// AnsiToRGBA is the port of upstream ansiToRgba (theme/index.ts:301):
 // 0-15 standard, 16-231 the 6x6x6 cube, 232-255 the grayscale ramp,
 // anything else black.
-func AnsiToRgba(code int) Rgba {
+func AnsiToRGBA(code int) RGBA {
 	if code < 16 {
 		hex := "#000000"
 		if code >= 0 && code < len(ansi16) {
@@ -88,25 +88,25 @@ func AnsiToRgba(code int) Rgba {
 			}
 			return x*40 + 55
 		}
-		return Rgba{uint8(val(r)), uint8(val(g)), uint8(val(b)), 255}
+		return RGBA{uint8(val(r)), uint8(val(g)), uint8(val(b)), 255}
 	}
 	if code < 256 {
 		gray := (code-232)*10 + 8
-		return Rgba{uint8(gray), uint8(gray), uint8(gray), 255}
+		return RGBA{uint8(gray), uint8(gray), uint8(gray), 255}
 	}
-	return Rgba{0, 0, 0, 255}
+	return RGBA{0, 0, 0, 255}
 }
 
 // Resolved is the output of ResolveTheme: every token (incl. the two
 // optional ones) mapped to its resolved color, plus the bookkeeping fields.
 type Resolved struct {
-	Colors                  map[string]Rgba
+	Colors                  map[string]RGBA
 	ThinkingOpacity         float64
 	HasSelectedListItemText bool
 }
 
 // Color returns the resolved token (ok=false when absent).
-func (r Resolved) Color(name string) (Rgba, bool) {
+func (r Resolved) Color(name string) (RGBA, bool) {
 	c, ok := r.Colors[name]
 	return c, ok
 }
@@ -118,38 +118,38 @@ func (r Resolved) Color(name string) (Rgba, bool) {
 // thinkingOpacity (default: 0.6). Error messages keep the upstream wording.
 func ResolveTheme(j ThemeJSON, mode string) (Resolved, error) {
 	defs := j.Defs
-	var resolve func(c any, chain []string) (Rgba, error)
-	resolve = func(c any, chain []string) (Rgba, error) {
-		if rgb, ok := c.(Rgba); ok {
+	var resolve func(c any, chain []string) (RGBA, error)
+	resolve = func(c any, chain []string) (RGBA, error) {
+		if rgb, ok := c.(RGBA); ok {
 			return rgb, nil // generateSystem output values (upstream RGBA instanceof)
 		}
 		switch v := c.(type) {
 		case string:
 			if v == "transparent" || v == "none" {
-				return Rgba{0, 0, 0, 0}, nil
+				return RGBA{0, 0, 0, 0}, nil
 			}
 			if strings.HasPrefix(v, "#") {
 				return FromHex(v), nil
 			}
 			if slices.Contains(chain, v) {
-				return Rgba{}, fmt.Errorf("circular color reference: %s", strings.Join(append(chain, v), " -> "))
+				return RGBA{}, fmt.Errorf("circular color reference: %s", strings.Join(append(chain, v), " -> "))
 			}
 			next, ok := defs[v]
 			if !ok {
 				next, ok = j.Theme[v]
 			}
 			if !ok {
-				return Rgba{}, fmt.Errorf("color reference %q not found in defs or theme", v)
+				return RGBA{}, fmt.Errorf("color reference %q not found in defs or theme", v)
 			}
 			return resolve(next, append(chain, v))
 		case float64: // JSON numbers unmarshal to float64
-			return AnsiToRgba(int(v)), nil
+			return AnsiToRGBA(int(v)), nil
 		case map[string]any:
 			return resolve(v[mode], chain)
 		}
-		return Rgba{}, fmt.Errorf("unresolvable color value %v (%T)", c, c)
+		return RGBA{}, fmt.Errorf("unresolvable color value %v (%T)", c, c)
 	}
-	resolved := make(map[string]Rgba, len(j.Theme))
+	resolved := make(map[string]RGBA, len(j.Theme))
 	for key, value := range j.Theme {
 		switch key {
 		case "selectedListItemText", "backgroundMenu", "thinkingOpacity":

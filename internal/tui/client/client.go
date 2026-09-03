@@ -29,13 +29,13 @@ var (
 type Service struct {
 	BaseURL string
 	Dir     string
-	HC      *http.Client
+	hc      *http.Client
 	Backoff func(int) time.Duration // SSE reconnect backoff (tests override)
 }
 
 // New returns a client for base with scope dir.
 func New(base, dir string) *Service {
-	return &Service{BaseURL: base, Dir: dir, HC: &http.Client{}}
+	return &Service{BaseURL: base, Dir: dir, hc: &http.Client{}}
 }
 
 func (c *Service) backoff(n int) time.Duration {
@@ -77,7 +77,7 @@ func (c *Service) do(ctx context.Context, method, path string, in, out any) erro
 		req.Header.Set("Content-Type", "application/json")
 	}
 	c.dirHeader(req)
-	resp, err := c.HC.Do(req)
+	resp, err := c.hc.Do(req)
 	if err != nil {
 		return err
 	}

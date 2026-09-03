@@ -75,12 +75,11 @@ func TestRetryDialogKeys(t *testing.T) {
 }
 
 func TestRetryTransitionHook(t *testing.T) {
-	ev := func(prev, next string, attempt int) protocol.Event {
+	ev := func(next string, attempt int) protocol.Event {
 		props, _ := protocol.MakeEvent(protocol.EventTypeSessionStatus, protocol.SessionStatusProps{
 			SessionID: "s1",
 			Status:    protocol.SessionStatus{Type: next, Attempt: attempt, Message: "upstream overloaded"},
 		})
-		_ = prev
 		return props
 	}
 
@@ -88,14 +87,14 @@ func TestRetryTransitionHook(t *testing.T) {
 		a := testApp()
 		a.curSessionID = "s1"
 		a.store.Status = protocol.SessionStatus{Type: "idle"}
-		a.onSessionStatus("idle", ev("idle", "retry", 1))
+		a.onSessionStatus("idle", ev("retry", 1))
 		top, ok := a.dlg.top()
 		if !ok || top.kind != dlgRetryAction {
 			t.Fatalf("top = %v, want dlgRetryAction", top.kind)
 		}
 		// a second idle->retry for the same session is suppressed (per-run)
 		a.store.Status = protocol.SessionStatus{Type: "idle"}
-		a.onSessionStatus("idle", ev("idle", "retry", 2))
+		a.onSessionStatus("idle", ev("retry", 2))
 		if n := len(a.dlg.items); n != 1 {
 			t.Fatalf("the suppression leaked: depth = %d, want 1", n)
 		}
@@ -114,7 +113,7 @@ func TestRetryTransitionHook(t *testing.T) {
 		}
 		// busy -> retry is not the idle->retry transition
 		a.store.Status = protocol.SessionStatus{Type: "busy"}
-		a.onSessionStatus("busy", ev("busy", "retry", 1))
+		a.onSessionStatus("busy", ev("retry", 1))
 		if !a.dlg.empty() {
 			t.Fatal("busy->retry must not open the dialog")
 		}
@@ -124,12 +123,12 @@ func TestRetryTransitionHook(t *testing.T) {
 		a := testApp()
 		a.curSessionID = "s1"
 		a.store.Status = protocol.SessionStatus{Type: "idle"}
-		a.onSessionStatus("idle", ev("idle", "retry", 1))
+		a.onSessionStatus("idle", ev("retry", 1))
 		a.handleKey(press(tea.KeyLeft)) // dismiss
 		a.handleKey(press(tea.KeyEnter))
 		a.applySend(sendMsg{}) // the next send clears the suppression
 		a.store.Status = protocol.SessionStatus{Type: "idle"}
-		a.onSessionStatus("idle", ev("idle", "retry", 2))
+		a.onSessionStatus("idle", ev("retry", 2))
 		if a.dlg.empty() {
 			t.Fatal("the cleared suppression must allow the dialog again")
 		}
