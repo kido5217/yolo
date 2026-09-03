@@ -53,7 +53,8 @@ def fail(msg):
 def main():
     if not os.path.exists(MANIFEST):
         fail("the upstream MANIFEST.json is missing (run `just parity-capture` first)")
-    man = json.load(open(MANIFEST))
+    with open(MANIFEST) as fh:
+        man = json.load(fh)
     dump = tempfile.mkdtemp(prefix="yolo-parity-")
     env = dict(os.environ, YOLO_PARITY_DUMP=dump)
     r = subprocess.run(
@@ -70,7 +71,8 @@ def main():
     head = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True, text=True
     ).stdout.strip()
-    man_sha = hashlib.sha256(open(MANIFEST, "rb").read()).hexdigest()
+    with open(MANIFEST, "rb") as fh:
+        man_sha = hashlib.sha256(fh.read()).hexdigest()
     rows = []
     for s in man["surfaces"]:
         name = s["name"]
@@ -80,8 +82,15 @@ def main():
             fail(
                 "the yolo dump is missing %s (TestParityDump did not render it)" % name
             )
-        yolo = normalize.screen(open(yolo_path, "rb").read(), s["cols"], s["rows"])
-        upstream = json.load(open(up_path))
+        if not os.path.exists(up_path):
+            fail(
+                "the upstream fixture is missing %s (run `just parity-capture` first)"
+                % up_path
+            )
+        with open(yolo_path, "rb") as fh:
+            yolo = normalize.screen(fh.read(), s["cols"], s["rows"])
+        with open(up_path) as fh:
+            upstream = json.load(fh)
         rows.append((name, s["cols"], s["rows"], diff_screens(upstream, yolo)))
     # the report
     lines = [

@@ -2487,6 +2487,16 @@ logged as deviations <range> (the color-space class info, the
 <list>) — the sweep report is the mechanical record, the deviation log
 the judgment" --json`.
 
+> Note (2026-09-03, post-S8.4): the "goldens re-baselined" clause applies
+> only on the CLOSE path (Step 3 re-baselines a TTY_FORCE SGR golden only
+> when a surface is CLOSED with a render fix). The all-LOG S8.4 run closed
+> 0 surfaces, so 0 SGR goldens were re-baselined (no non-parity test file
+> changed) — the 14/17 upstream parity-fixture re-baseline is the S8.2/S8.4
+> capture pin, not the SGR goldens. The committed subject therefore
+> overstates the golden step. The frozen message is retained as-is per the
+> freeze rule (line 16); this note records the conditional intent for
+> future frozen messages that conditionally apply.
+
 ### Task S8.5: Close-out: PROGRESS.md verified fact; epic close; tag ONLY on explicit user go-ahead (bead `yolo-oae.9.5`, expected id `yolo-oae.9.6`)
 
 **Files:** `docs/superpowers/PROGRESS.md` (the verified fact + the

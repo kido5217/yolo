@@ -99,8 +99,12 @@ _MASKS = [
     # input right edge (the fill's start column is computed from the
     # raw example length). The whole line is canonicalized to the
     # fixed-length form ("<EX>" + 35 spaces, fill at col 64, 15 spaces)
-    # so the replay is identical across boots; the SGR values are the
-    # default-theme constants of the hermetic capture env.
+    # so the replay is identical across boots. The matched SGR bytes are
+    # theme-coupled BY DESIGN (the hermetic default theme's placeholder fg
+    # #808080, input-row bg #1e1e1e, and fill fg #ffffff): this mask
+    # canonicalizes the exact rendered line, so a theme or placeholder-line
+    # change is a mask edit + re-baseline — caught, never silent, by the D5
+    # double-run determinism gate (the single edit point for such drift).
     (re.compile(rb"(?<!\d)\d+ms\b"), b"<DUR>"),
     (re.compile(rb"(?<!\d)\d+\.\ds\b"), b"<DUR>"),
     (
@@ -241,10 +245,23 @@ def screen(data: bytes, cols: int, rows: int) -> dict:
             wrap_cursor()
         cell = {"t": s, "fg": fg, "bg": bg, "bold": bold}
         if c >= cols - 1:
-            # the last column: a wide rune draws its first half only; the
-            # cursor parks in the pending-wrap state.
-            grid[r][cols - 1] = cell
-            pend = wrap
+            if width == 2:
+                # a wide rune cannot fit the final column: wrap it to the
+                # next line (the common terminal behavior for a wide char at
+                # the right edge) and paint its continuation cell blank.
+                wrap_cursor()
+                grid[r][0] = cell
+                if cols >= 2:
+                    grid[r][1] = {"t": " ", "fg": fg, "bg": bg, "bold": bold}
+                    c = 2
+                else:
+                    c = cols - 1
+                    pend = wrap
+            else:
+                # a single-cell rune at the last column parks in the
+                # pending-wrap state.
+                grid[r][cols - 1] = cell
+                pend = wrap
         else:
             grid[r][c] = cell
             c += width

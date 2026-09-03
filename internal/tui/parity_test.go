@@ -36,7 +36,6 @@ type paritySurface struct {
 	width  int
 	height int
 	turn   string // "text" | "tool" | "todo" — the canned book key
-	home   bool   // run on the home route (no session turn)
 	// steps drive the key script (the home settle precedes them).
 	steps []parityStep
 }
@@ -74,7 +73,7 @@ func paritySurfaces() []paritySurface {
 	toolTurn := promptTurn{prompt: parityPromptTool, settle: hasLine("parity-ok")}
 	todoTurn := promptTurn{prompt: parityPromptTodo, settle: hasLine("first item")}
 	return []paritySurface{
-		{name: "home", width: 80, height: 24, turn: "text", home: true},
+		{name: "home", width: 80, height: 24, turn: "text"},
 		{name: "session-text", width: 80, height: 24, turn: "text", steps: turn(textTurn)},
 		{name: "session-tool", width: 80, height: 24, turn: "tool", steps: turn(toolTurn)},
 		{name: "palette", width: 80, height: 24, turn: "text", steps: append(
@@ -99,7 +98,7 @@ func paritySurfaces() []paritySurface {
 			parityStep{keys: []tea.KeyPressMsg{pressCtrlD()}, cond: hasLine("Press ctrl+d again to confirm"), d: 10 * time.Second})},
 		{name: "status", width: 80, height: 24, turn: "text", steps: append(
 			turn(textTurn), parityStep{keys: leaderCont('s'), cond: hasLine("Status"), d: 10 * time.Second})},
-		{name: "which-key", width: 80, height: 24, turn: "text", home: true, steps: []parityStep{
+		{name: "which-key", width: 80, height: 24, turn: "text", steps: []parityStep{
 			{keys: []tea.KeyPressMsg{pressLeader()}, cond: hasLines("Model", "Session"), d: 10 * time.Second},
 		}},
 		{name: "sidebar", width: 140, height: 30, turn: "todo", steps: turn(todoTurn)},

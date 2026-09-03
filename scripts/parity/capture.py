@@ -193,8 +193,6 @@ SURFACES = [
     ),
 ]
 
-CANNED_PROMPTS = {}  # filled from canned.json at main()
-
 
 def sha256(path):
     with open(path, "rb") as fh:
