@@ -85,7 +85,7 @@ def main():
         if not os.path.exists(up_path):
             fail(
                 "the upstream fixture is missing %s (run `just parity-capture` first)"
-                % up_path
+                % name
             )
         with open(yolo_path, "rb") as fh:
             yolo = normalize.screen(fh.read(), s["cols"], s["rows"])
