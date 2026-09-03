@@ -12,7 +12,11 @@ import (
 )
 
 func fastOpts() PaletteOptions {
-	return PaletteOptions{ProbeTimeout: 50 * time.Millisecond, IdleTimeout: 50 * time.Millisecond, HardTimeout: 200 * time.Millisecond}
+	return PaletteOptions{
+		ProbeTimeout: 50 * time.Millisecond,
+		IdleTimeout:  50 * time.Millisecond,
+		HardTimeout:  200 * time.Millisecond,
+	}
 }
 
 func resp4(i int, hex string) string { return "\x1b]4;" + strconv.Itoa(i) + ";" + hex + "\x07" }
@@ -32,7 +36,10 @@ func fullResponses() string {
 	return b.String()
 }
 
-var hex16 = []string{"#000000", "#800000", "#008000", "#808000", "#000080", "#800080", "#008080", "#c0c0c0", "#808080", "#ff0000", "#00ff00", "#ffff00", "#0000ff", "#ff00ff", "#00ffff", "#ffffff"}
+var hex16 = [16]string{
+	"#000000", "#800000", "#008000", "#808000", "#000080", "#800080", "#008080", "#c0c0c0",
+	"#808080", "#ff0000", "#00ff00", "#ffff00", "#0000ff", "#ff00ff", "#00ffff", "#ffffff",
+}
 
 func TestDetectPaletteFullResponse(t *testing.T) {
 	var out bytes.Buffer

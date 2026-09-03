@@ -28,6 +28,7 @@ func testTheme(t *testing.T) Theme {
 }
 
 func TestThemeForegroundAccessors(t *testing.T) {
+	t.Parallel()
 	th := testTheme(t)
 	cases := []struct {
 		name string
@@ -44,13 +45,17 @@ func TestThemeForegroundAccessors(t *testing.T) {
 		{"diffAdded", th.DiffAdded().GetForeground(), "#4fd6be"},
 	}
 	for _, c := range cases {
-		if got := hexOf(c.got); got != c.want {
-			t.Errorf("%s fg = %s, want %s", c.name, got, c.want)
-		}
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			if got := hexOf(c.got); got != c.want {
+				t.Errorf("%s fg = %s, want %s", c.name, got, c.want)
+			}
+		})
 	}
 }
 
 func TestThemeBackgroundAccessors(t *testing.T) {
+	t.Parallel()
 	th := testTheme(t)
 	if got, want := hexOf(th.Background().GetBackground()), "#0a0a0a"; got != want {
 		t.Errorf("background = %s, want %s", got, want)
@@ -61,7 +66,11 @@ func TestThemeBackgroundAccessors(t *testing.T) {
 }
 
 func TestThemeTransparentTokenPaintsNothing(t *testing.T) {
-	themes, _ := AllThemes()
+	t.Parallel()
+	themes, err := AllThemes()
+	if err != nil {
+		t.Fatalf("AllThemes: %v", err)
+	}
 	r, err := ResolveTheme(themes["lucent-orng"], "dark")
 	if err != nil {
 		t.Fatalf("ResolveTheme: %v", err)
@@ -76,6 +85,7 @@ func TestThemeTransparentTokenPaintsNothing(t *testing.T) {
 }
 
 func TestThemeSelectedForeground(t *testing.T) {
+	t.Parallel()
 	// opaque background, no explicit selectedListItemText → background
 	th := testTheme(t)
 	if got, want := th.SelectedForeground().Hex(), FromHex("#0a0a0a").Hex(); got != want {
@@ -87,7 +97,7 @@ func TestThemeSelectedForeground(t *testing.T) {
 	// selectedListItemText, and upstream selectedForeground
 	// (theme/index.ts:95-111) checks _hasSelectedListItemText FIRST, so
 	// the contrast branch would never run on a bundled theme.
-	syn := ThemeJson{Theme: map[string]any{"background": "transparent"}}
+	syn := ThemeJSON{Theme: map[string]any{"background": "transparent"}}
 	r3, err := ResolveTheme(syn, "dark")
 	if err != nil {
 		t.Fatalf("ResolveTheme(synthetic): %v", err)
@@ -100,8 +110,14 @@ func TestThemeSelectedForeground(t *testing.T) {
 		t.Errorf("SelectedForeground (dark bg) = %v, want white", got)
 	}
 	// explicit selectedListItemText wins (orng defines one)
-	themes, _ := AllThemes()
-	r2, _ := ResolveTheme(themes["orng"], "dark")
+	themes, err := AllThemes()
+	if err != nil {
+		t.Fatalf("AllThemes: %v", err)
+	}
+	r2, err := ResolveTheme(themes["orng"], "dark")
+	if err != nil {
+		t.Fatalf("ResolveTheme(orng): %v", err)
+	}
 	ot := Theme{R: r2, Name: "orng", Mode: "dark"}
 	want, _ := r2.Color("selectedListItemText")
 	if got := ot.SelectedForeground(); got != want {
