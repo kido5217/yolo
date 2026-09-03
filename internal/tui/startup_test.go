@@ -16,6 +16,7 @@ import (
 // startup-loading.tsx: the 500 ms arming, the min-3 s hold once shown, the
 // ready text swap, the no-op ready-twice).
 func TestStartupLoadingStateMachine(t *testing.T) {
+	t.Parallel()
 	a := testApp()
 	if a.loadShown || a.loadReady {
 		t.Fatal("fresh app must start unshown + unready")
@@ -52,6 +53,7 @@ func TestStartupLoadingStateMachine(t *testing.T) {
 // before the 500 ms tick fired ⇒ the line never shows; a late tick after
 // ready is a no-op; an expired hold hides immediately.
 func TestStartupLoadingReadyBeforeShow(t *testing.T) {
+	t.Parallel()
 	a := testApp()
 	if got := a.loadDone(); got != nil {
 		t.Fatal("ready before show must return nil (no hold)")
@@ -78,6 +80,7 @@ func TestStartupLoadingReadyBeforeShow(t *testing.T) {
 // TestStartupLoadingRender pins the home-only bottom line and its slot
 // (after the help line content, before the footer line).
 func TestStartupLoadingRender(t *testing.T) {
+	t.Parallel()
 	a := testApp()
 	a.Update(loadShowMsg{})
 	if got := stripANSI(a.loadingView(80)); !strings.Contains(got, startupTextLoading) {

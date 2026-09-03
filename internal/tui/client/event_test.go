@@ -15,6 +15,7 @@ import (
 )
 
 func TestEventsDecodeAndReconnect(t *testing.T) {
+	t.Parallel()
 	// Frame payloads hoisted so the handler lines stay short.
 	const (
 		idleFrame = `data: {"id":"evt_1","type":"session.status","properties":` +
@@ -69,6 +70,7 @@ func TestEventsDecodeAndReconnect(t *testing.T) {
 // re-hydrate state over REST because events published during the drop are
 // lost (the bus has no replay). Events keep flowing after the reconnect.
 func TestEventsResyncPingsOnDrop(t *testing.T) {
+	t.Parallel()
 	const (
 		idleFrame = `data: {"id":"evt_1","type":"session.status","properties":` +
 			`{"sessionID":"ses_1","status":{"type":"idle"}}}` + "\n\n"
@@ -132,6 +134,7 @@ func TestEventsResyncPingsOnDrop(t *testing.T) {
 // JSON-escaped) — is delivered instead of dropped (safety-2). The 2 MiB
 // payload sits under the new 4 MiB cap.
 func TestEventsLargeDataLineSurvives(t *testing.T) {
+	t.Parallel()
 	frame := `data: {"id":"evt_big","type":"message.part.updated","properties":{"part":{"text":"` +
 		strings.Repeat("x", 2*1024*1024) + `"}}}` + "\n\n"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

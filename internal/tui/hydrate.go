@@ -68,6 +68,8 @@ func (a *App) hydrateCmd() tea.Cmd {
 			if err != nil {
 				return hydratedMsg{sessID: id, err: err}
 			}
+			// the command list is best-effort (a fetch error degrades the
+			// menu, not the transcript re-hydration).
 			cmds, _ := a.ListCommands(ctx)
 			msgs, merr := a.ListMessages(ctx, id)
 			if merr != nil {
@@ -80,6 +82,8 @@ func (a *App) hydrateCmd() tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		list, err := a.ListSessions(ctx)
+		// the command list + config are best-effort (a fetch error keeps
+		// the previous store values — see applyHydrate's nil guards).
 		cmds, _ := a.ListCommands(ctx)
 		cfg, _ := a.GetConfig(ctx)
 		return hydratedMsg{list: list, cmds: cmds, cfg: cfg, err: err}
