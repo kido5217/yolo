@@ -140,6 +140,39 @@ func TestMalformedJSONIsError(t *testing.T) {
 	}
 }
 
+// TestSaveGlobalMergeAndMode pins SaveGlobal: cfg is merged over the
+// existing global config (existing keys survive, cfg wins on conflict) and
+// the rewritten yolo.jsonc is mode 0600 (the config may carry provider API
+// keys).
+func TestSaveGlobalMergeAndMode(t *testing.T) {
+	global := t.TempDir()
+	write(t, filepath.Join(global, "yolo.json"), `{"model":"keep/model","provider":{"keep":{"apiKey":"old"}}}`)
+	err := config.SaveGlobal(global, &protocol.Config{
+		Model:    "new/model",
+		Provider: map[string]protocol.ProviderConfig{"add": {APIKey: "k"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadGlobal(global)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Model != "new/model" {
+		t.Fatalf("model = %q, want new/model (cfg wins)", cfg.Model)
+	}
+	if cfg.Provider["keep"].APIKey != "old" || cfg.Provider["add"].APIKey != "k" {
+		t.Fatalf("provider = %+v, want the existing key kept and the new one added", cfg.Provider)
+	}
+	fi, err := os.Stat(filepath.Join(global, "yolo.jsonc"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fi.Mode().Perm(); got != 0o600 {
+		t.Fatalf("yolo.jsonc mode = %o, want 600 (secrets may live here)", got)
+	}
+}
+
 // seedProfileRoot builds a <configHome>/yolo profile root: one dir per
 // model value plus an optional legacy flat file, with the given marker.
 func seedProfileRoot(t *testing.T, configHome, marker string, profiles map[string]string) {

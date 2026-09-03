@@ -610,6 +610,7 @@ func TestProtocolToPartSurfacesMarshalError(t *testing.T) {
 // database-6). Pre-fix the order is query-plan-dependent; the test pins
 // insertion order.
 func TestSameMillisecondTiebreakRowid(t *testing.T) {
+	t.Parallel()
 	db := openDB(t)
 	const ses, msg = "ses_t", "msg_a"
 	if err := db.CreateSession(t.Context(), storage.SessionRow{ID: ses, ProjectDir: "/p", Model: "kido/q", TimeCreated: 1, TimeUpdated: 1}); err != nil {
@@ -636,37 +637,30 @@ func TestSameMillisecondTiebreakRowid(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ids := func(rows []storage.PartRow) []string {
-		out := make([]string, len(rows))
-		for i, r := range rows {
-			out[i] = r.ID
-		}
-		return out
-	}
 	partRows, err := db.ListParts(t.Context(), msg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := ids(partRows), []string{"prt_a", "prt_b"}; !slices.Equal(got, want) {
+	if got, want := partIDs(partRows), []string{"prt_a", "prt_b"}; !slices.Equal(got, want) {
 		t.Fatalf("ListParts = %v, want %v (rowid tiebreak)", got, want)
 	}
 	msgRows, err := db.ListMessages(t.Context(), ses)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := ids2(msgRows), []string{"msg_a", "msg_b"}; !slices.Equal(got, want) {
+	if got, want := messageIDs(msgRows), []string{"msg_a", "msg_b"}; !slices.Equal(got, want) {
 		t.Fatalf("ListMessages = %v, want %v (rowid tiebreak)", got, want)
 	}
 	permRows, err := db.ListPermissions(t.Context(), ses, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := ids3(permRows), []string{"perm_a", "perm_b"}; !slices.Equal(got, want) {
+	if got, want := permissionIDs(permRows), []string{"perm_a", "perm_b"}; !slices.Equal(got, want) {
 		t.Fatalf("ListPermissions = %v, want %v (rowid tiebreak)", got, want)
 	}
 }
 
-func ids2(rows []storage.MessageRow) []string {
+func partIDs(rows []storage.PartRow) []string {
 	out := make([]string, len(rows))
 	for i, r := range rows {
 		out[i] = r.ID
@@ -674,7 +668,15 @@ func ids2(rows []storage.MessageRow) []string {
 	return out
 }
 
-func ids3(rows []storage.PermissionRow) []string {
+func messageIDs(rows []storage.MessageRow) []string {
+	out := make([]string, len(rows))
+	for i, r := range rows {
+		out[i] = r.ID
+	}
+	return out
+}
+
+func permissionIDs(rows []storage.PermissionRow) []string {
 	out := make([]string, len(rows))
 	for i, r := range rows {
 		out[i] = r.RequestID
@@ -682,10 +684,92 @@ func ids3(rows []storage.PermissionRow) []string {
 	return out
 }
 
+// TestListPartsByMessageIDs pins the batched part fetch (the N+1 fix): one
+// parameterized IN query returns every requested message's parts grouped by
+// message_id, each message's parts in ListParts order (time_created ASC,
+// rowid ASC); a message with no parts and an id absent from the table
+// contribute no rows, and an empty input returns an empty slice.
+func TestListPartsByMessageIDs(t *testing.T) {
+	t.Parallel()
+	db := openDB(t)
+	const ses = "ses_batch"
+	if err := db.CreateSession(t.Context(), storage.SessionRow{ID: ses, ProjectDir: "/p", Model: "kido/q", TimeCreated: 1, TimeUpdated: 1}); err != nil {
+		t.Fatal(err)
+	}
+	for i, id := range []string{"msg_x", "msg_a", "msg_b"} {
+		if err := db.CreateMessage(t.Context(), storage.MessageRow{ID: id, SessionID: ses, Role: "user", TimeCreated: int64(10 + i)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seed := func(id, msg string, tc int64) {
+		t.Helper()
+		if err := db.UpsertPart(t.Context(), storage.PartRow{ID: id, MessageID: msg, SessionID: ses, Type: "text", StateJSON: `{"text":"` + id + `"}`, TimeCreated: tc}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// msg_a: a same-time_created pair (the rowid tiebreak decides), msg_b:
+	// two parts inserted in reverse time_created order (the query must
+	// re-sort them), msg_x: no parts at all.
+	seed("prt_a1", "msg_a", 5)
+	seed("prt_a2", "msg_a", 5)
+	seed("prt_b1", "msg_b", 9)
+	seed("prt_b2", "msg_b", 7)
+
+	grouped := func(t *testing.T, ids []string) map[string][]string {
+		t.Helper()
+		rows, err := db.ListPartsByMessageIDs(t.Context(), ids)
+		if err != nil {
+			t.Fatalf("ListPartsByMessageIDs: %v", err)
+		}
+		got := map[string][]string{}
+		for _, r := range rows {
+			got[r.MessageID] = append(got[r.MessageID], r.ID)
+		}
+		return got
+	}
+
+	t.Run("multiple messages grouped with per-message order", func(t *testing.T) {
+		// Input order is deliberately not alphabetical: the query's
+		// message_id, time_created, rowid order groups and orders the
+		// output regardless of the input order.
+		got := grouped(t, []string{"msg_b", "msg_missing", "msg_a", "msg_x"})
+		want := map[string][]string{
+			"msg_a": {"prt_a1", "prt_a2"},
+			"msg_b": {"prt_b2", "prt_b1"},
+		}
+		if len(got) != len(want) {
+			t.Fatalf("grouped = %v, want %v", got, want)
+		}
+		for msg, wantIDs := range want {
+			if !slices.Equal(got[msg], wantIDs) {
+				t.Fatalf("parts[%s] = %v, want %v", msg, got[msg], wantIDs)
+			}
+		}
+	})
+
+	t.Run("message without parts and unknown id contribute nothing", func(t *testing.T) {
+		got := grouped(t, []string{"msg_x", "msg_missing"})
+		if len(got) != 0 {
+			t.Fatalf("grouped = %v, want no messages", got)
+		}
+	})
+
+	t.Run("empty input returns empty slice without error", func(t *testing.T) {
+		rows, err := db.ListPartsByMessageIDs(t.Context(), nil)
+		if err != nil {
+			t.Fatalf("empty input: %v", err)
+		}
+		if rows == nil || len(rows) != 0 {
+			t.Fatalf("rows = %v, want an empty non-nil slice", rows)
+		}
+	})
+}
+
 // TestUpdateNotFoundPaths: a zero-rows update maps to ErrNotFound (the
 // surviving path after Task J starts returning driver RowsAffected errors
 // as-is instead of masking them as not-found).
 func TestUpdateNotFoundPaths(t *testing.T) {
+	t.Parallel()
 	db := openDB(t)
 	if err := db.UpdateSession(t.Context(), "ses_nope", storage.SessionRow{Title: "x"}); !errors.Is(err, storage.ErrNotFound) {
 		t.Fatalf("UpdateSession missing id: err = %v, want ErrNotFound", err)
@@ -701,6 +785,7 @@ func TestUpdateNotFoundPaths(t *testing.T) {
 // TestCancelledCtxReachesDriver: a cancelled ctx fails the DAO call with the
 // ctx error (context propagation — database-3).
 func TestCancelledCtxReachesDriver(t *testing.T) {
+	t.Parallel()
 	db := openDB(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
