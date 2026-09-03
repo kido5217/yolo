@@ -793,3 +793,21 @@ overflow, and max-tool-rounds; error-before-idle order). A failure
 before any round started publishes nothing (the idle status is the
 surface); overflow and max-tool-rounds end idle without an error
 (non-failures, yolo model).
+
+Cobra CLI (2026-09-03, v0.6.0 D1, beads `yolo-o75.2`): user-approved
+`github.com/spf13/cobra` v1.10.2 (license call: **Apache-2.0** accepted as
+permissive — the dependency-policy checklist now reads "MIT/BSD/Apache-2.0")
+with indirect `github.com/spf13/pflag` v1.0.9 + `github.com/inconshreveable/
+mousetrap` v1.1.0 (Windows-only stub); test-only `go.uber.org/goleak` v1.3.0
+was approved in the same ruling for X3 (lands separately). The CLI is now a
+cobra tree: root = TUI (`yolo [sessionID]`), `serve` / `auth` (list|add|
+remove) / `profile` (list|add|use|edit|remove|copy) / `version`, plus cobra's
+default `completion` subcommand (static only; dynamic candidates deferred,
+bead `yolo-k49`). pflag's interspersed parsing replaces the old
+pullDescFlags/pullEditFlags; stdlib-style single-dash long flags (`-addr`,
+`-dir`, `-profile`, even `-description`) are normalized to double-dash in
+`run` (normalizeSingleDash) because pflag reads a single dash as a shorthand
+cluster — the pinned `serve -addr` test keeps the surface. The root
+`-v`/`--version` pre-scan is retained verbatim (cobra's `--version`
+annotation only covers the exact long form). Exit codes 0/1/2 and help
+wording are pinned by the pre-migration behavioral suite (all green).

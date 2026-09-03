@@ -31,6 +31,7 @@ yolo auth add <provider> [key]   # add (key omitted = prompt on stdin)
 yolo auth remove <provider>
 yolo version
 yolo help
+yolo completion bash   # shell completion script (zsh / fish / powershell too)
 ```
 
 SIGINT/SIGTERM (TUI or `serve`) triggers a graceful drain — in-flight turns are cancelled, the listener shuts down within 5 s — and the process exits 0.

@@ -10,7 +10,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -21,6 +20,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/spf13/cobra"
 
 	"github.com/kido5217/yolo/internal/auth"
 	"github.com/kido5217/yolo/internal/config"
@@ -61,55 +61,511 @@ func main() {
 	os.Exit(run(os.Args[1:]))
 }
 
-// run dispatches the CLI. The subcommand/flag surface is hand-rolled on the
-// stdlib flag package; the golang-cli skill default is cobra+viper (with
-// free shell completions) — migrating needs a dep approval (escalation,
-// review yolo-3r8.5).
-func run(args []string) int {
-	if len(args) == 0 {
-		return tuiCmd(nil)
+// errUsage and errRuntime are the RunE sentinels for the two failure
+// classes (Unix convention, matching the pre-cobra dispatch): a usage
+// error (bad flag/argument) exits 2, a runtime failure exits 1. The
+// failing command has already printed its own "yolo <path>: %v" line (plus
+// usage, for usage errors) before returning, so cobra prints nothing extra
+// (SilenceErrors/SilenceUsage on the whole tree).
+var (
+	errUsage   = errors.New("usage error")
+	errRuntime = errors.New("runtime error")
+)
+
+// run dispatches the CLI on the cobra command tree (v0.6.0 D1, yolo-o75.2):
+// root = TUI, serve/auth/profile/version subcommands plus cobra's default
+// completion command (static only). A fresh tree is built per call so the
+// in-process tests can re-invoke run() without flag state leaking between
+// invocations. The root -v/--version stays a first-arg pre-scan (NOT a
+// persistent flag: `yolo --dir x -v` is a usage error today and must stay
+// so).
+// singleDashShorthands are the single-char shorthands the CLI defines (h =
+// cobra's help flag on every command; v/d/n on serve/profile).
+var singleDashShorthands = map[byte]bool{'h': true, 'v': true, 'd': true, 'n': true}
+
+// normalizeSingleDash converts stdlib-flag-style single-dash long flags
+// (-addr, -dir, -profile, even -description) to pflag's double-dash form.
+// pflag reads a single dash as a shorthand cluster, but the stdlib flag
+// package (the pre-cobra dispatcher) accepted single-dash long names, and
+// the surface keeps them (the pinned serve test uses `-addr`). Only a
+// single known shorthand char stays single-dash.
+func normalizeSingleDash(args []string) []string {
+	out := make([]string, len(args))
+	copy(out, args)
+	for i, a := range out {
+		if len(a) < 2 || a[0] != '-' || a[1] == '-' {
+			continue
+		}
+		name := a[1:]
+		if eq := strings.IndexByte(name, '='); eq >= 0 {
+			name = name[:eq]
+		}
+		if len(name) == 1 && singleDashShorthands[name[0]] {
+			continue
+		}
+		out[i] = "-" + a
 	}
-	if args[0] == "-v" || args[0] == "--version" {
-		printVersion()
-		return 0
-	}
-	switch args[0] {
-	case "help", "-h", "--help":
-		usage(os.Stdout)
-		return 0
-	case "serve":
-		return serveCmd(args[1:])
-	case "auth":
-		return authCmd(args[1:])
-	case "profile":
-		return profileCmd(args[1:])
-	case "version":
-		printVersion()
-		return 0
-	default:
-		return tuiCmd(args)
-	}
+	return out
 }
 
-func usage(w io.Writer) {
-	// Quoted-string concatenation (not a raw string) so the long profile
-	// line breaks at source level without changing the output.
-	fmt.Fprint(w,
-		"yolo — Go TUI + core-server harness\n\nUsage:\n  "+
-			"yolo [<sessionID>] [--dir DIR] [--profile ID]   start the TUI (optionally resume a session)\n  "+
-			"yolo serve [--addr ADDR] [--profile ID]         run the core server only (default http://127.0.0.1:4096)\n  "+
-			"yolo auth <subcommand>           manage credentials (list | add <provider> [key] | remove <provider>)\n  "+
-			"yolo profile <subcommand>        manage config profiles (list | add [name] [-d DESC] | use ID | "+
-			"edit ID [-n NAME] [-d DESC] | remove ID | copy SRC NAME [-d DESC])\n  "+
-			"yolo [-v|--version]              print version (same as: yolo version)\n  "+
-			"yolo help                        this help\n\n"+
-			"--profile selects the config profile by id or name (default: YOLO_PROFILE\n"+
-			"env, then the active profile set with yolo profile use).\n")
+func run(args []string) int {
+	if len(args) > 0 && (args[0] == "-v" || args[0] == "--version") {
+		printVersion()
+		return 0
+	}
+	root := newRootCmd()
+	root.SetArgs(normalizeSingleDash(args))
+	cmd, err := root.ExecuteC()
+	if err == nil || errors.Is(err, flag.ErrHelp) {
+		return 0
+	}
+	switch {
+	case errors.Is(err, errUsage):
+		return 2
+	case errors.Is(err, errRuntime):
+		return 1
+	default:
+		// A flag-parse error reached here (it precedes RunE): cobra
+		// printed nothing (SilenceErrors), so print the app-style line +
+		// the failing command's usage and exit 2, as the pre-cobra
+		// per-command parseFlags path did.
+		fmt.Fprintf(os.Stderr, "%s: %v\n", cmd.CommandPath(), err)
+		cmd.Usage()
+		return 2
+	}
 }
 
 // profileFlagUsage is the --profile flag help text, shared by the root TUI
 // command and serve.
 const profileFlagUsage = "config profile to use (id or name; default: YOLO_PROFILE env, then the active profile)"
+
+// newRootCmd builds the cobra command tree fresh (the D1 tree, yolo-o75.2).
+// The root command runs the TUI; a positional argument is a sessionID for
+// the root, not an error (pre-cobra behavior) — ArbitraryArgs opts out of
+// cobra's legacyArgs rule that a root with subcommands rejects positionals.
+func newRootCmd() *cobra.Command {
+	root := &cobra.Command{
+		Use:   "yolo [sessionID]",
+		Short: "Go TUI + core-server harness",
+		Args:  cobra.ArbitraryArgs,
+		Long: "yolo runs the core HTTP server (REST + SSE) in-process and, by " +
+			"default, the bubbletea TUI, which talks to it only through the " +
+			"wire contract. `yolo [<sessionID>]` starts the TUI (optionally " +
+			"resume a session).\n\n" +
+			"--profile selects the config profile by id or name (default: " +
+			"YOLO_PROFILE env, then the active profile set with yolo profile " +
+			"use).",
+		RunE: tuiRunE,
+	}
+	root.Flags().String("dir", "", "project directory (default CWD)")
+	root.Flags().String("profile", "", profileFlagUsage)
+	root.AddCommand(newServeCmd(), newAuthCmd(), newProfileCmd(), newVersionCmd())
+	silenceAll(root)
+	return root
+}
+
+// silenceAll sets SilenceUsage/SilenceErrors on the whole tree: the commands
+// print their own "yolo <path>: %v" lines (plus usage where the pre-cobra
+// commands did), so cobra must not print anything of its own.
+func silenceAll(c *cobra.Command) {
+	c.SilenceUsage = true
+	c.SilenceErrors = true
+	for _, sub := range c.Commands() {
+		silenceAll(sub)
+	}
+}
+
+func newServeCmd() *cobra.Command {
+	c := &cobra.Command{
+		Use:   "serve",
+		Short: "run the core server only (default http://127.0.0.1:4096)",
+		RunE:  serveRunE,
+	}
+	c.Flags().String("addr", "127.0.0.1:4096", "listen address")
+	c.Flags().String("profile", "", profileFlagUsage)
+	// -v and --version (the pre-cobra flag set defined the two separately);
+	// one BoolP covers both spellings.
+	c.Flags().BoolP("version", "v", false, "print version and exit")
+	return c
+}
+
+// parentUsageErr is the RunE of the auth/profile parent commands: a bare
+// `yolo auth` or an unknown subcommand prints the parent's usage to stderr
+// and exits 2 (cobra's bare-parent default would drift to help/exit 0).
+func parentUsageErr(cmd *cobra.Command, args []string) error {
+	cmd.Usage()
+	return errUsage
+}
+
+// unexpectedArg reports a stray positional argument on a subcommand leaf:
+// "<command path>: unexpected argument %q" + the parent's usage, exit 2.
+func unexpectedArg(cmd *cobra.Command, args []string, index int) error {
+	fmt.Fprintf(os.Stderr, "%s: unexpected argument %q\n", cmd.CommandPath(), args[index])
+	cmd.Parent().Usage()
+	return errUsage
+}
+
+// profileRootErr loads the profile root, printing "<command path>: <err>"
+// and flagging exit 1 on failure.
+func profileRootErr(cmd *cobra.Command) (string, error) {
+	root, err := profileRoot()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %v\n", cmd.CommandPath(), err)
+		return "", errRuntime
+	}
+	return root, nil
+}
+
+func newAuthCmd() *cobra.Command {
+	c := &cobra.Command{
+		Use:   "auth",
+		Short: "manage credentials (list | add <provider> [key] | remove <provider>)",
+		RunE:  parentUsageErr,
+	}
+	c.AddCommand(authListCmd(), authAddCmd(), authRemoveCmd())
+	return c
+}
+
+func authListCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "list credentials",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return unexpectedArg(cmd, args, 0)
+			}
+			s, err := auth.Load()
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "auth list:", err)
+				return errRuntime
+			}
+			if len(s) == 0 {
+				fmt.Println("no credentials")
+				return nil
+			}
+			ids := make([]string, 0, len(s))
+			for id := range s {
+				ids = append(ids, id)
+			}
+			sort.Strings(ids)
+			for _, id := range ids {
+				fmt.Printf("%s  %s  (set)\n", id, s[id].Type)
+			}
+			return nil
+		},
+	}
+}
+
+func authAddCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "add <provider> [key]",
+		Short: "add a credential (key omitted = prompt on stdin)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 2 {
+				return unexpectedArg(cmd, args, 2)
+			}
+			if len(args) < 1 {
+				cmd.Parent().Usage()
+				return errUsage
+			}
+			provider := args[0]
+			var key string
+			if len(args) >= 2 {
+				key = strings.TrimSpace(args[1])
+			} else {
+				// no new dep: plain stdin prompt, echo NOT disabled (documented limitation)
+				fmt.Fprint(os.Stderr, "API key: ")
+				line, rerr := bufio.NewReader(os.Stdin).ReadString('\n')
+				if rerr != nil {
+					fmt.Fprintf(os.Stderr, "auth add: reading key: %v\n", rerr)
+					return errRuntime
+				}
+				key = strings.TrimSpace(line)
+			}
+			if key == "" {
+				fmt.Fprintln(os.Stderr, "auth add: key must not be empty")
+				return errRuntime
+			}
+			s, err := auth.Load()
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "auth add:", err)
+				return errRuntime
+			}
+			s.Set(provider, key)
+			if err := auth.Save(s); err != nil {
+				fmt.Fprintln(os.Stderr, "auth add:", err)
+				return errRuntime
+			}
+			return nil
+		},
+	}
+}
+
+func authRemoveCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "remove <provider>",
+		Short: "remove a credential",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 1 {
+				return unexpectedArg(cmd, args, 1)
+			}
+			if len(args) < 1 {
+				cmd.Parent().Usage()
+				return errUsage
+			}
+			s, err := auth.Load()
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "auth remove:", err)
+				return errRuntime
+			}
+			s.Delete(args[0])
+			if err := auth.Save(s); err != nil {
+				fmt.Fprintln(os.Stderr, "auth remove:", err)
+				return errRuntime
+			}
+			return nil
+		},
+	}
+}
+
+func newProfileCmd() *cobra.Command {
+	c := &cobra.Command{
+		Use:   "profile",
+		Short: "manage config profiles (list | add [name] [-d DESC] | use ID | edit ID [-n NAME] [-d DESC] | remove ID | copy SRC NAME [-d DESC])",
+		RunE:  parentUsageErr,
+	}
+	c.AddCommand(
+		profileListCmd(),
+		profileAddCmd(),
+		profileUseCmd(),
+		profileEditCmd(),
+		profileRemoveCmd(),
+		profileCopyCmd(),
+	)
+	return c
+}
+
+func profileListCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "list profiles (* = active)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return unexpectedArg(cmd, args, 0)
+			}
+			root, err := profileRootErr(cmd)
+			if err != nil {
+				return err
+			}
+			profiles, err := config.List(root)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s: %v\n", cmd.CommandPath(), err)
+				return errRuntime
+			}
+			active, err := config.ActiveID(root)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s: %v\n", cmd.CommandPath(), err)
+				return errRuntime
+			}
+			if len(profiles) == 0 {
+				fmt.Println("no profiles")
+				return nil
+			}
+			for _, p := range profiles {
+				mark := "  "
+				if p.ID == active {
+					mark = "* "
+				}
+				line := mark + p.ID + "  " + p.Name
+				if p.Description != "" {
+					line += "  " + p.Description
+				}
+				fmt.Println(line)
+			}
+			return nil
+		},
+	}
+}
+
+func profileAddCmd() *cobra.Command {
+	c := &cobra.Command{
+		Use:   "add [name]",
+		Short: "create a profile (auto id; name + optional description)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 1 {
+				return unexpectedArg(cmd, args, 1)
+			}
+			desc, _ := cmd.Flags().GetString("description")
+			root, err := profileRootErr(cmd)
+			if err != nil {
+				return err
+			}
+			name := ""
+			if len(args) == 1 {
+				name = args[0]
+			}
+			p, err := config.Add(root, name, desc)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s: %v\n", cmd.CommandPath(), err)
+				return errRuntime
+			}
+			fmt.Printf("%s  %s\n", p.ID, p.Name)
+			return nil
+		},
+	}
+	c.Flags().StringP("description", "d", "", "profile description")
+	return c
+}
+
+func profileUseCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "use <id_or_name>",
+		Short: "set the active profile",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 1 {
+				return unexpectedArg(cmd, args, 1)
+			}
+			if len(args) < 1 {
+				cmd.Parent().Usage()
+				return errUsage
+			}
+			root, err := profileRootErr(cmd)
+			if err != nil {
+				return err
+			}
+			id, ok := resolveProfile(cmd.Name(), root, args[0])
+			if !ok {
+				return errRuntime
+			}
+			if err := config.SetActive(root, id); err != nil {
+				fmt.Fprintf(os.Stderr, "%s: %v\n", cmd.CommandPath(), err)
+				return errRuntime
+			}
+			fmt.Println(id)
+			return nil
+		},
+	}
+}
+
+func profileEditCmd() *cobra.Command {
+	c := &cobra.Command{
+		Use:   "edit <id_or_name>",
+		Short: "change name and/or description (-n, -d)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			f := cmd.Flags()
+			// A profile reference AND at least one field flag are both
+			// required (pre-cobra: hasProfile && hasFieldFlag).
+			if len(args) > 1 {
+				return unexpectedArg(cmd, args, 1)
+			}
+			if len(args) != 1 || (!f.Changed("name") && !f.Changed("description")) {
+				cmd.Parent().Usage()
+				return errUsage
+			}
+			root, err := profileRootErr(cmd)
+			if err != nil {
+				return err
+			}
+			id, ok := resolveProfile(cmd.Name(), root, args[0])
+			if !ok {
+				return errRuntime
+			}
+			name, _ := f.GetString("name")
+			desc, _ := f.GetString("description")
+			p, err := config.Edit(
+				root,
+				id,
+				name,
+				desc,
+				f.Changed("name"),
+				f.Changed("description"),
+			)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s: %v\n", cmd.CommandPath(), err)
+				return errRuntime
+			}
+			fmt.Printf("%s  %s\n", p.ID, p.Name)
+			return nil
+		},
+	}
+	c.Flags().StringP("name", "n", "", "new profile name")
+	c.Flags().StringP("description", "d", "", "new profile description")
+	return c
+}
+
+func profileRemoveCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "remove <id_or_name>",
+		Short: "delete a profile (active falls back to the next one)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 1 {
+				return unexpectedArg(cmd, args, 1)
+			}
+			if len(args) < 1 {
+				cmd.Parent().Usage()
+				return errUsage
+			}
+			root, err := profileRootErr(cmd)
+			if err != nil {
+				return err
+			}
+			id, ok := resolveProfile(cmd.Name(), root, args[0])
+			if !ok {
+				return errRuntime
+			}
+			if err := config.Remove(root, id); err != nil {
+				fmt.Fprintf(os.Stderr, "%s: %v\n", cmd.CommandPath(), err)
+				return errRuntime
+			}
+			fmt.Println(id)
+			return nil
+		},
+	}
+}
+
+func profileCopyCmd() *cobra.Command {
+	c := &cobra.Command{
+		Use:   "copy <src> <name>",
+		Short: "duplicate a profile under a new id",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 2 {
+				return unexpectedArg(cmd, args, 2)
+			}
+			if len(args) < 2 {
+				cmd.Parent().Usage()
+				return errUsage
+			}
+			desc, _ := cmd.Flags().GetString("description")
+			root, err := profileRootErr(cmd)
+			if err != nil {
+				return err
+			}
+			srcID, ok := resolveProfile(cmd.Name(), root, args[0])
+			if !ok {
+				return errRuntime
+			}
+			p, err := config.Copy(root, srcID, args[1], desc)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s: %v\n", cmd.CommandPath(), err)
+				return errRuntime
+			}
+			fmt.Printf("%s  %s\n", p.ID, p.Name)
+			return nil
+		},
+	}
+	c.Flags().StringP("description", "d", "", "profile description")
+	return c
+}
+
+func newVersionCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "print version (same as: yolo -v)",
+		Run: func(cmd *cobra.Command, args []string) {
+			printVersion()
+		},
+	}
+}
 
 // workDir resolves --dir to an absolute directory that must exist.
 func workDir(flagDir string) (string, error) {
@@ -134,56 +590,28 @@ func workDir(flagDir string) (string, error) {
 	return abs, nil
 }
 
-// parseFlags runs the flagset with the flag package's own output silenced
-// (we print the app usage ourselves): -h/--help is a clean help (stdout,
-// exit 0), any other parse error prints the flag error + app usage and is
-// a usage error (exit 2). It reports (ok, err): ok=false + err=nil means
-// help was requested.
-func parseFlags(fs *flag.FlagSet, args []string) (bool, error) {
-	fs.SetOutput(io.Discard)
-	err := fs.Parse(args)
-	if err == nil {
-		return true, nil
-	}
-	if errors.Is(err, flag.ErrHelp) {
-		return false, nil
-	}
-	return false, err
-}
-
-// tuiCmd runs `yolo [<sessionID>] [--dir DIR]`: in-process server on an
-// ephemeral port + the TUI.
-func tuiCmd(args []string) int {
-	fs := flag.NewFlagSet("yolo", flag.ContinueOnError)
-	dir := fs.String("dir", "", "project directory (default CWD)")
-	profile := fs.String("profile", "", profileFlagUsage)
-	ok, err := parseFlags(fs, args)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "yolo: %v\n", err)
-		usage(os.Stderr)
-		return 2
-	}
-	if !ok { // -h/--help
-		usage(os.Stdout)
-		return 0
+// tuiRunE runs `yolo [<sessionID>] [--dir DIR] [--profile ID]`: in-process
+// server on an ephemeral port + the TUI.
+func tuiRunE(cmd *cobra.Command, args []string) error {
+	if len(args) > 1 {
+		cmd.Root().Usage()
+		return errUsage
 	}
 	var sessionID string
-	if fs.NArg() > 1 {
-		usage(os.Stderr)
-		return 2
+	if len(args) == 1 {
+		sessionID = args[0]
 	}
-	if fs.NArg() == 1 {
-		sessionID = fs.Arg(0)
-	}
-	wd, err := workDir(*dir)
+	dir, _ := cmd.Flags().GetString("dir")
+	profile, _ := cmd.Flags().GetString("profile")
+	wd, err := workDir(dir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "yolo: %v\n", err)
-		return 2
+		return errUsage
 	}
-	deps, closeDB, err := buildDeps(wd, *profile)
+	deps, closeDB, err := buildDeps(wd, profile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "yolo: %v\n", err)
-		return 1
+		return errRuntime
 	}
 	defer closeDB()
 
@@ -195,7 +623,7 @@ func tuiCmd(args []string) int {
 		deps.Log.Error("listen failed", "error", err)
 		fmt.Fprintf(os.Stderr, "yolo: %v\n", err)
 		drain(deps, srv)
-		return 1
+		return errRuntime
 	}
 	deps.Log.Info("serving on", "addr", ln.String(), "workdir", wd)
 
@@ -224,7 +652,7 @@ func tuiCmd(args []string) int {
 				fmt.Fprintf(os.Stderr, "yolo: %v\n", err)
 			}
 			drain(deps, srv)
-			return 2
+			return errUsage
 		}
 	}
 
@@ -236,14 +664,14 @@ func tuiCmd(args []string) int {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "yolo: %v\n", err)
 		drain(deps, srv)
-		return 1
+		return errRuntime
 	}
 	loader := config.Loader{Profile: deps.Dirs.Profile}
 	cfg, err := loader.LoadAt(filepath.Join(globalDir, deps.Dirs.Profile), wd)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "yolo: %v\n", err)
 		drain(deps, srv)
-		return 1
+		return errRuntime
 	}
 	engine, err := theme.New(theme.EngineOptions{
 		KVPath:        filepath.Join(deps.Dirs.Data, "tui", "kv.json"),
@@ -255,7 +683,7 @@ func tuiCmd(args []string) int {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "yolo: %v\n", err)
 		drain(deps, srv)
-		return 1
+		return errRuntime
 	}
 	defer engine.Close()
 	if err := engine.Resolve(context.Background()); err != nil {
@@ -274,7 +702,7 @@ func tuiCmd(args []string) int {
 	if err := app.SetKeybinds(cfg.Keybinds); err != nil {
 		fmt.Fprintf(os.Stderr, "yolo: %v\n", err)
 		drain(deps, srv)
-		return 1
+		return errRuntime
 	}
 	deps.Log.Info("tui start", "workdir", wd)
 	program := tea.NewProgram(app)
@@ -295,7 +723,10 @@ func tuiCmd(args []string) int {
 	deps.Log.Info("tui end", "exit_code", tuiExit(runErr))
 	app.Close()
 	drain(deps, srv)
-	return tuiExit(runErr)
+	if tuiExit(runErr) != 0 {
+		return errRuntime
+	}
+	return nil
 }
 
 // tuiExit maps a tea.Run result to the process exit code: a program killed
@@ -340,51 +771,38 @@ func armForceKill(lg *log.Logger, stop <-chan os.Signal, cancel context.CancelFu
 	}()
 }
 
-func serveCmd(args []string) int {
-	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
-	addr := fs.String("addr", "127.0.0.1:4096", "listen address")
-	profile := fs.String("profile", "", profileFlagUsage)
-	showVersion := fs.Bool("v", false, "print version and exit")
-	showVersionLong := fs.Bool("version", false, "print version and exit")
-	ok, err := parseFlags(fs, args)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "yolo serve: %v\n", err)
-		usage(os.Stderr)
-		return 2
+// serveRunE runs `yolo serve [--addr ADDR] [--profile ID]`.
+func serveRunE(cmd *cobra.Command, args []string) error {
+	if len(args) > 0 {
+		return unexpectedArg(cmd, args, 0)
 	}
-	if !ok { // -h/--help
-		usage(os.Stdout)
-		return 0
-	}
-	if fs.NArg() > 0 {
-		fmt.Fprintf(os.Stderr, "yolo serve: unexpected argument %q\n", fs.Arg(0))
-		usage(os.Stderr)
-		return 2
-	}
-	if *showVersion || *showVersionLong {
+	showVersion, _ := cmd.Flags().GetBool("version")
+	if showVersion {
 		printVersion()
-		return 0
+		return nil
 	}
+	addr, _ := cmd.Flags().GetString("addr")
+	profile, _ := cmd.Flags().GetString("profile")
 	wd, err := workDir("")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "yolo serve: %v\n", err)
-		return 1
+		return errRuntime
 	}
-	deps, closeDB, err := buildDeps(wd, *profile)
+	deps, closeDB, err := buildDeps(wd, profile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "yolo serve: %v\n", err)
-		return 1
+		return errRuntime
 	}
 	defer closeDB()
 	deps.Log.Info("yolo starting", "mode", "serve", "workdir", wd, "version", version)
 
 	srv := server.NewServer(*deps)
-	ln, err := srv.Start(*addr)
+	ln, err := srv.Start(addr)
 	if err != nil {
 		deps.Log.Error("listen failed", "error", err)
 		fmt.Fprintf(os.Stderr, "yolo serve: listen: %v\n", err)
 		drain(deps, srv)
-		return 1
+		return errRuntime
 	}
 	fmt.Printf("yolo serving on http://%s (dir %s)\n", ln.String(), wd)
 	deps.Log.Info("serving on", "addr", ln.String(), "workdir", wd)
@@ -397,111 +815,7 @@ func serveCmd(args []string) int {
 	defer cancel()
 	armForceKill(deps.Log, stop, cancel)
 	drainCtx(deps, srv, ctx)
-	return 0
-}
-
-func authUsage() int {
-	fmt.Fprintln(os.Stderr, "Usage:\n  yolo auth list\n  yolo auth add <provider> [key]\n  yolo auth remove <provider>")
-	return 2
-}
-
-func authCmd(args []string) int {
-	if len(args) == 0 {
-		return authUsage()
-	}
-	sub, rest := args[0], args[1:]
-
-	loadStore := auth.Load
-
-	switch sub {
-	case "list":
-		if len(rest) != 0 {
-			fmt.Fprintf(os.Stderr, "yolo auth list: unexpected argument %q\n", rest[0])
-			return authUsage()
-		}
-		s, err := loadStore()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "auth list:", err)
-			return 1
-		}
-		if len(s) == 0 {
-			fmt.Println("no credentials")
-			return 0
-		}
-		ids := make([]string, 0, len(s))
-		for id := range s {
-			ids = append(ids, id)
-		}
-		sort.Strings(ids)
-		for _, id := range ids {
-			fmt.Printf("%s  %s  (set)\n", id, s[id].Type)
-		}
-		return 0
-	case "add":
-		if len(rest) < 1 || len(rest) > 2 {
-			if len(rest) > 2 {
-				fmt.Fprintf(os.Stderr, "yolo auth add: unexpected argument %q\n", rest[2])
-			}
-			return authUsage()
-		}
-		provider := rest[0]
-		var key string
-		if len(rest) >= 2 {
-			key = strings.TrimSpace(rest[1])
-		} else {
-			// no new dep: plain stdin prompt, echo NOT disabled (documented limitation)
-			fmt.Fprint(os.Stderr, "API key: ")
-			line, rerr := bufio.NewReader(os.Stdin).ReadString('\n')
-			if rerr != nil {
-				fmt.Fprintf(os.Stderr, "auth add: reading key: %v\n", rerr)
-				return 1
-			}
-			key = strings.TrimSpace(line)
-		}
-		if key == "" {
-			fmt.Fprintln(os.Stderr, "auth add: key must not be empty")
-			return 1
-		}
-		s, err := loadStore()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "auth add:", err)
-			return 1
-		}
-		s.Set(provider, key)
-		if err := auth.Save(s); err != nil {
-			fmt.Fprintln(os.Stderr, "auth add:", err)
-			return 1
-		}
-		return 0
-	case "remove":
-		if len(rest) < 1 || len(rest) > 1 {
-			if len(rest) > 1 {
-				fmt.Fprintf(os.Stderr, "yolo auth remove: unexpected argument %q\n", rest[1])
-			}
-			return authUsage()
-		}
-		s, err := loadStore()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "auth remove:", err)
-			return 1
-		}
-		s.Delete(rest[0])
-		if err := auth.Save(s); err != nil {
-			fmt.Fprintln(os.Stderr, "auth remove:", err)
-			return 1
-		}
-		return 0
-	default:
-		return authUsage()
-	}
-}
-
-func profileUsage() int {
-	fmt.Fprintln(os.Stderr,
-		"Usage:\n  yolo profile list\n  yolo profile add [name] [-d description]\n  "+
-			"yolo profile use <id_or_name>\n  yolo profile edit <id_or_name> [-n name] [-d description]\n  "+
-			"yolo profile remove <id_or_name>\n  yolo profile copy <src> <name> [-d description]")
-	return 2
+	return nil
 }
 
 // profileRoot returns the global profile root (<XDG config>/yolo) and
@@ -540,242 +854,4 @@ func resolveProfile(cmd, root, ref string) (string, bool) {
 		fmt.Fprintf(os.Stderr, "yolo profile %s: %v\n", cmd, err)
 	}
 	return "", false
-}
-
-// descFlagArgs is the parse result of a -d/--description flag group: the
-// positional args plus the description value.
-type descFlagArgs struct {
-	pos  []string
-	desc string
-}
-
-// editFlagArgs is the parse result of the -n/--name + -d/--description flag
-// group: the positional args plus the flag values with their presence:
-// absent != empty (an empty value clears the field), which descFlagArgs
-// cannot express.
-type editFlagArgs struct {
-	pos     []string
-	name    string
-	desc    string
-	hasName bool
-	hasDesc bool
-}
-
-// pullDescFlags extracts the -d/--description flag from args (any position:
-// -d X, --description X, --description=X) and returns the positional args
-// plus the description value; a -d without a value is an error. The stdlib
-// flag package stops at the first positional, which would forbid `profile
-// add work -d "..."`.
-func pullDescFlags(args []string) (descFlagArgs, error) {
-	var out descFlagArgs
-	out.pos = make([]string, 0, len(args))
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		switch {
-		case a == "-d" || a == "--description":
-			if i+1 >= len(args) {
-				return descFlagArgs{}, errors.New("-d flag needs a value")
-			}
-			out.desc = args[i+1]
-			i++
-		case strings.HasPrefix(a, "--description="):
-			out.desc = strings.TrimPrefix(a, "--description=")
-		default:
-			out.pos = append(out.pos, a)
-		}
-	}
-	return out, nil
-}
-
-// pullEditFlags extracts the -n/--name and -d/--description flags from args
-// (any position: -n X, --name X, --name=X, -d X, --description X,
-// --description=X) and returns the positional args plus the flag values with
-// their presence; a -n or -d without a value is an error.
-func pullEditFlags(args []string) (editFlagArgs, error) {
-	var out editFlagArgs
-	out.pos = make([]string, 0, len(args))
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		switch {
-		case a == "-n" || a == "--name":
-			if i+1 >= len(args) {
-				return editFlagArgs{}, errors.New("-n flag needs a value")
-			}
-			out.name, out.hasName = args[i+1], true
-			i++
-		case strings.HasPrefix(a, "--name="):
-			out.name, out.hasName = strings.TrimPrefix(a, "--name="), true
-		case a == "-d" || a == "--description":
-			if i+1 >= len(args) {
-				return editFlagArgs{}, errors.New("-d flag needs a value")
-			}
-			out.desc, out.hasDesc = args[i+1], true
-			i++
-		case strings.HasPrefix(a, "--description="):
-			out.desc, out.hasDesc = strings.TrimPrefix(a, "--description="), true
-		default:
-			out.pos = append(out.pos, a)
-		}
-	}
-	return out, nil
-}
-
-func profileCmd(args []string) int {
-	if len(args) == 0 {
-		return profileUsage()
-	}
-	sub, rest := args[0], args[1:]
-	root, err := profileRoot()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "yolo profile: %v\n", err)
-		return 1
-	}
-
-	switch sub {
-	case "list":
-		if len(rest) != 0 {
-			fmt.Fprintf(os.Stderr, "yolo profile list: unexpected argument %q\n", rest[0])
-			return profileUsage()
-		}
-		profiles, err := config.List(root)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "yolo profile list: %v\n", err)
-			return 1
-		}
-		active, err := config.ActiveID(root)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "yolo profile list: %v\n", err)
-			return 1
-		}
-		if len(profiles) == 0 {
-			fmt.Println("no profiles")
-			return 0
-		}
-		for _, p := range profiles {
-			mark := "  "
-			if p.ID == active {
-				mark = "* "
-			}
-			line := mark + p.ID + "  " + p.Name
-			if p.Description != "" {
-				line += "  " + p.Description
-			}
-			fmt.Println(line)
-		}
-		return 0
-	case "add":
-		flags, err := pullDescFlags(rest)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "yolo profile add: %v\n", err)
-			return profileUsage()
-		}
-		if len(flags.pos) > 1 {
-			fmt.Fprintf(os.Stderr, "yolo profile add: unexpected argument %q\n", flags.pos[1])
-			return profileUsage()
-		}
-		name := ""
-		if len(flags.pos) == 1 {
-			name = flags.pos[0]
-		}
-		p, err := config.Add(root, name, flags.desc)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "yolo profile add: %v\n", err)
-			return 1
-		}
-		fmt.Printf("%s  %s\n", p.ID, p.Name)
-		return 0
-	case "use":
-		if len(rest) < 1 || len(rest) > 1 {
-			if len(rest) > 1 {
-				fmt.Fprintf(os.Stderr, "yolo profile use: unexpected argument %q\n", rest[1])
-			}
-			return profileUsage()
-		}
-		id, ok := resolveProfile("use", root, rest[0])
-		if !ok {
-			return 1
-		}
-		if err := config.SetActive(root, id); err != nil {
-			fmt.Fprintf(os.Stderr, "yolo profile use: %v\n", err)
-			return 1
-		}
-		fmt.Println(id)
-		return 0
-	case "edit":
-		flags, err := pullEditFlags(rest)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "yolo profile edit: %v\n", err)
-			return profileUsage()
-		}
-		if len(flags.pos) > 1 {
-			fmt.Fprintf(os.Stderr, "yolo profile edit: unexpected argument %q\n", flags.pos[1])
-			return profileUsage()
-		}
-		hasProfile := len(flags.pos) == 1
-		hasFieldFlag := flags.hasName || flags.hasDesc
-		if !hasProfile || !hasFieldFlag {
-			return profileUsage()
-		}
-		id, ok := resolveProfile("edit", root, flags.pos[0])
-		if !ok {
-			return 1
-		}
-		p, err := config.Edit(
-			root,
-			id,
-			flags.name,
-			flags.desc,
-			flags.hasName,
-			flags.hasDesc,
-		)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "yolo profile edit: %v\n", err)
-			return 1
-		}
-		fmt.Printf("%s  %s\n", p.ID, p.Name)
-		return 0
-	case "remove":
-		if len(rest) < 1 || len(rest) > 1 {
-			if len(rest) > 1 {
-				fmt.Fprintf(os.Stderr, "yolo profile remove: unexpected argument %q\n", rest[1])
-			}
-			return profileUsage()
-		}
-		id, ok := resolveProfile("remove", root, rest[0])
-		if !ok {
-			return 1
-		}
-		if err := config.Remove(root, id); err != nil {
-			fmt.Fprintf(os.Stderr, "yolo profile remove: %v\n", err)
-			return 1
-		}
-		fmt.Println(id)
-		return 0
-	case "copy":
-		flags, err := pullDescFlags(rest)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "yolo profile copy: %v\n", err)
-			return profileUsage()
-		}
-		if len(flags.pos) < 2 {
-			return profileUsage()
-		}
-		if len(flags.pos) > 2 {
-			fmt.Fprintf(os.Stderr, "yolo profile copy: unexpected argument %q\n", flags.pos[2])
-			return profileUsage()
-		}
-		srcID, ok := resolveProfile("copy", root, flags.pos[0])
-		if !ok {
-			return 1
-		}
-		p, err := config.Copy(root, srcID, flags.pos[1], flags.desc)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "yolo profile copy: %v\n", err)
-			return 1
-		}
-		fmt.Printf("%s  %s\n", p.ID, p.Name)
-		return 0
-	default:
-		return profileUsage()
-	}
 }
