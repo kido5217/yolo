@@ -2,7 +2,7 @@ package server
 
 import (
 	"net/http"
-	"sort"
+	"slices"
 
 	"github.com/kido5217/yolo/internal/protocol"
 )
@@ -39,7 +39,7 @@ func (s *Server) handleAgent(w http.ResponseWriter, _ *http.Request) {
 					ids = append(ids, id)
 				}
 			}
-			sort.Strings(ids)
+			slices.Sort(ids)
 			for _, id := range ids {
 				out = append(out, protocol.Agent{Name: id, Description: "Custom agent.", Mode: "primary", Options: map[string]any{}})
 			}

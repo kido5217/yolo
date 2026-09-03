@@ -2,7 +2,8 @@ package protocol
 
 import (
 	"fmt"
-	"sort"
+	"slices"
+	"strings"
 )
 
 // config wire = config file schema (spec 6.1)
@@ -61,7 +62,7 @@ func ParsePerms(m map[string]any) ([]Rule, error) {
 	for k := range m {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	var wild, specific []Rule
 	for _, k := range keys {
 		switch v := m[k].(type) {
@@ -72,11 +73,11 @@ func ParsePerms(m map[string]any) ([]Rule, error) {
 			for p := range v {
 				pats = append(pats, p)
 			}
-			sort.Slice(pats, func(i, j int) bool {
-				if len(pats[i]) != len(pats[j]) {
-					return len(pats[i]) < len(pats[j])
+			slices.SortFunc(pats, func(a, b string) int {
+				if len(a) != len(b) {
+					return len(a) - len(b)
 				}
-				return pats[i] < pats[j]
+				return strings.Compare(a, b)
 			})
 			for _, p := range pats {
 				a, ok := v[p].(string)
