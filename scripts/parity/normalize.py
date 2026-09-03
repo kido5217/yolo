@@ -71,7 +71,15 @@ _MASKS = [
     ),
 ]
 
-_CSI = re.compile(rb"\x1b\[([0-9;?<]*)([A-Za-z])")
+# The param class admits '>' and '$' (the intermediate bytes of the
+# private sequences bubbletea v2 emits at boot/exit: the DECRQM queries
+# \x1b[?2026$p / \x1b[?2027$p and the secondary-DA \x1b[>4m / \x1b[>1u).
+# They are consumed-and-ignored below (S8.3, deviation 256): without the
+# two extra bytes the ESC is skipped alone and the leftover "[>4m"-class
+# text lands in the replayed screen (row 0 of every yolo surface). The
+# upstream capture never emits them (its sync output is masked above),
+# so this is a no-op for the pinned upstream fixtures.
+_CSI = re.compile(rb"\x1b\[([0-9;?<>$]*)([A-Za-z])")
 
 _FG_BASIC = {c: "ansi:%d" % (30 + c) for c in range(8)}
 _BG_BASIC = {c: "ansi:%d" % (40 + c) for c in range(8)}
@@ -110,6 +118,11 @@ def screen(data: bytes, cols: int, rows: int) -> dict:
                     ps = [p for p in params.split(b";") if p != b""]
                     if not ps:
                         ps = [b"0"]
+                    if not all(p.isdigit() for p in ps):
+                        # a non-numeric-param "m" sequence (the private
+                        # \x1b[>4m secondary-DA query) is not SGR:
+                        # consumed-and-ignored (deviation 256).
+                        continue
                     j = 0
                     while j < len(ps):
                         code = int(ps[j])
