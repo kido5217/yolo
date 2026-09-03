@@ -163,6 +163,10 @@ func newRootCmd() *cobra.Command {
 	root.PersistentPreRunE = checkOutputFormat
 	root.Flags().String("dir", "", "project directory (default CWD)")
 	root.Flags().String("profile", "", profileFlagUsage)
+	// Dynamic completion (yolo-k49): --profile candidates from the profile
+	// store; the root positional sessionID from the --dir store's sessions.
+	root.RegisterFlagCompletionFunc("profile", profileCompletionFunc)
+	root.ValidArgsFunction = sessionIDCompletionFunc
 	root.AddCommand(newServeCmd(), newAuthCmd(), newProfileCmd(), newVersionCmd())
 	silenceAll(root)
 	return root
@@ -187,6 +191,9 @@ func newServeCmd() *cobra.Command {
 	}
 	c.Flags().String("addr", "127.0.0.1:4096", "listen address")
 	c.Flags().String("profile", "", profileFlagUsage)
+	// Dynamic completion (yolo-k49): --profile candidates from the profile
+	// store (same source as the root flag).
+	c.RegisterFlagCompletionFunc("profile", profileCompletionFunc)
 	// -v and --version (the pre-cobra flag set defined the two separately);
 	// one BoolP covers both spellings.
 	c.Flags().BoolP("version", "v", false, "print version and exit")

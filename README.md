@@ -37,6 +37,8 @@ yolo auth list --output json  # machine-readable output (see below)
 
 `--output json` switches the data-reporting leaves (`auth list`, `profile list`, `version`) to a bare 2-space-indented JSON value (no envelope) on stdout; on failure stdout stays empty, stderr keeps the human error wording, and the exit codes stay 0/1/2. The default (no flag) keeps the human output byte-for-byte. Any other command rejects `--output` with a usage error (exit 2).
 
+Shell completion is dynamic for `--profile` (profile ids and names) and the root `sessionID` positional (the current directory's session ids, most recent first); everything else is static.
+
 SIGINT/SIGTERM (TUI or `serve`) triggers a graceful drain — in-flight turns are cancelled, the listener shuts down within 5 s — and the process exits 0.
 
 ## Configuration
