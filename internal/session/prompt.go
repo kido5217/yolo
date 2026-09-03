@@ -144,6 +144,9 @@ var gitCache struct {
 // gitRepo reports whether dir is inside a git work tree. Detection is
 // `git -C dir rev-parse --is-inside-work-tree` with a 2s timeout; any failure
 // counts as "no". Results are cached per directory, bounded and expiring.
+// The check-then-cache race (a repo appearing/expiring mid-process) is
+// tolerated: the TTL bounds staleness and the answer only steers prompt
+// text, not behavior.
 func gitRepo(dir string) bool {
 	now := time.Now()
 	gitCache.mu.Lock()

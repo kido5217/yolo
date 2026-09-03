@@ -384,7 +384,8 @@ func TestRunTurnRecoversPanic(t *testing.T) {
 	h.overrideDriver = &pd
 	h.build(t)
 	ses := h.startSession(t, t.TempDir())
-	if err := h.db.UpdateSession(t.Context(), ses, storage.SessionRow{Title: "titled", TimeUpdated: time.Now().UnixMilli()}); err != nil {
+	row := storage.SessionRow{Title: "titled", TimeUpdated: time.Now().UnixMilli()}
+	if err := h.db.UpdateSession(t.Context(), ses, row); err != nil {
 		t.Fatal(err)
 	}
 	var doneErr error
@@ -740,8 +741,8 @@ func TestAbortThenNewTurnCompletes(t *testing.T) {
 }
 
 // TestWaitIdleUnknownSession: WaitIdle returns nil immediately for a
-// session with no in-flight turn (unknown id or an idle session) — no
-// polling, no error (yolo-1vp settle API).
+// session with no in-flight turn (unknown id or an idle session) — it
+// observes the done event, never polls Status.
 func TestWaitIdleUnknownSession(t *testing.T) {
 	h := newHarness(t)
 	h.build(t)

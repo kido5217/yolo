@@ -87,13 +87,17 @@ type Engine struct {
 
 	mu   sync.Mutex
 	busy map[string]context.CancelFunc
-	// settle is closed when the session's in-flight turn ends: WaitIdle
-	// awaiters observe the settle event instead of polling the busy flag.
-	settle    map[string]chan struct{}
+	// turnDone is closed when the session's in-flight turn ends: WaitIdle
+	// awaiters observe the done event instead of polling the busy flag.
+	turnDone  map[string]chan struct{}
 	shells    map[string]*tool.Shell
 	titleCtx  map[string]*titleCancel
 	titleWait sync.WaitGroup
-	deleted   map[string]struct{}
+	// deleted suppresses events for closed sessions (troubleshoot-5). It is
+	// unbounded by design: an entry can never be removed safely (a late event
+	// or a late turn must stay suppressed), and a session-id set per process
+	// lifetime is small in practice.
+	deleted map[string]struct{}
 }
 
 // New builds the engine from its deps. DB, Bus, Prov, Perm and Tools are
@@ -149,7 +153,7 @@ func New(d Deps) (*Engine, error) {
 		clock:     clock,
 		backoff:   backoff,
 		busy:      map[string]context.CancelFunc{},
-		settle:    map[string]chan struct{}{},
+		turnDone:  map[string]chan struct{}{},
 		shells:    map[string]*tool.Shell{},
 		titleCtx:  map[string]*titleCancel{},
 		deleted:   map[string]struct{}{},
@@ -197,7 +201,7 @@ func (e *Engine) Send(ctx context.Context, sessionID, text string, onDone func(e
 	}
 	turnCtx, cancel := context.WithCancel(ctx)
 	e.busy[sessionID] = cancel
-	e.settle[sessionID] = make(chan struct{})
+	e.turnDone[sessionID] = make(chan struct{})
 	e.mu.Unlock()
 
 	now := e.clock()
@@ -206,7 +210,7 @@ func (e *Engine) Send(ctx context.Context, sessionID, text string, onDone func(e
 	if err := e.db.CreateMessage(ctx, storage.MessageRow{
 		ID: msgID, SessionID: sessionID, Role: "user", Agent: row.Agent, TimeCreated: now,
 	}); err != nil {
-		e.releaseBusy(sessionID)
+		e.endTurn(sessionID)
 		return SendResult{}, err
 	}
 	userPart := protocol.Part{
@@ -215,11 +219,11 @@ func (e *Engine) Send(ctx context.Context, sessionID, text string, onDone func(e
 	}
 	userPartRow, err := storage.ProtocolToPart(userPart)
 	if err != nil {
-		e.releaseBusy(sessionID)
+		e.endTurn(sessionID)
 		return SendResult{}, fmt.Errorf("session: persist user part: %w", err)
 	}
 	if err := e.db.UpsertPart(ctx, userPartRow); err != nil {
-		e.releaseBusy(sessionID)
+		e.endTurn(sessionID)
 		return SendResult{}, err
 	}
 	userMsg := protocol.Message{
@@ -228,7 +232,9 @@ func (e *Engine) Send(ctx context.Context, sessionID, text string, onDone func(e
 		Model: &protocol.MessageModel{ProviderID: info.ID, ModelID: model.ID},
 	}
 	e.publish(protocol.EventTypeMessageUpdated, protocol.MessageUpdatedProps{SessionID: sessionID, Info: userMsg})
-	e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{SessionID: sessionID, Part: userPart, Time: now})
+	e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
+		SessionID: sessionID, Part: userPart, Time: now,
+	})
 
 	t := newTurn(sessionID, row, info, model)
 	e.maybeScheduleTitle(ctx, t, text)
@@ -265,14 +271,17 @@ func (e *Engine) Abort(sessionID string) bool {
 }
 
 // WaitIdle blocks until the session's in-flight turn releases the busy flag
-// (its settle signal) or ctx is done, returning ctx.Err() on cancellation.
-// An idle or unknown session returns nil immediately. It awaits the settle
+// (its done signal) or ctx is done, returning ctx.Err() on cancellation.
+// An idle or unknown session returns nil immediately. It awaits the done
 // event instead of polling Status; the channel is captured under the engine
 // lock, so a turn that ends between the capture and the select has already
-// closed it and the wait returns at once.
+// closed it and the wait returns at once. Note that it observes a single
+// settlement: a NEW turn that starts after the capture is not awaited (the
+// method then returns nil while the session is busy again) — callers that
+// must observe an idle state re-check Status (settleAndClose loops).
 func (e *Engine) WaitIdle(ctx context.Context, sessionID string) error {
 	e.mu.Lock()
-	ch := e.settle[sessionID]
+	ch := e.turnDone[sessionID]
 	e.mu.Unlock()
 	if ch == nil {
 		return nil
@@ -385,23 +394,19 @@ func (e *Engine) Shutdown(ctx context.Context) {
 	}
 }
 
-// endTurn releases the session's busy flag and signals the settle (the
-// WaitIdle awaiters) in one atomic step.
+// endTurn releases the session's busy flag and signals the done channel (the
+// WaitIdle awaiters) in one atomic step. It is also the Send failure path:
+// the turn goroutine never started, so no client observed a busy — a lone
+// idle status would be a transition with no observed start (spec §3.1 B);
+// Send's error paths therefore call endTurn without publishing.
 func (e *Engine) endTurn(sessionID string) {
 	e.mu.Lock()
 	delete(e.busy, sessionID)
-	if ch := e.settle[sessionID]; ch != nil {
+	if ch := e.turnDone[sessionID]; ch != nil {
 		close(ch)
-		delete(e.settle, sessionID)
+		delete(e.turnDone, sessionID)
 	}
 	e.mu.Unlock()
-}
-
-// releaseBusy drops the session's busy entry without publishing a status:
-// the turn goroutine never started, so no client observed a busy — a lone
-// idle would be a transition with no observed start (spec §3.1 B).
-func (e *Engine) releaseBusy(sessionID string) {
-	e.endTurn(sessionID)
 }
 
 func (e *Engine) publish(t string, props any) {
@@ -656,7 +661,8 @@ func (e *Engine) surfaceTurnError(ctx context.Context, t *turn, turnErr error) {
 	}
 	row, err := e.db.GetMessage(dctx, t.lastMsgID)
 	if err != nil {
-		e.lg.Error("load message for error surface failed", "message_id", t.lastMsgID, "session_id", t.sessionID, "error", err)
+		e.lg.Error("load message for error surface failed",
+			"message_id", t.lastMsgID, "session_id", t.sessionID, "error", err)
 		return
 	}
 	info := protocol.Message{
