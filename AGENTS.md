@@ -96,7 +96,7 @@ Entries live under `superpowers:` skills; invoke a skill **before** acting when 
 | Bug, crash, deadlock, unexpected behavior | `systematic-debugging` — root cause before proposing a fix |
 | Before claiming "done / fixed / passing", before committing | `verification-before-completion` — run the gate, read the output, then claim |
 | Committing changes | `git-commit` — conventional message from the actual diff |
-| Milestone finished / before merge | `requesting-code-review` — and `receiving-code-review` when feedback arrives. **Wiki gate first:** run `just wiki-stale`; if it exits 1, refresh `openwiki/` via the `openwiki` skill's host-driven update (MCP `openwiki_begin` mode=update) before review |
+| Milestone finished / before merge | `requesting-code-review` — and `receiving-code-review` when feedback arrives |
 | A new spec needs an implementation plan | `writing-plans` — specs → `docs/superpowers/specs/`, plans → `docs/superpowers/plans/`, progress → `docs/superpowers/PROGRESS.md` |
 | 2+ independent tasks with no shared state | `dispatching-parallel-agents` — at most two subagents in flight at once (core principle 7) |
 | Feature work needing workspace isolation | `using-git-worktrees` |
@@ -360,15 +360,3 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
 <!-- END BEADS INTEGRATION -->
 
-<!-- OPENWIKI:START -->
-
-## OpenWiki
-
-This repository has a generated `openwiki/` evidence index. It is optional just-in-time context, not required startup reading.
-
-- Treat source code and tests as authoritative. A brief's unknowns and review items are verification gaps, not automatic requirements.
-- Prefer the narrowest quiet validation that proves the changed behavior. Preserve complete failure output.
-
-The wiki refreshes via the `openwiki` skill's on-demand host-driven update (MCP `openwiki_begin` mode=update) — there is no scheduled CI workflow. Do not hand-edit generated OpenWiki pages unless explicitly asked; prefer updating source code/docs and letting OpenWiki regenerate.
-
-<!-- OPENWIKI:END -->

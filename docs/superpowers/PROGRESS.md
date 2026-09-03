@@ -646,18 +646,7 @@ deviation 104) — the sole new dependency of 0.3.0 (root AGENTS.md allowlist, p
    numbers: S0.7 config.theme wire → 130, S0.7 single-probe scoping → 131,
    slice-gate SGR quantization → 132 (cross-refs: S0.7 step 5,
    `config_test.go` comment, S0.10 DOX bullet, slice gate steps 4/5/7).
-- OpenWiki evidence index (2026-08-26, bead `yolo-9pn`, branch `new_tui`):
-  generated `openwiki/` wiki is finalized — 15 pages (architecture ×4, llm
-  ×2, tools ×2, tui ×2, config, storage, testing, project, quickstart) plus
-  OpenWiki-owned sidecars (`.claims/`, indexes, provenance,
-  `.last-update.json`). Generated pages are NEVER hand-edited; source changes
-  propagate via the on-demand host-driven update (openwiki skill, MCP
-  `openwiki_begin` mode=update — NOT a scheduled CI workflow; root AGENTS.md
-  `OPENWIKI` block). Pre-merge wiki gate: `just wiki-stale` (exit 1 when
-  `.last-update.json` gitHead trails HEAD on source changes outside
-  `openwiki/` + `CLAUDE.md`); enforced in the root AGENTS.md workflow table
-  ("Wiki gate first").
-- TUI parity audit S8 (2026-09-03, slice `yolo-oae.9`, branch `new_tui`):
+ - TUI parity audit S8 (2026-09-03, slice `yolo-oae.9`, branch `new_tui`):
   the deterministic parity runtime + the 17-surface diff sweep landed; the
   sweep verdict is the record (the D7 close-or-log judgment — the report
   `plans/2026-08-24-opencode-tui-parity/parity-sweep-report.md` is the
