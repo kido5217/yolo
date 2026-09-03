@@ -103,10 +103,10 @@ func TestThemeSelectedForeground(t *testing.T) {
 		t.Fatalf("ResolveTheme(synthetic): %v", err)
 	}
 	st := Theme{R: r3, Name: "synthetic-transparent", Mode: "dark"}
-	if got := st.SelectedForeground(FromHex("#ffffff")); got != (Rgba{0, 0, 0, 255}) {
+	if got := st.SelectedForeground(FromHex("#ffffff")); got != (RGBA{0, 0, 0, 255}) {
 		t.Errorf("SelectedForeground (light bg) = %v, want black", got)
 	}
-	if got := st.SelectedForeground(FromHex("#000000")); got != (Rgba{255, 255, 255, 255}) {
+	if got := st.SelectedForeground(FromHex("#000000")); got != (RGBA{255, 255, 255, 255}) {
 		t.Errorf("SelectedForeground (dark bg) = %v, want white", got)
 	}
 	// explicit selectedListItemText wins (orng defines one)

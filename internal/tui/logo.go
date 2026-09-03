@@ -66,7 +66,7 @@ func renderLogo(th theme.Theme) string {
 // with shadow = Tint(background, fg, 0.25) (logo.tsx:10). Consecutive
 // same-class cells emit as one styled run; a missing token (zero Theme)
 // renders the plain glyphs.
-func logoLine(line string, fg theme.Rgba, fgOK bool, bg theme.Rgba, bgOK bool, bold bool) string {
+func logoLine(line string, fg theme.RGBA, fgOK bool, bg theme.RGBA, bgOK bool, bold bool) string {
 	shadow := theme.Tint(bg, fg, 0.25)
 	var (
 		fgStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color(fg.Hex()[:7]))

@@ -15,7 +15,7 @@ type Theme struct {
 }
 
 // Color is the raw-token accessor (test hook + generic consumers).
-func (t Theme) Color(name string) (Rgba, bool) { return t.R.Color(name) }
+func (t Theme) Color(name string) (RGBA, bool) { return t.R.Color(name) }
 
 // fg returns a foreground style for the token; an absent token or a
 // transparent (alpha 0) token yields an empty style (no foreground).
@@ -57,11 +57,11 @@ func (t Theme) blended(token string) lipgloss.Style {
 	if a <= 0 || a >= 1 {
 		return t.fg(token)
 	}
-	bg := Rgba{0, 0, 0, 255}
+	bg := RGBA{0, 0, 0, 255}
 	if bc, ok := t.R.Color("background"); ok {
 		bg = bc
 	}
-	out := Rgba{
+	out := RGBA{
 		R: uint8(math.Round(float64(c.R)*a + float64(bg.R)*(1-a))),
 		G: uint8(math.Round(float64(c.G)*a + float64(bg.G)*(1-a))),
 		B: uint8(math.Round(float64(c.B)*a + float64(bg.B)*(1-a))),
@@ -74,7 +74,7 @@ func (t Theme) blended(token string) lipgloss.Style {
 // (theme/index.ts:95-111): explicit selectedListItemText wins; transparent
 // background → contrast against bg (or primary) via the luminance rule
 // (0.299r+0.587g+0.114b > 0.5 → black, else white); else background.
-func (t Theme) SelectedForeground(bg ...Rgba) Rgba {
+func (t Theme) SelectedForeground(bg ...RGBA) RGBA {
 	if t.R.HasSelectedListItemText {
 		c, _ := t.R.Color("selectedListItemText")
 		return c
@@ -89,9 +89,9 @@ func (t Theme) SelectedForeground(bg ...Rgba) Rgba {
 		}
 		lum := 0.299*float64(target.R) + 0.587*float64(target.G) + 0.114*float64(target.B)
 		if lum > 0.5*255 {
-			return Rgba{0, 0, 0, 255}
+			return RGBA{0, 0, 0, 255}
 		}
-		return Rgba{255, 255, 255, 255}
+		return RGBA{255, 255, 255, 255}
 	}
 	return background
 }

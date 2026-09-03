@@ -14,11 +14,11 @@ type TerminalColors struct {
 
 // Tint is the port of upstream tint (theme/index.ts:346): overlay blended
 // onto base with alpha, in the upstream FLOAT 0-1 operation order.
-func Tint(base, overlay Rgba, alpha float64) Rgba {
+func Tint(base, overlay RGBA, alpha float64) RGBA {
 	r := float64(base.R)/255 + (float64(overlay.R)/255-float64(base.R)/255)*alpha
 	g := float64(base.G)/255 + (float64(overlay.G)/255-float64(base.G)/255)*alpha
 	b := float64(base.B)/255 + (float64(overlay.B)/255-float64(base.B)/255)*alpha
-	return Rgba{uint8(math.Round(r * 255)), uint8(math.Round(g * 255)), uint8(math.Round(b * 255)), 255}
+	return RGBA{uint8(math.Round(r * 255)), uint8(math.Round(g * 255)), uint8(math.Round(b * 255)), 255}
 }
 
 // generateGrayScale is the port of upstream generateGrayScale
@@ -27,8 +27,8 @@ func Tint(base, overlay Rgba, alpha float64) Rgba {
 // divide by luminance: a pure-black background in light mode (luminance 0)
 // yields NaN, which converts to 0 grays — upstream parity, deliberately
 // not guarded (the branch pins are the S0 golden).
-func generateGrayScale(bg Rgba, isDark bool) [13]Rgba {
-	var grays [13]Rgba
+func generateGrayScale(bg RGBA, isDark bool) [13]RGBA {
+	var grays [13]RGBA
 	luminance := 0.299*float64(bg.R) + 0.587*float64(bg.G) + 0.114*float64(bg.B)
 	for i := 1; i <= 12; i++ {
 		factor := float64(i) / 12.0
@@ -56,14 +56,14 @@ func generateGrayScale(bg Rgba, isDark bool) [13]Rgba {
 				newB = math.Max(float64(bg.B)*ratio, 0)
 			}
 		}
-		grays[i] = Rgba{uint8(math.Floor(newR)), uint8(math.Floor(newG)), uint8(math.Floor(newB)), 255}
+		grays[i] = RGBA{uint8(math.Floor(newR)), uint8(math.Floor(newG)), uint8(math.Floor(newB)), 255}
 	}
 	return grays
 }
 
 // generateMutedTextColor is the port of upstream generateMutedTextColor
 // (theme/index.ts:525-554).
-func generateMutedTextColor(bg Rgba, isDark bool) Rgba {
+func generateMutedTextColor(bg RGBA, isDark bool) RGBA {
 	bgLum := 0.299*float64(bg.R) + 0.587*float64(bg.G) + 0.114*float64(bg.B)
 	var grayValue float64
 	if isDark {
@@ -80,21 +80,21 @@ func generateMutedTextColor(bg Rgba, isDark bool) Rgba {
 		}
 	}
 	g := uint8(grayValue)
-	return Rgba{g, g, g, 255}
+	return RGBA{g, g, g, 255}
 }
 
 // GenerateSystem is the port of upstream generateSystem
 // (theme/index.ts:360-469): terminal palette + default fg/bg → generated
-// ThemeJSON. Theme values are Rgba (ResolveTheme's Rgba branch), mirroring
+// ThemeJSON. Theme values are RGBA (ResolveTheme's RGBA branch), mirroring
 // upstream's RGBA-instance values; missing palette entries fall back to the
 // ANSI table, missing default bg/fg to palette[0]/palette[7].
 func GenerateSystem(colors TerminalColors, mode string) ThemeJSON {
 	isDark := mode == "dark"
-	col := func(i int) Rgba {
+	col := func(i int) RGBA {
 		if colors.Palette[i] != "" {
 			return FromHex(colors.Palette[i])
 		}
-		return AnsiToRgba(i)
+		return AnsiToRGBA(i)
 	}
 	bg := col(0)
 	if colors.DefaultBackground != "" {
@@ -104,10 +104,10 @@ func GenerateSystem(colors TerminalColors, mode string) ThemeJSON {
 	if colors.DefaultForeground != "" {
 		fg = FromHex(colors.DefaultForeground)
 	}
-	transparent := Rgba{bg.R, bg.G, bg.B, 0}
+	transparent := RGBA{bg.R, bg.G, bg.B, 0}
 	grays := generateGrayScale(bg, isDark)
 	textMuted := generateMutedTextColor(bg, isDark)
-	ansiColors := map[string]Rgba{
+	ansiColors := map[string]RGBA{
 		"black": col(0), "red": col(1), "green": col(2), "yellow": col(3),
 		"blue": col(4), "magenta": col(5), "cyan": col(6), "white": col(7),
 		"redBright": col(9), "greenBright": col(10),
