@@ -83,35 +83,19 @@ Read it before acting. Task state: beads (`bd ready`). Verified facts:
 - Update `PROGRESS.md` / `DEVIATIONS.md` when facts or deviations change. **No per-task history in files, no plan-slice copies:** task state is beads; `git log --oneline` and the plan file are the archive. Deviations are append-only in `DEVIATIONS.md` (pre-v0.1.2 items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 - **Tags ONLY with explicit user go-ahead.** Versioning: **semantic versioning** — `MAJOR.MINOR.PATCH`, MAJOR = breaking changes, MINOR = new features, PATCH = fixes.
 
-## Workflow (required)
+## Agent skills
 
-Invoke a skill **before** acting when it applies — not as a formality.
+### Issue tracker
 
-| Situation | Skill |
-|---|---|
-| Any new conversation | establish skill usage — check for skills before ANY response or action |
-| New design requirement, behavior change, or "build X" | `brainstorming` — classify spike / bounded / architectural; **approval gate before any implementation** |
-| Executing the plan, task-by-task | `executing-plans` or `subagent-driven-development` (recommended) — **strict 5-step TDD per plan task**: (1) write failing test → (2) confirm FAIL → (3) minimal implementation → (4) `go vet ./... && go test ./...` green → (5) commit with the plan's message |
-| Writing any implementation code | `test-driven-development` — failing test first, always |
-| Bug, crash, deadlock, unexpected behavior | `systematic-debugging` — root cause before proposing a fix |
-| Before claiming "done / fixed / passing", before committing | `verification-before-completion` — run the gate, read the output, then claim |
-| Committing changes | `git-commit` — conventional message from the actual diff |
-| Milestone finished / before merge | `requesting-code-review` — and `receiving-code-review` when feedback arrives |
-| A new spec needs an implementation plan | `writing-plans` — specs → `specs/`, plans → `plans/`, progress → `PROGRESS.md` |
-| 2+ independent tasks with no shared state | `dispatching-parallel-agents` — at most two subagents in flight at once (core principle 7) |
-| Feature work needing workspace isolation | `using-git-worktrees` |
-| Implementation complete, deciding integration | `finishing-a-development-branch` |
+Issues live in beads (`bd` CLI / beads MCP) — local Dolt-backed store. See `docs/agents/issue-tracker.md`.
 
-- **One subagent per bead (preferred workflow):** execute each bead in a freshly
-  spawned subagent — at most two beads in flight at once (core principle 7); if
-  the root is `YOLO`, the subagent must be `YOLO` too (core principle 8). The root session only plans,
-  dispatches, and reviews. A bead done inline triggers the compaction discipline below.
-- **Subagent thinking level:** dispatch bead subagents with `thinking=medium` —
-  the dispatch prompt states the requirement so the subagent calibrates its
-  reasoning effort accordingly (medium depth, not maximum, not minimal).
-- **Compaction discipline:** after finishing each task/bead that was not delegated to a
-  subagent, compact the session (opencode: `/compact`) before starting the next task —
-  inline work accumulates root context. Work delegated to a subagent is exempt.
+### Triage labels
+
+Five canonical roles, label strings equal to role names. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` + `docs/adr/` at the repo root, created lazily. See `docs/agents/domain.md`.
 
 ## Golang skills (15, in `.agents/skills/`, hash-locked in `skills-lock.json`)
 
@@ -223,7 +207,7 @@ Default section order:
 
 - `internal/AGENTS.md` — core packages: package map, layering, pinned text, in-code zero telemetry (children: `internal/protocol`, `internal/tui`)
 - `AGENTS.md` (process memory) — verified facts (PROGRESS.md), deviation audit (DEVIATIONS.md), 0.3.0 work list (DEFERRED.md), plans/specs/reviews layout
-- Root-owned files: `README.md`, `LICENSE`, `go.mod`, `justfile`, `.golangci.yml`, `.gitignore`, `skills-lock.json`, `cmd/`, `scripts/`, `.agents/skills/` (hash-locked golang skills — do not edit; `.agents/skills/beads/` is bd-managed), and root-level project documentation.
+- Root-owned files: `README.md`, `LICENSE`, `go.mod`, `justfile`, `.golangci.yml`, `.gitignore`, `skills-lock.json`, `cmd/`, `scripts/`, `.agents/skills/` (hash-locked golang skills — do not edit; `.agents/skills/beads/` is bd-managed), `docs/agents/` (engineering-skill config), and root-level project documentation.
 
 
 
