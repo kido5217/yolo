@@ -5,6 +5,26 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
+**Status (2026-09-03):** v0.5.1 skill-review map (epic `yolo-3r8`) complete —
+the whole codebase under `cmd/` + `internal/` is reviewed against the 15
+hash-pinned golang skills and every finding fixed, shipping as patch v0.5.1
+on top of v0.5.0 (`7877bf5`). All fix tickets landed: `.1` protocol+server
+(PR #24), `.2` session+llm (PR #25 — adds `Engine.WaitIdle`), `.3`
+tool+permission (PR #30 — 18 findings incl. the `Ask` ctx-cancel abort fix),
+`.4` config/auth/storage/log/bus/glob + the `yolo-eh9` N+1 parts fix (PR #31 —
+config 0600 = deviation 268; batched `ListPartsByMessageIDs`; bus/glob
+conformant), `.5` cmd/yolo (PR #27 — gate-crossing items escalated to P4
+backlog: cobra/viper `yolo-5ir`, `--output` `yolo-dpf`, goleak `yolo-9t0`;
+sweep-error log `yolo-35l`), `.6` tui/theme (PR #28), `.7` tui core (PR #32 —
+incl. the cross-scope `Rgba`→`RGBA` / `AnsiToRgba`→`AnsiToRGBA` rename +
+`HC`→`hc`), `.9` server.handleAbort adopts `Engine.WaitIdle` (PR #33 — the
+interim `settleIdle` bus-wait deleted). Release-tail diff-scoped re-review
+(Q8) came back CLEAN (no wire/telemetry/pinned-text/layering violations;
+goldens byte-identical); its one latent finding — the batched parts query's
+unbounded `IN (...)` tripping SQLite's 32766 bound-variable cap — is fixed by
+chunking at 500 ids/query (PR #34). The one-subagent-at-a-time rule landed
+(PR #29, core principle 7). Gate green on main; tag `v0.5.1` pending go-ahead.
+
 **Status (2026-08-27):** TUI parity S1 (transcript) landed on `new_tui`
 (epic `yolo-oae`): glamour v2.0.1 transcript rendering — StyleConfig +
 per-theme TranscriptRenderer/ReasoningRenderer (S1.2, dev 149), renderer
