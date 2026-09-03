@@ -29,6 +29,14 @@ func TestNewIDFormats(t *testing.T) {
 	}
 }
 
+// BenchmarkNewID guards the id minting hot path (one id per streamed event):
+// the per-char crypto draw must not allocate beyond the output slice.
+func BenchmarkNewID(b *testing.B) {
+	for b.Loop() {
+		_ = protocol.NewID("ses")
+	}
+}
+
 func TestSessionWireShape(t *testing.T) {
 	s := protocol.Session{
 		ID: "ses_test1234567890123456", ProjectID: "prj_123", Directory: "/w",
