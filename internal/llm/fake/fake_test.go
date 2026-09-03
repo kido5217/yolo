@@ -227,7 +227,8 @@ func TestFromScript(t *testing.T) {
 		t.Fatalf("turn 1 = %+v", t1)
 	}
 	p := t1.Parts[0]
-	if p.Kind != "tool" || p.Name != "read" || p.CallID != "c1" || string(p.Args) != `{"filePath":"/x"}` || p.Finish != "tool_calls" {
+	argsOK := string(p.Args) == `{"filePath":"/x"}`
+	if p.Kind != "tool" || p.Name != "read" || p.CallID != "c1" || !argsOK || p.Finish != "tool_calls" {
 		t.Fatalf("turn 1 part = %+v (args %s)", p, p.Args)
 	}
 	// the loaded driver actually serves the parsed turns

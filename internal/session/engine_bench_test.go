@@ -45,7 +45,8 @@ func BenchmarkCallKeyHash(b *testing.B) {
 	nested := make([]byte, 0, 32<<10)
 	nested = append(nested, '{')
 	for i := 0; i < 500; i++ {
-		nested = append(nested, fmt.Sprintf(`"key_%d":{"a":"value %d","n":%d,"s":"%s"},`, i, i, i, strings.Repeat("x", 24))...)
+		format := `"key_%d":{"a":"value %d","n":%d,"s":"%s"},`
+		nested = append(nested, fmt.Sprintf(format, i, i, i, strings.Repeat("x", 24))...)
 	}
 	nested = append(nested, `"last":true}`...)
 	cases := []struct {
@@ -99,7 +100,11 @@ func BenchmarkMessagesFor(b *testing.B) {
 		b.Fatal(err)
 	}
 	projectDir := b.TempDir()
-	if err := db.CreateSession(b.Context(), storage.SessionRow{ID: sessionID, ProjectDir: projectDir, Model: "kido/q", Agent: "build", TimeCreated: 1, TimeUpdated: 1}); err != nil {
+	srow := storage.SessionRow{
+		ID: sessionID, ProjectDir: projectDir, Model: "kido/q",
+		Agent: "build", TimeCreated: 1, TimeUpdated: 1,
+	}
+	if err := db.CreateSession(b.Context(), srow); err != nil {
 		b.Fatal(err)
 	}
 	userText := benchText(256)
@@ -122,19 +127,42 @@ func BenchmarkMessagesFor(b *testing.B) {
 		if i%2 == 1 {
 			role = "assistant"
 		}
-		if err := db.CreateMessage(b.Context(), storage.MessageRow{ID: mid, SessionID: sessionID, Role: role, Agent: "build", TimeCreated: int64(i) + 2}); err != nil {
+		mrow := storage.MessageRow{ID: mid, SessionID: sessionID, Role: role, Agent: "build", TimeCreated: int64(i) + 2}
+		if err := db.CreateMessage(b.Context(), mrow); err != nil {
 			b.Fatal(err)
 		}
 		if role == "user" {
 			for j := 0; j < 3; j++ {
-				addPart(mid, protocol.Part{ID: fmt.Sprintf("prt_bench_%03d_%d", i, j), MessageID: mid, SessionID: sessionID, Type: "text", Text: userText, Time: protocol.PartTime{Start: int64(i)}})
+				textPart := protocol.Part{
+					ID: fmt.Sprintf("prt_bench_%03d_%d", i, j), MessageID: mid, SessionID: sessionID,
+					Type: "text", Text: userText, Time: protocol.PartTime{Start: int64(i)},
+				}
+				addPart(mid, textPart)
 			}
 			continue
 		}
-		addPart(mid, protocol.Part{ID: fmt.Sprintf("prt_bench_%03d_t", i), MessageID: mid, SessionID: sessionID, Type: "text", Text: asstText, Time: protocol.PartTime{Start: int64(i)}})
-		addPart(mid, protocol.Part{ID: fmt.Sprintf("prt_bench_%03d_a", i), MessageID: mid, SessionID: sessionID, Type: "tool", Tool: "bash", State: &protocol.ToolState{Status: "completed", Input: map[string]any{"command": "ls"}, Output: smallOut, Time: protocol.PartTime{Start: int64(i), End: int64(i) + 1}}})
+		asstPart := protocol.Part{
+			ID: fmt.Sprintf("prt_bench_%03d_t", i), MessageID: mid, SessionID: sessionID,
+			Type: "text", Text: asstText, Time: protocol.PartTime{Start: int64(i)},
+		}
+		addPart(mid, asstPart)
+		aState := &protocol.ToolState{
+			Status: "completed", Input: map[string]any{"command": "ls"}, Output: smallOut,
+			Time: protocol.PartTime{Start: int64(i), End: int64(i) + 1},
+		}
+		addPart(mid, protocol.Part{
+			ID: fmt.Sprintf("prt_bench_%03d_a", i), MessageID: mid, SessionID: sessionID,
+			Type: "tool", Tool: "bash", State: aState,
+		})
 		if i < 40 {
-			addPart(mid, protocol.Part{ID: fmt.Sprintf("prt_bench_%03d_b", i), MessageID: mid, SessionID: sessionID, Type: "tool", Tool: "bash", State: &protocol.ToolState{Status: "completed", Input: map[string]any{"command": bigIn}, Output: bigOut, Time: protocol.PartTime{Start: int64(i), End: int64(i) + 1}}})
+			bState := &protocol.ToolState{
+				Status: "completed", Input: map[string]any{"command": bigIn}, Output: bigOut,
+				Time: protocol.PartTime{Start: int64(i), End: int64(i) + 1},
+			}
+			addPart(mid, protocol.Part{
+				ID: fmt.Sprintf("prt_bench_%03d_b", i), MessageID: mid, SessionID: sessionID,
+				Type: "tool", Tool: "bash", State: bState,
+			})
 		}
 	}
 	row, err := db.GetSession(b.Context(), sessionID)

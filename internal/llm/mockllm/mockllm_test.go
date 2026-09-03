@@ -13,11 +13,14 @@ import (
 	"testing"
 )
 
-const cannedReply = "## Heading\n\nSome **bold** and `inline code` text.\n\n- one\n- two\n\n> a quote\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n[link](https://example.com)\n\n```js\nconst x = 1;\n```\n\n你好 world\n\nDone."
+const cannedReply = "## Heading\n\nSome **bold** and `inline code` text.\n\n- one\n- two\n\n> a quote\n\n" +
+	"| a | b |\n|---|---|\n| 1 | 2 |\n\n[link](https://example.com)\n\n```js\nconst x = 1;\n```\n\n" +
+	"你好 world\n\nDone."
 
 const toolCannedArgs = `{"command":"echo parity-ok"}`
 const toolCannedReply = "The check printed parity-ok.\n"
-const todoCannedArgs = `{"todos":[{"content":"first item","status":"in_progress"},{"content":"second item","status":"pending"}]}`
+const todoCannedArgs = `{"todos":[{"content":"first item","status":"in_progress"},` +
+	`{"content":"second item","status":"pending"}]}`
 const todoCannedReply = "Todos updated.\n"
 
 func textCanned() Canned {

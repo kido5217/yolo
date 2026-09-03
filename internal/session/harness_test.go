@@ -137,10 +137,11 @@ func (h *harness) queueReplies(responses ...string) {
 func (h *harness) build(t *testing.T) {
 	t.Helper()
 	drv := fake.New()
-	reg, err := provider.NewWithSeams(t.Context(), t.TempDir(), func(providerID string) (provider.Info, provider.Model, error) {
+	seam := func(providerID string) (provider.Info, provider.Model, error) {
 		return provider.Info{ID: "kido", Name: "kido", BaseURL: "http://fake", KeyRequired: false},
 			provider.Model{ID: "q", Name: "q", Adapter: "openai", Context: 100000, ToolCall: true}, nil
-	})
+	}
+	reg, err := provider.NewWithSeams(t.Context(), t.TempDir(), seam)
 	if err != nil {
 		t.Fatal(err)
 	}

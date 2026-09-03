@@ -253,7 +253,8 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 	// Overflow: the round's input already exceeds the model context; the
 	// turn ends with a synthetic note (v1 has no compaction).
 	if usage != nil && t.model.Context > 0 && usage.Input > t.model.Context {
-		e.lg.Info("overflow detected", "session_id", t.sessionID, "model", t.model.ID, "reason", "usage", "input", usage.Input)
+		e.lg.Info("overflow detected",
+			"session_id", t.sessionID, "model", t.model.ID, "reason", "usage", "input", usage.Input)
 		e.saveSynthetic(ctx, t, r, overflowNote(t.model, usage.Input, nil))
 		e.finishRound(ctx, t, r, usage, finish)
 		return false, nil

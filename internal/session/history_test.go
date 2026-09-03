@@ -13,16 +13,25 @@ func TestMapHistoryPinsLockedMapping(t *testing.T) {
 	now := time.Now().UnixMilli()
 	mk := func(role, agent, content string) protocol.MessageWithParts {
 		return protocol.MessageWithParts{
-			Info:  protocol.Message{ID: protocol.NewID("msg"), Role: role, Agent: agent, Time: protocol.MessageTime{Created: now}},
+			Info: protocol.Message{
+				ID: protocol.NewID("msg"), Role: role, Agent: agent,
+				Time: protocol.MessageTime{Created: now},
+			},
 			Parts: []protocol.Part{{ID: protocol.NewID("prt"), Type: "text", Text: content}},
 		}
 	}
 
 	toolRound := protocol.MessageWithParts{
-		Info: protocol.Message{ID: protocol.NewID("msg"), Role: "assistant", Agent: "build", Time: protocol.MessageTime{Created: now}},
+		Info: protocol.Message{
+			ID: protocol.NewID("msg"), Role: "assistant", Agent: "build",
+			Time: protocol.MessageTime{Created: now},
+		},
 		Parts: []protocol.Part{
 			{ID: protocol.NewID("prt"), Type: "text", Text: "checking"},
-			{ID: "call_1", Type: "tool", Tool: "bash", State: &protocol.ToolState{Status: "completed", Input: map[string]any{"command": "ls"}, Output: "out"}},
+			{
+				ID: "call_1", Type: "tool", Tool: "bash",
+				State: &protocol.ToolState{Status: "completed", Input: map[string]any{"command": "ls"}, Output: "out"},
+			},
 		},
 	}
 

@@ -155,7 +155,10 @@ func TestAbortTurnSurfacesAbortedError(t *testing.T) {
 	d := t.TempDir()
 	ses := h.startSession(t, d)
 	h.drv.Turns = []fake.Turn{
-		{Parts: []llm.Part{{Kind: "text", Text: "working"}, {Kind: "tool", Name: "glob", CallID: "t1", Text: `{"pattern":"x*"}`, Finish: "tool_calls"}}},
+		{Parts: []llm.Part{
+			{Kind: "text", Text: "working"},
+			{Kind: "tool", Name: "glob", CallID: "t1", Text: `{"pattern":"x*"}`, Finish: "tool_calls"},
+		}},
 	}
 	h.slowTurn = true // hold the stream open so the abort lands mid-turn
 	if _, err := h.eng.Send(context.Background(), ses, "slow", nil); err != nil {
@@ -256,7 +259,8 @@ func TestMaxToolRoundsEndsIdleWithoutError(t *testing.T) {
 			Text: fmt.Sprintf(`{"pattern":"p%d*"}`, i), Finish: "tool_calls",
 		}}})
 	}
-	turns = append(turns, fake.Turn{Parts: []llm.Part{{Kind: "text", Text: "end", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}})
+	endPart := llm.Part{Kind: "text", Text: "end", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}
+	turns = append(turns, fake.Turn{Parts: []llm.Part{endPart}})
 	h.drv.Turns = turns
 	done := make(chan error, 1)
 	if _, err := h.eng.Send(context.Background(), ses, "spin", func(e error) { done <- e }); err != nil {
