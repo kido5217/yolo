@@ -62,7 +62,7 @@ Read it before acting. Task state: beads (`bd ready`). Verified facts:
 4. **TUI is a pure client.** Non-test files under `internal/tui/` import only `internal/protocol` + `internal/tui/*` (+ stdlib/charm deps). `_test.go` may use `internal/server/testutil` (escape hatch). Enforced by `TestImportsDirection` (`internal/tui/imports_test.go`).
 5. **Tests define the contract.** When the plan contradicts itself (or its own test code is buggy), resolve per the last-stated call, fix the test, and **log the deviation in `DEVIATIONS.md`** with severity.
 6. **Task state in beads; proven knowledge in docs.** Track task state in beads — never duplicate it in files. When a fact is proven or a deviation is logged, update `PROGRESS.md` (facts) / `DEVIATIONS.md` (audit) before moving on — a stale audit log is a broken resume. File shapes: "Commit & branch discipline."
-7. **Subagents, at most two at a time.** Never dispatch more than two subagents concurrently (via the `task` tool): at most two independent subagents in flight; wait for their full return before dispatching the next. (Raised from one to two on user instruction 2026-09-02.) This supersedes any plan/spec wording permitting more parallel subagents.
+7. **Subagents, at most one at a time.** Dispatch at most ONE subagent (via the `task` tool) at a time; wait for its full return before dispatching the next. (Was "at most two" — raised from one to two on user instruction 2026-09-02, then set back to one on user instruction 2026-09-03.) This supersedes any plan/spec wording permitting parallel subagents.
 8. **YOLO spawns only YOLO.** If the root agent is `YOLO`, any subagent it spawns MUST also be `YOLO` — never dispatch a subagent of a different agent type.
 
 ## Commands & verification
