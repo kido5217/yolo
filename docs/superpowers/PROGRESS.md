@@ -355,9 +355,10 @@ S3.9 theme commands landed (bead `yolo-oae.4.10`, commit 3032022):
   wiring — the fresh engine on the same KV file sees the persisted
   theme, the raw file after Close carries the mode keys); full gate
   green (`go vet ./... && go test ./...` + `gofmt -l .`).
-S7 done (5/5 child beads closed, slice gate green — the user-run TTY
-smoke is on-demand, pending). Next: S8 detail pass (parity audit
-+ close-out — slice bead `yolo-oae.9`).
+S8 done (5/5 child beads closed, slice gate green — the parity capture +
+sweep smoke performed under COLORTERM=truecolor; the user-run TTY smoke
+is on-demand, pending) — epic close + tag PENDING USER GO-AHEAD (epic
+`yolo-oae`; the 17-surface sweep: 0 MATCH / 17 logged, devs 258–260).
 Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
 (PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
 + GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,
@@ -650,3 +651,45 @@ deviation 104) — the sole new dependency of 0.3.0 (root AGENTS.md allowlist, p
   `.last-update.json` gitHead trails HEAD on source changes outside
   `openwiki/` + `CLAUDE.md`); enforced in the root AGENTS.md workflow table
   ("Wiki gate first").
+- TUI parity audit S8 (2026-09-03, slice `yolo-oae.9`, branch `new_tui`):
+  the deterministic parity runtime + the 17-surface diff sweep landed; the
+  sweep verdict is the record (the D7 close-or-log judgment — the report
+  `plans/2026-08-24-opencode-tui-parity/parity-sweep-report.md` is the
+  mechanical record): 0/17 MATCH, all 17 surfaces LOGGED — dev 258 (info,
+  all 17: the bg-fill rendering model — upstream opentui repaints the full
+  opaque background every frame, yolo bubbletea v2 diff-renders only its
+  content cells), 259 (medium, 16: the content/layout divergence — the
+  transcript viewport scroll-to-tail vs the full reply, the command-set
+  subsets, the chrome — the expected "reference, not contract" port scope,
+  root principle 2), 260 (medium, 1: the exit epilogue — yolo prints
+  nothing after exit, upstream prints the opencode-branded `Continue
+  opencode -s <SES>` epilogue; logged per the D8(1) fallback — a true
+  MATCH would be a brand mismatch + a yolo behavior change beyond parity
+  scope). The runtime: `internal/llm/mockllm` (the byte-deterministic
+  canned OpenAI-compatible SSE — text/tool/todo turns, fixed ids
+  `chatcmpl-canned01`/`call_canned1`/`call_canned2`, `created
+  1700000000`, model `canned`, usage 12/40; `TestCannedMatchesDefault`
+  pins the shared fixture) + `scripts/parity/mock` (127.0.0.1, the
+  `MOCK_PORT=<port>` handshake) + `scripts/parity/{capture.sh,capture.py,
+  normalize.py,sweep.py}` (user-run, never CI — `just parity-capture` /
+  `just parity-sweep`; the npm `opencode-ai@1.18.18` runs hermetically
+  against the mock: `OPENCODE_MODELS_PATH` catalog file, fetch + auto-
+  update disabled; devs 254–255 — the fresh-HOME-per-run + 6 s boot-settle
+  runtime adaptations + the `<DUR>`/`<EX>`/split-TS volatile masks) +
+  `TestParityDump` (gated on `YOLO_PARITY_DUMP`, `t.Skip` when unset —
+  the CI gate never renders it; the fake driver scripted from the shared
+  canned book, `TestParityCannedConsistent`). Fixture pin:
+  `internal/tui/testdata/parity/` — `canned.json` (shared),
+  `catalog-pin.json` (the reduced `{openai}` catalog snapshot),
+  `upstream/` the 17 NORMALIZED screens + `MANIFEST.json` (npm 1.18.18,
+  per-surface `{name,cols,rows,sha256}`; `TestParityFixturesPinned` fails
+  on any drift) — re-baselined 2026-09-03 after the normalizer's faithful
+  terminal replay (dev 257: LNM/IND/NEL/RI, pending-wrap, the erase ops,
+  DECSTBM+SU/SD, tracked cursor moves, ESC 7/8/c, TAB, ST-aware OSC — the
+  `[1 q` DECSCUSR fragment no longer leaks, so all 17 fixtures
+  re-baselined; the swapped-scroll-direction fix lands the `epilogue`
+  exit lines at rows 20–21; the yolo temp-dir mask widened). The capture +
+  sweep ran under `COLORTERM=truecolor` (the upstream 24-bit SGR confirmed
+  — deviation 125 holds; the yolo side is ANSI256 — the expected
+  color-space class inside 258/259); the D5 double-run determinism gate
+  passed on every surface.
