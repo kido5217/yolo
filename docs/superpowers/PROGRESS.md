@@ -815,3 +815,23 @@ cluster — the pinned `serve -addr` test keeps the surface. The root
 `-v`/`--version` pre-scan is retained verbatim (cobra's `--version`
 annotation only covers the exact long form). Exit codes 0/1/2 and help
 wording are pinned by the pre-migration behavioral suite (all green).
+
+`--output` flag (2026-09-04, v0.6.0 D2, beads `yolo-o75.8`/`yolo-o75.4`): a
+root persistent `--output` flag, `json` the only accepted value (an unknown
+value — including a `human` alias — is `yolo: unknown output format %q` +
+usage, exit 2). Supported leaves: `auth list` (a bare `[{"id","type"}]`
+array sorted by id; empty store → `[]`, never null), `profile list` (a bare
+`[{"id","name","description"(omitempty),"active"}]` array in config.List
+order), `version` (`{"name":"yolo","version","commit"(omitempty),
+"built"(omitempty)}` — the FULL vcs.revision; the human line's 8-char prefix
+is display-only). The JSON is a bare 2-space-indented top-level value (no
+envelope) on stdout, success only (on failure stdout stays empty, stderr
+keeps the human wording, exit codes 0/1/2 unchanged). Every other command
+(serve, the TUI root, `completion bash`, mutating leaves, bare parents)
+rejects `--output json` with `yolo <cmd>: --output is not supported by
+<cmd>` + usage, exit 2 — checked in the root PersistentPreRunE (`checkOutputFormat`) before
+any side effect (serve does not bind, the TUI does not start,
+no marker/store writes), so the machine output is a CLI-side presentation
+surface (structs in cmd/yolo/output.go), not a wire-contract change
+(principle 2). Shell-completion requests (`__complete`/`__completeNoDesc`)
+are exempt from the check.

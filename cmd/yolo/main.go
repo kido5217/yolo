@@ -157,6 +157,10 @@ func newRootCmd() *cobra.Command {
 			"use).",
 		RunE: tuiRunE,
 	}
+	// --output (D2, yolo-o75.8): a root persistent flag validated in the
+	// pre-run before any command side effect (json is the only value).
+	root.PersistentFlags().String("output", "", "output format (json; default: human)")
+	root.PersistentPreRunE = checkOutputFormat
 	root.Flags().String("dir", "", "project directory (default CWD)")
 	root.Flags().String("profile", "", profileFlagUsage)
 	root.AddCommand(newServeCmd(), newAuthCmd(), newProfileCmd(), newVersionCmd())
@@ -239,15 +243,28 @@ func authListCmd() *cobra.Command {
 				fmt.Fprintln(os.Stderr, "auth list:", err)
 				return errRuntime
 			}
-			if len(s) == 0 {
-				fmt.Println("no credentials")
-				return nil
-			}
 			ids := make([]string, 0, len(s))
 			for id := range s {
 				ids = append(ids, id)
 			}
 			sort.Strings(ids)
+			if isJSONOutput(cmd) {
+				entries := make([]jsonAuthEntry, 0, len(ids))
+				for _, id := range ids {
+					entries = append(entries, jsonAuthEntry{ID: id, Type: s[id].Type})
+				}
+				b, err := renderJSON(entries)
+				if err != nil {
+					fmt.Fprintln(os.Stderr, "auth list:", err)
+					return errRuntime
+				}
+				fmt.Println(string(b))
+				return nil
+			}
+			if len(s) == 0 {
+				fmt.Println("no credentials")
+				return nil
+			}
 			for _, id := range ids {
 				fmt.Printf("%s  %s  (set)\n", id, s[id].Type)
 			}
@@ -366,6 +383,21 @@ func profileListCmd() *cobra.Command {
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "%s: %v\n", cmd.CommandPath(), err)
 				return errRuntime
+			}
+			if isJSONOutput(cmd) {
+				entries := make([]jsonProfileEntry, 0, len(profiles))
+				for _, p := range profiles {
+					entries = append(entries, jsonProfileEntry{
+						ID: p.ID, Name: p.Name, Description: p.Description, Active: p.ID == active,
+					})
+				}
+				b, err := renderJSON(entries)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "%s: %v\n", cmd.CommandPath(), err)
+					return errRuntime
+				}
+				fmt.Println(string(b))
+				return nil
 			}
 			if len(profiles) == 0 {
 				fmt.Println("no profiles")
@@ -561,8 +593,18 @@ func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
 		Short: "print version (same as: yolo -v)",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if isJSONOutput(cmd) {
+				b, err := renderJSON(versionJSON())
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "%s: %v\n", cmd.CommandPath(), err)
+					return errRuntime
+				}
+				fmt.Println(string(b))
+				return nil
+			}
 			printVersion()
+			return nil
 		},
 	}
 }
