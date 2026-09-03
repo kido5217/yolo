@@ -765,6 +765,54 @@ func TestListPartsByMessageIDs(t *testing.T) {
 	})
 }
 
+// TestListPartsByMessageIDsChunks pins the chunked batched fetch: a message
+// count above the per-query batch forces multiple IN (...) chunks, and every
+// message's parts still come back complete and earliest-first (the old
+// single-query form tripped SQLite's bound-variable cap on a large count).
+func TestListPartsByMessageIDsChunks(t *testing.T) {
+	t.Parallel()
+	db := openDB(t)
+	const ses = "ses_chunks"
+	if err := db.CreateSession(t.Context(), storage.SessionRow{ID: ses, ProjectDir: "/p", Model: "kido/q", TimeCreated: 1, TimeUpdated: 1}); err != nil {
+		t.Fatal(err)
+	}
+	// 550 > the 500-per-query batch: spans two chunks.
+	const n = 550
+	ids := make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		id := fmt.Sprintf("m%03d", i)
+		ids = append(ids, id)
+		if err := db.CreateMessage(t.Context(), storage.MessageRow{ID: id, SessionID: ses, Role: "user", TimeCreated: int64(i)}); err != nil {
+			t.Fatal(err)
+		}
+		// Two parts, inserted in reverse time_created order: the query must
+		// re-sort them earliest-first within every chunk.
+		if err := db.UpsertPart(t.Context(), storage.PartRow{ID: id + "_b", MessageID: id, SessionID: ses, Type: "text", StateJSON: `{}`, TimeCreated: int64(i) + 1}); err != nil {
+			t.Fatal(err)
+		}
+		if err := db.UpsertPart(t.Context(), storage.PartRow{ID: id + "_a", MessageID: id, SessionID: ses, Type: "text", StateJSON: `{}`, TimeCreated: int64(i)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rows, err := db.ListPartsByMessageIDs(t.Context(), ids)
+	if err != nil {
+		t.Fatalf("ListPartsByMessageIDs: %v", err)
+	}
+	got := map[string][]string{}
+	for _, r := range rows {
+		got[r.MessageID] = append(got[r.MessageID], r.ID)
+	}
+	if len(got) != n {
+		t.Fatalf("messages with parts = %d, want %d", len(got), n)
+	}
+	for i := 0; i < n; i++ {
+		id := fmt.Sprintf("m%03d", i)
+		if !slices.Equal(got[id], []string{id + "_a", id + "_b"}) {
+			t.Fatalf("parts[%s] = %v, want earliest-first [.._a .._b]", id, got[id])
+		}
+	}
+}
+
 // TestUpdateNotFoundPaths: a zero-rows update maps to ErrNotFound (the
 // surviving path after Task J starts returning driver RowsAffected errors
 // as-is instead of masking them as not-found).
