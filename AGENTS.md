@@ -27,7 +27,13 @@ Read it before acting. Task state: beads (`bd ready`). Verified facts:
     (user-approved 2026-08-27, bead `yolo-oae.3.4` — huh field dialogs:
     alert/confirm/input; direct import `charm.land/huh/v2`),
     `github.com/sahilm/fuzzy` v0.1.3 (same approval — subsequence fuzzy
-    filter for the select/palette; direct import `github.com/sahilm/fuzzy`);
+    filter for the select/palette; direct import `github.com/sahilm/fuzzy`),
+    `github.com/spf13/cobra` v1.10.2
+    (user-approved 2026-09-03, beads `yolo-o75.2` D1 — the v0.6.0 CLI
+    command/flag tree; license call: **Apache-2.0** accepted as permissive,
+    so the checklist below reads MIT/BSD/Apache-2.0; transitive indirects
+    `github.com/spf13/pflag` v1.0.9 + `github.com/inconshreveable/mousetrap`
+    v1.1.0 (Windows-only stub));
     dev-only
   `github.com/charmbracelet/x/exp/teatest/v2`
    v2.0.0-20260823001701-96af6d2cb5f6. Anything outside the allowlist requires
@@ -36,7 +42,8 @@ Read it before acting. Task state: beads (`bd ready`). Verified facts:
   search** — the agent MUST treat its own memory as outdated: maintenance
   status, last activity, license, and available versions are verified live
   (e.g. GitHub API, `go list -m`), never recalled; checklist: actively
-  maintained, pure Go / no cgo, permissive license (MIT/BSD), transitive
+  maintained, pure Go / no cgo, permissive license (MIT/BSD/Apache-2.0),
+  transitive
   surface (how many NEW modules it adds to the build); why stdlib or
   hand-rolling is inadequate. Landing requires explicit user approval;
   approved deps join this allowlist + a `PROGRESS.md` fact.

@@ -143,6 +143,34 @@ func TestHelpListsSubcommands(t *testing.T) {
 	}
 }
 
+// TestCompletionCommand pins the D1 ruling (yolo-o75.2, v0.6.0): cobra's
+// default completion subcommand is enabled — a static script per shell,
+// listed in the root help. (Dynamic candidates are a P4 follow-up,
+// yolo-k49.)
+func TestCompletionCommand(t *testing.T) {
+	bin := buildBinary(t)
+	for _, shell := range []string{"bash", "zsh", "fish", "powershell"} {
+		t.Run(shell, func(t *testing.T) {
+			out, err := exec.Command(bin, "completion", shell).CombinedOutput()
+			if err != nil {
+				t.Fatalf("completion %s exit = %v, want 0\n%s", shell, err, out)
+			}
+			if !strings.Contains(string(out), "yolo") {
+				t.Fatalf("completion %s output missing yolo:\n%s", shell, out)
+			}
+		})
+	}
+	t.Run("help lists completion", func(t *testing.T) {
+		out, err := exec.Command(bin, "help").CombinedOutput()
+		if err != nil {
+			t.Fatalf("help: %v\n%s", err, out)
+		}
+		if !strings.Contains(string(out), "completion") {
+			t.Fatalf("help output missing completion:\n%s", out)
+		}
+	})
+}
+
 // TestJustfileVersionRecipe pins the justfile entry point: it parses and the
 // version variable resolves to a non-empty git-derived string (skipped when
 // `just` is not installed — the artifact still ships).
@@ -1312,4 +1340,22 @@ func TestProfileEdit(t *testing.T) {
 			t.Fatalf("code = %d stderr = %q, want usage + exit 2", code, errOut)
 		}
 	})
+}
+
+// authCmd runs the auth subtree directly (the in-process tests drive it
+// without the "auth" prefix): identical to run(["auth", args...]).
+func authCmd(args []string) int {
+	a := make([]string, 0, len(args)+1)
+	a = append(a, "auth")
+	a = append(a, args...)
+	return run(a)
+}
+
+// profileCmd runs the profile subtree directly (the in-process tests drive
+// it without the "profile" prefix): identical to run(["profile", args...]).
+func profileCmd(args []string) int {
+	a := make([]string, 0, len(args)+1)
+	a = append(a, "profile")
+	a = append(a, args...)
+	return run(a)
 }
