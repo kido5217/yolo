@@ -2,7 +2,7 @@ package tui
 
 import (
 	"fmt"
-	"strconv"
+	"math"
 	"strings"
 	"time"
 
@@ -74,13 +74,15 @@ func (a *App) footerView() string {
 		}
 	}
 	muted := a.theme.TextMuted()
-	main := muted.Render(strings.Join([]string{
-		model,
-		agent,
-		"↑" + strconv.FormatInt(tokens.Input, 10) + " ↓" + strconv.FormatInt(tokens.Output, 10),
-		fmt.Sprintf("$%.4f", cost),
-	}, " · "))
-	parts := []string{main}
+	tokensSeg := "↑" + number(tokens.Input) + " ↓" + number(tokens.Output)
+	if pct := a.contextPct(); pct >= 0 {
+		tokensSeg += fmt.Sprintf(" (%d%%)", pct)
+	}
+	seg := model + " · " + agent + " · " + tokensSeg
+	if cost > 0 {
+		seg += " · " + fmt.Sprintf("$%.2f", cost)
+	}
+	parts := []string{muted.Render(seg)}
 	switch {
 	case a.resyncing:
 		parts = append(parts, a.theme.Error().Render("◌ reconnecting"))
@@ -93,4 +95,34 @@ func (a *App) footerView() string {
 		parts = append(parts, muted.Render(seg))
 	}
 	return strings.Join(parts, " · ")
+}
+
+// contextPct is the S7.4 restyle's context percentage (the upstream
+// prompt-bar usage shape, prompt/index.tsx:264-282): the round(100 * total
+// / context) when the session model resolves (over store.Providers — the
+// lazy catalog referent, deviation 241) to a Limit.Context > 0; total =
+// the session aggregate input+output+reasoning+cache.read+cache.write
+// (the yolo referent for the upstream last-assistant-message total —
+// deviation 249). -1 when unknown (the segment omitted).
+func (a *App) contextPct() int64 {
+	if a.route != routeSession || a.store.Current == nil {
+		return -1
+	}
+	mr := a.store.Current.Model
+	if mr == nil {
+		return -1
+	}
+	for _, p := range a.store.Providers {
+		m, ok := p.Models[mr.ID]
+		if !ok || p.ID != mr.ProviderID {
+			continue
+		}
+		if m.Limit.Context <= 0 {
+			return -1
+		}
+		t := a.store.Current.Tokens
+		total := t.Input + t.Output + t.Reasoning + t.Cache.Read + t.Cache.Write
+		return int64(math.Round(100 * float64(total) / float64(m.Limit.Context)))
+	}
+	return -1
 }

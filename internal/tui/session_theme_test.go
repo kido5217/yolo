@@ -280,7 +280,7 @@ func TestSessionChromeZeroThemeIsPlain(t *testing.T) {
 	if fv != stripANSI(fv) {
 		t.Fatalf("zero-theme footer carries SGR:\n%q", fv)
 	}
-	if got := stripANSI(fv); got != "no model · default · ↑0 ↓0 · $0.0000 · ● live" {
+	if got := stripANSI(fv); got != "no model · default · ↑0 ↓0 · ● live" {
 		t.Fatalf("footer = %q", got)
 	}
 }

@@ -49,19 +49,19 @@ func TestFooterRender(t *testing.T) {
 		{
 			name:  "session idle live",
 			route: routeSession,
-			want:  "kido/q · build · ↑123 ↓45 · $0.0002 · ● live",
+			want:  "kido/q · build · ↑123 ↓45 · $0.00 · ● live",
 		},
 		{
 			name:   "session sse off",
 			route:  routeSession,
 			mutate: func(s *store.State) { s.Live = false },
-			want:   "kido/q · build · ↑123 ↓45 · $0.0002 · ○ off",
+			want:   "kido/q · build · ↑123 ↓45 · $0.00 · ○ off",
 		},
 		{
 			name:   "session busy",
 			route:  routeSession,
 			mutate: func(s *store.State) { s.Status = protocol.SessionStatus{Type: protocol.SessionStatusBusy} },
-			want:   "kido/q · build · ↑123 ↓45 · $0.0002 · ● live · ⠋ busy",
+			want:   "kido/q · build · ↑123 ↓45 · $0.00 · ● live · ⠋ busy",
 		},
 		{
 			name:  "session retry shows attempt and message",
@@ -69,30 +69,30 @@ func TestFooterRender(t *testing.T) {
 			mutate: func(s *store.State) {
 				s.Status = protocol.SessionStatus{Type: protocol.SessionStatusRetry, Attempt: 2, Message: "rate limited"}
 			},
-			want: "kido/q · build · ↑123 ↓45 · $0.0002 · ● live · ⠋ retry 2: rate limited",
+			want: "kido/q · build · ↑123 ↓45 · $0.00 · ● live · ⠋ retry 2: rate limited",
 		},
 		{
 			name:   "session without model",
 			route:  routeSession,
 			mutate: func(s *store.State) { s.Current.Model = nil },
-			want:   "no model · build · ↑123 ↓45 · $0.0002 · ● live",
+			want:   "no model · build · ↑123 ↓45 · $0.00 · ● live",
 		},
 		{
-			name:   "cost rounds to four decimals",
+			name:   "cost rounds to two decimals (the S7.4 Intl shape)",
 			route:  routeSession,
 			mutate: func(s *store.State) { s.Current.Cost = 1.23456 },
-			want:   "kido/q · build · ↑123 ↓45 · $1.2346 · ● live",
+			want:   "kido/q · build · ↑123 ↓45 · $1.23 · ● live",
 		},
 		{
 			name:  "home uses config defaults",
 			route: routeHome,
 			cfg:   map[string]any{"model": "kido/q", "agent": "build"},
-			want:  "kido/q · build · ↑0 ↓0 · $0.0000 · ● live",
+			want:  "kido/q · build · ↑0 ↓0 · ● live",
 		},
 		{
 			name:  "home without config",
 			route: routeHome,
-			want:  "no model · default · ↑0 ↓0 · $0.0000 · ● live",
+			want:  "no model · default · ↑0 ↓0 · ● live",
 		},
 	}
 	for _, tt := range tests {
