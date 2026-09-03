@@ -8,6 +8,7 @@ package theme
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
 )
 
 // DefaultName is the fallback active theme (upstream default, theme.tsx:96).
@@ -23,8 +24,23 @@ type ThemeJson struct {
 }
 
 // AllThemes parses the 33 embedded upstream theme assets. Names are the asset
-// file stems (kebab-case preserved: catppuccin-frappe, one-dark, ...).
+// file stems (kebab-case preserved: catppuccin-frappe, one-dark, ...). The
+// assets are embedded (immutable), so the parsed map is cached for the
+// process lifetime; callers must treat the returned map as read-only.
 func AllThemes() (map[string]ThemeJson, error) {
+	allThemesOnce.Do(func() {
+		allThemes, allThemesErr = loadAllThemes()
+	})
+	return allThemes, allThemesErr
+}
+
+var (
+	allThemesOnce sync.Once
+	allThemes     map[string]ThemeJson
+	allThemesErr  error
+)
+
+func loadAllThemes() (map[string]ThemeJson, error) {
 	entries, err := assetsFS.ReadDir("assets")
 	if err != nil {
 		return nil, fmt.Errorf("theme assets: %w", err)

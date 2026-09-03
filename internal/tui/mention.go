@@ -134,16 +134,6 @@ func (a *App) walkedFiles() []string {
 	return a.walked
 }
 
-// freqFor returns the frecency entry for relPath (nil when absent).
-func (a *App) freqFor(relPath string) *frecencyEntry {
-	for i := range a.freq {
-		if a.freq[i].Path == relPath {
-			return &a.freq[i]
-		}
-	}
-	return nil
-}
-
 // mentionOptions builds the @-picker rows: fuzzy.Find over the walked files
 // by the @-query, each score x2 for a prefix match x (1 + frecencyScore)
 // (the ported upstream scoreFn), sorted desc, capped at maxPickerOptions.
@@ -158,6 +148,12 @@ func (a *App) mentionOptions() []selectOption {
 		return nil
 	}
 	now := nowMillis()
+	// Per-call frecency index: O(1) lookup instead of a linear scan per
+	// file (mentionOptions was O(files x frecency)).
+	idx := make(map[string]*frecencyEntry, len(a.freq))
+	for i := range a.freq {
+		idx[a.freq[i].Path] = &a.freq[i]
+	}
 	type scored struct {
 		path  string
 		score float64
@@ -166,7 +162,7 @@ func (a *App) mentionOptions() []selectOption {
 	if q := a.prompt.acQuery(); q == "" {
 		ranked = make([]scored, len(files))
 		for i, f := range files {
-			ranked[i] = scored{path: f, score: frecencyScore(a.freqFor(f), now)}
+			ranked[i] = scored{path: f, score: frecencyScore(idx[f], now)}
 		}
 	} else {
 		for _, m := range fuzzy.Find(q, files) {
@@ -174,7 +170,7 @@ func (a *App) mentionOptions() []selectOption {
 			if strings.HasPrefix(m.Str, q) {
 				s *= 2
 			}
-			s *= 1 + frecencyScore(a.freqFor(m.Str), now)
+			s *= 1 + frecencyScore(idx[m.Str], now)
 			ranked = append(ranked, scored{path: m.Str, score: s})
 		}
 	}

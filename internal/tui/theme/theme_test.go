@@ -32,6 +32,22 @@ func TestAllThemesEmbeds33UpstreamThemes(t *testing.T) {
 	}
 }
 
+func TestAllThemesCached(t *testing.T) {
+	first, err := AllThemes()
+	if err != nil {
+		t.Fatalf("AllThemes: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		got, err := AllThemes()
+		if err != nil {
+			t.Fatalf("AllThemes (call %d): %v", i+2, err)
+		}
+		if reflect.ValueOf(got).Pointer() != reflect.ValueOf(first).Pointer() {
+			t.Fatalf("AllThemes (call %d) returned a different map; the embedded assets are immutable and the parsed map must be cached", i+2)
+		}
+	}
+}
+
 func TestParseOpencodeThemeShape(t *testing.T) {
 	themes, err := AllThemes()
 	if err != nil {
