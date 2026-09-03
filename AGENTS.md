@@ -77,7 +77,9 @@ Read it before acting. Task state: beads (`bd ready`). Verified facts:
 
 - **NEVER commit directly onto `main`** (user directive, 2026-08-22). Every change —
   code, docs, checkpoints, release bookkeeping — is committed on a task branch and
-  reaches `main` only via a merged PR (branch → commit → push → PR → user merge).
+  reaches `main` only via a merged PR (branch → commit → push → PR → merge). The
+  agent merges its own task PRs itself once the CI gate is green (user go-ahead
+  2026-09-03); no further per-PR approval needed.
 - Work happens inline on the current task branch (named with the active plan), **one task at a time**.
 - Conventional commits (`feat:`/`fix:`/`docs:`/`test:`/…, imperative, ≤ 72-char subject). Task commits use **the commit message pinned in the plan**. Between tasks: `docs: checkpoint — Task N (...) done, next is Task N+1`.
 - Update `PROGRESS.md` / `DEVIATIONS.md` when facts or deviations change. **No per-task history in files, no plan-slice copies:** task state is beads; `git log --oneline` and the plan file are the archive. Deviations are append-only in `DEVIATIONS.md` (pre-v0.1.2 items 1–66 frozen in `deviations-archive-v0.1.0.md`).
