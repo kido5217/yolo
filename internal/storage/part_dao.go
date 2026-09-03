@@ -79,16 +79,38 @@ func (d *DB) listPartsBy(ctx context.Context, messageID, typ string) ([]PartRow,
 	return out, rows.Err()
 }
 
-// ListPartsByMessageIDs fetches the parts of every given message in one
-// parameterized query (batched N+1 replacement for per-message ListParts
-// calls). The global order is message_id ASC, then time_created ASC,
-// rowid ASC — so each message's parts come back earliest first, exactly
-// ListParts' per-message order; unknown ids simply contribute no rows.
-// An empty input returns an empty slice, not an error.
+// partQueryBatch bounds the message ids per IN (...) query in
+// ListPartsByMessageIDs. SQLite caps a statement's bound variables (32766 in
+// modernc.org/sqlite v1.57.0); batching keeps an arbitrarily large message
+// count within the cap instead of failing it.
+const partQueryBatch = 500
+
+// ListPartsByMessageIDs fetches the parts of every given message (batched
+// N+1 replacement for per-message ListParts calls), running one
+// parameterized IN (...) query per partQueryBatch chunk so an unbounded
+// message count never trips SQLite's bound-variable cap. Each message's
+// parts come back earliest first — time_created ASC, rowid ASC, exactly
+// ListParts' per-message order (a message's ids live in a single chunk);
+// unknown ids simply contribute no rows. An empty input returns an empty
+// slice, not an error.
 func (d *DB) ListPartsByMessageIDs(ctx context.Context, messageIDs []string) ([]PartRow, error) {
 	if len(messageIDs) == 0 {
 		return []PartRow{}, nil
 	}
+	out := make([]PartRow, 0, len(messageIDs))
+	for start := 0; start < len(messageIDs); start += partQueryBatch {
+		chunk, err := d.queryPartsByIDs(ctx, messageIDs[start:min(start+partQueryBatch, len(messageIDs))])
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, chunk...)
+	}
+	return out, nil
+}
+
+// queryPartsByIDs runs one parameterized IN (...) query for a batch of
+// message ids, returning their parts in message_id, time_created, rowid order.
+func (d *DB) queryPartsByIDs(ctx context.Context, messageIDs []string) ([]PartRow, error) {
 	q := `SELECT id, message_id, session_id, type, tool, state_json, time_created FROM part WHERE message_id IN (` +
 		strings.Repeat(`?,`, len(messageIDs)-1) + `?) ORDER BY message_id ASC, time_created ASC, rowid ASC`
 	args := make([]any, len(messageIDs))
