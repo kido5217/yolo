@@ -98,7 +98,7 @@ func TestSessionListDeleteFailureOpensDlg(t *testing.T) {
 }
 
 // TestTUIDeleteFailedDialog is the teatest SGR leg: the active option row
-// paints the primary background (48;5;216 — opencode dark primary, the
+// paints the primary background (48;5;216 — yolo dark primary, the
 // homeSGRTokens-pinned index).
 func TestTUIDeleteFailedDialog(t *testing.T) {
 	dir := t.TempDir()

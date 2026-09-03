@@ -410,6 +410,16 @@ prompt+model does NOT loop in upstream opencode. Detail: deviations 73–77.
 
 ## Last completed
 
+Rebrand (2026-09-03, branch `rebrand-yolo`, bead `yolo-df5`): yolo
+presents as yolo — the prompt identity lines become "You are YOLO"
+(opencode help/feedback/doc-fetch content deleted, 10 of 14 pinned
+prompt files re-baselined), the home logo re-lettered "opencode"→"YOLO"
+(19-column mark-style block; `logo_test` pins re-baselined), the default
+theme renamed `opencode`→`yolo` (asset renamed; a legacy
+`theme: "opencode"` degrades to the default — same palette), the keymap
+labels `yolo.status`/`yolo.debug`, the help line reworded. The OpenCode
+Zen service identity (provider ids, URLs, `OPENCODE_API_KEY`, the
+catalog `"opencode"` key) is untouched by user call. Deviation 265.
 Slice S0 tasks 1–5 (2026-08-25, branch `new_tui`, epic `yolo-oae`, beads
 `yolo-oae.1.1`–`.5` closed; every task reviewed clean): theme-engine
 foundation — S0.1 embed 33 upstream theme JSONs + `ThemeJson` model
@@ -467,6 +477,13 @@ deviations 73–77. Detail in `git log --oneline`.)
 
 ## Key verified facts (so they don't get re-litigated)
 
+- Rebrand (2026-09-03, deviation 265): the default theme is `yolo` (the
+renamed `opencode` asset — a legacy `theme: "opencode"` degrades to the
+default, same palette); the home logo spells YOLO (19-column block,
+`logoWidth = 19`; the 28-run divider is unchanged); the prompt identity
+is "You are YOLO"; the OpenCode Zen provider identity (`opencode` id,
+`OPENCODE_API_KEY`, the opencode.ai URLs, the catalog's `"opencode"`
+key) is intentionally untouched.
 - Permission engine = port of `packages/opencode/src/permission/index.ts` + matrices in
 `agent/agent.ts` (build/plan/yolo verbatim, Task 10).
 - Doom loop = sliding 3-identical window; wildcard-deny hides tool iff last matching rule

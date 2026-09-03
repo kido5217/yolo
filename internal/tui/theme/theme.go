@@ -11,8 +11,9 @@ import (
 	"sync"
 )
 
-// DefaultName is the fallback active theme (upstream default, theme.tsx:96).
-const DefaultName = "opencode"
+// DefaultName is the fallback active theme (upstream default,
+// theme.tsx:96; rebranded to the yolo default).
+const DefaultName = "yolo"
 
 // ThemeJson mirrors the upstream theme JSON shape (theme/index.ts:120):
 // defs = named color constants; theme = semantic tokens, each a

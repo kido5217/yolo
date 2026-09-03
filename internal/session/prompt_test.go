@@ -16,20 +16,20 @@ import (
 
 // sha256 constants from `sha256sum internal/session/prompt/*.txt` (ALL 14).
 var promptPins = map[string]string{
-	"prompt/anthropic.txt":     "8324e4cf58eb45d4d9d6fd120f5e8da59e0548de48e7e6aefcdfbf2923f40b4e",
-	"prompt/beast.txt":         "a384d7b485829c1fe43bd6deaae10466db2c16b8cba045764538974f737958ba",
+	"prompt/anthropic.txt":     "d4087ed2105a5f61a2f631d80744edb37a0496e9f2e1e9a412675f72583af99d",
+	"prompt/beast.txt":         "8869178bf7996c25f57a6f8829e9efb62ab9db2bd542dbc2ab53c7213fccec64",
 	"prompt/build-switch.txt":  "5e3db616a685a3dfaaf95fb86ae6e2acfbdf520bda60f7b27f727d2a88ba8a25",
-	"prompt/codex.txt":         "c30bca40693a47965e25ceac3f02d3709712af7abeab1278bba53a9efcffa928",
-	"prompt/copilot-gpt-5.txt": "0ef5261daf7a4ae72b3e874cabc7b06cf34d991376d1dcfa1874734b13031828",
-	"prompt/default.txt":       "962fbf3cb3ec659c9a5244425ee2e7bb141ad4428f489a630a7738566880dc6a",
-	"prompt/gemini.txt":        "921750803b0314b88b8adc996e2afcf1a61fd7d9dd6dfcf812baeadac1468cf3",
-	"prompt/gpt.txt":           "83a66a46a5febbc21454161d5f053638b22d25d95e09d77b8f6da33debc848ad",
-	"prompt/kimi.txt":          "ade9199b00df5aa3b51bb02b8e8c711f3e0de224345aef7df9f31d3ea08a5bc7",
-	"prompt/meta.txt":          "9068607ce8bbb3f9b09531d8114fc16e1724de96cd1e364565c9f6f6b2b61df3",
+	"prompt/codex.txt":         "b1ad2ffeb2dda8941bb707e27b35acf00b02a3dd1e8d38cdfabd40dddfb37acb",
+	"prompt/copilot-gpt-5.txt": "df6814d4e9630c26a86968ce75ecd850546cef4abfc8b41046c4cb6c17142c53",
+	"prompt/default.txt":       "6e207840afe7f2b905d2e3e6de1956260f35c407b663d13dca54116eff6e74e3",
+	"prompt/gemini.txt":        "ba6fde8ccdd770e27f6cf56dfc925f660187c459f24315825fce23661f09c587",
+	"prompt/gpt.txt":           "549aef0b99b93ea42a4c986f41d282ecb89489ead260a8238710998511be63ba",
+	"prompt/kimi.txt":          "419b7fa4ed588da1e702910d5f3276a55bffd0357f1cff087704ae8c5a2cc3d8",
+	"prompt/meta.txt":          "17e1197af4a338e83da5a8794d99eb904a0e1916f4b709a33e510607d87678c6",
 	"prompt/plan-mode.txt":     "473381e8f20d054fa24ed3631a3b741a4fd432dadb8a0f0925f73d94a6e2866c",
 	"prompt/plan.txt":          "455db97e0d21e8097c2afb539d167b4b2483e99b585dbc4fff23cafd4a3029b8",
 	"prompt/title.txt":         "e7a6848eba328f28c7e870874cf0591e4edbaf90d7602ad8fdfe90601c6e656f",
-	"prompt/trinity.txt":       "0019dc1d018d08c1b5a065d10896e22d2615d33580088f44aefc3a042a46ebe2",
+	"prompt/trinity.txt":       "8b29dcd766ccd125223be9319d10e1920e26b20feef159d7397cbe8c5866d2d5",
 }
 
 func sha256hex(b []byte) string {

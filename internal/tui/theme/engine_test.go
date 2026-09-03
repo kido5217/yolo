@@ -58,7 +58,7 @@ func engineDir(t *testing.T) (dir, kvPath string) {
 }
 
 // TestEngineSelectionChain: active = ConfigTheme > KV "theme" > default
-// "opencode" (theme.tsx:121-122, spec §3) across the full cfg × kv matrix.
+// "yolo" (theme.tsx:121-122, spec §3) across the full cfg × kv matrix.
 func TestEngineSelectionChain(t *testing.T) {
 	dark := paletteFunc(testPalette("#000000", "#ffffff"), true)
 	cases := []struct {
@@ -67,7 +67,7 @@ func TestEngineSelectionChain(t *testing.T) {
 		kv   string // "" = key absent
 		want string
 	}{
-		{"cfg empty, kv absent", "", "", "opencode"},
+		{"cfg empty, kv absent", "", "", "yolo"},
 		{"cfg empty, kv valid", "", "kanagawa", "kanagawa"},
 		{"cfg empty, kv unknown", "", "ghost", "ghost"},
 		{"cfg valid, kv absent", "nord", "", "nord"},
@@ -76,6 +76,7 @@ func TestEngineSelectionChain(t *testing.T) {
 		{"cfg unknown, kv absent", "ghostcfg", "", "ghostcfg"},
 		{"cfg unknown, kv valid", "ghostcfg", "kanagawa", "ghostcfg"},
 		{"cfg unknown, kv unknown", "ghostcfg", "ghostkv", "ghostcfg"},
+		{"cfg legacy opencode, kv absent", "opencode", "", "opencode"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -113,8 +114,31 @@ func TestEngineSelectionChain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ActiveTheme: %v", err)
 	}
-	if th.Name != "opencode" {
-		t.Errorf("ActiveTheme().Name = %q, want opencode (memo fallback)", th.Name)
+	if th.Name != "yolo" {
+		t.Errorf("ActiveTheme().Name = %q, want yolo (memo fallback)", th.Name)
+	}
+
+	// The legacy default name (pre-rebrand "opencode") is unknown after
+	// the rename: the stored selection keeps it; the resolved theme
+	// degrades to the default (the renamed asset, the same palette).
+	dir, kvPath = engineDir(t)
+	seedKV(t, kvPath, `{"theme":"opencode"}`)
+	e = newTestEngine(t, EngineOptions{
+		KVPath: kvPath, GlobalYoloDir: dir, CWD: dir,
+		ConfigTheme: "opencode", Palette: dark,
+	})
+	if err := e.Resolve(context.Background()); err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if got := e.Active(); got != "opencode" {
+		t.Fatalf("Active() = %q, want opencode (legacy stored selection)", got)
+	}
+	legacy, err := e.ActiveTheme()
+	if err != nil {
+		t.Fatalf("ActiveTheme: %v", err)
+	}
+	if legacy.Name != "yolo" {
+		t.Fatalf("ActiveTheme().Name = %q, want yolo (legacy-name fallback)", legacy.Name)
 	}
 }
 
@@ -211,7 +235,7 @@ func TestEngineStaleThemeModeClearedWhenUnlocked(t *testing.T) {
 
 // TestEngineSystemTheme: the "system" key exists when the palette probe is
 // ok + palette[0] present, and config "system" selects it; palette[0]
-// empty → no "system" + active "system" falls back to "opencode" (the
+// empty → no "system" + active "system" falls back to "yolo" (the
 // upstream catch path, theme.tsx:159-163, 174-178).
 func TestEngineSystemTheme(t *testing.T) {
 	dir, kvPath := engineDir(t)
@@ -404,7 +428,7 @@ func TestEnginePinFreeApplyAndModeEvents(t *testing.T) {
 }
 
 // TestEngineRefreshCustoms: the 1000 ms refresh leg — a runtime-added
-// custom appears; a corrupt file is the error path: active "opencode",
+// custom appears; a corrupt file is the error path: active "yolo",
 // customs emptied, error returned (the theme.tsx:132-144 catch).
 func TestEngineRefreshCustoms(t *testing.T) {
 	dark := paletteFunc(testPalette("#000000", "#ffffff"), true)

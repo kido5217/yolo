@@ -88,7 +88,7 @@ func run(args []string) int {
 }
 
 func usage(w io.Writer) {
-	fmt.Fprint(w, `yolo — Go port of opencode (v1.18.18 wire contract)
+	fmt.Fprint(w, `yolo — Go TUI + core-server harness
 
 Usage:
   yolo [<sessionID>] [--dir DIR] [--profile ID]   start the TUI (optionally resume a session)

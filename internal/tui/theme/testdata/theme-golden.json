@@ -2463,7 +2463,7 @@
     "selectedListItemText": "#fafafaff",
     "backgroundMenu": "#eaeaebff"
   },
-  "opencode.dark": {
+  "yolo.dark": {
     "thinkingOpacity": 0.6,
     "_hasSelectedListItemText": false,
     "primary": "#fab283ff",
@@ -2519,7 +2519,7 @@
     "selectedListItemText": "#0a0a0aff",
     "backgroundMenu": "#1e1e1eff"
   },
-  "opencode.light": {
+  "yolo.light": {
     "thinkingOpacity": 0.6,
     "_hasSelectedListItemText": false,
     "primary": "#3b7dd8ff",

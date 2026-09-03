@@ -317,7 +317,7 @@ func (a *App) helpHeaderRow(w int, th theme.Theme) string {
 }
 
 // helpOKPill renders the right-aligned "ok" pill: pad 0 3, the primary bg and
-// the SelectedForeground fg (the opencode token has no selectedListItemText
+// the SelectedForeground fg (the yolo token has no selectedListItemText
 // → the fallback; 48;5;216 bg + 38;5;232 fg under the pinned test env).
 func (a *App) helpOKPill(w int, th theme.Theme) string {
 	const label = "ok"

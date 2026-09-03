@@ -34,7 +34,7 @@ func ThemeDirs(globalYoloDir, cwd string) []string {
 // earlier names. A missing themes dir is skipped (upstream Glob.scan yields
 // nothing); an unreadable or unparseable file is a hard error (upstream
 // JSON.parse throws → the whole discover fails; the caller's catch sets
-// active to "opencode" — S0.7). Values are returned RAW: the IsTheme filter
+// active to "yolo" — S0.7). Values are returned RAW: the IsTheme filter
 // is the caller's job (theme.tsx:137-140, S0.7), not Discover's.
 func Discover(dirs []string) (map[string]any, error) {
 	result := map[string]any{}

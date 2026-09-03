@@ -20,11 +20,11 @@ func TestMessageErrorBox(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AllThemes: %v", err)
 	}
-	r, err := theme.ResolveTheme(all["opencode"], "dark")
+	r, err := theme.ResolveTheme(all["yolo"], "dark")
 	if err != nil {
 		t.Fatalf("ResolveTheme: %v", err)
 	}
-	th := theme.Theme{R: r, Name: "opencode", Mode: "dark"}
+	th := theme.Theme{R: r, Name: "yolo", Mode: "dark"}
 
 	// non-aborted: the box (border + message).
 	out := renderMessageError(protocol.MessageError{Type: "unknown", Message: "boom"}, th, 77)
@@ -59,11 +59,11 @@ func TestMessageErrorBoxStyle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AllThemes: %v", err)
 	}
-	r, err := theme.ResolveTheme(all["opencode"], "dark")
+	r, err := theme.ResolveTheme(all["yolo"], "dark")
 	if err != nil {
 		t.Fatalf("ResolveTheme: %v", err)
 	}
-	th := theme.Theme{R: r, Name: "opencode", Mode: "dark"}
+	th := theme.Theme{R: r, Name: "yolo", Mode: "dark"}
 	st := messageErrorBoxStyle(th)
 	_, top, right, bottom, left := st.GetBorder()
 	if !left || top || right || bottom {

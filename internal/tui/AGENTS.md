@@ -54,9 +54,9 @@ and the teatest suites.
   per visual line, S0.9); the selected row's background paints every
   rendered line's content only — no background on the plain indent or the
   empty tail beyond the content. The home logo
-  (S0.8) is the one exception: a fixed 39-column glyph block that never
-  wraps or shrinks (the upstream look) — terminals under 39 columns clip
-  it in the alt-screen frame. The session
+  (S0.8) is the one exception: a fixed 19-column glyph block (the
+  re-lettered YOLO mark, deviation 265) that never wraps or shrinks —
+  terminals under 19 columns clip it in the alt-screen frame. The session
   route counts the wrapped help line's real line count in the viewport
   height budget. The model dialog cell hangs at the left-pane column
   (`modelRow`); when the left pane alone ≥ width, cell lines go full width.

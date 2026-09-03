@@ -37,7 +37,7 @@ var (
 )
 
 // TestPermissionDialogSGR pins the restyled permission dialog's paint
-// (TTY_FORCE ANSI256, real engine — opencode dark): the warning header
+// (TTY_FORCE ANSI256, real engine — yolo dark): the warning header
 // token (fg 215) and the selected pill's warning background (bg 215 —
 // yolo look pin, deviation 182). The SGR tokens are pinned in the dialog's
 // FIRST drain (deviation 181): the cell-diff renderer emits the panel once
@@ -75,8 +75,8 @@ func TestPermissionDialogSGR(t *testing.T) {
 	if err := e.Resolve(context.Background()); err != nil {
 		t.Fatalf("theme.Resolve: %v", err)
 	}
-	if got := e.Active(); got != "opencode" {
-		t.Fatalf("active theme = %s, want opencode (no config, no KV)", got)
+	if got := e.Active(); got != "yolo" {
+		t.Fatalf("active theme = %s, want yolo (no config, no KV)", got)
 	}
 
 	c := client.New(ts.URL, ts.Dir)
