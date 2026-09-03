@@ -2,7 +2,7 @@ package session
 
 import (
 	"context"
-	"sort"
+	"slices"
 
 	"github.com/kido5217/yolo/internal/llm"
 	"github.com/kido5217/yolo/internal/permission"
@@ -76,7 +76,7 @@ func (e *Engine) toolSchemaList(ctx context.Context, sessionID string) ([]llm.To
 	for id := range visible {
 		ids = append(ids, id)
 	}
-	sort.Strings(ids)
+	slices.Sort(ids)
 	tools := make([]llm.ToolDef, 0, len(ids))
 	for _, id := range ids {
 		t := visible[id]

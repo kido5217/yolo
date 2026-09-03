@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/kido5217/yolo/internal/protocol"
-	"github.com/kido5217/yolo/internal/provider"
 )
 
 //go:embed prompt/*.txt
@@ -172,7 +171,7 @@ func gitRepo(dir string) bool {
 // instructions...]. v1 instruction resolution is the AGENTS.md walk-up
 // (nearest wins); config instructions[] are appended by the engine which owns
 // the loaded config.
-func BuildSystemPrompt(dir string, model provider.Model, apiID, providerID string) ([]string, error) {
+func BuildSystemPrompt(dir, apiID, providerID string) ([]string, error) {
 	return buildCore(dir, apiID, providerID, nil)
 }
 

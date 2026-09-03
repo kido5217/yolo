@@ -46,6 +46,8 @@ func (e *Engine) generateTitle(ctx context.Context, tc *titleCancel, t *turn, us
 	defer tc.cancel()
 	defer e.titleWait.Done()
 	defer e.dropTitleCtx(t.sessionID, tc)
+	// Best-effort: a config load failure degrades to env-only key
+	// resolution (nil cfg); the title stays the default either way.
 	cfg, _ := e.loadCfg(t.row.ProjectDir)
 	req := llm.Request{
 		Model:   t.model.ID,
