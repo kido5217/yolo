@@ -129,7 +129,6 @@ func TestParityDump(t *testing.T) {
 		t.Fatalf("parity dump: mkdir: %v", err)
 	}
 	for _, s := range paritySurfaces() {
-		s := s
 		t.Run(s.name, func(t *testing.T) { dumpSurface(t, dir, s) })
 	}
 }
