@@ -169,7 +169,10 @@ func (s *Service) Ask(ctx context.Context, req Request) (Decision, error) {
 	case d := <-entry.ch:
 		return d, nil
 	case <-ctx.Done():
-		s.resolve(ctx, req.RequestID, Deny, "aborted", "reject", false)
+		// ctx is cancelled; the 'aborted' row must still be stored, so the
+		// write runs on a detached context (a cancelled ctx would fail the
+		// DB write and leave the row pending).
+		s.resolve(context.WithoutCancel(ctx), req.RequestID, Deny, "aborted", "reject", false)
 		return Deny, nil
 	}
 }
@@ -243,7 +246,7 @@ func (s *Service) cascade(ctx context.Context, sessionID, skipID string, d Decis
 func (s *Service) sessionPending(sessionID, skipID string) []*pendingEntry {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var out []*pendingEntry
+	out := []*pendingEntry{}
 	for id, e := range s.pending {
 		if e.req.SessionID != sessionID || id == skipID {
 			continue

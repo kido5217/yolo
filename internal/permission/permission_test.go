@@ -11,6 +11,7 @@ func r(perm, pattern, effect string) protocol.Rule {
 }
 
 func TestEvaluateFindLastNoMatchAsk(t *testing.T) {
+	t.Parallel()
 	rules := []protocol.Rule{r("*", "*", "allow"), r("read", "*.env", "ask")}
 	if got := Evaluate(rules, "read", []string{"a.env"}); got != Ask {
 		t.Fatalf("got %v", got)
@@ -24,6 +25,7 @@ func TestEvaluateFindLastNoMatchAsk(t *testing.T) {
 }
 
 func TestMultiResourceAnyDenyWins(t *testing.T) {
+	t.Parallel()
 	rules := []protocol.Rule{r("*", "*", "allow"), r("edit", "secrets/*", "deny")}
 	if got := Evaluate(rules, "edit", []string{"secrets/a", "ok/b"}); got != Deny {
 		t.Fatalf("got %v", got)
@@ -34,6 +36,7 @@ func TestMultiResourceAnyDenyWins(t *testing.T) {
 // allow continues, anything else (ask or no rule) forces the whole call to
 // ask — so mixed ask+allow is Ask, not Allow.
 func TestMultiResourceAskAllowMixesToAsk(t *testing.T) {
+	t.Parallel()
 	rules := []protocol.Rule{r("*", "*", "allow"), r("read", "*.env", "ask")}
 	if got := Evaluate(rules, "read", []string{"a.env", "a.go"}); got != Ask {
 		t.Fatalf("mixed ask+allow → %v, want ask", got)
@@ -41,6 +44,7 @@ func TestMultiResourceAskAllowMixesToAsk(t *testing.T) {
 }
 
 func TestHiddenWildcardDenyLastWins(t *testing.T) {
+	t.Parallel()
 	// build: no edit rule → findLast("*") = allow → not hidden
 	hidden := Hidden(base, []string{"edit", "write", "bash"})
 	if hidden["edit"] || hidden["write"] || hidden["bash"] {
@@ -63,6 +67,7 @@ func TestHiddenWildcardDenyLastWins(t *testing.T) {
 }
 
 func TestBuiltinsYoloAllowsEverything(t *testing.T) {
+	t.Parallel()
 	rules, err := LoadBuiltins("yolo", "/data")
 	if err != nil {
 		t.Fatal(err)
@@ -75,6 +80,7 @@ func TestBuiltinsYoloAllowsEverything(t *testing.T) {
 }
 
 func TestBuiltinsPlanDeniesEditUnlessPlanPath(t *testing.T) {
+	t.Parallel()
 	rules, err := LoadBuiltins("plan", "/data")
 	if err != nil {
 		t.Fatal(err)
@@ -94,6 +100,7 @@ func TestBuiltinsPlanDeniesEditUnlessPlanPath(t *testing.T) {
 }
 
 func TestDoomLoopDue(t *testing.T) {
+	t.Parallel()
 	k := func() CallKey { return CallKey{"bash", "abc"} }
 	if DoomLoopDue(nil, k()) || DoomLoopDue([]CallKey{k()}, k()) {
 		t.Fatal("too early")

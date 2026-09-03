@@ -68,11 +68,8 @@ func bashPrefix(command string) string {
 }
 
 func bashArgs(raw json.RawMessage) (command string, timeoutMS int, err error) {
-	var m map[string]any
-	if len(raw) == 0 {
-		raw = []byte("{}")
-	}
-	if err = json.Unmarshal(raw, &m); err != nil {
+	m, err := argsMap(raw)
+	if err != nil {
 		return
 	}
 	v, _ := m["command"].(string)
@@ -136,8 +133,16 @@ func (bashTool) Run(ctx context.Context, raw json.RawMessage, env *Env) (Output,
 	if cut {
 		// Upstream shell.ts: a truncated run stores the FULL output and
 		// tells the model the path — without the marker the model sees a
-		// silent mid-stream start and re-runs the command in a loop.
-		if file, werr := WriteFullOutput(env.OutputDir, out); werr == nil && file != "" {
+		// silent mid-stream start and re-runs the command in a loop. A
+		// store failure degrades to the bare marker and is logged (the
+		// model still sees the truncated tail).
+		file, werr := WriteFullOutput(env.OutputDir, out)
+		switch {
+		case werr != nil:
+			if env.Log != nil {
+				env.Log.Warn("bash: saving full output failed", "error", werr)
+			}
+		case file != "":
 			text = "...output truncated...\n\nFull output saved to: " + file + "\n\n" + text
 			meta["outputPath"] = file
 		}

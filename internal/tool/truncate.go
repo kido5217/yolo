@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -33,7 +34,9 @@ func WriteFullOutput(dir, text string) (string, error) {
 
 // CleanOutputDir removes tool_* outputs older than OutputDirRetention
 // (upstream runs the sweep hourly; v1 runs it once at startup). A missing
-// dir is a no-op (first run before any truncation).
+// dir is a no-op (first run before any truncation). Removal failures are
+// joined and returned (a stale file is not an error, but a failed remove is
+// reported to the caller rather than dropped).
 func CleanOutputDir(dir string) error {
 	if dir == "" {
 		return nil
@@ -46,6 +49,7 @@ func CleanOutputDir(dir string) error {
 		return err
 	}
 	cutoff := time.Now().Add(-OutputDirRetention)
+	var errs []error
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasPrefix(e.Name(), "tool_") {
 			continue
@@ -55,10 +59,12 @@ func CleanOutputDir(dir string) error {
 			continue
 		}
 		if info.ModTime().Before(cutoff) {
-			_ = os.Remove(filepath.Join(dir, e.Name()))
+			if rerr := os.Remove(filepath.Join(dir, e.Name())); rerr != nil {
+				errs = append(errs, rerr)
+			}
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // Truncate keeps the TAIL of text: the last up-to Limits.MaxLines lines
@@ -95,8 +101,6 @@ func Truncate(text string, l Limits) (string, bool) {
 		out = append(out, lines[i])
 		bytes += size
 	}
-	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
-		out[i], out[j] = out[j], out[i]
-	}
+	slices.Reverse(out)
 	return strings.Join(out, "\n"), true
 }

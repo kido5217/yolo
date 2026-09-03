@@ -38,10 +38,10 @@ func (l Limits) withDefaults() Limits {
 // Close). Tools that don't run commands must tolerate a nil Env.Shell.
 
 // Env is what Run receives: the session project dir (permission anchor and
-// base for relative paths), the session shell, output limits, — for tools
-// that persist (todowrite) — the session storage, and OutputDir (the data
-// dir's tool-output/), where bash stores the FULL output of a truncated run
-// (upstream shell.ts). Dir/Shell/Limits are the engine's concern to
+// base for relative paths), the session shell, output limits, and — for
+// tools that persist (todowrite) — the session storage, plus OutputDir (the
+// data dir's tool-output/), where bash stores the FULL output of a truncated
+// run (upstream shell.ts). Dir/Shell/Limits are the engine's concern to
 // populate; OutputDir/Storage/SessionID may be empty/nil for tools that
 // ignore them.
 type Env struct {
@@ -62,6 +62,19 @@ func shortRunes(s string, n int) string {
 		return s
 	}
 	return string(r[:n]) + "..."
+}
+
+// argsMap normalizes empty raw args to "{}" and unmarshals them into a map
+// (every tool's arg parser shares the same normalization).
+func argsMap(raw json.RawMessage) (map[string]any, error) {
+	if len(raw) == 0 {
+		raw = []byte("{}")
+	}
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // Output is a tool result: Title for the TUI, Text for the model, Meta for

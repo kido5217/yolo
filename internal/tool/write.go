@@ -59,11 +59,8 @@ func (writeTool) External(raw json.RawMessage) ([]string, error) {
 // writeArgs parses {filePath, content}; content may be "" (creates an empty
 // file) but must be present.
 func writeArgs(raw json.RawMessage) (fp, content string, err error) {
-	if len(raw) == 0 {
-		raw = []byte("{}")
-	}
-	var m map[string]any
-	if err = json.Unmarshal(raw, &m); err != nil {
+	m, err := argsMap(raw)
+	if err != nil {
 		return
 	}
 	v, ok := m["filePath"].(string)
