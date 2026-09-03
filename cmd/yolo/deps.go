@@ -42,8 +42,11 @@ func buildDeps(workDir, profile string) (*server.Deps, func(), error) {
 
 	// Retention sweep for full outputs of truncated bash runs (upstream
 	// runs it hourly; v1 runs it once at startup). Best effort: the
-	// hygiene pass must not block boot.
-	_ = tool.CleanOutputDir(filepath.Join(dataDir, "tool-output"))
+	// hygiene pass must not block boot, but a failure is logged (not
+	// dropped) so a broken tool-output dir stays diagnosable.
+	if serr := tool.CleanOutputDir(filepath.Join(dataDir, "tool-output")); serr != nil {
+		logger.Warn("tool-output sweep failed", "error", serr)
+	}
 
 	fail := func(err error) (*server.Deps, func(), error) {
 		logger.Error("startup failed", "error", err)

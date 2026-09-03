@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/kido5217/yolo/internal/server"
@@ -176,4 +177,52 @@ func TestBuildDepsProfileSelection(t *testing.T) {
 			t.Fatal("buildDeps with missing profile: want error, got nil")
 		}
 	})
+}
+
+// TestBuildDepsSweepErrorLogged: the startup retention sweep
+// (CleanOutputDir) is best effort — a sweep failure must not block boot,
+// but it must not vanish silently: buildDeps logs it at WARN in yolo.log.
+func TestBuildDepsSweepErrorLogged(t *testing.T) {
+	root := t.TempDir()
+	workDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
+	t.Setenv("YOLO_LOG_LEVEL", "INFO")
+	script := filepath.Join(root, "script.json")
+	if err := os.WriteFile(script, []byte(fakeScriptOK), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("YOLO_LLM", "fake")
+	t.Setenv("YOLO_FAKE_SCRIPT", script)
+
+	// A regular file at the sweep path makes ReadDir fail (ENOTDIR, not
+	// os.ErrNotExist), so CleanOutputDir returns an error at startup.
+	toolOutput := filepath.Join(root, "data", "yolo", "tool-output")
+	if err := os.MkdirAll(filepath.Dir(toolOutput), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(toolOutput, []byte("not a dir"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// A sweep failure must not block boot.
+	_, closeDB, err := buildDeps(workDir, "")
+	if err != nil {
+		t.Fatalf("buildDeps with a broken sweep dir: %v", err)
+	}
+	defer closeDB()
+
+	data, err := os.ReadFile(filepath.Join(root, "data", "yolo", "log", "yolo.log"))
+	if err != nil {
+		t.Fatalf("read yolo.log: %v", err)
+	}
+	// The sweep message and the WARN level must sit on the SAME line:
+	// an unrelated WARN plus the message at another level would not do.
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.Contains(line, "tool-output sweep failed") && strings.Contains(line, "level=WARN") {
+			return
+		}
+	}
+	t.Fatalf("sweep error not logged at WARN in yolo.log:\n%s", data)
 }
