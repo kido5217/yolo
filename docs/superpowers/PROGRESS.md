@@ -355,9 +355,9 @@ S3.9 theme commands landed (bead `yolo-oae.4.10`, commit 3032022):
   wiring — the fresh engine on the same KV file sees the persisted
   theme, the raw file after Close carries the mode keys); full gate
   green (`go vet ./... && go test ./...` + `gofmt -l .`).
-S6 done (6/6 child beads closed, slice gate green — the user-run TTY
-smoke is on-demand, pending). Next: S7 detail pass (session completion
-— slice bead `yolo-oae.8`).
+S7 done (5/5 child beads closed, slice gate green — the user-run TTY
+smoke is on-demand, pending). Next: S8 detail pass (parity audit
++ close-out — slice bead `yolo-oae.9`).
 Prior release: v0.4.3 (2026-08-24) — allowlisted dependency bump
 (PR #20, branch `chore/deps-update`) merged to `main` + tagged `v0.4.3`
 + GitHub release cut: bubbletea v2.0.9, bubbles v2.2.1,
