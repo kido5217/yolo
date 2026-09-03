@@ -166,7 +166,8 @@ func TestOpenAIClosesStreamAtDone(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(200)
 		fl, _ := w.(http.Flusher)
-		_, _ = w.Write([]byte("data: {\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"}}]}\n\n"))
+		frame := "data: {\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hi\"}}]}\n\n"
+		_, _ = w.Write([]byte(frame))
 		fl.Flush()
 		_, _ = w.Write([]byte("data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n"))
 		fl.Flush()
@@ -347,7 +348,9 @@ func TestAnthropicUpstream400DrainsBody(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(400)
-		_, _ = w.Write([]byte(`{"type":"error","error":{"type":"invalid_request_error","message":"input is too long for requested model"}}`))
+		payload := `{"type":"error","error":{"type":"invalid_request_error",` +
+			`"message":"input is too long for requested model"}}`
+		_, _ = w.Write([]byte(payload))
 	}))
 	defer srv.Close()
 	_, err := NewAnthropic(srv.Client()).Stream(ctx0(t), Request{

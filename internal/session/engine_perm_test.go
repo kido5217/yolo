@@ -132,7 +132,10 @@ func TestPermissionAlwaysPersistsAndSkipsNext(t *testing.T) {
 	fp := filepath.Join(d, ".env")
 	writeFile(t, fp, "SECRET=1")
 	readCall := func(callID string) llm.Part {
-		return llm.Part{Kind: "tool", Name: "read", CallID: callID, Text: fmt.Sprintf(`{"filePath":%q}`, fp), Finish: "tool_calls"}
+		return llm.Part{
+			Kind: "tool", Name: "read", CallID: callID,
+			Text: fmt.Sprintf(`{"filePath":%q}`, fp), Finish: "tool_calls",
+		}
 	}
 	h.drv.Turns = []fake.Turn{
 		{Parts: []llm.Part{readCall("c1")}},
@@ -181,7 +184,8 @@ func TestHiddenToolNotSentToModel(t *testing.T) {
 	h.build(t)
 	// wildcard-deny as the LAST edit rule hides both edit and write.
 	h.cfgPermission = []protocol.Rule{{Permission: "edit", Pattern: "*", Action: "deny"}}
-	h.drv.Turns = []fake.Turn{{Parts: []llm.Part{{Kind: "text", Text: "x", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}}}
+	xPart := llm.Part{Kind: "text", Text: "x", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}
+	h.drv.Turns = []fake.Turn{{Parts: []llm.Part{xPart}}}
 	d := t.TempDir()
 	ses := h.startSession(t, d)
 	waitIdle(t, h, ses, func() {

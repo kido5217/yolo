@@ -16,19 +16,14 @@ import (
 )
 
 // toolCall bundles the per-call context of one in-flight tool call: the
-// session identity, the turn config + permission rules, the assistant
-// message id, the turn's doom history (aliased so gate appends land on the
-// turn), and the part itself.
+// round context, the owning turn (its session identity, config and rules,
+// and the doom history the gates append to), the assistant message id, and
+// the part itself.
 type toolCall struct {
-	ctx       context.Context
-	sessionID string
-	agent     string
-	row       storage.SessionRow
-	cfg       *protocol.Config
-	cfgRules  []protocol.Rule
-	asstID    string
-	doomHist  *[]permission.CallKey
-	part      llm.Part
+	ctx    context.Context
+	t      *turn
+	asstID string
+	part   llm.Part
 }
 
 // executeTool runs one model-issued tool call through the LOCKED permission
@@ -53,11 +48,7 @@ func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part)
 		// scripted drivers carry the args JSON in Text (locked convention)
 		raw = json.RawMessage(p.Text)
 	}
-	tc := &toolCall{
-		ctx: ctx, sessionID: t.sessionID, agent: t.agent,
-		row: t.row, cfg: t.cfg, cfgRules: t.cfgRules,
-		asstID: r.id, doomHist: &t.doomHist, part: p,
-	}
+	tc := &toolCall{ctx: ctx, t: t, asstID: r.id, part: p}
 	input := map[string]any{}
 	if len(raw) > 0 {
 		if err := json.Unmarshal(raw, &input); err != nil {
@@ -113,15 +104,15 @@ func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part)
 	}
 
 	env := &tool.Env{
-		Dir:       tc.row.ProjectDir,
-		Shell:     e.shellFor(tc.sessionID, tc.row.ProjectDir),
-		Limits:    e.limitsFor(tc.cfg),
+		Dir:       tc.t.row.ProjectDir,
+		Shell:     e.shellFor(tc.t.sessionID, tc.t.row.ProjectDir),
+		Limits:    e.limitsFor(tc.t.cfg),
 		OutputDir: e.outputDir,
 		Storage:   e.db,
-		SessionID: tc.sessionID,
+		SessionID: tc.t.sessionID,
 		Log:       e.lg,
 	}
-	e.lg.Info("tool start", "session_id", tc.sessionID, "tool", p.Name)
+	e.lg.Info("tool start", "session_id", tc.t.sessionID, "tool", p.Name)
 	toolStart := e.clock()
 	out, runErr := tl.Run(ctx, raw, env)
 	if runErr != nil {
@@ -131,7 +122,7 @@ func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part)
 			// already force-killed via ctx.
 			msg = "aborted"
 		}
-		e.lg.Error("tool failed", "session_id", tc.sessionID, "tool", p.Name, "error", msg)
+		e.lg.Error("tool failed", "session_id", tc.t.sessionID, "tool", p.Name, "error", msg)
 		e.saveToolPart(tc, toolPart{
 			callID: p.CallID,
 			name:   p.Name,
@@ -148,7 +139,7 @@ func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part)
 		return
 	}
 	{
-		args := []any{"session_id", tc.sessionID, "tool", p.Name, "latency_ms", e.clock() - toolStart}
+		args := []any{"session_id", tc.t.sessionID, "tool", p.Name, "latency_ms", e.clock() - toolStart}
 		if v, ok := out.Meta["exit"]; ok {
 			args = append(args, "exit_code", v)
 		}
@@ -178,25 +169,28 @@ func (e *Engine) executeTool(ctx context.Context, t *turn, r *round, p llm.Part)
 // history; the gate reports whether the call may proceed (an Ask error or
 // a non-Allow decision finalizes the part and stops the call).
 func (e *Engine) checkDoom(tc *toolCall, tl tool.Tool, key permission.CallKey, input map[string]any) bool {
-	if !permission.DoomLoopDue(*tc.doomHist, key) {
-		*tc.doomHist = append(*tc.doomHist, key)
+	if !permission.DoomLoopDue(tc.t.doomHist, key) {
+		tc.t.doomHist = append(tc.t.doomHist, key)
 		return true
 	}
-	e.lg.Info("doom loop trigger", "session_id", tc.sessionID, "tool", tc.part.Name)
-	d := e.perm.EvaluateRules(tc.agent, tc.cfgRules, "doom_loop", []string{tc.part.Name})
+	e.lg.Info("doom loop trigger", "session_id", tc.t.sessionID, "tool", tc.part.Name)
+	d := e.perm.EvaluateRules(tc.t.agent, tc.t.cfgRules, "doom_loop", []string{tc.part.Name})
 	doomReq := permission.Request{
-		RequestID: protocol.NewID("perm"), SessionID: tc.sessionID, Agent: tc.agent,
+		RequestID: protocol.NewID("perm"), SessionID: tc.t.sessionID, Agent: tc.t.agent,
 		Permission: "doom_loop", Tool: tl.ID(),
 		Resources: []string{tc.part.Name},
 		CallID:    tc.part.CallID, MessageID: tc.asstID,
 		PreDecision: d, CreatedAt: e.clock(),
-		CfgRules: tc.cfgRules,
+		CfgRules: tc.t.cfgRules,
 	}
 	decision, err := e.perm.Ask(tc.ctx, doomReq)
 	if err != nil {
+		// An Ask error ends the call without recording it in the doom
+		// history (the failed ask does not count toward the loop window).
 		e.failToolPart(tc, e.clock(), err.Error())
 		return false
 	}
+	tc.t.doomHist = append(tc.t.doomHist, key)
 	if decision != permission.Allow {
 		msg := "permission rejected"
 		if tc.ctx.Err() != nil {
@@ -214,10 +208,8 @@ func (e *Engine) checkDoom(tc *toolCall, tl tool.Tool, key permission.CallKey, i
 				Time:     protocol.PartTime{Start: now, End: now},
 			},
 		})
-		*tc.doomHist = append(*tc.doomHist, key)
 		return false
 	}
-	*tc.doomHist = append(*tc.doomHist, key)
 	return true
 }
 
@@ -230,21 +222,21 @@ func (e *Engine) gateExternal(tc *toolCall, tl tool.Tool, external []string) boo
 	for _, ext := range external {
 		abs := ext
 		if !filepath.IsAbs(abs) {
-			abs = filepath.Join(tc.row.ProjectDir, abs)
+			abs = filepath.Join(tc.t.row.ProjectDir, abs)
 		}
 		abs = filepath.Clean(abs)
-		if inside, _ := withinDir(tc.row.ProjectDir, abs); inside {
+		if inside, _ := withinDir(tc.t.row.ProjectDir, abs); inside {
 			continue
 		}
 		pattern := filepath.Dir(abs) + "/*"
-		d := e.perm.EvaluateRules(tc.agent, tc.cfgRules, "external_directory", []string{pattern})
+		d := e.perm.EvaluateRules(tc.t.agent, tc.t.cfgRules, "external_directory", []string{pattern})
 		extReq := permission.Request{
-			RequestID: protocol.NewID("perm"), SessionID: tc.sessionID, Agent: tc.agent,
+			RequestID: protocol.NewID("perm"), SessionID: tc.t.sessionID, Agent: tc.t.agent,
 			Permission: "external_directory", Tool: tl.ID(),
 			Resources: []string{pattern},
 			CallID:    tc.part.CallID, MessageID: tc.asstID,
 			PreDecision: d, CreatedAt: e.clock(),
-			CfgRules: tc.cfgRules,
+			CfgRules: tc.t.cfgRules,
 		}
 		decision, aerr := e.perm.Ask(tc.ctx, extReq)
 		if aerr != nil || decision != permission.Allow {
@@ -259,14 +251,14 @@ func (e *Engine) gateExternal(tc *toolCall, tl tool.Tool, external []string) boo
 // tool.Patterns: an Ask error fails the part with the error text; a
 // non-Allow decision finalizes the part via gateFail; both stop the call.
 func (e *Engine) coreAsk(tc *toolCall, tl tool.Tool, resources, always []string) bool {
-	d := e.perm.EvaluateRules(tc.agent, tc.cfgRules, tl.Permission(), resources)
+	d := e.perm.EvaluateRules(tc.t.agent, tc.t.cfgRules, tl.Permission(), resources)
 	preq := permission.Request{
-		RequestID: protocol.NewID("perm"), SessionID: tc.sessionID, Agent: tc.agent,
+		RequestID: protocol.NewID("perm"), SessionID: tc.t.sessionID, Agent: tc.t.agent,
 		Permission: tl.Permission(), Tool: tl.ID(),
 		Resources: resources, Always: always,
 		CallID: tc.part.CallID, MessageID: tc.asstID,
 		PreDecision: d, CreatedAt: e.clock(),
-		CfgRules: tc.cfgRules,
+		CfgRules: tc.t.cfgRules,
 	}
 	decision, err := e.perm.Ask(tc.ctx, preq)
 	if err != nil {
@@ -291,9 +283,9 @@ func (e *Engine) gateFail(tc *toolCall) {
 }
 
 // failToolPart finalizes the part as a hard error (invalid args, unknown
-// tool, or a service failure): status "error" with the empty input, End
-// stamped at the caller's stage.
-func (e *Engine) failToolPart(tc *toolCall, stage int64, msg string) {
+// tool, or a service failure): status "error" with the empty input, the end
+// time stamped at the caller's failure point.
+func (e *Engine) failToolPart(tc *toolCall, end int64, msg string) {
 	e.saveToolPart(tc, toolPart{
 		callID: tc.part.CallID,
 		name:   tc.part.Name,
@@ -301,7 +293,7 @@ func (e *Engine) failToolPart(tc *toolCall, stage int64, msg string) {
 			Status: "error",
 			Input:  map[string]any{},
 			Error:  msg,
-			Time:   protocol.PartTime{Start: e.clock(), End: stage},
+			Time:   protocol.PartTime{Start: e.clock(), End: end},
 		},
 	})
 }
@@ -316,22 +308,22 @@ type toolPart struct {
 
 func (e *Engine) saveToolPart(tc *toolCall, tp toolPart) {
 	p := protocol.Part{
-		ID: tp.callID, SessionID: tc.sessionID, MessageID: tc.asstID,
+		ID: tp.callID, SessionID: tc.t.sessionID, MessageID: tc.asstID,
 		Type: "tool", Tool: tp.name, CallID: tp.callID, State: &tp.state,
 	}
 	row, perr := storage.ProtocolToPart(p)
 	if perr != nil {
-		e.lg.Error("persist part marshal failed", "part_id", p.ID, "session_id", tc.sessionID, "error", perr)
+		e.lg.Error("persist part marshal failed", "part_id", p.ID, "session_id", tc.t.sessionID, "error", perr)
 		return
 	}
 	// Finalization must land even when the turn ctx is cancelled (abort):
 	// a cancelled ctx would drop the terminal tool-part write and leave the
 	// part "running" in the store.
 	if err := e.db.UpsertPart(context.WithoutCancel(tc.ctx), row); err != nil {
-		e.lg.Error("persist part failed", "part_id", p.ID, "session_id", tc.sessionID, "error", err)
+		e.lg.Error("persist part failed", "part_id", p.ID, "session_id", tc.t.sessionID, "error", err)
 	}
 	e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
-		SessionID: tc.sessionID, Part: p, Time: e.clock(),
+		SessionID: tc.t.sessionID, Part: p, Time: e.clock(),
 	})
 }
 

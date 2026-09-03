@@ -170,10 +170,15 @@ func TestMaxToolStepsHalts(t *testing.T) {
 	// gate (Task 17) on the 3rd call and park an ask nobody answers.
 	parts := make([]llm.Part, 0, 52)
 	for i := 0; i < 51; i++ {
-		parts = append(parts, llm.Part{Kind: "tool", Name: "glob", CallID: string(rune('a'+i%26)) + strconv.Itoa(i), Text: fmt.Sprintf(`{"pattern":"p%d*"}`, i), Finish: "tool_calls"})
+		callID := string(rune('a'+i%26)) + strconv.Itoa(i)
+		parts = append(parts, llm.Part{
+			Kind: "tool", Name: "glob", CallID: callID,
+			Text: fmt.Sprintf(`{"pattern":"p%d*"}`, i), Finish: "tool_calls",
+		})
 	}
 	parts = append(parts, llm.Part{Kind: "text", Text: "end", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}})
-	h.drv.Turns = []fake.Turn{{Parts: parts}, {Parts: []llm.Part{{Kind: "text", Text: "x", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}}}
+	xPart := llm.Part{Kind: "text", Text: "x", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}
+	h.drv.Turns = []fake.Turn{{Parts: parts}, {Parts: []llm.Part{xPart}}}
 	if _, err := h.eng.Send(context.Background(), ses, "spin", nil); err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +290,8 @@ func TestConcurrentSend409(t *testing.T) {
 	h.build(t)
 	d := t.TempDir()
 	ses := h.startSession(t, d)
-	h.drv.Turns = []fake.Turn{{Parts: []llm.Part{{Kind: "text", Text: "slow", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}}}
+	slowPart := llm.Part{Kind: "text", Text: "slow", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}
+	h.drv.Turns = []fake.Turn{{Parts: []llm.Part{slowPart}}}
 	h.slowTurn = true // harness seam: hold the turn 500ms via fake driver delay
 	_, err := h.eng.Send(context.Background(), ses, "one", nil)
 	if err != nil {

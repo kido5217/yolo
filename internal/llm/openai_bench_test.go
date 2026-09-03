@@ -18,16 +18,27 @@ func benchOAStream(nText int) []byte {
 		b.WriteString(`data: {"choices":[{"index":0,"delta":{"content":"tok "}}]}` + "\n\n")
 	}
 	const frag = 48
-	fmt.Fprintf(&b, `data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_0","function":{"name":"bash","arguments":"{\"command\":\"ls -la \"}}]}}]}`+"\n\n")
+	nameFrame := `data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_0",` +
+		`"function":{"name":"bash","arguments":"{\"command\":\"ls -la \"}}]}}]}` + "\n\n"
+	fmt.Fprint(&b, nameFrame)
 	for i := 0; i < frag; i++ {
-		fmt.Fprintf(&b, `data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"fragment %d "}}]}}]}`+"\n\n", i)
+		const fragFrame = `data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,` +
+			`"function":{"arguments":"fragment %d "}}]}}]}`
+		fmt.Fprintf(&b, fragFrame+"\n\n", i)
 	}
-	fmt.Fprintf(&b, `data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":1,"id":"call_1","function":{"name":"read","arguments":"{\"path\":\"/x\""}}]}}]}`+"\n\n")
+	readFrame := `data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":1,"id":"call_1",` +
+		`"function":{"name":"read","arguments":"{\"path\":\"/x\""}}]}}]}` + "\n\n"
+	fmt.Fprint(&b, readFrame)
 	for i := 0; i < frag; i++ {
-		fmt.Fprintf(&b, `data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":1,"function":{"arguments":"chunk %d "}}]}}]}`+"\n\n", i)
+		const chunkFrame = `data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":1,` +
+			`"function":{"arguments":"chunk %d "}}]}}]}`
+		fmt.Fprintf(&b, chunkFrame+"\n\n", i)
 	}
 	b.WriteString(`data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}` + "\n\n")
-	b.WriteString(`data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":100,"completion_tokens_details":{"reasoning_tokens":10},"prompt_tokens_details":{"cached_tokens":5}}}` + "\n\n")
+	usageFrame := `data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":100,` +
+		`"completion_tokens_details":{"reasoning_tokens":10},` +
+		`"prompt_tokens_details":{"cached_tokens":5}}}` + "\n\n"
+	b.WriteString(usageFrame)
 	b.WriteString("data: [DONE]\n\n")
 	return []byte(b.String())
 }

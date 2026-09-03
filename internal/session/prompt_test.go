@@ -135,7 +135,9 @@ func TestEnvBlock(t *testing.T) {
 // buildSystemPromptForTest is the test seam over buildCore: instructions are
 // given explicitly and no config is involved (the engine appends the config
 // instructions itself, see messagesFor).
-func buildSystemPromptForTest(dir string, model provider.Model, providerID string, instructionPaths []string) ([]string, error) {
+func buildSystemPromptForTest(
+	dir string, model provider.Model, providerID string, instructionPaths []string,
+) ([]string, error) {
 	return buildCore(dir, model.ID, providerID, instructionPaths)
 }
 
@@ -162,7 +164,9 @@ func TestBuildSystemPromptInstructions(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(sub, "AGENTS.md"), []byte("NEARER RULES"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	sys2, err := buildSystemPromptForTest(sub, provider.Model{ID: "m", Name: "m"}, "prov", []string{filepath.Join(d, "missing-instructions.md")})
+	model := provider.Model{ID: "m", Name: "m"}
+	paths := []string{filepath.Join(d, "missing-instructions.md")}
+	sys2, err := buildSystemPromptForTest(sub, model, "prov", paths)
 	if err != nil {
 		t.Fatal(err)
 	}

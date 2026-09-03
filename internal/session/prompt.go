@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/kido5217/yolo/internal/protocol"
-	"github.com/kido5217/yolo/internal/provider"
 )
 
 //go:embed prompt/*.txt
@@ -145,6 +144,9 @@ var gitCache struct {
 // gitRepo reports whether dir is inside a git work tree. Detection is
 // `git -C dir rev-parse --is-inside-work-tree` with a 2s timeout; any failure
 // counts as "no". Results are cached per directory, bounded and expiring.
+// The check-then-cache race (a repo appearing/expiring mid-process) is
+// tolerated: the TTL bounds staleness and the answer only steers prompt
+// text, not behavior.
 func gitRepo(dir string) bool {
 	now := time.Now()
 	gitCache.mu.Lock()
@@ -172,7 +174,7 @@ func gitRepo(dir string) bool {
 // instructions...]. v1 instruction resolution is the AGENTS.md walk-up
 // (nearest wins); config instructions[] are appended by the engine which owns
 // the loaded config.
-func BuildSystemPrompt(dir string, model provider.Model, apiID, providerID string) ([]string, error) {
+func BuildSystemPrompt(dir, apiID, providerID string) ([]string, error) {
 	return buildCore(dir, apiID, providerID, nil)
 }
 

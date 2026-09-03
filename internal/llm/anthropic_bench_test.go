@@ -17,7 +17,9 @@ func benchAnStream(nText, nTool int) []byte {
 	ev := func(event, data string) {
 		b.WriteString("event: " + event + "\ndata: " + data + "\n\n")
 	}
-	b.WriteString("event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_bench\",\"usage\":{\"input_tokens\":7}}}\n\n")
+	startFrame := "event: message_start\ndata: {\"type\":\"message_start\"," +
+		"\"message\":{\"id\":\"msg_bench\",\"usage\":{\"input_tokens\":7}}}\n\n"
+	b.WriteString(startFrame)
 	b.WriteString(`event: content_block_start
 data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
 

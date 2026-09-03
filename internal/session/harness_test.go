@@ -137,10 +137,11 @@ func (h *harness) queueReplies(responses ...string) {
 func (h *harness) build(t *testing.T) {
 	t.Helper()
 	drv := fake.New()
-	reg, err := provider.NewWithSeams(t.Context(), t.TempDir(), func(providerID string) (provider.Info, provider.Model, error) {
+	seam := func(providerID string) (provider.Info, provider.Model, error) {
 		return provider.Info{ID: "kido", Name: "kido", BaseURL: "http://fake", KeyRequired: false},
 			provider.Model{ID: "q", Name: "q", Adapter: "openai", Context: 100000, ToolCall: true}, nil
-	})
+	}
+	reg, err := provider.NewWithSeams(t.Context(), t.TempDir(), seam)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -290,12 +291,12 @@ func statusType(t *testing.T, e protocol.Event) protocol.SessionStatus {
 func waitIdle(t *testing.T, h *harness, ses string, fn func()) {
 	t.Helper()
 	fn()
-	deadline := time.Now().Add(5 * time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
 	for h.eng.Status(ses) == protocol.SessionStatusBusy {
-		if time.Now().After(deadline) {
-			t.Fatal("engine did not go idle")
+		if err := h.eng.WaitIdle(ctx, ses); err != nil {
+			t.Fatalf("engine did not go idle: %v", err)
 		}
-		time.Sleep(10 * time.Millisecond)
 	}
 }
 

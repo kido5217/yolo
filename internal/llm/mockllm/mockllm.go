@@ -223,6 +223,9 @@ type wireNSBody struct {
 }
 
 func sse(w http.ResponseWriter, v any) {
+	// All call sites pass the fixed wireFrame DTO, which cannot fail to
+	// marshal; on the (impossible) failure path the empty body is written
+	// and the canned exchange simply short-circuits.
 	b, _ := json.Marshal(v)
 	fmt.Fprintf(w, "data: %s\n\n", b)
 }
@@ -287,10 +290,12 @@ func writeToolStream(w http.ResponseWriter, c Canned) {
 	f.Choices = []wireChoice{{Index: 0, Delta: wireDelta{Role: "assistant"}}}
 	sse(w, f)
 	f = baseFrame()
-	f.Choices = []wireChoice{{Index: 0, Delta: wireDelta{ToolCalls: []wireToolCall{{Index: 0, ID: id, Type: "function", Function: wireFunction{Name: c.Tool.Name}}}}}}
+	nameCall := wireToolCall{Index: 0, ID: id, Type: "function", Function: wireFunction{Name: c.Tool.Name}}
+	f.Choices = []wireChoice{{Index: 0, Delta: wireDelta{ToolCalls: []wireToolCall{nameCall}}}}
 	sse(w, f)
 	f = baseFrame()
-	f.Choices = []wireChoice{{Index: 0, Delta: wireDelta{ToolCalls: []wireToolCall{{Index: 0, Function: wireFunction{Arguments: c.Tool.Args}}}}}}
+	argsCall := wireToolCall{Index: 0, Function: wireFunction{Arguments: c.Tool.Args}}
+	f.Choices = []wireChoice{{Index: 0, Delta: wireDelta{ToolCalls: []wireToolCall{argsCall}}}}
 	sse(w, f)
 	f = baseFrame()
 	toolCalls := "tool_calls"
@@ -312,8 +317,10 @@ func writeTextJSON(w http.ResponseWriter, c Canned, reply string) {
 		Object:  "chat.completion",
 		Created: fixedCreated,
 		Model:   fixedModel,
-		Choices: []wireNSChoice{{Index: 0, Message: wireNSMessage{Role: "assistant", Content: reply}, FinishReason: "stop"}},
-		Usage:   c.Usage.wire(),
+		Choices: []wireNSChoice{{
+			Index: 0, Message: wireNSMessage{Role: "assistant", Content: reply}, FinishReason: "stop",
+		}},
+		Usage: c.Usage.wire(),
 	}
 	_ = json.NewEncoder(w).Encode(body)
 }

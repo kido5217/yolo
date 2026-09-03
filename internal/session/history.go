@@ -30,7 +30,9 @@ import (
 // history snapshot once (⑪). messagesFor maps this snapshot; the mapping is
 // unchanged (LOCKED).
 func mapHistory(hist []protocol.MessageWithParts, agent string, sys []string) []llm.Message {
-	out := make([]llm.Message, 0, len(sys)+8)
+	// The request mirrors the snapshot 1:1 (plus per-tool result messages),
+	// so the known sizes preallocate the common case.
+	out := make([]llm.Message, 0, len(sys)+len(hist))
 	for _, s := range sys {
 		out = append(out, llm.Message{Role: llm.RoleSystem, Content: s})
 	}

@@ -16,7 +16,10 @@ import (
 // does not hold the engine round hostage; flushTail controls whether a
 // partial frame at stream end is processed before finish() runs exactly
 // once.
-func sseLoop(body io.ReadCloser, process func(payload []byte), onErr func(error), flushTail bool, done func() bool, finish func()) {
+func sseLoop(
+	body io.ReadCloser, process func(payload []byte), onErr func(error),
+	flushTail bool, done func() bool, finish func(),
+) {
 	// Byte-based line reading: the payload is assembled as []byte and
 	// handed to json.Unmarshal directly, with the same parse semantics as
 	// the string join (per-value trim, multi-data join with '\n').
