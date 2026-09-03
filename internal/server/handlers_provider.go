@@ -148,7 +148,7 @@ func (s *Server) handleAuthPut(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Key string `json:"key"`
 	}
-	if err := decode(r, &body); err != nil || body.Key == "" {
+	if err := decode(w, r, &body); err != nil || body.Key == "" {
 		envelope(w, http.StatusBadRequest, "invalid key", nil)
 		return
 	}

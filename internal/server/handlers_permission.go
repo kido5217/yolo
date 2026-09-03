@@ -61,7 +61,7 @@ func (s *Server) handlePermissionReply(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Response string `json:"response"`
 	}
-	if err := decode(r, &body); err != nil {
+	if err := decode(w, r, &body); err != nil {
 		envelope(w, http.StatusBadRequest, "invalid reply", nil)
 		return
 	}

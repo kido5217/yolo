@@ -178,8 +178,15 @@ func (s *Server) globalDir() (string, error) {
 	return filepath.Join(root, id), nil
 }
 
-// Start listens on addr (":0" = ephemeral) and serves in a goroutine.
+// Start listens on addr (":0" = ephemeral) and serves in a goroutine. A
+// second Start is an error: a second listener would leak (its goroutine is
+// only joined by Shutdown on the current one).
 func (s *Server) Start(addr string) (net.Addr, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.srv != nil {
+		return nil, errors.New("server: already started")
+	}
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, err
@@ -188,15 +195,12 @@ func (s *Server) Start(addr string) (net.Addr, error) {
 	// user-overridable listen addresses; Read/Write/Idle stay off for the
 	// long-lived SSE endpoint.
 	srv := &http.Server{Handler: s.handler, ReadHeaderTimeout: 10 * time.Second}
-	s.mu.Lock()
 	s.srv = srv
 	s.addr = ln.Addr()
-	bound := s.addr
-	s.mu.Unlock()
 	go func() {
 		_ = srv.Serve(ln)
 	}()
-	return bound, nil
+	return s.addr, nil
 }
 
 // Addr returns the bound listener address (nil before Start).
@@ -244,12 +248,19 @@ func (s *Server) scope(r *http.Request) (string, error) {
 	return d, nil
 }
 
+// maxBodyBytes bounds request bodies: the wire contract carries small
+// payloads (message text, config patches, replies), and the listen address
+// is user-overridable, so an unbounded body is a memory-exhaustion vector.
+const maxBodyBytes = 10 << 20
+
 // decode JSON-decodes the request body into v; an empty body leaves v
-// untouched.
-func decode(r *http.Request, v any) error {
+// untouched. Bodies over maxBodyBytes fail with http.MaxBytesError (the
+// caller answers 400; MaxBytesReader itself may already have sent 413).
+func decode(w http.ResponseWriter, r *http.Request, v any) error {
 	if r.Body == nil {
 		return nil
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
 	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
 		if errors.Is(err, io.EOF) {
 			return nil

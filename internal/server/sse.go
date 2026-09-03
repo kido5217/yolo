@@ -32,6 +32,9 @@ func (s *Server) handleEvent(w http.ResponseWriter, r *http.Request) {
 			}
 			b, err := json.Marshal(ev)
 			if err != nil {
+				// invariant for our own wire DTOs: log the fault, drop the
+				// frame (the single-handling rule: logged, not returned)
+				s.Log.Error("sse frame encode failed", "error", err)
 				continue
 			}
 			// Three writes instead of Fprintf: identical wire bytes,

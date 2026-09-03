@@ -37,7 +37,7 @@ func (s *Server) handleConfigPatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var partial map[string]any
-	if err := decode(r, &partial); err != nil {
+	if err := decode(w, r, &partial); err != nil {
 		envelope(w, http.StatusBadRequest, "invalid config JSON", nil)
 		return
 	}
@@ -60,9 +60,10 @@ func (s *Server) handleConfigPatch(w http.ResponseWriter, r *http.Request) {
 
 // mergeWriteConfig deep-merges partial on top of the existing JSONC layer at
 // path, rewrites it as 2-space JSON (comments not preserved, flagged
-// deviation), and returns the merged object. ensureDir creates path's parent
-// directory before writing (used by the global route; project layer sits in
-// the already-existing working directory).
+// deviation), and returns the merged object. The file is written 0600 (the
+// config may carry apiKeys). ensureDir creates path's parent directory
+// before writing (used by the global route; project layer sits in the
+// already-existing working directory).
 // configWriteMu serializes the read->merge->write of any yolo.jsonc (project
 // or global) so concurrent PATCHes to the same file cannot lose an update
 // (③). Writes are rare; a single process-wide lock suffices (no per-path map).
@@ -91,7 +92,13 @@ func mergeWriteConfig(path string, partial map[string]any, ensureDir bool) (map[
 	if err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(path, b, 0o644); err != nil {
+	// 0600, not the default 0644: the config may carry provider apiKeys, so
+	// it follows the auth.json secret-file convention (auth.SaveTo). The
+	// chmod normalizes a pre-existing 0644 file on re-write.
+	if err := os.WriteFile(path, b, 0o600); err != nil {
+		return nil, err
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
 		return nil, err
 	}
 	return merged, nil
@@ -116,7 +123,7 @@ func (s *Server) handleGlobalConfigGet(w http.ResponseWriter, _ *http.Request) {
 // merged object.
 func (s *Server) handleGlobalConfigPatch(w http.ResponseWriter, r *http.Request) {
 	var partial map[string]any
-	if err := decode(r, &partial); err != nil {
+	if err := decode(w, r, &partial); err != nil {
 		envelope(w, http.StatusBadRequest, "invalid config JSON", nil)
 		return
 	}
