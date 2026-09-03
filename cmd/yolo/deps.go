@@ -85,9 +85,14 @@ func buildDeps(workDir, profile string) (*server.Deps, func(), error) {
 	loader := config.Loader{Profile: profileID} // nil Env view = real env
 
 	deps := &server.Deps{
-		DB:     db,
-		Bus:    b,
-		Perm:   permission.New(db, b, logger, dataDir),
+		DB:  db,
+		Bus: b,
+		Perm: permission.New(
+			db,
+			b,
+			logger,
+			dataDir,
+		),
 		Config: loader,
 		Log:    logger,
 		// Dirs are resolved above: the server never re-resolves XDG itself
