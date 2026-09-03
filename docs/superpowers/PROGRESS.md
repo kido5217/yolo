@@ -691,3 +691,48 @@ deviation 104) — the sole new dependency of 0.3.0 (root AGENTS.md allowlist, p
   — deviation 125 holds; the yolo side is ANSI256 — the expected
   color-space class inside 258/259); the D5 double-run determinism gate
   passed on every surface.
+Pre-merge code review re-pass (2026-09-03, full range c1bf541..a93812d,
+fresh reviewer subagent): all gates green (go vet clean, go test 20
+packages ok, gofmt -l empty). No criticals. Fidelity claims verified
+mechanically, not by assertion: all 184 upstream keybind defaults match
+yolo's Definitions 1:1 (only addition prompt_soft_newline, dev 208), all
+33 theme assets byte-identical to upstream, theme resolution logic (mode
+lock > system > config > terminal-dark) a verbatim port incl. the
+setMode===pin quirk, command-palette flow matches command-palette.tsx
+(Suggested bucket deferral = dev 212). Policy gates hold: zero telemetry
+(no OTEL/OTLP/telemetry surface), every new direct require on the
+allowlist (glamour v2.0.1, chroma/v2 v2.14.0 — direct import only at
+internal/tui/theme/syntax.go:16 —, huh v2.0.3, fuzzy v0.1.3, x/term
+v0.2.2 promotion), TestImportsDirection passes (TUI purity), sha256 pin
+integrity holds. All six prior-review-round fixes (db9f55b, c478d1b,
+0d9f510, c42c28a, 8ac1f19, a93812d) verified substantive, incl. the
+mockllm last-message tool-turn guard (a real misclassification fix) and
+the attention idle-path reset matching upstream notifications.ts.
+One Important finding, verified in code by the root session: the engine
+NEVER surfaces a turn failure on the wire — storage.MessageRow has no
+error column, messageWire maps no error field
+(internal/server/handlers_session.go:220-231), protocol.MessageError is
+constructed only in TUI tests, and runTurn's deferred exit path emits
+only session.status idle + the onDone log site
+(internal/session/engine.go:503-507). Consequence: the S1.8 error box
+(renderMessageError, internal/tui/session.go) and the S5.6 errored-bell
+branch (internal/tui/attention.go) are reachable in production only via
+simulated events — a real turn failure (auth error, model 4xx) shows the
+user NOTHING (footer silently returns to idle). Logged as deviation 263
+(correcting dev 227's premise that "the turn error surfaces as the
+current message's Message.Error"); follow-up bead filed (discovered-from
+yolo-oae, P1 bug): surface turn failures on the wire — on turn failure
+publish message.updated with Info.Error (mirroring upstream
+message-updater.ts:227 finish:"error"+error at step failure; needs an
+error column or an in-memory message-id→error map at the server layer).
+Review minors (noted, not actioned this branch): the sweep report header
+pins badbffc (re-run just parity-sweep at the final tip before merge —
+the six post-report commits change none of the 17 rendered surfaces,
+D7 verdict stands); skills-lock.json's new charm-stack entry's
+computedHash matches neither the installed file nor upstream main (all 15
+pre-existing entries show the same local≠lock relationship — tool
+semantics, the hash-lock guarantee is not independently verifiable);
+mentionOptions linear scan (bounded 1000×1000, perf note), AllThemes()
+re-parses the 33 embedded assets per call (low-frequency, sync.Once
+option), the epilogue parity-dump step carries an unused 5 s deadline
+(the real settle is the 2 s appendPump).
