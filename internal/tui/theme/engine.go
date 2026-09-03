@@ -43,7 +43,7 @@ type Engine struct {
 	customs map[string]any
 	// system holds the generated system theme (absent = no usable
 	// palette).
-	system   ThemeJson
+	system   ThemeJSON
 	hasSys   bool
 	mode     string
 	lock     string
@@ -148,9 +148,9 @@ func (e *Engine) Resolve(ctx context.Context) error {
 
 // themesFromRaw filters the raw value map to theme objects (upstream
 // Object.entries(...).filter isTheme — theme.tsx:137-140) and
-// round-trips each to a ThemeJson.
-func themesFromRaw(raw map[string]any) map[string]ThemeJson {
-	out := map[string]ThemeJson{}
+// round-trips each to a ThemeJSON.
+func themesFromRaw(raw map[string]any) map[string]ThemeJSON {
+	out := map[string]ThemeJSON{}
 	for name, v := range raw {
 		if !IsTheme(v) {
 			continue
@@ -159,7 +159,7 @@ func themesFromRaw(raw map[string]any) map[string]ThemeJson {
 		if err != nil {
 			continue
 		}
-		var tj ThemeJson
+		var tj ThemeJSON
 		if err := json.Unmarshal(b, &tj); err != nil {
 			continue
 		}
@@ -174,8 +174,8 @@ func themesFromRaw(raw map[string]any) map[string]ThemeJson {
 // systemThemeSignature/systemThemeMode skip (theme.tsx:167-171) is
 // not ported: the Go port regenerates on every refresh leg — the
 // regeneration is idempotent and the legs are at most every second.
-func (e *Engine) themesMap() map[string]ThemeJson {
-	out := map[string]ThemeJson{}
+func (e *Engine) themesMap() map[string]ThemeJSON {
+	out := map[string]ThemeJSON{}
 	base, err := AllThemes()
 	if err != nil {
 		slog.Warn("theme: builtins failed", "error", err)
@@ -192,10 +192,10 @@ func (e *Engine) themesMap() map[string]ThemeJson {
 	return out
 }
 
-// resolveThemeJson resolves one ThemeJson at the current mode and
+// resolveThemeJSON resolves one ThemeJSON at the current mode and
 // tags it with the selected name + mode (the Theme shape S0.8–S0.10
 // consume).
-func (e *Engine) resolveThemeJson(name string, tj ThemeJson) (Theme, error) {
+func (e *Engine) resolveThemeJSON(name string, tj ThemeJSON) (Theme, error) {
 	r, err := ResolveTheme(tj, e.mode)
 	if err != nil {
 		return Theme{}, err
@@ -210,11 +210,11 @@ func (e *Engine) ActiveTheme() (Theme, error) {
 	defer e.mu.Unlock()
 	themes := e.themesMap()
 	if tj, ok := themes[e.active]; ok {
-		return e.resolveThemeJson(e.active, tj)
+		return e.resolveThemeJSON(e.active, tj)
 	}
 	if saved, ok := e.kv.Get("theme", nil).(string); ok {
 		if tj, ok := themes[saved]; ok {
-			return e.resolveThemeJson(saved, tj)
+			return e.resolveThemeJSON(saved, tj)
 		}
 	}
 	tj, ok := themes[DefaultName]
@@ -225,7 +225,7 @@ func (e *Engine) ActiveTheme() (Theme, error) {
 		}
 		tj = base[DefaultName]
 	}
-	return e.resolveThemeJson(DefaultName, tj)
+	return e.resolveThemeJSON(DefaultName, tj)
 }
 
 // Active is the active theme name.
@@ -256,10 +256,10 @@ func (e *Engine) Ready() bool {
 	return e.ready
 }
 
-// AllThemes is the name → ThemeJson map (builtins + customs +
+// AllThemes is the name → ThemeJSON map (builtins + customs +
 // "system" when present) — the upstream `all` export
 // (theme.tsx:285).
-func (e *Engine) AllThemes() map[string]ThemeJson {
+func (e *Engine) AllThemes() map[string]ThemeJSON {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.themesMap()

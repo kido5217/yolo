@@ -2,6 +2,7 @@ package theme
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -52,6 +53,8 @@ func FromHex(s string) Rgba {
 }
 
 func hexByte(s string) uint8 {
+	// The error is discarded deliberately: every caller feeds only
+	// isHex-validated 2-digit hex, so ParseUint cannot fail.
 	v, _ := strconv.ParseUint(s, 16, 8)
 	return uint8(v)
 }
@@ -113,7 +116,7 @@ func (r Resolved) Color(name string) (Rgba, bool) {
 // ANSI ints, {dark,light} variants; optional selectedListItemText
 // (default: background), backgroundMenu (default: backgroundElement),
 // thinkingOpacity (default: 0.6). Error messages keep the upstream wording.
-func ResolveTheme(j ThemeJson, mode string) (Resolved, error) {
+func ResolveTheme(j ThemeJSON, mode string) (Resolved, error) {
 	defs := j.Defs
 	var resolve func(c any, chain []string) (Rgba, error)
 	resolve = func(c any, chain []string) (Rgba, error) {
@@ -128,10 +131,8 @@ func ResolveTheme(j ThemeJson, mode string) (Resolved, error) {
 			if strings.HasPrefix(v, "#") {
 				return FromHex(v), nil
 			}
-			for _, prev := range chain {
-				if prev == v {
-					return Rgba{}, fmt.Errorf("circular color reference: %s", strings.Join(append(chain, v), " -> "))
-				}
+			if slices.Contains(chain, v) {
+				return Rgba{}, fmt.Errorf("circular color reference: %s", strings.Join(append(chain, v), " -> "))
 			}
 			next, ok := defs[v]
 			if !ok {
