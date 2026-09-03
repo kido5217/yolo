@@ -68,11 +68,14 @@ func TestPaletteSelectPick(t *testing.T) {
 	a := testApp()
 	a.store.Commands = []protocol.Command{{Name: "/help", Description: "Show help"}}
 	a.openPaletteDialog()
-	d, _ := a.dlg.top()
+	d, ok := a.dlg.top()
+	if !ok {
+		t.Fatal("the palette must be on top")
+	}
 	sel := d.sel
 	sel.sel = 0 // the local /sessions (first)
 	sel.submit(a.App)
-	d, ok := a.dlg.top()
+	d, ok = a.dlg.top()
 	if ok && d.kind == dlgPalette {
 		t.Fatal("the palette must close after a run")
 	}
@@ -88,7 +91,10 @@ func TestPaletteNav(t *testing.T) {
 		{Name: "/new", Description: "New session"},
 	}
 	a.openPaletteDialog()
-	d, _ := a.dlg.top()
+	d, ok := a.dlg.top()
+	if !ok {
+		t.Fatal("the palette must be on top")
+	}
 	sel := d.sel
 	n := len(sel.filtered())
 	if sel.sel != 0 {

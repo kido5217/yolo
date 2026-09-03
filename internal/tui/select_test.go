@@ -84,10 +84,8 @@ func TestSelectFuzzyWeighting(t *testing.T) {
 		{title: "Other", category: "quiet group"},
 	}
 	m := selectNew("T", "S", opts, nil, nil, nil)
-	l := m.filtered()
-	_ = l
 	m.filter = "quiet"
-	l = m.filtered()
+	l := m.filtered()
 	if len(l) != 2 || l[0].title != "Quiet" {
 		t.Fatalf("weighted order = %v, want [Quiet Other]", titlesOf(l))
 	}
