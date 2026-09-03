@@ -13,6 +13,7 @@ require (
 	github.com/charmbracelet/x/term v0.2.2
 	github.com/spf13/cobra v1.10.2
 	github.com/tidwall/jsonc v0.3.3
+	go.uber.org/goleak v1.3.0
 	modernc.org/sqlite v1.57.0
 )
 
