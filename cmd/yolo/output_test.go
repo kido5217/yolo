@@ -109,8 +109,15 @@ func TestOutputUnsupported(t *testing.T) {
 			if out != "" {
 				t.Fatalf("stdout = %q, want empty", out)
 			}
-			if !strings.Contains(errOut, tc.wantMsg) {
-				t.Fatalf("stderr missing %q:\n%s", tc.wantMsg, errOut)
+			// The message is the exact first stderr line (before the usage):
+			// a byte pin, so a doubled prefix (v0.6.0's "yolo yolo:", the
+			// spec-literal reading fixed in v0.6.1, yolo-sti) fails here.
+			first := errOut
+			if i := strings.IndexByte(errOut, '\n'); i >= 0 {
+				first = errOut[:i]
+			}
+			if first != tc.wantMsg {
+				t.Fatalf("stderr first line = %q, want %q:\n%s", first, tc.wantMsg, errOut)
 			}
 			if !strings.Contains(errOut, "Usage:") {
 				t.Fatalf("stderr missing the usage:\n%s", errOut)

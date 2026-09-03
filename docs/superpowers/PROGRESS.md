@@ -846,8 +846,10 @@ envelope) on stdout, success only (on failure stdout stays empty, stderr
 keeps the human wording, exit codes 0/1/2 unchanged). Every other command
 (serve, the TUI root, `completion bash`, mutating leaves, bare parents)
 rejects `--output json` with `yolo <cmd>: --output is not supported by
-<cmd>` + usage, exit 2 — checked in the root PersistentPreRunE (`checkOutputFormat`) before
-any side effect (serve does not bind, the TUI does not start,
+<cmd>` + usage, exit 2 (the TUI-root case prints a single "yolo" prefix —
+the v0.6.1 user ruling, `yolo-sti`, dev 270 — and the message is the exact
+first stderr line, byte-pinned per case) — checked in the root
+PersistentPreRunE (`checkOutputFormat`) before any side effect (serve does not bind, the TUI does not start,
 no marker/store writes), so the machine output is a CLI-side presentation
 surface (structs in cmd/yolo/output.go), not a wire-contract change
 (principle 2). Shell-completion requests (`__complete`/`__completeNoDesc`)

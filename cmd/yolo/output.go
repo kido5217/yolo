@@ -72,13 +72,17 @@ func checkOutputFormat(cmd *cobra.Command, _ []string) error {
 		return errUsage
 	}
 	if !outputSupported(cmd) {
-		// <cmd> is the command path without the root prefix ("yolo", "serve",
-		// "auth add", ...); the root prints "yolo" in both slots.
-		path := cmd.CommandPath()
-		if strings.HasPrefix(path, "yolo ") {
-			path = strings.TrimPrefix(path, "yolo ")
+		// The message names the command CLI-style: "yolo" for the root (a
+		// single prefix, per the v0.6.1 ruling, yolo-sti) and "yolo <path>"
+		// for subcommands.
+		var prefix, name string
+		if cmd == cmd.Root() {
+			prefix, name = "yolo", "yolo"
+		} else {
+			prefix = cmd.CommandPath()
+			name = strings.TrimPrefix(prefix, "yolo ")
 		}
-		fmt.Fprintf(os.Stderr, "yolo %s: --output is not supported by %s\n", path, path)
+		fmt.Fprintf(os.Stderr, "%s: --output is not supported by %s\n", prefix, name)
 		cmd.Usage()
 		return errUsage
 	}
