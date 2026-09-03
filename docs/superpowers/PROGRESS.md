@@ -646,7 +646,7 @@ deviation 104) — the sole new dependency of 0.3.0 (root AGENTS.md allowlist, p
    numbers: S0.7 config.theme wire → 130, S0.7 single-probe scoping → 131,
    slice-gate SGR quantization → 132 (cross-refs: S0.7 step 5,
    `config_test.go` comment, S0.10 DOX bullet, slice gate steps 4/5/7).
- - TUI parity audit S8 (2026-09-03, slice `yolo-oae.9`, branch `new_tui`):
+- TUI parity audit S8 (2026-09-03, slice `yolo-oae.9`, branch `new_tui`):
   the deterministic parity runtime + the 17-surface diff sweep landed; the
   sweep verdict is the record (the D7 close-or-log judgment — the report
   `plans/2026-08-24-opencode-tui-parity/parity-sweep-report.md` is the
@@ -675,14 +675,17 @@ deviation 104) — the sole new dependency of 0.3.0 (root AGENTS.md allowlist, p
   the CI gate never renders it; the fake driver scripted from the shared
   canned book, `TestParityCannedConsistent`). Fixture pin:
   `internal/tui/testdata/parity/` — `canned.json` (shared),
-  `catalog-pin.json` (the reduced `{openai}` catalog snapshot),
+   `catalog-pin.json` (the reduced `{openai}` catalog snapshot, re-fetched
+   at capture — the committed sha supersedes the plan's detail-time
+   snapshot `3df03cfe`),
   `upstream/` the 17 NORMALIZED screens + `MANIFEST.json` (npm 1.18.18,
   per-surface `{name,cols,rows,sha256}`; `TestParityFixturesPinned` fails
   on any drift) — re-baselined 2026-09-03 after the normalizer's faithful
   terminal replay (dev 257: LNM/IND/NEL/RI, pending-wrap, the erase ops,
   DECSTBM+SU/SD, tracked cursor moves, ESC 7/8/c, TAB, ST-aware OSC — the
-  `[1 q` DECSCUSR fragment no longer leaks, so all 17 fixtures
-  re-baselined; the swapped-scroll-direction fix lands the `epilogue`
+   `[1 q` DECSCUSR fragment no longer leaks, so 14/17 fixtures
+   re-baselined (help, session-rename, status were byte-identical under the
+   new normalizer); the swapped-scroll-direction fix lands the `epilogue`
   exit lines at rows 20–21; the yolo temp-dir mask widened). The capture +
   sweep ran under `COLORTERM=truecolor` (the upstream 24-bit SGR confirmed
   — deviation 125 holds; the yolo side is ANSI256 — the expected
