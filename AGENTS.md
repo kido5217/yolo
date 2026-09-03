@@ -34,9 +34,14 @@ Read it before acting. Task state: beads (`bd ready`). Verified facts:
     so the checklist below reads MIT/BSD/Apache-2.0; transitive indirects
     `github.com/spf13/pflag` v1.0.9 + `github.com/inconshreveable/mousetrap`
     v1.1.0 (Windows-only stub));
-    dev-only
+    dev-only:
   `github.com/charmbracelet/x/exp/teatest/v2`
-   v2.0.0-20260823001701-96af6d2cb5f6. Anything outside the allowlist requires
+   v2.0.0-20260823001701-96af6d2cb5f6, `go.uber.org/goleak` v1.3.0
+   (user-approved 2026-09-03, beads `yolo-o75.2` D1 — goroutine-leak
+   detection via VerifyTestMain in the internal/session, internal/server
+   and internal/bus test suites; MIT, zero new go.mod modules — its own
+   test-deps land in go.sum only).
+  Anything outside the allowlist requires
   an agent **dep proposal** (in the task's spec/plan or beads issue) BEFORE any
   `go get`/`go mod tidy`: module + exact version; evidence from **extensive web
   search** — the agent MUST treat its own memory as outdated: maintenance

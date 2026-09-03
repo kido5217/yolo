@@ -799,7 +799,11 @@ Cobra CLI (2026-09-03, v0.6.0 D1, beads `yolo-o75.2`): user-approved
 permissive — the dependency-policy checklist now reads "MIT/BSD/Apache-2.0")
 with indirect `github.com/spf13/pflag` v1.0.9 + `github.com/inconshreveable/
 mousetrap` v1.1.0 (Windows-only stub); test-only `go.uber.org/goleak` v1.3.0
-was approved in the same ruling for X3 (lands separately). The CLI is now a
+was approved in the same ruling for X3 and landed as
+`goleak.VerifyTestMain` TestMains in internal/session, internal/server and
+internal/bus (replacing the earlier dependency-free goroutine census in
+session/server; no legitimate lingering goroutine needed an
+IgnoreTopFunction allowlist). The CLI is now a
 cobra tree: root = TUI (`yolo [sessionID]`), `serve` / `auth` (list|add|
 remove) / `profile` (list|add|use|edit|remove|copy) / `version`, plus cobra's
 default `completion` subcommand (static only; dynamic candidates deferred,
