@@ -38,6 +38,7 @@ const (
 	dlgRetryAction
 	dlgThemes
 	dlgPalette
+	dlgMessage // S7.3: the full-message view (the snapshot payload)
 )
 
 // dlgSize is the modal panel width (upstream DialogSize: medium 60, large
@@ -68,17 +69,18 @@ type dialog struct {
 	kind         dialogKind
 	model        *modelDlg
 	agent        *agentDlg
-	form         *huhFormDlg      // dlgForm payload (S2.3)
-	sel          *selectModel     // S2.5: the select payload (dlgModel/dlgAgents from S2.9/10)
-	perm         *permDlg         // S2.8: the permission payload (dlgPerm)
-	sessions     *sessionsDlg     // S3.1: the session picker payload (dlgSessions)
-	deleteFailed *deleteFailedDlg // S3.3: the delete-failed payload (dlgDeleteFailed)
-	provider     *providerDlg     // S3.4: the provider picker payload (dlgProvider)
-	retry        *retryDlg        // S3.7: the retry-action payload (dlgRetryAction)
-	themes       *themeDlg        // S3.8: the theme picker payload (dlgThemes)
-	modal        bool             // true: rendered as the overlay frame (S2.2)
-	size         dlgSize          // the panel width, modal only
-	onClose      func(*App)       // the stack-pop callback (upstream result callback)
+	form         *huhFormDlg                // dlgForm payload (S2.3)
+	sel          *selectModel               // S2.5: the select payload (dlgModel/dlgAgents from S2.9/10)
+	perm         *permDlg                   // S2.8: the permission payload (dlgPerm)
+	sessions     *sessionsDlg               // S3.1: the session picker payload (dlgSessions)
+	deleteFailed *deleteFailedDlg           // S3.3: the delete-failed payload (dlgDeleteFailed)
+	provider     *providerDlg               // S3.4: the provider picker payload (dlgProvider)
+	retry        *retryDlg                  // S3.7: the retry-action payload (dlgRetryAction)
+	themes       *themeDlg                  // S3.8: the theme picker payload (dlgThemes)
+	message      *protocol.MessageWithParts // S7.3: the full-message payload (dlgMessage)
+	modal        bool                       // true: rendered as the overlay frame (S2.2)
+	size         dlgSize                    // the panel width, modal only
+	onClose      func(*App)                 // the stack-pop callback (upstream result callback)
 }
 
 type dialogStack struct{ items []dialog }
@@ -433,6 +435,10 @@ func (a *App) modalInner(d *dialog, w, h int) string {
 	case dlgPalette:
 		if d.sel != nil {
 			return d.sel.view(w, h, a.theme)
+		}
+	case dlgMessage:
+		if d.message != nil {
+			return a.messageView(d.message, w, a.theme)
 		}
 	}
 	return ""

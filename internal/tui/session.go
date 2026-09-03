@@ -31,11 +31,12 @@ type sessionModel struct {
 // documentation); Expand/Think remain the yolo surface toggles (deviation
 // 211's scope).
 var sessKeyMap = struct {
-	PageUp   key.Binding
-	PageDown key.Binding
-	Expand   key.Binding
-	Think    key.Binding
-	Rename   key.Binding
+	PageUp      key.Binding
+	PageDown    key.Binding
+	Expand      key.Binding
+	Think       key.Binding
+	MessageView key.Binding
+	Rename      key.Binding
 }{
 	PageUp:   key.NewBinding(key.WithKeys("pgup")),
 	PageDown: key.NewBinding(key.WithKeys("pgdown")),
@@ -44,6 +45,11 @@ var sessKeyMap = struct {
 	// textinput's DefaultKeyMap).
 	Expand: key.NewBinding(key.WithKeys("alt+e")),
 	Think:  key.NewBinding(key.WithKeys("alt+t")),
+	// S7.3: the yolo-surface full-message view (deviation 248's scope —
+	// the upstream dialog-message opener is a mouse click, no key referent;
+	// alt+m is unbound by textinput's DefaultKeyMap, the alt+e / alt+t
+	// precedent).
+	MessageView: key.NewBinding(key.WithKeys("alt+m")),
 	// S3.2 (the upstream session_rename default; the S4.2 registry takes
 	// the binding over).
 	Rename: key.NewBinding(key.WithKeys("ctrl+r")),
@@ -623,6 +629,9 @@ func (a *App) handleSessionKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 		if expand {
 			a.sess.isDirty = true
 		}
+		return nil, true
+	case key.Matches(k, sessKeyMap.MessageView):
+		a.openMessageDialog()
 		return nil, true
 	// S4.2: the registry-backed rename (the upstream session_rename default
 	// ctrl+r). Only when a session is open (an empty curSessionID has no
