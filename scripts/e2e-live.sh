@@ -24,8 +24,10 @@
 #      best-effort abort of a busy turn)
 #   7. SIGTERM the server -> expect graceful shutdown, exit 0
 # The TTY-only smoke legs (S3: help, retry-action dialog, theme-list UI,
-# mode switch/lock; S4: keybind remap, command palette, which-key overlay)
-# remain user-run; this script covers the wire side only.
+# mode switch/lock; S4: keybind remap, command palette, which-key overlay;
+# S5–S7: prompt completion, home completion, session completion + todo
+# sidebar) remain user-run, as is the S8 parity capture/sweep
+# (scripts/parity/, never CI); this script covers the wire side only.
 # Exits 0 with PASS, 1 with FAIL.
 
 set -uo pipefail

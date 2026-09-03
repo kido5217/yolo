@@ -558,6 +558,12 @@ column math.
    Re-run 2026-09-02 post-S4 (branch `new_tui` @ `1729dc2`, the S4-complete
    tree): full live PASS again — the `main.go` `SetKeybinds` startup wiring +
    the `keybinds` config field changed neither startup nor the wire shape.
+   Re-run 2026-09-03 post-S8 (branch `new_tui` @ `3201d2f`, the S8-complete
+   tree): full live PASS again (incl. the abort-while-busy leg `aborted:true`)
+   — the wire surface (protocol/config/server/session) is unchanged since the
+   1729dc2 run (S5–S8 are TUI + parity tooling only), so `e2e-live.sh` needed
+   no wire-leg change (its header TTY-leg note extended to S5–S7 + the S8
+   parity scripts).
    `ai.kido.ws` accepts ANY bearer token
    (private endpoint — key order env → auth.json → config).
   `GET /global/health` → `{"status":"ok"}`; `/session/{id}/message` rows =
