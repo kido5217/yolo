@@ -60,11 +60,20 @@ func (a *App) onAttention(ev protocol.Event) tea.Cmd {
 			a.attention.errored = false
 			return nil
 		case protocol.SessionStatusIdle:
-			if a.attention.active && !a.attention.errored {
-				return bell()
+			// Ported from the upstream idle handler, which deletes the
+			// session from active before the bell decision and, when
+			// errored, deletes errored too — so a second idle without an
+			// intervening busy/retry cannot re-ring, and an errored idle
+			// leaves no flag behind.
+			if !a.attention.active {
+				return nil
 			}
 			a.attention.active = false
-			return nil
+			if a.attention.errored {
+				a.attention.errored = false
+				return nil
+			}
+			return bell()
 		}
 	case protocol.EventTypeMessageUpdated:
 		var p protocol.MessageUpdatedProps

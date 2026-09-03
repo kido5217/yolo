@@ -55,6 +55,36 @@ func TestAttentionBell(t *testing.T) {
 			t.Fatalf("idle after an error must not ring the done bell, got %v", c)
 		}
 	})
+	t.Run("done: a second idle without a busy does not re-ring", func(t *testing.T) {
+		a := attentionApp()
+		a.onAttention(statusEv("busy"))
+		if c := a.onAttention(statusEv("idle")); c == nil {
+			t.Fatal("idle after busy must ring the done bell")
+		}
+		if a.attention.active {
+			t.Fatal("idle must clear active")
+		}
+		if c := a.onAttention(statusEv("idle")); c != nil {
+			t.Fatalf("a second idle without a busy must not re-ring, got %v", c)
+		}
+	})
+	t.Run("error: an errored idle clears the flags so the next turn rings", func(t *testing.T) {
+		a := attentionApp()
+		a.onAttention(statusEv("busy"))
+		a.onAttention(msgErrEv("unknown"))
+		if c := a.onAttention(statusEv("idle")); c != nil {
+			t.Fatalf("idle after an error must not ring the done bell, got %v", c)
+		}
+		if a.attention.errored {
+			t.Fatal("an errored idle must clear errored (the upstream idle handler deletes it)")
+		}
+		if c := a.onAttention(statusEv("busy")); c != nil {
+			t.Fatalf("busy must not ring, got %v", c)
+		}
+		if c := a.onAttention(statusEv("idle")); c == nil {
+			t.Fatal("idle after the next busy must ring the done bell")
+		}
+	})
 	t.Run("error: the current message error rings", func(t *testing.T) {
 		a := attentionApp()
 		if c := a.onAttention(msgErrEv("unknown")); c == nil {
