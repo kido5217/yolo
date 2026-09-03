@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -74,8 +75,8 @@ func ParsePerms(m map[string]any) ([]Rule, error) {
 				pats = append(pats, p)
 			}
 			slices.SortFunc(pats, func(a, b string) int {
-				if len(a) != len(b) {
-					return len(a) - len(b)
+				if c := cmp.Compare(len(a), len(b)); c != 0 {
+					return c
 				}
 				return strings.Compare(a, b)
 			})

@@ -178,14 +178,19 @@ func (s *Server) globalDir() (string, error) {
 	return filepath.Join(root, id), nil
 }
 
-// Start listens on addr (":0" = ephemeral) and serves in a goroutine. A
-// second Start is an error: a second listener would leak (its goroutine is
-// only joined by Shutdown on the current one).
+// ErrAlreadyStarted is returned by Start when the server was already
+// started: a second listener would leak (its goroutine is only joined by
+// Shutdown on the current one).
+var ErrAlreadyStarted = errors.New("server: already started")
+
+// Start listens on addr (":0" = ephemeral) and serves in a goroutine.
+// mu is held across net.Listen on purpose: the check-and-set must be
+// atomic or two concurrent Starts would each leak a listener.
 func (s *Server) Start(addr string) (net.Addr, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.srv != nil {
-		return nil, errors.New("server: already started")
+		return nil, ErrAlreadyStarted
 	}
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {

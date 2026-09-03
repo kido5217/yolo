@@ -29,9 +29,11 @@ func TestNewIDFormats(t *testing.T) {
 	}
 }
 
-// BenchmarkNewID guards the id minting hot path (one id per streamed event):
-// the per-char crypto draw must not allocate beyond the output slice.
+// BenchmarkNewID guards the id minting hot path (one id per streamed
+// event); the per-char crypto draws dominate the allocation profile, so
+// report allocs for regression tracking.
 func BenchmarkNewID(b *testing.B) {
+	b.ReportAllocs()
 	for b.Loop() {
 		_ = protocol.NewID("ses")
 	}

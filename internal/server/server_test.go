@@ -392,13 +392,14 @@ func TestCommandEndpoint(t *testing.T) {
 // TestStartTwiceErrors pins the listener-leak guard: a second Start on the
 // same Server fails instead of leaking the first listener's goroutine.
 func TestStartTwiceErrors(t *testing.T) {
+	t.Parallel()
 	s := server.NewServer(server.Deps{WorkDir: t.TempDir(), Dirs: config.Dirs{Data: t.TempDir()}})
 	if _, err := s.Start("127.0.0.1:0"); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	defer s.Close()
-	if _, err := s.Start("127.0.0.1:0"); err == nil {
-		t.Fatal("second Start succeeded, want error")
+	if _, err := s.Start("127.0.0.1:0"); !errors.Is(err, server.ErrAlreadyStarted) {
+		t.Fatalf("second Start: err = %v, want ErrAlreadyStarted", err)
 	}
 }
 

@@ -311,7 +311,11 @@ func (s *Server) handleAbort(w http.ResponseWriter, r *http.Request) {
 	}
 	aborted := s.Engine.Abort(row.ID)
 	// settle until the turn reports idle so status reads agree right away
-	s.settleIdle(r, row.ID, aborted)
+	// (only when a running turn was aborted; an idle session publishes no
+	// idle event and would stall the wait to its deadline)
+	if aborted {
+		s.settleIdle(r, row.ID)
+	}
 	writeJSON(w, http.StatusOK, map[string]bool{"aborted": aborted})
 }
 
@@ -320,10 +324,7 @@ func (s *Server) handleAbort(w http.ResponseWriter, r *http.Request) {
 // so the wait is event-driven on the bus instead of a status poll; the
 // per-iteration status re-check covers the idle published before the
 // subscription. A client disconnect ends the wait early.
-func (s *Server) settleIdle(r *http.Request, sessionID string, wait bool) {
-	if !wait {
-		return
-	}
+func (s *Server) settleIdle(r *http.Request, sessionID string) {
 	events, done := s.Bus.Subscribe()
 	defer done()
 	deadline := time.After(2 * time.Second)
