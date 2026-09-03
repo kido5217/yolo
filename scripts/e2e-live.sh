@@ -16,11 +16,18 @@
 # Boots `yolo serve` in a scratch project dir, then drives the wire contract:
 #   1. health
 #   2. create session (agent=yolo)
-#   3. send "list files in /tmp" -> expect a completed read/glob tool call
+#   3. session list + rename (GET /session, PATCH title, re-list)
+#   4. config theme round-trip (GET /config, PATCH {"theme":"aura"}, re-GET)
+#   5. send "list files in /tmp" -> expect a completed read/glob tool call
 #      plus a non-empty assistant text reply
-#   4. abort test (deterministic: abort while idle -> aborted:false, then a
+#   6. abort test (deterministic: abort while idle -> aborted:false, then a
 #      best-effort abort of a busy turn)
-#   5. SIGTERM the server -> expect graceful shutdown, exit 0
+#   7. SIGTERM the server -> expect graceful shutdown, exit 0
+# The TTY-only smoke legs (S3: help, retry-action dialog, theme-list UI,
+# mode switch/lock; S4: keybind remap, command palette, which-key overlay;
+# S5–S7: prompt completion, home completion, session completion + todo
+# sidebar) remain user-run, as is the S8 parity capture/sweep
+# (scripts/parity/, never CI); this script covers the wire side only.
 # Exits 0 with PASS, 1 with FAIL.
 
 set -uo pipefail
@@ -127,7 +134,55 @@ wait_text() { # $1 timeout_s ; polls /message for a completed assistant text par
 }
 
 if [ -n "$SESS_ID" ]; then
-  step "3. turn: 'list files in /tmp'"
+  step "3. session list + rename"
+  req GET /session
+  b=$BODY
+  if [ "$HTTP_STATUS" = "200" ] && jq -e --arg id "$SESS_ID" \
+    '[.[] | select(.id == $id and .agent == "yolo")] | length > 0' <<<"$b" >/dev/null 2>&1; then
+    ok "session $SESS_ID (agent=yolo) in list"
+  else
+    bad "list sessions: $HTTP_STATUS $b"
+  fi
+  req PATCH "/session/$SESS_ID" '{"title":"e2e-renamed"}'
+  b=$BODY
+  if [ "$HTTP_STATUS" = "200" ] && [ "$(jq -r '.title // empty' <<<"$b")" = "e2e-renamed" ]; then
+    ok "rename -> title e2e-renamed"
+  else
+    bad "rename session: $HTTP_STATUS $b"
+  fi
+  req GET /session
+  b=$BODY
+  if [ "$HTTP_STATUS" = "200" ] && jq -e --arg id "$SESS_ID" --arg t "e2e-renamed" \
+    '[.[] | select(.id == $id)] | length == 1 and .[0].title == $t' <<<"$b" >/dev/null 2>&1; then
+    ok "re-list: rename persisted"
+  else
+    bad "rename not in list: $HTTP_STATUS $b"
+  fi
+
+  step "4. config theme round-trip"
+  req GET /config
+  b=$BODY
+  if [ "$HTTP_STATUS" = "200" ] && [ "$(jq -r '.provider.kido.baseURL // empty' <<<"$b")" = "$BASE_URL" ]; then
+    ok "config loaded from scratch project"
+  else
+    bad "get config: $HTTP_STATUS $b"
+  fi
+  req PATCH /config '{"theme":"aura"}'
+  b=$BODY
+  if [ "$HTTP_STATUS" = "200" ] && [ "$(jq -r '.theme // empty' <<<"$b")" = "aura" ]; then
+    ok "theme set to aura"
+  else
+    bad "patch config theme: $HTTP_STATUS $b"
+  fi
+  req GET /config
+  b=$BODY
+  if [ "$HTTP_STATUS" = "200" ] && [ "$(jq -r '.theme // empty' <<<"$b")" = "aura" ]; then
+    ok "re-get: theme aura persisted (string)"
+  else
+    bad "theme not persisted: $HTTP_STATUS $b"
+  fi
+
+  step "5. turn: 'list files in /tmp'"
   req POST "/session/$SESS_ID/message" '{"text":"list files in /tmp"}'
   b=$BODY
   MID="$(jq -r '.message_id // empty' <<<"$b")"
@@ -178,7 +233,7 @@ if [ -n "$SESS_ID" ]; then
       return 1
     }
 
-    step "4. abort test"
+    step "6. abort test"
     # the turn may still be settling after its text reply; require idle first
     if wait_idle 20; then
       ok "session idle before abort test"
@@ -225,7 +280,7 @@ if [ -n "$SESS_ID" ]; then
   fi
 fi
 
-step "5. graceful shutdown (SIGTERM)"
+step "7. graceful shutdown (SIGTERM)"
 kill -TERM "$SERVER_PID"
 deadline=$((SECONDS + 6))
 while kill -0 "$SERVER_PID" 2>/dev/null && [ $SECONDS -lt $deadline ]; do

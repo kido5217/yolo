@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestWrapLine(t *testing.T) {
@@ -38,5 +39,68 @@ func TestWrapLine(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestWrapLineANSIAware (yolo-kj6): a styled line wraps on its VISIBLE width
+// (the SGR escape is zero-width glue, not a run of width-1 runes) and a
+// hard-split never cuts inside an escape. The S2.8 permDlg.view styles a row
+// then wraps it, so the wrapper must be ANSI-aware: pre-fix, the leading SGR
+// inflated the first field's width (early wrap) and cutWidth could split the
+// escape, emitting a corrupted `\x1b[...` fragment.
+func TestWrapLineANSIAware(t *testing.T) {
+	const sgr = "\x1b[38;5;215m" // ANSI256 fg (the warning token's shape)
+	const reset = "\x1b[0m"
+	token := strings.Repeat("x", 30) // a 30-col single token
+	in := sgr + token + reset
+
+	got := wrapLine(in, 10)
+
+	// (a) every ESC opens a complete CSI — no truncated escape reached the
+	// terminal (the pre-fix corruption: a line ending in `\x1b[38;5;21`).
+	for _, l := range strings.Split(got, "\n") {
+		for i := 0; i < len(l); {
+			if l[i] != 0x1b {
+				_, size := utf8.DecodeRuneInString(l[i:])
+				i += size
+				continue
+			}
+			n := csiLen(l[i:])
+			if n == 0 {
+				t.Fatalf("corrupted (truncated) escape in line %q", l)
+			}
+			i += n
+		}
+	}
+	// (b) the visible text survives the wrap (strip the SGR; drop the wrap
+	// newlines so the 30-col token — now three 10-col lines — is contiguous).
+	plain := strings.ReplaceAll(stripANSI(got), "\n", "")
+	if !strings.Contains(plain, token) {
+		t.Fatalf("visible text lost the token:\n%q", plain)
+	}
+	// (c) the wrap is on visible width: the SGR contributes no columns, so a
+	// 30-col token at w=10 is three 10-col lines (not more, which the
+	// pre-fix width-1-per-SGR-byte accounting produced).
+	if n := len(strings.Split(got, "\n")); n != 3 {
+		t.Fatalf("want 3 visible lines (SGR is zero-width), got %d:\n%q", n, got)
+	}
+}
+
+// TestWrapLineANSIAwarePlainUnchanged pins the regression guard: a line with
+// no ESC behaves exactly as before (ansiWidth == runeWidth, identical splits).
+func TestWrapLineANSIAwarePlainUnchanged(t *testing.T) {
+	cases := []struct {
+		in   string
+		w    int
+		want string
+	}{
+		{in: "one two three four five six", w: 20, want: "one two three four\nfive six"},
+		{in: "abcdefghijkl", w: 5, want: "abcde\nfghij\nkl"},
+		{in: "  x y z", w: 4, want: "  x\ny\nz"},
+	}
+	for _, tt := range cases {
+		if got := wrapLine(tt.in, tt.w); got != tt.want {
+			t.Fatalf("plain wrap changed: wrapLine(%q, %d) = %q, want %q", tt.in, tt.w, got, tt.want)
+		}
 	}
 }

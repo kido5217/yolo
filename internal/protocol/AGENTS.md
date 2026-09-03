@@ -26,6 +26,8 @@ message, part, provider, session DTOs + `protocol_test.go`.
 
 ## Work Guidance
 
+- Golang skills (full table in root AGENTS.md "Golang skills") — new DTOs
+  follow `golang-naming` + `golang-code-style` (always paired).
 - Keep the package wire-level: DTOs, ids, event shapes — no business logic,
   no I/O.
 - Wire changes land here first; `server` (emitting) and `tui` (consuming)

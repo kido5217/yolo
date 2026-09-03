@@ -1,52 +1,135 @@
 package tui
 
 import (
+	"bytes"
+	"context"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/kido5217/yolo/internal/protocol"
+	"github.com/kido5217/yolo/internal/server/testutil"
+	"github.com/kido5217/yolo/internal/tui/client"
+	"github.com/kido5217/yolo/internal/tui/store"
+	"github.com/kido5217/yolo/internal/tui/theme"
 )
 
-// T28 locks the help dialog text: the spec's keymap table verbatim plus the
-// scroll/newline note. The table mirrors the actual bindings: pgup/pgdn are
-// the only scroll keys (v0.1.1 reconciliation, the spec's arrow row never
-// existed) and alt+e/alt+t are the real expand/think toggles. \+enter
-// inserts a newline in the prompt.
-const wantHelp = "Help\n" +
-	"  | Key | Action |\n" +
-	"  |---|---|\n" +
-	"  | enter | send prompt |\n" +
-	"  | esc | abort turn (busy) / close dialog |\n" +
-	"  | ctrl+c | quit (confirm) |\n" +
-	"  | ctrl+p | model dialog |\n" +
-	"  | ctrl+a | agent dialog |\n" +
-	"  | / | command menu |\n" +
-	"  | pgup/pgdn | viewport scroll |\n" +
-	"  | 1/2/3 | permission reply |\n" +
-	"  | alt+e / alt+t | expand tool part / toggle reasoning |\n" +
-	"  pgup/pgdn scroll \u00B7 \\+enter newline"
-
-func openHelp(t *testing.T) *recApp {
-	t.Helper()
+func TestHelpDialogView(t *testing.T) {
 	a := testApp()
-	a.dlg.push(dialog{kind: dlgHelp})
-	return a
-}
-
-func TestHelpDialogText(t *testing.T) {
-	got := stripANSI(openHelp(t).dlgView(80))
-	if got != wantHelp {
-		t.Fatalf("help dialog mismatch:\ngot:\n%q\nwant:\n%q", got, wantHelp)
+	a.pushModal(dialog{kind: dlgHelp}, dlgMedium, nil)
+	got := stripANSI(a.helpDialogView(80, 24, a.theme))
+	for _, tok := range []string{
+		"Help",
+		"esc/enter",
+		"Press ctrl+p to see all available actions and commands in any context.",
+		"pgup/pgdn scroll \u00B7 \\+enter newline",
+		"ok",
+	} {
+		if !strings.Contains(got, tok) {
+			t.Fatalf("token %q missing:\n%s", tok, got)
+		}
+	}
+	// the pre-S3 markdown table is gone
+	for _, gone := range []string{"| enter |", "| pgup |"} {
+		if strings.Contains(got, gone) {
+			t.Fatalf("stale table token %q still present:\n%s", gone, got)
+		}
 	}
 }
 
-func TestHelpAnyKeyCloses(t *testing.T) {
-	a := openHelp(t)
-	a.handleKey(press('q'))
-	if d, ok := a.dlg.top(); ok {
-		t.Fatalf("dialog %d still open after a key; help closes on any key", d.kind)
+func TestHelpPaletteHintFromRegistry(t *testing.T) {
+	a := testApp()
+	// S4.7: the default palette hint is the registry's command_list binding
+	// (byte-identical to the pre-S4 "ctrl+p" — the existing goldens hold).
+	if got := a.paletteShortcut(); got != "ctrl+p" {
+		t.Fatalf("default palette hint = %q, want ctrl+p (the registry default)", got)
 	}
+	// A remap is reflected in the hint and in the /help body (registry-driven).
+	if err := a.keymap.Set("command_list", "ctrl+k"); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.paletteShortcut(); got != "ctrl+k" {
+		t.Fatalf("remapped palette hint = %q, want ctrl+k", got)
+	}
+	v := stripANSI(a.helpDialogView(80, 24, a.theme))
+	if !strings.Contains(v, "Press ctrl+k to see all available actions") {
+		t.Fatalf("the /help palette hint must reflect the remap:\n%s", v)
+	}
+	// The V1-pinned line is untouched (kept byte-identical).
+	if !strings.Contains(v, "pgup/pgdn scroll \u00B7 \\+enter newline") {
+		t.Fatalf("the V1-pinned help line must stay byte-identical:\n%s", v)
+	}
+}
+
+func TestHelpDialogKeys(t *testing.T) {
+	a := testApp()
+	a.pushModal(dialog{kind: dlgHelp}, dlgMedium, nil)
+	// a plain key is ignored (pre-S3: any key closed)
+	if cmds := a.handleKey(press('x')); len(cmds) != 0 || a.dlg.empty() {
+		t.Fatalf("a plain key must be ignored: cmds=%d empty=%v", len(cmds), a.dlg.empty())
+	}
+	// enter closes
+	a.handleKey(press(tea.KeyEnter))
+	if !a.dlg.empty() {
+		t.Fatal("enter must close the help dialog")
+	}
+	// esc closes
+	a.pushModal(dialog{kind: dlgHelp}, dlgMedium, nil)
+	a.handleKey(press(tea.KeyEscape))
+	if !a.dlg.empty() {
+		t.Fatal("esc must close the help dialog")
+	}
+}
+
+// TestTUIHelpDialog is the teatest SGR golden: the modal help on the real
+// stack — the "ok" pill paints the primary bg (48;5;216) + the
+// SelectedForeground fg (38;5;232 — the homeSGRTokens-pinned indices).
+func TestTUIHelpDialog(t *testing.T) {
+	dir := t.TempDir()
+	e, err := theme.New(theme.EngineOptions{
+		KVPath:        filepath.Join(dir, "kv.json"),
+		GlobalYoloDir: dir,
+		CWD:           dir,
+		Palette:       func(context.Context) (theme.TerminalColors, bool) { return theme.TerminalColors{}, false },
+	})
+	if err != nil {
+		t.Fatalf("theme.New: %v", err)
+	}
+	t.Cleanup(func() { _ = e.Close() })
+	if err := e.Resolve(context.Background()); err != nil {
+		t.Fatalf("theme.Resolve: %v", err)
+	}
+
+	ts := testutil.Boot(t)
+	c := client.New(ts.URL, ts.Dir)
+	a := NewApp(c, store.State{}, "", e)
+	t.Cleanup(a.Close)
+	tm := teatest.NewTestModel(t, a,
+		teatest.WithInitialTermSize(80, 24),
+		teatest.WithProgramOptions(tea.WithEnvironment([]string{"TTY_FORCE=1", "TERM=xterm-256color"})),
+	)
+
+	teatest.WaitFor(t, tm.Output(), hasLines("New session"), teatest.WithDuration(5*time.Second))
+	suiteType(tm, "/help")
+	tm.Send(press(tea.KeyEnter))
+	// ONE merged condition: the plain header + the palette line + the V1
+	// note + the ok pill's SGR params.
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		s := stripANSI(string(b))
+		return strings.Contains(s, "Help") &&
+			strings.Contains(s, "Press ctrl+p to see all available actions") &&
+			strings.Contains(s, "pgup/pgdn scroll") &&
+			bytes.Contains(b, []byte("48;5;216")) &&
+			bytes.Contains(b, []byte("38;5;232"))
+	}, teatest.WithDuration(5*time.Second))
+
+	tm.Send(press(tea.KeyEscape))
+	_ = tm.Quit()
+	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 }
 
 // T28 locks the quit-confirm text to `quit? [Y/n]`; y/enter exit, n/esc go

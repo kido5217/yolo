@@ -26,7 +26,7 @@ func TestGlobalProjectYoloDiscoveryAndMerge(t *testing.T) {
 	// fake global config dir
 	write(t, filepath.Join(global, "config.json"), `{"model":"opencode/gpt-5-nano","provider":{"opencode":{"apiKey":"{env:MY_KEY}"}}}`)
 	write(t, filepath.Join(global, "yolo.jsonc"), `// comment
-{"instructions":["/docs/A.md"], "theme":{"dark":true}}`)
+{"instructions":["/docs/A.md"], "theme":"opencode"}`)
 
 	root := filepath.Join(work, "repo")
 	mid := filepath.Join(root, "mid")
@@ -69,8 +69,8 @@ func TestGlobalProjectYoloDiscoveryAndMerge(t *testing.T) {
 	if cfg.ToolOutput == nil || cfg.ToolOutput.MaxLines != 500 {
 		t.Fatalf("tool_output not merged: %+v", cfg.ToolOutput)
 	}
-	if cfg.Theme == nil {
-		t.Fatal("theme lost")
+	if cfg.Theme != "opencode" {
+		t.Fatalf("theme = %q, want opencode (string shape, deviation 130)", cfg.Theme)
 	}
 	rules, err := protocol.ParsePerms(cfg.Permission)
 	if err != nil {
@@ -78,6 +78,27 @@ func TestGlobalProjectYoloDiscoveryAndMerge(t *testing.T) {
 	}
 	if len(rules) != 1 || rules[0].Action != "ask" {
 		t.Fatalf("perms: %+v", rules)
+	}
+}
+
+func TestKeybindsFieldParsesAndMerges(t *testing.T) {
+	global := t.TempDir()
+	work := t.TempDir()
+	write(t, filepath.Join(global, "yolo.jsonc"), `{"keybinds":{"command_list":"ctrl+k"}}`)
+	mid := filepath.Join(work, "mid")
+	write(t, filepath.Join(mid, "yolo.jsonc"), `{"keybinds":{"model_list":"<leader>m"}}`)
+	cfg, err := config.Loader{Env: nil}.LoadAt(global, mid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Keybinds) != 2 {
+		t.Fatalf("keybinds = %d entries, want 2 (the deep merge of the two maps)", len(cfg.Keybinds))
+	}
+	if got := cfg.Keybinds["command_list"]; got != "ctrl+k" {
+		t.Fatalf("keybinds.command_list = %v, want ctrl+k (global kept)", got)
+	}
+	if got := cfg.Keybinds["model_list"]; got != "<leader>m" {
+		t.Fatalf("keybinds.model_list = %v, want <leader>m (project added)", got)
 	}
 }
 

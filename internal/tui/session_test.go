@@ -9,6 +9,7 @@ import (
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/tui/client"
 	"github.com/kido5217/yolo/internal/tui/store"
+	"github.com/kido5217/yolo/internal/tui/theme"
 )
 
 // sessionFixture is the T24 render fixture: one user message plus one
@@ -53,10 +54,10 @@ func TestRenderMessages(t *testing.T) {
 			name: "collapsed",
 			want: "User: hello\n" +
 				dividerLine() + "\n" +
-				"\u25B8 think\n" +
-				"\u2713 read src/main.go\n" +
-				"\u25B6 bash ls -la\n" +
-				"\u2717 grep pattern: no match\n" +
+				"Thinking\n" +
+				"→ src/main.go\n" +
+				"~ Writing command...\n" +
+				"✱ grep\n" +
 				"ok-text",
 		},
 		{
@@ -64,11 +65,11 @@ func TestRenderMessages(t *testing.T) {
 			expanded: map[string]bool{"t1": true},
 			want: "User: hello\n" +
 				dividerLine() + "\n" +
-				"\u25B8 think\n" +
-				"\u2713 read src/main.go\n" +
+				"Thinking\n" +
+				"→ src/main.go\n" +
 				"  line1\n  line2\n  line3\n" +
-				"\u25B6 bash ls -la\n" +
-				"\u2717 grep pattern: no match\n" +
+				"~ Writing command...\n" +
+				"✱ grep\n" +
 				"ok-text",
 		},
 		{
@@ -76,38 +77,39 @@ func TestRenderMessages(t *testing.T) {
 			expanded: map[string]bool{"t3": true},
 			want: "User: hello\n" +
 				dividerLine() + "\n" +
-				"\u25B8 think\n" +
-				"\u2713 read src/main.go\n" +
-				"\u25B6 bash ls -la\n" +
-				"\u2717 grep pattern: no match\n" +
+				"Thinking\n" +
+				"→ src/main.go\n" +
+				"~ Writing command...\n" +
+				"✱ grep\n" +
 				"  pattern: no match\n  detail line\n" +
 				"ok-text",
 		},
 		{
-			name:     "reasoning expanded shows indented text",
+			// Zero theme: no reasoning renderer is built, so the expanded
+			// part shows only the header row (the body needs a real theme).
+			name:     "reasoning expanded under zero theme shows header only",
 			expanded: map[string]bool{"r1": true},
 			want: "User: hello\n" +
 				dividerLine() + "\n" +
-				"\u25BE think\n" +
-				"  because x\n  and y\n" +
-				"\u2713 read src/main.go\n" +
-				"\u25B6 bash ls -la\n" +
-				"\u2717 grep pattern: no match\n" +
+				"Thinking\n" +
+				"→ src/main.go\n" +
+				"~ Writing command...\n" +
+				"✱ grep\n" +
 				"ok-text",
 		},
 		{
-			name: "message error renders red line after parts",
+			name: "message error renders bare line after parts",
 			mutate: func(s *store.State) {
 				s.Messages[1].Info.Error = &protocol.MessageError{Type: "unknown", Message: "something broke"}
 			},
 			want: "User: hello\n" +
 				dividerLine() + "\n" +
-				"\u25B8 think\n" +
-				"\u2713 read src/main.go\n" +
-				"\u25B6 bash ls -la\n" +
-				"\u2717 grep pattern: no match\n" +
+				"Thinking\n" +
+				"→ src/main.go\n" +
+				"~ Writing command...\n" +
+				"✱ grep\n" +
 				"ok-text\n" +
-				"! something broke",
+				"something broke",
 		},
 		{
 			name:  "empty store renders nothing",
@@ -126,11 +128,11 @@ func TestRenderMessages(t *testing.T) {
 			},
 			want: "User: hello\n" +
 				dividerLine() + "\n" +
-				"\u25B8 think\n" +
-				"\u2713 read src/main.go\n" +
-				"\u2713 bash ls -la\n" +
+				"Thinking\n" +
+				"→ src/main.go\n" +
+				"$ ls -la\n" +
 				"  l1\n  l2\n  l3\n  l4\n  l5\n  l6\n  l7\n  l8\n  l9\n  l10\n  \u2026\n" +
-				"\u2717 grep pattern: no match\n" +
+				"✱ grep\n" +
 				"ok-text",
 		},
 		{
@@ -142,11 +144,11 @@ func TestRenderMessages(t *testing.T) {
 			},
 			want: "User: hello\n" +
 				dividerLine() + "\n" +
-				"\u25B8 think\n" +
-				"\u2713 read src/main.go\n" +
-				"\u2713 bash ls -la\n" +
+				"Thinking\n" +
+				"→ src/main.go\n" +
+				"$ ls -la\n" +
 				"  a\n  b\n" +
-				"\u2717 grep pattern: no match\n" +
+				"✱ grep\n" +
 				"ok-text",
 		},
 		{
@@ -161,11 +163,11 @@ func TestRenderMessages(t *testing.T) {
 			expanded: map[string]bool{"t2": true},
 			want: "User: hello\n" +
 				dividerLine() + "\n" +
-				"\u25B8 think\n" +
-				"\u2713 read src/main.go\n" +
-				"\u2713 bash ls -la\n" +
+				"Thinking\n" +
+				"→ src/main.go\n" +
+				"$ ls -la\n" +
 				"  l1\n  l2\n  l3\n  l4\n  l5\n  l6\n  l7\n  l8\n  l9\n  l10\n  l11\n  l12\n" +
-				"\u2717 grep pattern: no match\n" +
+				"✱ grep\n" +
 				"ok-text",
 		},
 		{
@@ -178,10 +180,10 @@ func TestRenderMessages(t *testing.T) {
 			expanded: map[string]bool{"t1": true},
 			want: "User: hello\n" +
 				dividerLine() + "\n" +
-				"\u25B8 think\n" +
-				"\u2713 read src/main.go\n" +
-				"\u25B6 bash ls -la\n" +
-				"\u2717 grep pattern: no match\n" +
+				"Thinking\n" +
+				"→ src/main.go\n" +
+				"~ Writing command...\n" +
+				"✱ grep\n" +
 				"ok-text",
 		},
 	}
@@ -194,7 +196,7 @@ func TestRenderMessages(t *testing.T) {
 			if tt.mutate != nil {
 				tt.mutate(&s)
 			}
-			got := stripANSI(renderMessages(&s, tt.expanded, 80))
+			got := stripANSI(renderMessages(&s, tt.expanded, 80, theme.Theme{}, ""))
 			if got != tt.want {
 				t.Errorf("renderMessages mismatch:\ngot:\n%q\nwant:\n%q", got, tt.want)
 			}
@@ -210,30 +212,35 @@ func TestRenderMessagesTitleFallbacks(t *testing.T) {
 		}
 		return s
 	}
+	// S1.7: the running row no longer renders the title (only the pending
+	// text), so these cases re-target to completed/error states where the
+	// title — and thus the fallback — is visible. Fallback coverage is
+	// preserved.
 	tests := []struct {
 		name string
 		s    store.State
 		want string
 	}{
 		{
-			name: "running tool without title falls back to command input",
+			name: "completed tool without title falls back to command input",
 			s: one(protocol.Part{
 				ID: "t2", Type: "tool", Tool: "bash", CallID: "call_2",
-				State: &protocol.ToolState{Status: "running", Input: map[string]any{"command": "ls -la"}},
+				State: &protocol.ToolState{Status: "completed", Input: map[string]any{"command": "ls -la"}},
 			}),
-			want: "\u25B6 bash ls -la",
+			want: "$ ls -la",
 		},
 		{
-			name: "nil state falls back to callID prefix 8",
+			name: "error tool without title falls back to callID prefix 8",
 			s: one(protocol.Part{
 				ID: "t8", Type: "tool", Tool: "read", CallID: "call_abcdef1234",
+				State: &protocol.ToolState{Status: "error"},
 			}),
-			want: "\u25B6 read call_abc",
+			want: "→ call_abc",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := stripANSI(renderMessages(&tt.s, nil, 80))
+			got := stripANSI(renderMessages(&tt.s, nil, 80, theme.Theme{}, ""))
 			if got != tt.want {
 				t.Errorf("renderMessages = %q, want %q", got, tt.want)
 			}
@@ -348,7 +355,7 @@ func TestRenderMessagesWrapsLongLines(t *testing.T) {
 	}
 	// w must be >= the locked 28-rune divider.
 	const w = 30
-	got := stripANSI(renderMessages(&s, nil, w))
+	got := stripANSI(renderMessages(&s, nil, w, theme.Theme{}, ""))
 	want := "User: print me 1000 words\n" +
 		"about anime\n" +
 		dividerLine() + "\n" +

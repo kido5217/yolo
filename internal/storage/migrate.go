@@ -65,6 +65,9 @@ CREATE TABLE IF NOT EXISTS todo (
 );
 CREATE INDEX IF NOT EXISTS idx_todo_session ON todo(session_id);
 `,
+	3: `
+ALTER TABLE message ADD COLUMN error_json TEXT;
+`,
 }
 
 // migrate applies any unapplied migrations in ascending version order.

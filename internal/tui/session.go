@@ -12,6 +12,7 @@ import (
 
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/tui/store"
+	"github.com/kido5217/yolo/internal/tui/theme"
 )
 
 // sessionModel holds session-route state: the transcript viewport, the
@@ -25,11 +26,17 @@ type sessionModel struct {
 	content   string
 }
 
+// sessKeyMap: PageUp/PageDown/Rename are superseded by the S4.2 keymap
+// registry (messages_page_up/down, session_rename — kept as the V1-pin
+// documentation); Expand/Think remain the yolo surface toggles (deviation
+// 211's scope).
 var sessKeyMap = struct {
-	PageUp   key.Binding
-	PageDown key.Binding
-	Expand   key.Binding
-	Think    key.Binding
+	PageUp      key.Binding
+	PageDown    key.Binding
+	Expand      key.Binding
+	Think       key.Binding
+	MessageView key.Binding
+	Rename      key.Binding
 }{
 	PageUp:   key.NewBinding(key.WithKeys("pgup")),
 	PageDown: key.NewBinding(key.WithKeys("pgdown")),
@@ -38,6 +45,14 @@ var sessKeyMap = struct {
 	// textinput's DefaultKeyMap).
 	Expand: key.NewBinding(key.WithKeys("alt+e")),
 	Think:  key.NewBinding(key.WithKeys("alt+t")),
+	// S7.3: the yolo-surface full-message view (deviation 248's scope —
+	// the upstream dialog-message opener is a mouse click, no key referent;
+	// alt+m is unbound by textinput's DefaultKeyMap, the alt+e / alt+t
+	// precedent).
+	MessageView: key.NewBinding(key.WithKeys("alt+m")),
+	// S3.2 (the upstream session_rename default; the S4.2 registry takes
+	// the binding over).
+	Rename: key.NewBinding(key.WithKeys("ctrl+r")),
 }
 
 func newSessionModel(w, h int) sessionModel {
@@ -66,14 +81,14 @@ const sessionHelp = "pgup/pgdn scroll \u00B7 alt+e expand \u00B7 alt+t think \u0
 // The transcript re-renders only when dirty (store mutation or expand
 // toggle); frames that only advance the footer spinner or report a status
 // tick reuse the existing viewport content instead of rebuilding it.
-func (sm *sessionModel) sync(st *store.State, w, h int) {
+func (sm *sessionModel) sync(st *store.State, w, h int, th theme.Theme, spin string) {
 	if sm.vm.Width() != w || sm.vm.Height() != h {
 		sm.vm.SetWidth(w)
 		sm.vm.SetHeight(h)
 	}
 	if sm.isDirty {
 		sm.isDirty = false
-		content := renderMessages(st, sm.expanded, w)
+		content := renderMessages(st, sm.expanded, w, th, spin)
 		if content != sm.content {
 			sm.content = content
 			sm.vm.SetContent(content)
@@ -85,18 +100,30 @@ func (sm *sessionModel) sync(st *store.State, w, h int) {
 }
 
 // renderMessages renders the current session's transcript as viewport
-// content: user messages verbatim, assistant parts in arrival order (reasoning
-// collapsed as "▸ think", tool rows "✓/▶/✗ <tool> <title>"), a divider before
-// every message after the first, and message errors as a red "! message" line.
-// expanded maps partID to the parts whose I/O block or reasoning text is
-// shown.
-func renderMessages(st *store.State, expanded map[string]bool, w int) string {
+// content: user messages verbatim, assistant parts in arrival order
+// (reasoning as the spinner/Thought row, tool rows in the S1.7 glyph form —
+// "~ <pending>" running, "<icon> <title>" completed, "<icon>
+// <failure ?? title>" error), a divider before every message after the
+// first, and message errors as a red "! message" line. expanded maps partID
+// to the parts whose I/O block or reasoning text is shown; spin is the
+// footer spinner frame for the running reasoning + read rows ("" in unit
+// runs).
+func renderMessages(st *store.State, expanded map[string]bool, w int, th theme.Theme, spin string) string {
+	var tr, rr *theme.Renderer
+	if !th.Zero() {
+		if built, err := theme.NewTranscriptRenderer(th, w-3); err == nil {
+			tr = built
+		}
+		if built, err := theme.NewReasoningRenderer(th, w-5); err == nil {
+			rr = built
+		}
+	}
 	blocks := make([]string, 0, len(st.Messages))
 	for _, m := range st.Messages {
 		if m.Info.Role == "user" {
 			blocks = append(blocks, renderUser(m, w))
 		} else {
-			blocks = append(blocks, renderAssistant(m, expanded, w))
+			blocks = append(blocks, renderAssistant(m, expanded, w, th, tr, rr, spin))
 		}
 	}
 	if len(blocks) == 0 {
@@ -137,7 +164,7 @@ func renderUser(m protocol.MessageWithParts, w int) string {
 	return b.String()
 }
 
-func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool, w int) string {
+func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool, w int, th theme.Theme, tr, rr *theme.Renderer, spin string) string {
 	var b strings.Builder
 	first := true
 	writeRaw := func(s string) {
@@ -165,30 +192,95 @@ func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool, w in
 			if p.Text == "" {
 				continue
 			}
-			for _, l := range strings.Split(p.Text, "\n") {
-				writePlain(l)
-			}
-		case "reasoning":
-			if expanded[p.ID] && p.Text != "" {
-				writeStyled(dim, "\u25BE think")
+			if tr == nil {
 				for _, l := range strings.Split(p.Text, "\n") {
-					writeStyled(dim, "  "+l)
+					writePlain(l)
+				}
+				continue
+			}
+			// The upstream TextPart is a 3-column-indented markdown block
+			// (index.tsx:1700-1707). The renderer word-wraps at w-3
+			// (WithWordWrap), so the indented lines already fit w — the
+			// styled output never reaches wrapLine.
+			if out, err := tr.Render(p.Text); err == nil {
+				for _, l := range strings.Split(strings.Trim(out, "\n"), "\n") {
+					writeRaw("   " + l)
 				}
 			} else {
-				writeStyled(dim, "\u25B8 think")
+				for _, l := range strings.Split(p.Text, "\n") {
+					writePlain(l)
+				}
+			}
+		case "reasoning":
+			text := strings.TrimSpace(strings.ReplaceAll(p.Text, "[REDACTED]", ""))
+			if text == "" {
+				continue
+			}
+			done := p.Time.End != 0
+			dur := int64(0)
+			if done {
+				dur = p.Time.End - p.Time.Start
+				if dur < 0 {
+					dur = 0
+				}
+			}
+			title, body := reasoningSummary(text)
+			open := expanded[p.ID]
+			// The upstream header fg: warning PRE-BLENDED at ThinkingOpacity
+			// while running (the Spinner color, index.tsx:1660) and when
+			// open (1657-1659); full warning when done+closed.
+			var hdr lipgloss.Style
+			if !done || open {
+				hdr = th.WarningSubtle()
+			} else {
+				hdr = th.Warning()
+			}
+			row := ""
+			switch {
+			case !done:
+				label := "Thinking"
+				if title != "" {
+					label = "Thinking: " + title
+				}
+				if spin != "" {
+					row = spin + " " + label
+				} else {
+					row = label // zero-theme/unit runs pass "" — no leading space
+				}
+			case title != "" && dur > 0:
+				row = openMark(open) + " Thought: " + title + " · " + durationText(dur)
+			case title != "":
+				row = openMark(open) + " Thought: " + title
+			case dur > 0:
+				row = openMark(open) + " Thought: " + durationText(dur)
+			default:
+				row = openMark(open) + " Thought"
+			}
+			writeStyled(hdr, row)
+			if open && body != "" && rr != nil {
+				if out, err := rr.Render(body); err == nil {
+					for _, l := range strings.Split(strings.Trim(out, "\n"), "\n") {
+						writeRaw("     " + l) // 3 (part box) + 2 (body box)
+					}
+				}
 			}
 		case "tool":
-			sty, row, ok := toolRowLine(p)
+			sty, row, ok := toolRow(p, th, spin)
 			if !ok {
 				continue
 			}
 			writeStyled(sty, row)
 			switch {
+			case expanded[p.ID] && p.State != nil && p.State.Status == "error":
+				// The upstream expanded error (InlineToolRow 1992-1999):
+				// the FULL error at the icon width (2), fg=error.
+				if p.State.Error != "" {
+					for _, l := range strings.Split(p.State.Error, "\n") {
+						writeStyled(th.Error(), "  "+l)
+					}
+				}
 			case expanded[p.ID] && p.State != nil:
 				block := tailLines(p.State.Output, 40)
-				if p.State.Status == "error" {
-					block = p.State.Error
-				}
 				if block == "" {
 					continue
 				}
@@ -196,8 +288,7 @@ func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool, w in
 					writePlain("  " + l)
 				}
 			case p.Tool == "bash" && p.State != nil && p.State.Status == "completed":
-				// Inline preview (upstream parity): a completed bash part
-				// shows the 10-line head of its output without alt+e.
+				// Inline preview (S0 lock): the 10-line head.
 				if block := headPreview(p.State.Output, 10); block != "" {
 					for _, l := range strings.Split(block, "\n") {
 						writePlain("  " + l)
@@ -207,15 +298,184 @@ func renderAssistant(m protocol.MessageWithParts, expanded map[string]bool, w in
 		}
 	}
 	if m.Info.Error != nil {
-		writeStyled(errRed, "! "+m.Info.Error.Message)
+		writeRaw(renderMessageError(*m.Info.Error, th, w))
 	}
 	return b.String()
 }
 
-// toolRowLine renders the locked tool row: "✓ <tool> <title>" completed,
-// "▶ <tool> <title>" running, "✗ <tool> <error>" error (first error line).
-// The caller applies the style per wrapped line (the row may wrap).
-func toolRowLine(p protocol.Part) (lipgloss.Style, string, bool) {
+// rgbaHex is the 6-digit hex of a resolved token (the theme package's
+// hex6 stays unexported — the TUI keeps its own one-liner; the surface
+// stays S1.2/S1.4-locked).
+func rgbaHex(c theme.Rgba) string {
+	return fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B)
+}
+
+// renderMessageError renders the assistant message error: the upstream
+// error BOX for non-aborted errors (index.tsx:1534-1548 — left border in
+// the error token, the panel background, 1/2 padding, textMuted text) and
+// the muted "~ <message>" line for aborted runs (upstream renders no box
+// for MessageAbortedError — the user caused them). A zero Theme degrades
+// to the bare plain message (the S0.7 contract: no SGR, never a panic).
+func renderMessageError(e protocol.MessageError, th theme.Theme, w int) string {
+	if th.Zero() {
+		return e.Message
+	}
+	if e.Type == "aborted" {
+		return th.TextMuted().Render("~ " + e.Message)
+	}
+	// word-wrap the message at the inner width before boxing (the box
+	// does not wrap).
+	var lines []string
+	inner := w - 4 // border(1) + paddingLeft(2) + margin(1)
+	for _, l := range strings.Split(e.Message, "\n") {
+		lines = append(lines, wrapLine(l, max(1, inner)))
+	}
+	return messageErrorBoxStyle(th).Render(th.TextMuted().Render(strings.Join(lines, "\n")))
+}
+
+// messageErrorBoxStyle builds the error box chrome (the S1.8 test pins it
+// through the lipgloss accessors): a single left border line in the error
+// token over the panel background, padded 1/0/1/2.
+func messageErrorBoxStyle(th theme.Theme) lipgloss.Style {
+	box := lipgloss.NewStyle().
+		Border(leftOnlyBorder(), false, false, false, true).
+		Padding(1, 0, 1, 2)
+	if c, ok := th.Color("error"); ok {
+		box = box.BorderForeground(lipgloss.Color(rgbaHex(c)))
+	}
+	if c, ok := th.Color("backgroundPanel"); ok {
+		box = box.Background(lipgloss.Color(rgbaHex(c)))
+	}
+	return box
+}
+
+func leftOnlyBorder() lipgloss.Border {
+	return lipgloss.Border{
+		Left: "│", // all other edges empty: a single left border line
+	}
+}
+
+// reasoningSummary ports upstream thinking.ts:12: the leading **title**
+// block is disclosure metadata; the rest is the markdown body.
+func reasoningSummary(text string) (title string, body string) {
+	content := strings.TrimSpace(text)
+	i := strings.Index(content, "**")
+	if i != 0 {
+		return "", content
+	}
+	j := strings.Index(content[2:], "**")
+	if j < 0 {
+		return "", content
+	}
+	title = strings.TrimSpace(content[2 : 2+j])
+	if title == "" {
+		return "", content
+	}
+	rest := content[2+j+2:]
+	if rest == "" {
+		return title, ""
+	}
+	// the upstream regex requires the title block to end at a blank line
+	// ((\r?\n) twice, mixed endings allowed) or the end of the content;
+	// the body is what follows the blank line.
+	i = 0
+	for n := 0; n < 2; n++ {
+		if i < len(rest) && rest[i] == '\r' {
+			i++
+		}
+		if i < len(rest) && rest[i] == '\n' {
+			i++
+		} else {
+			return "", content
+		}
+	}
+	return title, strings.TrimRight(rest[i:], " \t\r\n")
+}
+
+// durationText ports upstream Locale.duration (util/locale.ts:39): ms <
+// 1s, X.Xs < 1m, Nm Ns < 1h, Nh Nm < 24h, else Nd Nh.
+func durationText(ms int64) string {
+	if ms < 1000 {
+		return fmt.Sprintf("%dms", ms)
+	}
+	if ms < 60000 {
+		return fmt.Sprintf("%.1fs", float64(ms)/1000)
+	}
+	if ms < 3600000 {
+		return fmt.Sprintf("%dm %ds", ms/60000, (ms%60000)/1000)
+	}
+	if ms < 86400000 {
+		return fmt.Sprintf("%dh %dm", ms/3600000, (ms%3600000)/60000)
+	}
+	return fmt.Sprintf("%dd %dh", ms/86400000, (ms%86400000)/3600000)
+}
+
+// openMark is the done-reasoning header prefix mark: "-" open, "+"
+// collapsed (the single separating space lives in the row string — the
+// brief's spaced mark + spaced row string built a double space; the
+// binding parity note pins the single-space form, deviation 156).
+func openMark(open bool) string {
+	if open {
+		return "-"
+	}
+	return "+"
+}
+
+// toolGlyph is the per-tool icon (upstream InlineTool icon props,
+// index.tsx:2105-2545 — the 2-column slot is the glyph + space).
+func toolGlyph(tool string) string {
+	switch tool {
+	case "bash":
+		return "$"
+	case "write", "edit":
+		return "←"
+	case "glob", "grep":
+		return "✱"
+	case "read":
+		return "→"
+	default:
+		return "⚙"
+	}
+}
+
+// toolPending is the upstream pending text (the running row, index.tsx
+// pending= props).
+func toolPending(tool string) string {
+	switch tool {
+	case "bash":
+		return "Writing command..."
+	case "write":
+		return "Preparing write..."
+	case "edit":
+		return "Preparing edit..."
+	case "glob":
+		return "Finding files..."
+	case "grep":
+		return "Searching content..."
+	case "read":
+		return "Reading file..."
+	case "todowrite":
+		return "Updating todos..."
+	default:
+		return "Working..."
+	}
+}
+
+// toolFailure is the upstream failure= prop (the error row text when the
+// part has no title).
+func toolFailure(tool string) string {
+	if tool == "todowrite" {
+		return "Todo update failed"
+	}
+	return ""
+}
+
+// toolRow renders the upstream InlineTool row: the running row is "~
+// <pending>" at fg=text (read: "<spin> Reading file..."), the completed
+// row "<icon> <title>" at fg=textMuted, the error row "<icon>
+// <failure ?? title>" at fg=error (index.tsx:1882-1889, 1966-1990).
+// A zero Theme degrades to plain rows (the S0.10 contract).
+func toolRow(p protocol.Part, th theme.Theme, spin string) (lipgloss.Style, string, bool) {
 	st := p.State
 	status := "running"
 	title := ""
@@ -226,23 +486,23 @@ func toolRowLine(p protocol.Part) (lipgloss.Style, string, bool) {
 	if title == "" {
 		title = toolTitleFallback(p)
 	}
+	icon := toolGlyph(p.Tool) + " "
 	switch status {
 	case "completed":
-		return okGreen, "\u2713 " + p.Tool + " " + title, true
+		return th.TextMuted(), icon + title, true
 	case "error":
-		errText := ""
-		if st != nil {
-			errText = st.Error
+		text := toolFailure(p.Tool)
+		if text == "" {
+			text = title
 		}
-		if i := strings.IndexByte(errText, '\n'); i >= 0 {
-			errText = errText[:i]
-		}
-		if errText == "" {
-			errText = title
-		}
-		return errRed, "\u2717 " + p.Tool + " " + errText, true
+		return th.Error(), icon + text, true
 	default:
-		return toolRow, "\u25B6 " + p.Tool + " " + title, true
+		// read: the upstream spinner row (spinner={isRunning()}); a
+		// zero-spin caller (zero-theme/unit runs) degrades to "~".
+		if p.Tool == "read" && spin != "" {
+			return th.Text(), spin + " " + toolPending("read"), true
+		}
+		return th.Text(), "~ " + toolPending(p.Tool), true
 	}
 }
 
@@ -314,17 +574,22 @@ func lastToolPartID(st *store.State) string {
 	return id
 }
 
-// handleSessionKey dispatches session-route keys: pgup/pgdn scroll, alt+e
-// expands the most recent tool part, alt+t toggles reasoning, esc aborts
-// while busy and returns to home when idle. It reports whether the key was
-// consumed; unhandled keys fall through to the prompt input.
+// handleSessionKey dispatches session-route keys: pgup/pgdn scroll (the
+// registry's messages_page_up/down, S4.2), alt+e expands the most recent tool
+// part, alt+t toggles reasoning (the yolo surface toggles, deviation 211),
+// ctrl+r opens the rename dialog (the registry's session_rename), esc aborts
+// while busy and returns to home when idle (the registry's
+// session_interrupt). It reports whether the key was consumed; unhandled keys
+// fall through to the prompt input.
 func (a *App) handleSessionKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 	switch {
-	case key.Matches(k, sessKeyMap.PageUp):
+	// S4.2: the registry-backed session keys (the messages_page_up/down
+	// defaults add ctrl+alt+b/f; the V1 pgup/pgdn pins are the first seqs).
+	case a.keymap.Match("messages_page_up", k):
 		a.sess.vm.PageUp()
 		a.sess.following = false
 		return nil, true
-	case key.Matches(k, sessKeyMap.PageDown):
+	case a.keymap.Match("messages_page_down", k):
 		a.sess.vm.PageDown()
 		a.sess.following = a.sess.vm.AtBottom()
 		return nil, true
@@ -365,11 +630,29 @@ func (a *App) handleSessionKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 			a.sess.isDirty = true
 		}
 		return nil, true
-	case key.Matches(k, escBinding):
+	case key.Matches(k, sessKeyMap.MessageView):
+		a.openMessageDialog()
+		return nil, true
+	// S4.2: the registry-backed rename (the upstream session_rename default
+	// ctrl+r). Only when a session is open (an empty curSessionID has no
+	// title to seed). The form's init cmds are consumed here (the pinned
+	// contract: ctrl+r is consumed with no cmds — the test sink captures
+	// them; the focus is set synchronously by form.Init).
+	case a.keymap.Match("session_rename", k):
+		if a.curSessionID == "" {
+			return nil, false
+		}
+		a.openSessionRenameDialog(a.curSessionID)
+		return nil, true
+	// S4.2: the registry-backed interrupt (the upstream session_interrupt
+	// default escape); the esc-when-idle return-home is the yolo surface
+	// behavior (deviation 211's scope).
+	case a.keymap.Match("session_interrupt", k):
 		if sessionBusy(&a.store) {
 			return a.emit(a.abortCmd()), true
 		}
 		a.route = routeHome
+		a.repickTip()
 		a.curSessionID = ""
 		return a.emit(a.hydrateCmd()), true
 	}

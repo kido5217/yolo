@@ -24,8 +24,9 @@ import (
 )
 
 // stripANSITest removes SGR color sequences from raw teatest output so the
-// assertions can match the visible text (the ✓ tool row is split across two
-// styled spans, so the raw bytes never contain "✓ read" contiguously).
+// assertions can match the visible text (the `→ hello.txt` tool row is the
+// pin; a styled run splits the row text across spans in the raw bytes, so
+// the strip keeps the assertions form-agnostic).
 var sgrTestRe = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 func stripANSITest(b []byte) string { return sgrTestRe.ReplaceAllString(string(b), "") }
@@ -33,13 +34,12 @@ func stripANSITest(b []byte) string { return sgrTestRe.ReplaceAllString(string(b
 func TestHomeRendersListAndNewSession(t *testing.T) {
 	ts := testutil.Boot(t)
 	c := client.New(ts.URL, ts.Dir)
-	a := tui.NewApp(c, store.State{}, "")
+	a := tui.NewApp(c, store.State{}, "", nil)
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return bytes.Contains(b, []byte("Yolo")) &&
-			bytes.Contains(b, []byte("New session"))
+		return bytes.Contains(b, []byte("New session"))
 	}, teatest.WithDuration(5*time.Second))
 
 	ctx := context.Background()
@@ -66,7 +66,7 @@ func TestHomeRendersListAndNewSession(t *testing.T) {
 func TestResumeMissingSessionExitsWithError(t *testing.T) {
 	ts := testutil.Boot(t)
 	c := client.New(ts.URL, ts.Dir)
-	a := tui.NewApp(c, store.State{}, "ses_missing")
+	a := tui.NewApp(c, store.State{}, "ses_missing", nil)
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
@@ -110,7 +110,7 @@ func TestSessionStreamingViewport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	a := tui.NewApp(c, store.State{}, ses.ID)
+	a := tui.NewApp(c, store.State{}, ses.ID, nil)
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 10))
 
@@ -123,7 +123,7 @@ func TestSessionStreamingViewport(t *testing.T) {
 	}
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
 		s := []byte(stripANSITest(b))
-		return bytes.Contains(s, []byte("\u2713 read")) && bytes.Contains(s, []byte("done"))
+		return bytes.Contains(s, []byte("→ hello.txt")) && bytes.Contains(s, []byte("done"))
 	}, teatest.WithDuration(5*time.Second))
 
 	_ = tm.Quit()
@@ -159,7 +159,7 @@ func TestPromptSendAndSlashMenu(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	a := tui.NewApp(c, store.State{}, ses.ID)
+	a := tui.NewApp(c, store.State{}, ses.ID, nil)
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
@@ -219,7 +219,7 @@ func TestPromptSendWhileBusyToasts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	a := tui.NewApp(c, store.State{}, ses.ID)
+	a := tui.NewApp(c, store.State{}, ses.ID, nil)
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
@@ -251,12 +251,12 @@ func TestPromptSendWhileBusyToasts(t *testing.T) {
 func TestPromptSlashNewWithoutSession(t *testing.T) {
 	ts := testutil.Boot(t)
 	c := client.New(ts.URL, ts.Dir)
-	a := tui.NewApp(c, store.State{}, "")
+	a := tui.NewApp(c, store.State{}, "", nil)
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return bytes.Contains(b, []byte("Yolo"))
+		return bytes.Contains(b, []byte("New session"))
 	}, teatest.WithDuration(5*time.Second))
 
 	typeIn(tm, "/new")

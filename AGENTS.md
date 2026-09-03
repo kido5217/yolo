@@ -16,7 +16,19 @@ Read it before acting. Task state: beads (`bd ready`). Verified facts:
   `charm.land/lipgloss/v2` v2.0.6, `charm.land/bubbles/v2` v2.2.1,
   `modernc.org/sqlite` v1.57.0 (pure Go, no cgo), `tidwall/jsonc` v0.3.3,
   `github.com/aymanbagabas/go-udiff` v0.4.1 (proposal #1, user-approved
-  2026-08-23 — the Myers line diff); dev-only
+  2026-08-23 — the Myers line diff), `github.com/charmbracelet/x/term`
+   v0.2.2 (promotion, user-approved 2026-08-25, bead `yolo-oae.1.11` —
+   raw-mode tty for OSC palette detection; zero new modules, already in
+   the graph via bubbletea v2), `charm.land/glamour/v2` v2.0.1
+   (user-approved 2026-08-26, bead `yolo-oae.2.11` — GFM markdown + chroma
+   syntax highlighting for the transcript; direct imports: `glamour`,
+    `glamour/ansi`, `chroma/v2/styles` for the global "charm" slot
+    workaround), `charm.land/huh/v2` v2.0.3
+    (user-approved 2026-08-27, bead `yolo-oae.3.4` — huh field dialogs:
+    alert/confirm/input; direct import `charm.land/huh/v2`),
+    `github.com/sahilm/fuzzy` v0.1.3 (same approval — subsequence fuzzy
+    filter for the select/palette; direct import `github.com/sahilm/fuzzy`);
+    dev-only
   `github.com/charmbracelet/x/exp/teatest/v2`
    v2.0.0-20260823001701-96af6d2cb5f6. Anything outside the allowlist requires
   an agent **dep proposal** (in the task's spec/plan or beads issue) BEFORE any
@@ -50,7 +62,7 @@ Read it before acting. Task state: beads (`bd ready`). Verified facts:
 4. **TUI is a pure client.** Non-test files under `internal/tui/` import only `internal/protocol` + `internal/tui/*` (+ stdlib/charm deps). `_test.go` may use `internal/server/testutil` (escape hatch). Enforced by `TestImportsDirection` (`internal/tui/imports_test.go`).
 5. **Tests define the contract.** When the plan contradicts itself (or its own test code is buggy), resolve per the last-stated call, fix the test, and **log the deviation in `docs/superpowers/DEVIATIONS.md`** with severity.
 6. **Task state in beads; proven knowledge in docs.** Track task state in beads — never duplicate it in files. When a fact is proven or a deviation is logged, update `docs/superpowers/PROGRESS.md` (facts) / `docs/superpowers/DEVIATIONS.md` (audit) before moving on — a stale audit log is a broken resume. File shapes: "Commit & branch discipline."
-7. **Subagents one at a time.** Never dispatch more than one subagent concurrently (via the `task` tool): dispatch one, wait for it to fully return, then dispatch the next. This supersedes any plan/spec wording permitting parallel subagents.
+7. **Subagents, at most two at a time.** Never dispatch more than two subagents concurrently (via the `task` tool): at most two independent subagents in flight; wait for their full return before dispatching the next. (Raised from one to two on user instruction 2026-09-02.) This supersedes any plan/spec wording permitting more parallel subagents.
 8. **YOLO spawns only YOLO.** If the root agent is `YOLO`, any subagent it spawns MUST also be `YOLO` — never dispatch a subagent of a different agent type.
 
 ## Commands & verification
@@ -86,13 +98,13 @@ Entries live under `superpowers:` skills; invoke a skill **before** acting when 
 | Committing changes | `git-commit` — conventional message from the actual diff |
 | Milestone finished / before merge | `requesting-code-review` — and `receiving-code-review` when feedback arrives |
 | A new spec needs an implementation plan | `writing-plans` — specs → `docs/superpowers/specs/`, plans → `docs/superpowers/plans/`, progress → `docs/superpowers/PROGRESS.md` |
-| 2+ independent tasks with no shared state | `dispatching-parallel-agents` — apply sequentially: one subagent at a time (core principle 7) |
+| 2+ independent tasks with no shared state | `dispatching-parallel-agents` — at most two subagents in flight at once (core principle 7) |
 | Feature work needing workspace isolation | `using-git-worktrees` |
 | Implementation complete, deciding integration | `finishing-a-development-branch` |
 
 - **One subagent per bead (preferred workflow):** execute each bead in a freshly
-  spawned subagent — one at a time (core principle 7); if the root is `YOLO`, the
-  subagent must be `YOLO` too (core principle 8). The root session only plans,
+  spawned subagent — at most two beads in flight at once (core principle 7); if
+  the root is `YOLO`, the subagent must be `YOLO` too (core principle 8). The root session only plans,
   dispatches, and reviews. A bead done inline triggers the compaction discipline below.
 - **Subagent thinking level:** dispatch bead subagents with `thinking=medium` —
   the dispatch prompt states the requirement so the subagent calibrates its
@@ -202,6 +214,10 @@ Default section order:
   lives in `AGENTS.md`; the only managed block is `bd setup opencode` (do not
   hand-edit its markers). The project beads skill at `.agents/skills/beads/`
   is bd-managed and stays.
+- TUI work: follow the project `charm-stack` skill
+  (`.agents/skills/charm-stack/`) for Bubbletea/Bubbles/Lipgloss/Huh
+  patterns; its v1 import paths are illustrative — the allowlist's
+  `charm.land/*` v2 line wins.
 
 ## Child DOX Index
 
@@ -343,3 +359,4 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 - If a required sync or push is blocked, stop and report the exact command and error.
 
 <!-- END BEADS INTEGRATION -->
+

@@ -43,53 +43,60 @@ func permApp() *recApp {
 }
 
 func TestPermissionRender(t *testing.T) {
-	t.Run("full props with always suggestions and tool ref", func(t *testing.T) {
+	t.Run("bash ask with no part input", func(t *testing.T) {
 		a := permApp()
 		got := stripANSI(a.permissionView(80))
-		want := "permission · bash\n" +
+		want := "△ Permission required\n" +
+			"  # Shell command\n" +
 			"  patterns: ls *\n" +
 			"  Always: ls, dir/*\n" +
-			"  tool call: msg_1/call_a\n" +
-			"  [1] once  [2] always  [3] reject"
+			"Allow once  Allow always  Reject"
 		if got != want {
 			t.Errorf("permissionView mismatch:\ngot:\n%q\nwant:\n%q", got, want)
+		}
+	})
+
+	t.Run("part input renders the body line", func(t *testing.T) {
+		a := permApp()
+		a.store.Messages = []protocol.MessageWithParts{{
+			Info: protocol.Message{ID: "msg_1"},
+			Parts: []protocol.Part{{
+				ID: "prt_1", MessageID: "msg_1", CallID: "call_abcdef", Type: "tool",
+				State: &protocol.ToolState{Input: map[string]any{"command": "echo hi"}},
+			}},
+		}}
+		got := stripANSI(a.permissionView(80))
+		if !strings.Contains(got, "  $ echo hi") {
+			t.Errorf("body line missing:\n%q", got)
+		}
+	})
+
+	t.Run("edit ask formats the path title", func(t *testing.T) {
+		a := permApp()
+		a.store.Pending[0].Permission = "edit"
+		a.store.Pending[0].Patterns = nil
+		a.store.Pending[0].Always = nil
+		a.store.Pending[0].Tool = &protocol.PermissionToolRef{CallID: "c1"}
+		a.store.Messages = []protocol.MessageWithParts{{
+			Parts: []protocol.Part{{
+				CallID: "c1", Type: "tool",
+				State: &protocol.ToolState{Input: map[string]any{"filePath": "/tmp/x.go"}},
+			}},
+		}}
+		got := stripANSI(a.permissionView(80))
+		if !strings.Contains(got, "  → Edit /tmp/x.go") {
+			t.Errorf("edit title missing:\n%q", got)
+		}
+		if strings.Contains(got, "Always:") || strings.Contains(got, "patterns:") {
+			t.Errorf("empty lines must be omitted:\n%q", got)
 		}
 	})
 
 	t.Run("empty always omits the line", func(t *testing.T) {
 		a := permApp()
 		a.store.Pending[0].Always = nil
-		got := stripANSI(a.permissionView(80))
-		if strings.Contains(got, "Always:") {
+		if got := stripANSI(a.permissionView(80)); strings.Contains(got, "Always:") {
 			t.Errorf("Always line must be omitted when empty:\n%q", got)
-		}
-		if !strings.Contains(got, "  patterns: ls *\n  tool call: ") {
-			t.Errorf("patterns and tool call lines missing:\n%q", got)
-		}
-	})
-
-	t.Run("missing tool ref omits the line", func(t *testing.T) {
-		a := permApp()
-		a.store.Pending[0].Tool = nil
-		got := stripANSI(a.permissionView(80))
-		if strings.Contains(got, "tool call:") {
-			t.Errorf("tool call line must be omitted when ref is nil:\n%q", got)
-		}
-	})
-
-	t.Run("short callID is not truncated", func(t *testing.T) {
-		a := permApp()
-		a.store.Pending[0].Tool = &protocol.PermissionToolRef{MessageID: "msg_9", CallID: "call_1"}
-		if got := stripANSI(a.permissionView(80)); !strings.Contains(got, "  tool call: msg_9/call_1") {
-			t.Errorf("short callID line missing:\n%q", got)
-		}
-	})
-
-	t.Run("multiple patterns are comma joined", func(t *testing.T) {
-		a := permApp()
-		a.store.Pending[0].Patterns = []string{"ls *", "cat *"}
-		if got := stripANSI(a.permissionView(80)); !strings.Contains(got, "  patterns: ls *, cat *") {
-			t.Errorf("combined patterns line missing:\n%q", got)
 		}
 	})
 
@@ -102,11 +109,70 @@ func TestPermissionRender(t *testing.T) {
 	})
 }
 
+func TestPermissionPillKeys(t *testing.T) {
+	if got, ok := permReplyFor(press('1'), 0); !ok || got != "once" {
+		t.Fatalf("1 → %q/%v, want once", got, ok)
+	}
+	if got, ok := permReplyFor(press('2'), 0); !ok || got != "always" {
+		t.Fatalf("2 → %q/%v, want always", got, ok)
+	}
+	if got, ok := permReplyFor(press('3'), 0); !ok || got != "reject" {
+		t.Fatalf("3 → %q/%v, want reject", got, ok)
+	}
+	if got, ok := permReplyFor(press(tea.KeyEscape), 1); !ok || got != "reject" {
+		t.Fatalf("esc → %q/%v, want reject (yolo pin)", got, ok)
+	}
+	if got, ok := permReplyFor(enterKey, 1); !ok || got != "always" {
+		t.Fatalf("enter on sel 1 → %q/%v, want always", got, ok)
+	}
+	if _, ok := permReplyFor(press('x'), 0); ok {
+		t.Fatalf("x must not reply")
+	}
+}
+
+func TestPermissionPillMove(t *testing.T) {
+	p := &permDlg{}
+	p.moveSel(1)
+	if p.sel != 1 {
+		t.Fatalf("right: sel=%d, want 1", p.sel)
+	}
+	p.moveSel(1)
+	if p.sel != 2 {
+		t.Fatalf("right: sel=%d, want 2", p.sel)
+	}
+	p.moveSel(1)
+	if p.sel != 0 {
+		t.Fatalf("wrap: sel=%d, want 0", p.sel)
+	}
+	p.moveSel(-1)
+	if p.sel != 2 {
+		t.Fatalf("wrap back: sel=%d, want 2", p.sel)
+	}
+}
+
+func TestPermissionStackSync(t *testing.T) {
+	a := permApp()
+	a.syncPermDialog()
+	top, ok := a.dlg.top()
+	if len(a.dlg.items) != 1 || !ok || top.kind != dlgPerm || !top.modal {
+		t.Fatalf("sync must push the perm modal: %+v", a.dlg.items)
+	}
+	a.syncPermDialog() // idempotent
+	if len(a.dlg.items) != 1 {
+		t.Fatalf("sync must be idempotent: %+v", a.dlg.items)
+	}
+	a.store.Pending = nil
+	a.syncPermDialog()
+	if len(a.dlg.items) != 0 {
+		t.Fatalf("drained queue must pop the perm modal: %+v", a.dlg.items)
+	}
+}
+
 func TestPermissionOverlayAbovePrompt(t *testing.T) {
 	a := permApp()
 	v := stripANSI(a.view())
 	p := stripANSI(a.prompt.view())
-	pidx := strings.Index(v, "permission · bash")
+	pidx := strings.Index(v, "Permission required")
 	sidx := strings.Index(v, p)
 	if pidx < 0 || sidx < 0 {
 		t.Fatalf("view missing permission overlay or prompt line:\n%q", v)
@@ -114,51 +180,6 @@ func TestPermissionOverlayAbovePrompt(t *testing.T) {
 	if pidx > sidx {
 		t.Errorf("overlay must render above the prompt:\n%q", v)
 	}
-}
-
-func TestPermissionKeyGate(t *testing.T) {
-	t.Run("other keys are ignored and do not reach the prompt", func(t *testing.T) {
-		a := permApp()
-		a.handleKey(press('x'))
-		if len(a.Cmds) != 0 {
-			t.Fatalf("key x must not emit cmds, got %d", len(a.Cmds))
-		}
-		if a.prompt.input.Value() != "" {
-			t.Fatalf("prompt input = %q, want empty", a.prompt.input.Value())
-		}
-	})
-
-	t.Run("1 replies once", func(t *testing.T) {
-		a := permApp()
-		a.handleKey(press('1'))
-		if len(a.Cmds) != 1 {
-			t.Fatalf("recorded %d cmds, want 1 reply cmd", len(a.Cmds))
-		}
-	})
-
-	t.Run("2 replies always", func(t *testing.T) {
-		a := permApp()
-		a.handleKey(press('2'))
-		if len(a.Cmds) != 1 {
-			t.Fatalf("recorded %d cmds, want 1 reply cmd", len(a.Cmds))
-		}
-	})
-
-	t.Run("3 replies reject", func(t *testing.T) {
-		a := permApp()
-		a.handleKey(press('3'))
-		if len(a.Cmds) != 1 {
-			t.Fatalf("recorded %d cmds, want 1 reply cmd", len(a.Cmds))
-		}
-	})
-
-	t.Run("esc rejects (locked)", func(t *testing.T) {
-		a := permApp()
-		a.handleKey(press(tea.KeyEscape))
-		if len(a.Cmds) != 1 {
-			t.Fatalf("recorded %d cmds, want 1 reply cmd", len(a.Cmds))
-		}
-	})
 }
 
 func TestPermissionReplyApply(t *testing.T) {
@@ -221,11 +242,15 @@ func permHarness(t *testing.T) (*testutil.TestServer, *client.Service, *teatest.
 	return ts, c, tm, ses.ID
 }
 
+// hasPermDialog matches the real permission flow under the S2.8 restyle
+// (header + the info() port + the pills).
 func hasPermDialog(b []byte) bool {
 	s := stripANSI(string(b))
-	return strings.Contains(s, "permission · bash") &&
+	return strings.Contains(s, "Permission required") &&
+		strings.Contains(s, "Shell command") &&
 		strings.Contains(s, "patterns: ls *") &&
-		strings.Contains(s, "[1] once  [2] always  [3] reject")
+		strings.Contains(s, "Allow once") &&
+		strings.Contains(s, "Reject")
 }
 
 func hasLine(s string) func([]byte) bool {
@@ -272,7 +297,11 @@ func TestPermissionDialogKeyReply(t *testing.T) {
 
 	tm.Send(permKey('1'))
 
-	teatest.WaitFor(t, tm.Output(), hasLine("\u2713 bash"), teatest.WithDuration(5*time.Second))
+	// Zero-engine run: the running->completed transition rewrites the
+	// WHOLE row (`~ Writing command...` -> `$ ls -la`), so the full
+	// completed line lands in the drain — pin it + the final text
+	// (deviation 144 pinned the pre-S1.7 icon-cell form).
+	teatest.WaitFor(t, tm.Output(), hasLines("$ ls -la", "done"), teatest.WithDuration(5*time.Second))
 	if got := waitPending(t, ts, 0); len(got) != 0 {
 		t.Fatalf("pending = %+v, want empty after reply", got)
 	}
@@ -313,7 +342,11 @@ func TestPermissionDialogHTTPReply(t *testing.T) {
 		t.Fatalf("ReplyPermission: %v", err)
 	}
 
-	teatest.WaitFor(t, tm.Output(), hasLine("\u2713 bash"), teatest.WithDuration(5*time.Second))
+	// Zero-engine run: the running->completed transition rewrites the
+	// WHOLE row (`~ Writing command...` -> `$ ls -la`), so the full
+	// completed line lands in the drain — pin it + the final text
+	// (deviation 144 pinned the pre-S1.7 icon-cell form).
+	teatest.WaitFor(t, tm.Output(), hasLines("$ ls -la", "done"), teatest.WithDuration(5*time.Second))
 	if got := waitPending(t, ts, 0); len(got) != 0 {
 		t.Fatalf("pending = %+v, want empty after the replied event", got)
 	}

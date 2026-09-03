@@ -5,6 +5,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // toast is one line of the transient error-flash block (LOCKED: red, above
@@ -67,24 +68,41 @@ func (a *App) removeToast(id int) {
 	}
 }
 
-// toastsView renders the block above the footer, newest line on top. Each
-// message word-wraps at the terminal width (a toast can carry a long error
-// string; the frame budget counts the wrapped lines dynamically).
 func (a *App) toastsView(w int) string {
 	if len(a.toasts) == 0 {
 		return ""
 	}
-	var b strings.Builder
-	for i := len(a.toasts) - 1; i >= 0; i-- {
-		if i != len(a.toasts)-1 {
-			b.WriteByte('\n')
-		}
-		for j, l := range strings.Split(wrapLine("\u2022 "+a.toasts[i].msg, w), "\n") {
-			if j > 0 {
+	// Zero Theme (nil-engine runs): the LOCKED plain red lines, unchanged
+	// (the zero-engine toast tests pin the exact/line form).
+	if a.theme.Zero() {
+		var b strings.Builder
+		for i := len(a.toasts) - 1; i >= 0; i-- { // newest on top (LOCKED)
+			if i != len(a.toasts)-1 {
 				b.WriteByte('\n')
 			}
-			b.WriteString(errRed.Render(l))
+			for j, l := range strings.Split(wrapLine("\u2022 "+a.toasts[i].msg, w), "\n") {
+				if j > 0 {
+					b.WriteByte('\n')
+				}
+				b.WriteString(a.theme.Error().Render(l))
+			}
+		}
+		return b.String()
+	}
+	box := lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder(), false, true, false, true).
+		Padding(1, 2, 1, 2)
+	if c, ok := a.theme.Color("error"); ok {
+		box = box.BorderForeground(lipgloss.Color(rgbaHex(c)))
+	}
+	if c, ok := a.theme.Color("backgroundPanel"); ok {
+		box = box.Background(lipgloss.Color(rgbaHex(c)))
+	}
+	var lines []string
+	for i := len(a.toasts) - 1; i >= 0; i-- { // newest on top (LOCKED)
+		for _, l := range strings.Split(wrapLine("\u2022 "+a.toasts[i].msg, max(1, w-6)), "\n") {
+			lines = append(lines, l)
 		}
 	}
-	return b.String()
+	return box.Render(a.theme.Error().Render(strings.Join(lines, "\n")))
 }

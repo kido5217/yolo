@@ -137,6 +137,9 @@ func (e *Engine) runRound(ctx context.Context, t *turn, req llm.Request) (bool, 
 	}); err != nil {
 		return false, err
 	}
+	// The turn's terminal error surfaces on this row (runTurn's deferred
+	// exit); a later round overwrites it with the new round's id.
+	t.lastMsgID = r.id
 	r.msg = protocol.Message{
 		ID: r.id, SessionID: t.sessionID, Role: "assistant", Agent: t.agent,
 		Time:  protocol.MessageTime{Created: r.now},

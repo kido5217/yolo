@@ -10,3 +10,4 @@
 # source of truth — see 86c9a82). Not committed: repo is public and it carries
 # the actor name.
 .beads/interactions.jsonl
+__pycache__/

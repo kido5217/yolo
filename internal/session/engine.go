@@ -32,6 +32,11 @@ var ErrSessionBusy = errors.New("session busy")
 // stream.
 var errRoundEnded = errors.New("round ended")
 
+// errMaxToolRounds ends the turn when the tool round budget is exhausted:
+// a non-failure in the yolo model (idle, no wire error — the error is the
+// onDone log site only), so the fail-path error surface skips it.
+var errMaxToolRounds = errors.New("session: max tool rounds exceeded")
+
 // maxToolRounds caps the tool round-trips of one turn.
 const maxToolRounds = 50
 
@@ -467,6 +472,11 @@ type turn struct {
 	// messagesFor maps memory instead of re-querying every row each round.
 	sys  []string
 	hist []protocol.MessageWithParts
+
+	// lastMsgID is the current round's assistant message id (set at round
+	// creation): the turn's terminal error surfaces on this row when the
+	// turn fails (runTurn's deferred exit).
+	lastMsgID string
 }
 
 // newTurn assembles the per-turn state; the agent defaults to "build".
@@ -500,6 +510,21 @@ func (e *Engine) runTurn(ctx context.Context, t *turn, onDone func(error)) {
 		}
 		if errors.Is(turnErr, context.Canceled) {
 			e.lg.Info("turn aborted", "session_id", t.sessionID, "reason", "context_canceled")
+		}
+		// Surface the turn failure on the wire BEFORE the idle publish:
+		// the TUI's idle-bell condition (c) rings only when not errored, so
+		// the error event first suppresses the done-bell — one bell, not
+		// two (upstream order is step.failed then idle). The success path
+		// keeps its original idle-only order.
+		switch {
+		case turnErr != nil && t.lastMsgID != "" && !errors.Is(turnErr, errMaxToolRounds):
+			e.surfaceTurnError(ctx, t, turnErr)
+		case turnErr != nil && t.lastMsgID == "" && !errors.Is(turnErr, errMaxToolRounds):
+			// Failure before any round started (e.g. loadHistory): there is
+			// no message to attach the error to — the idle status is the
+			// surface, so skip silently-ish.
+			e.lg.Info("turn failed before any round; the idle status is the surface",
+				"session_id", t.sessionID, "error", turnErr)
 		}
 		e.publish(protocol.EventTypeSessionStatus, protocol.SessionStatusProps{
 			SessionID: t.sessionID,
@@ -568,7 +593,46 @@ func (e *Engine) runTurn(ctx context.Context, t *turn, onDone func(error)) {
 			return
 		}
 	}
-	turnErr = errors.New("session: max tool rounds exceeded")
+	turnErr = errMaxToolRounds
+}
+
+// surfaceTurnError persists the turn's terminal error on the last round's
+// assistant message and re-publishes the FULL message as message.updated
+// with Info.Error. It runs in runTurn's deferred exit, before the idle
+// status publish (see there for the load-bearing order), and is
+// best-effort: a persist or fetch failure logs and still returns so the
+// idle path runs (the onDone log line is the single log site for the error
+// text).
+func (e *Engine) surfaceTurnError(ctx context.Context, t *turn, turnErr error) {
+	me := &protocol.MessageError{Type: "unknown", Message: turnErr.Error()}
+	if errors.Is(turnErr, context.Canceled) {
+		me = &protocol.MessageError{Type: "aborted", Message: "aborted by the user"}
+	}
+	// The abort path carries a cancelled ctx; WithoutCancel keeps the error
+	// write and the row fetch from being dropped (the finishRound idiom).
+	dctx := context.WithoutCancel(ctx)
+	if err := e.db.SetMessageError(dctx, t.lastMsgID, *me); err != nil {
+		e.lg.Error("persist message error failed", "message_id", t.lastMsgID, "session_id", t.sessionID, "error", err)
+	}
+	row, err := e.db.GetMessage(dctx, t.lastMsgID)
+	if err != nil {
+		e.lg.Error("load message for error surface failed", "message_id", t.lastMsgID, "session_id", t.sessionID, "error", err)
+		return
+	}
+	info := protocol.Message{
+		ID: row.ID, SessionID: row.SessionID, Role: row.Role, Agent: row.Agent,
+		Cost:   row.Cost,
+		Tokens: &row.Tokens,
+		Time:   protocol.MessageTime{Created: row.TimeCreated},
+	}
+	if row.TimeCompleted != nil {
+		info.Time.Completed = *row.TimeCompleted
+	}
+	// The TUI store's upsertMessage REPLACES the whole Info, so the
+	// re-publish carries the full message, not just the error field
+	// (a minimal publish would wipe role/time/agent/cost from the row).
+	info.Error = me
+	e.publish(protocol.EventTypeMessageUpdated, protocol.MessageUpdatedProps{SessionID: t.sessionID, Info: info})
 }
 
 // buildRequest assembles the next model request: system prompt entries, the

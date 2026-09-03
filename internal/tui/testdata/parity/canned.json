@@ -1,0 +1,22 @@
+{
+  "text": {
+    "prompt": "say hi to the mock",
+    "reply": "## Heading\n\nSome **bold** and `inline code` text.\n\n- one\n- two\n\n> a quote\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n[link](https://example.com)\n\n```js\nconst x = 1;\n```\n\n你好 world\n\nDone.",
+    "chunk_size": 6,
+    "usage": { "input": 12, "output": 40 }
+  },
+  "tool": {
+    "prompt": "run the parity check",
+    "tool": { "name": "bash", "args": "{\"command\":\"echo parity-ok\"}" },
+    "tool_reply": "The check printed parity-ok.\n",
+    "chunk_size": 6,
+    "usage": { "input": 12, "output": 40 }
+  },
+  "todo": {
+    "prompt": "add two todos",
+    "tool": { "name": "todowrite", "args": "{\"todos\":[{\"content\":\"first item\",\"status\":\"in_progress\"},{\"content\":\"second item\",\"status\":\"pending\"}]}" },
+    "tool_reply": "Todos updated.\n",
+    "chunk_size": 6,
+    "usage": { "input": 12, "output": 40 }
+  }
+}

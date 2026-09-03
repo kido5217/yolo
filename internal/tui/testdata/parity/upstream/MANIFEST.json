@@ -1,0 +1,109 @@
+{
+ "canned_sha256": "52706e396e5d581c550e9be79e1fa0a4fc6ea56eaaabac1e84585be884e7d1c1",
+ "catalog_sha256": "5b2c2d708dfafd45dcbe4e6120a49baaa5764a8f7d0b7fd88951f04304fa2cfc",
+ "npm_version": "1.18.18",
+ "surfaces": [
+  {
+   "cols": 80,
+   "name": "home",
+   "rows": 24,
+   "sha256": "22f4ee784c2f99a00b725ca955e0612d776a8f859fbbb6a71f3147ee718767c9"
+  },
+  {
+   "cols": 80,
+   "name": "session-text",
+   "rows": 24,
+   "sha256": "9c921f2f5f945155e05322bfd3d131083b38852853375b47f27a2f8526f5bf3d"
+  },
+  {
+   "cols": 80,
+   "name": "session-tool",
+   "rows": 24,
+   "sha256": "052b6d691a2a2e35a0509c7d3628d971350d64e4df5bc02ef0e179e4f407f5af"
+  },
+  {
+   "cols": 80,
+   "name": "palette",
+   "rows": 24,
+   "sha256": "2a14fdee4b854118cbb014fb7759be520590cb8b0770156592fa0abdd4f746df"
+  },
+  {
+   "cols": 80,
+   "name": "help",
+   "rows": 24,
+   "sha256": "5c7c5191fdedf464d5e5be45c1d28ba49d6ba9f52a0ee98fe74a3debeac0a53c"
+  },
+  {
+   "cols": 80,
+   "name": "model",
+   "rows": 24,
+   "sha256": "c1d989e994240b20e61067d2e9a6c7a5a41be7bcb3f9120b5a026e6d7a4ddcff"
+  },
+  {
+   "cols": 80,
+   "name": "agent",
+   "rows": 24,
+   "sha256": "00ed5edca72cc5b269d49120a0885903c03496b722406c1ca9ba740068d11f1f"
+  },
+  {
+   "cols": 80,
+   "name": "theme",
+   "rows": 24,
+   "sha256": "706e476f5214bf2ee7c2bda76e9568f6ecf0ef7947f6ba5d7b5f3b852c66e953"
+  },
+  {
+   "cols": 80,
+   "name": "session-list",
+   "rows": 24,
+   "sha256": "aef5e2ae443fc8f0b1b56f541d170398d8b2fc5b5ac7ee93a2cdbbf9be345b0b"
+  },
+  {
+   "cols": 80,
+   "name": "session-rename",
+   "rows": 24,
+   "sha256": "df2e208afeab7f67b2ca0a4c60a9e408619aeda14ed3a9bae1a7cff8c06def98"
+  },
+  {
+   "cols": 80,
+   "name": "session-delete",
+   "rows": 24,
+   "sha256": "b005398aa90b7e9faf399382b1f7dac214a7645afd83a0182b9a202ba65b0da1"
+  },
+  {
+   "cols": 80,
+   "name": "status",
+   "rows": 24,
+   "sha256": "5168431355178b2747d9072f73836b87dfa5a46a8acc1ce9a820305967868f2f"
+  },
+  {
+   "cols": 80,
+   "name": "which-key",
+   "rows": 24,
+   "sha256": "22f4ee784c2f99a00b725ca955e0612d776a8f859fbbb6a71f3147ee718767c9"
+  },
+  {
+   "cols": 140,
+   "name": "sidebar",
+   "rows": 30,
+   "sha256": "c67b598f7326fb138ad1255002e4fdf6643a6ad8e93545fe99d800a486f47427"
+  },
+  {
+   "cols": 80,
+   "name": "prompt-slash",
+   "rows": 24,
+   "sha256": "7a6ba6387b3d6c315bb7e7f91836130f98bb9bd39455e051f3f8f6f7640f926b"
+  },
+  {
+   "cols": 80,
+   "name": "prompt-mention",
+   "rows": 24,
+   "sha256": "ca7c7b4f6fd954627e2aee09ee619a31e8e76ff505f7f6e64ecee9c494e94aa1"
+  },
+  {
+   "cols": 80,
+   "name": "epilogue",
+   "rows": 24,
+   "sha256": "639d30f43e1c064e0a5195231f2cf847b167ecc2ccbc530309259eca10ab2121"
+  }
+ ]
+}

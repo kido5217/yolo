@@ -3,6 +3,7 @@ package tui
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -59,7 +60,7 @@ func TestTUIFullTurn(t *testing.T) {
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
-	teatest.WaitFor(t, tm.Output(), hasLine("Yolo"), teatest.WithDuration(5*time.Second))
+	teatest.WaitFor(t, tm.Output(), hasLine("New session"), teatest.WithDuration(5*time.Second))
 	tm.Send(press('n'))
 	teatest.WaitFor(t, tm.Output(), hasLine("esc abort/back"), teatest.WithDuration(5*time.Second))
 	suiteType(tm, "do it")
@@ -70,15 +71,22 @@ func TestTUIFullTurn(t *testing.T) {
 		full = stripANSI(string(b))
 		return strings.Contains(full, "User: do it") &&
 			strings.Contains(full, "thinking now") &&
-			strings.Contains(full, "\u2713 read") &&
+			strings.Contains(full, "→ hello.txt") &&
 			strings.Contains(full, "all done")
 	}, teatest.WithDuration(10*time.Second))
+
+	// S1.6: the done+collapsed reasoning row is the "+/- Thought" form —
+	// the turn drain carries the frame that settled it (zero theme, empty
+	// spin; the duration may or may not be present, the prefix is pinned).
+	if !strings.Contains(full, "+ Thought") {
+		t.Fatalf("done+collapsed reasoning row missing from turn drain:\n%s", full)
+	}
 
 	// The full turn rendered in order: user echo, text, completed tool, final.
 	idx := []int{
 		strings.Index(full, "User: do it"),
 		strings.Index(full, "thinking now"),
-		strings.Index(full, "\u2713 read"),
+		strings.Index(full, "→ hello.txt"),
 		strings.Index(full, "all done"),
 	}
 	for i := range idx {
@@ -98,11 +106,24 @@ func TestTUIFullTurn(t *testing.T) {
 		t.Fatalf("read final output: %v", err)
 	}
 	tsTail := stripANSI(string(tail))
-	// "think" is asserted via its \u25BE marker and the expanded content:
-	// the v2 renderer cell-diffs frames, and on the alt screen's fixed
-	// frame the unchanged tail of the marker line is never re-emitted, so
-	// the contiguous "▾ think" line cannot appear in the byte stream.
-	for _, w := range []string{"\u25BE", "let me think", "world", "quit?", "[Y/n]"} {
+	// S1.6: the alt+t toggle is asserted on the model state, not the tail
+	// drain: the v2 renderer cell-diffs frames and on the alt screen's
+	// fixed frame only the changed marker cell (+ → -) is re-emitted —
+	// the row tail never re-appears in this drain (the old ▾-era pin's
+	// root cause), and the body ("let me think") is invisible on this
+	// zero-engine run (the subtle-markdown body needs a real theme).
+	expandedReasoning := 0
+	for _, m := range a.store.Messages {
+		for _, p := range m.Parts {
+			if p.Type == "reasoning" && a.sess.expanded[p.ID] {
+				expandedReasoning++
+			}
+		}
+	}
+	if expandedReasoning == 0 {
+		t.Error("alt+t did not expand the reasoning part")
+	}
+	for _, w := range []string{"world", "quit?", "[Y/n]"} {
 		if !strings.Contains(tsTail, w) {
 			t.Errorf("final output missing %q:\n%s", w, tsTail)
 		}
@@ -137,16 +158,6 @@ func permFlowHarness(t *testing.T) (*teatest.TestModel, *testutil.TestServer) {
 	return tm, ts
 }
 
-// redSGR reports whether raw contains a foreground color SGR sequence.
-func redSGR(b []byte) bool {
-	for _, seq := range []string{"\x1b[38;5;196m", "\x1b[31m", "\x1b[38;2;"} {
-		if bytes.Contains(b, []byte(seq)) {
-			return true
-		}
-	}
-	return false
-}
-
 // hasLines requires every token within one WaitFor's accumulated polls
 // (consecutive WaitFors drain each other and would starve on a quiet app).
 func hasLines(tokens ...string) func([]byte) bool {
@@ -161,18 +172,26 @@ func hasLines(tokens ...string) func([]byte) bool {
 	}
 }
 
-// hasPermDialogEcho matches this scenario's bash ask (the shared
-// hasPermDialog pins T25's "ls *" pattern).
+// hasPermDialogEcho matches this scenario's bash ask (the S2.8 restyle:
+// the info() port reads the part input — "$ echo hi" — and the pills). The
+// tokens are pinned per RUN: under the real-theme engine the cell-diff
+// renderer splits the panel lines at pen changes (the header lands as "△
+// Permission" + a separate "required" run — deviation 181), so the
+// contiguous "Permission required" form is only matchable in the
+// zero-theme flow drains.
 func hasPermDialogEcho(b []byte) bool {
 	s := stripANSI(string(b))
-	return strings.Contains(s, "permission · bash") &&
+	return strings.Contains(s, "required") &&
+		strings.Contains(s, "# Shell") &&
+		strings.Contains(s, "$ echo hi") &&
 		strings.Contains(s, "patterns: echo *") &&
-		strings.Contains(s, "[1] once  [2] always  [3] reject")
+		strings.Contains(s, "Allow") &&
+		strings.Contains(s, "Reject")
 }
 
 func driveToPermDialog(t *testing.T, tm *teatest.TestModel, ts *testutil.TestServer) {
 	t.Helper()
-	teatest.WaitFor(t, tm.Output(), hasLine("Yolo"), teatest.WithDuration(5*time.Second))
+	teatest.WaitFor(t, tm.Output(), hasLine("New session"), teatest.WithDuration(5*time.Second))
 	tm.Send(press('n'))
 	teatest.WaitFor(t, tm.Output(), hasLine("esc abort/back"), teatest.WithDuration(5*time.Second))
 	suiteType(tm, "run it")
@@ -185,14 +204,19 @@ func driveToPermDialog(t *testing.T, tm *teatest.TestModel, ts *testutil.TestSer
 
 // TestTUIPermissionFlow: the locked bash ask replied with 1/2/3 in separate
 // runs — allow (once/always) proceeds and completes; reject renders the tool
-// error part in red with the engine's locked "permission rejected" text (the
-// plan's "forbidden" word deviates; deviation 56).
+// error part (theme error token — SGR pinned by TestSessionChromeThemeSGR
+// under the real engine) with the engine's locked "permission rejected" text
+// (the plan's "forbidden" word deviates; deviation 56).
 func TestTUIPermissionFlow(t *testing.T) {
 	t.Run("once", func(t *testing.T) {
 		tm, ts := permFlowHarness(t)
 		driveToPermDialog(t, tm, ts)
 		tm.Send(press('1'))
-		teatest.WaitFor(t, tm.Output(), hasLines("\u2713 bash", "all done"), teatest.WithDuration(5*time.Second))
+		// Zero-engine run: the running->completed transition rewrites the
+		// WHOLE row (`~ Writing command...` -> `$ echo hi`), so the full
+		// completed line lands in the drain — pin it + the final text
+		// (deviation 140 pinned the pre-S1.7 icon-cell form).
+		teatest.WaitFor(t, tm.Output(), hasLines("$ echo hi", "all done"), teatest.WithDuration(5*time.Second))
 		_ = tm.Quit()
 		tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 	})
@@ -200,7 +224,11 @@ func TestTUIPermissionFlow(t *testing.T) {
 		tm, ts := permFlowHarness(t)
 		driveToPermDialog(t, tm, ts)
 		tm.Send(press('2'))
-		teatest.WaitFor(t, tm.Output(), hasLines("\u2713 bash", "all done"), teatest.WithDuration(5*time.Second))
+		// Zero-engine run: the running->completed transition rewrites the
+		// WHOLE row (`~ Writing command...` -> `$ echo hi`), so the full
+		// completed line lands in the drain — pin it + the final text
+		// (deviation 140 pinned the pre-S1.7 icon-cell form).
+		teatest.WaitFor(t, tm.Output(), hasLines("$ echo hi", "all done"), teatest.WithDuration(5*time.Second))
 		_ = tm.Quit()
 		tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 	})
@@ -208,12 +236,22 @@ func TestTUIPermissionFlow(t *testing.T) {
 		tm, ts := permFlowHarness(t)
 		driveToPermDialog(t, tm, ts)
 		tm.Send(press('3'))
-		teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-			s := stripANSI(string(b))
-			return redSGR(b) &&
-				strings.Contains(s, "permission rejected") &&
-				strings.Contains(s, "all done")
-		}, teatest.WithDuration(5*time.Second))
+		// The rejected row is the CallID fallback (`$ call_1` — failToolPart
+		// persists empty Input for a rejected tool), coalesced with the
+		// final text in the post-dialog frame. That frame is also the sync
+		// point for the expansion: the reject reply clears store.Pending
+		// only async (permReplyMsg / permission.replied), and while Pending
+		// is non-empty handleKey routes every key to the perm dialog — an
+		// alt+e queued right after '3' would be eaten. permission.replied
+		// precedes the part update on the bus, so by this render Pending is
+		// provably cleared and the next alt+e reaches the session ladder.
+		teatest.WaitFor(t, tm.Output(), hasLines("$ call_1", "all done"), teatest.WithDuration(5*time.Second))
+		// S1.7: the rejected row no longer carries the error text — it
+		// renders via the S1.7 expansion, so alt+e expands the rejected
+		// part; the deviation-56 "permission rejected" pin stays on the
+		// expanded error block.
+		tm.Send(pressAlt('e'))
+		teatest.WaitFor(t, tm.Output(), hasLine("permission rejected"), teatest.WithDuration(5*time.Second))
 		_ = tm.Quit()
 		tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 	})
@@ -244,16 +282,18 @@ func TestTUIDialogs(t *testing.T) {
 		seq.WriteString(got)
 	}
 
-	capture("Yolo")
-	tm.Send(pressCtrlP())
+	capture("New session")
+	suiteType(tm, "/model")
+	tm.Send(press(tea.KeyEnter))
 	capture("Model", "Kido", "\u00B7 not-required", "\u25CB missing")
 	tm.Send(press(tea.KeyEscape))
-	tm.Send(pressCtrlA())
+	suiteType(tm, "/agents")
+	tm.Send(press(tea.KeyEnter))
 	capture("Agents", "build", "yolo", "Yolo agent. Permits everything")
 	tm.Send(press(tea.KeyEscape))
 	suiteType(tm, "/help")
 	tm.Send(press(tea.KeyEnter))
-	capture("Help", "| enter | send prompt |", "pgup/pgdn scroll \u00B7 \\+enter newline")
+	capture("Help", "Press ctrl+p to see all available actions", "pgup/pgdn scroll \u00B7 \\+enter newline")
 	tm.Send(press(tea.KeyEscape))
 	tm.Send(ctrlCKey)
 	capture("quit? [Y/n]")
@@ -289,7 +329,7 @@ func TestTUILongReplyWraps(t *testing.T) {
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
-	teatest.WaitFor(t, tm.Output(), hasLine("Yolo"), teatest.WithDuration(5*time.Second))
+	teatest.WaitFor(t, tm.Output(), hasLine("New session"), teatest.WithDuration(5*time.Second))
 	tm.Send(press('n'))
 	teatest.WaitFor(t, tm.Output(), hasLine("esc abort/back"), teatest.WithDuration(5*time.Second))
 	suiteType(tm, "print 1000 words")
@@ -314,5 +354,57 @@ func TestTUILongReplyWraps(t *testing.T) {
 
 	tm.Send(ctrlCKey)
 	tm.Send(press('y'))
+	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
+}
+
+// TestTUIRealStackTurnError: the dev-263 acceptance test — a real turn
+// failure (the fake driver's pre-stream error, classified non-transient so
+// it reaches the pre-stream failure path without retry) surfaces in the TUI
+// over the wire: the S1.8 error box renders (the box's border+padding row,
+// not just the synthetic note line, which carries no box border) and the
+// S5.6 turn-error bell rings (deviation 227 condition (d) is now live on a
+// real failure). ONE merged condition — the teatest buffer-drain rule makes
+// consecutive WaitFors observe disjoint slices.
+func TestTUIRealStackTurnError(t *testing.T) {
+	drv := fake.New(fake.Turn{Err: errors.New("boom")})
+	ts := testutil.BootWithDriver(t, drv)
+	a := parityApp(t, ts)
+	tm := teatest.NewTestModel(t, a,
+		teatest.WithInitialTermSize(80, 24),
+		// TTY_FORCE + TERM=xterm-256color: the fake terminal is not a TTY,
+		// so without the pin lipgloss strips every style and the box
+		// chrome (the border line) never renders.
+		teatest.WithProgramOptions(tea.WithEnvironment([]string{
+			"TTY_FORCE=1", "TERM=xterm-256color",
+		})),
+	)
+	teatest.WaitFor(t, tm.Output(), hasLine("New session"), teatest.WithDuration(5*time.Second))
+	tm.Send(press('n'))
+	teatest.WaitFor(t, tm.Output(), hasLine("esc abort/back"), teatest.WithDuration(5*time.Second))
+	suiteType(tm, "do it")
+	tm.Send(press(tea.KeyEnter))
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		s := stripANSI(string(b))
+		// (a) the error box row: border + 2 padding spaces + the message
+		// (the synthetic note line is the bare text, no box border).
+		box := strings.Contains(s, "│  boom")
+		// (b) the S5.6 turn-error bell: the terminal bell byte in the raw
+		// stream (attention.go rings tea.Raw("\a")).
+		bell := bytes.Contains(b, []byte{0x07})
+		return box && bell
+	}, teatest.WithDuration(10*time.Second))
+	// the persistence leg (the onDone log line's wire-visible twin): the
+	// assistant row carries the unknown error in storage.
+	msgs := ts.LastMessages(t, a.curSessionID)
+	if len(msgs) != 2 {
+		t.Fatalf("messages = %d, want 2 (user + assistant)", len(msgs))
+	}
+	if msgs[0].Info.Error != nil {
+		t.Fatalf("user row carries an error: %+v", msgs[0].Info.Error)
+	}
+	if msgs[1].Info.Error == nil || msgs[1].Info.Error.Type != "unknown" || msgs[1].Info.Error.Message != "boom" {
+		t.Fatalf("assistant stored error = %+v, want unknown/boom", msgs[1].Info.Error)
+	}
+	_ = tm.Quit()
 	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 }

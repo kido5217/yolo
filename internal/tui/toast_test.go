@@ -64,21 +64,28 @@ func TestToastAutoClearTick(t *testing.T) {
 	}
 }
 
-func TestToastRendersAboveFooterInRed(t *testing.T) {
+func TestToastRendersAboveFooter(t *testing.T) {
 	a := testApp()
 	a.toast("boom")
 	raw := a.view()
-	if !strings.Contains(raw, "\x1b[38;5;196m") {
-		t.Fatal("toast block is not rendered in the red SGR")
-	}
-	lines := strings.Split(stripANSI(raw), "\n")
+	lines := strings.Split(raw, "\n")
+	var toastLine string
 	for i, l := range lines {
 		if strings.Contains(l, "boom") {
+			toastLine = l
 			if i == len(lines)-1 {
 				t.Fatal("toast rendered on the last line; it must stay above the footer")
 			}
-			return
+			break
 		}
 	}
-	t.Fatal("toast text missing from the view")
+	if toastLine == "" {
+		t.Fatal("toast text missing from the view")
+	}
+	// Zero-engine run: the toast block renders plain (no SGR from a missing
+	// token — S0.7 rule; the error token's SGR under the real engine is the
+	// same th.Error() the S0.10 golden pins as 38;5;246 — deviation 143).
+	if toastLine != stripANSI(toastLine) {
+		t.Fatalf("zero-theme toast line carries SGR:\n%q", toastLine)
+	}
 }

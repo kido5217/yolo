@@ -29,6 +29,7 @@ import (
 	"github.com/kido5217/yolo/internal/tui"
 	"github.com/kido5217/yolo/internal/tui/client"
 	"github.com/kido5217/yolo/internal/tui/store"
+	"github.com/kido5217/yolo/internal/tui/theme"
 )
 
 // version is injected at build time: -ldflags "-X main.version=..." (just build).
@@ -197,9 +198,60 @@ func tuiCmd(args []string) int {
 		}
 	}
 
-	app := tui.NewApp(cl, store.State{}, sessionID)
+	// Theme engine (S0.7): the config > KV > default selection chain
+	// over the TUI-local KV file. The config is loaded via the same
+	// profile-pinned loader buildDeps used (buildDeps consumes its
+	// config internally and does not return it).
+	globalDir, err := config.GlobalYoloDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "yolo: %v\n", err)
+		drain(deps, srv)
+		return 1
+	}
+	loader := config.Loader{Profile: deps.Dirs.Profile}
+	cfg, err := loader.LoadAt(filepath.Join(globalDir, deps.Dirs.Profile), wd)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "yolo: %v\n", err)
+		drain(deps, srv)
+		return 1
+	}
+	engine, err := theme.New(theme.EngineOptions{
+		KVPath:        filepath.Join(deps.Dirs.Data, "tui", "kv.json"),
+		GlobalYoloDir: globalDir,
+		CWD:           wd,
+		ConfigTheme:   cfg.Theme,
+		Palette:       theme.DetectStd,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "yolo: %v\n", err)
+		drain(deps, srv)
+		return 1
+	}
+	defer engine.Close()
+	if err := engine.Resolve(context.Background()); err != nil {
+		deps.Log.Error("theme resolve failed", "error", err)
+	}
+
+	app := tui.NewApp(cl, store.State{}, sessionID, engine)
+	// the keybinds config (S4.3): apply the yolo.jsonc keybinds overrides to
+	// the keymap registry (an unknown keybind is a config error — fail the
+	// start, matching the other config-load failures above).
+	if err := app.SetKeybinds(cfg.Keybinds); err != nil {
+		fmt.Fprintf(os.Stderr, "yolo: %v\n", err)
+		drain(deps, srv)
+		return 1
+	}
 	deps.Log.Info("tui start", "workdir", wd)
-	_, runErr := tea.NewProgram(app).Run()
+	program := tea.NewProgram(app)
+	// The theme watcher (S0.6) sends ThemeRefreshMsg into the running
+	// program; armed just before Run (a SIGUSR2 in the arm→Run gap
+	// reaches the program at its first flush — the first refresh leg
+	// runs one tick late at worst).
+	stopTheme := theme.WatchThemeSignals(func() {
+		program.Send(tui.ThemeRefreshMsg{})
+	})
+	defer stopTheme()
+	_, runErr := program.Run()
 	if runErr != nil {
 		// One line to stderr (no stack): a TUI start failure must be
 		// visible in the dead terminal, not only in the log (row 12).

@@ -35,13 +35,20 @@ func testApp(sessions ...protocol.Session) *recApp {
 
 func press(r rune) tea.KeyPressMsg {
 	switch r {
-	case tea.KeyUp, tea.KeyDown, tea.KeyEnter, tea.KeyEscape:
+	case tea.KeyUp, tea.KeyDown, tea.KeyEnter, tea.KeyEscape, tea.KeyLeft, tea.KeyRight, tea.KeyBackspace:
 		return tea.KeyPressMsg{Code: r}
 	}
 	return tea.KeyPressMsg{Code: r, Text: string(r)}
 }
 
 var ctrlCKey = tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}
+
+var (
+	ctrlDKey = tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl}
+	ctrlRKey = tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl}
+)
+
+func pressTab() tea.KeyPressMsg { return tea.KeyPressMsg{Code: '\t'} }
 
 func TestRelTime(t *testing.T) {
 	tests := []struct {
@@ -93,15 +100,24 @@ func TestHomeRenderLockedLayout(t *testing.T) {
 		},
 	)
 	div := strings.Repeat("─", 28)
-	want := "Yolo\n" +
-		div + "\n" +
-		"  \u25B8 New session\n" +
-		"  T1 \u00B7 kido/q \u00B7 2m\n" +
-		"  T2 \u00B7 opencode/gpt-5-nano \u00B7 3h\n" +
-		"  old \u00B7 kido/q \u00B7 4d\n" +
-		div + "\n" +
-		"\u2191/\u2193 move \u00B7 enter open \u00B7 n new \u00B7 /help"
-	got := stripANSI(a.home.render(&a.store, 80))
+	// S6.3 re-baseline: the tips seam (wired by NewApp) renders the
+	// NO_MODELS nudge after the help line — the testApp has sessions but
+	// no providers (!connected), so the forced NO_MODELS line is pinned
+	// regardless of tipIdx (one line, fits 80).
+	// S6.5 re-baseline: the footer seam's hint part (the S6.4 destination
+	// is omitted — Dir "") renders the hint-only line after the tips line
+	// (the default leader, the registry-rendered ctrl+x).
+	want := strings.Join(append(logoPlainLines(),
+		"  ▸ New session",
+		"  T1 · kido/q · 2m",
+		"  T2 · opencode/gpt-5-nano · 3h",
+		"  old · kido/q · 4d",
+		div,
+		"↑/↓ move · enter open · n new · /help",
+		"● Tip Run /connect to add an AI provider and start coding",
+		"Show keyboard shortcuts with ctrl+x",
+	), "\n")
+	got := stripANSI(a.home.render(&a.store, 80, a.theme))
 	if got != want {
 		t.Errorf("render mismatch:\ngot:\n%q\nwant:\n%q", got, want)
 	}

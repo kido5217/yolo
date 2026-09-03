@@ -16,6 +16,10 @@ import (
 	"github.com/kido5217/yolo/internal/tui/store"
 )
 
+// agent_test.go — the S2.10 restyle: the plain agent list is the select +
+// the yolo-pinned a/b subchoice (the list → select swap rides deviation 168's
+// family entry, 183).
+
 // agentApp builds a session-route app with the offline catalog hydrated.
 func agentApp() *recApp {
 	a := testApp()
@@ -36,59 +40,70 @@ func openAgentAt() *recApp {
 	return a
 }
 
-func agentBlock(t *testing.T, a *recApp, want string) {
-	t.Helper()
-	if got := stripANSI(a.dlg.agent().view(&a.store, 80)); got != want {
-		t.Errorf("agent dialog mismatch:\ngot:\n%q\nwant:\n%q", got, want)
-	}
-}
-
 func TestAgentDialogRender(t *testing.T) {
-	t.Run("current agent is marked", func(t *testing.T) {
+	t.Run("agents flatten into the select, the current one is marked", func(t *testing.T) {
 		a := openAgentAt()
-		want := "Agents\n" +
-			"  build*  The default agent. Executes tools based on configured permissions.\n" +
-			"  plan  Plan mode. Disallows all edit tools.\n" +
-			"  yolo  Yolo agent. Permits everything without prompts.\n" +
-			"  ↑/↓ move · enter set · esc close"
-		agentBlock(t, a, want)
-	})
-
-	t.Run("config agent marks the default when no session exists", func(t *testing.T) {
-		a := openAgentAt()
-		a.store.Current = nil
-		a.store.Config["agent"] = "plan"
-		want := "Agents\n" +
-			"  build  The default agent. Executes tools based on configured permissions.\n" +
-			"  plan*  Plan mode. Disallows all edit tools.\n" +
-			"  yolo  Yolo agent. Permits everything without prompts.\n" +
-			"  ↑/↓ move · enter set · esc close"
-		agentBlock(t, a, want)
+		got := stripANSI(a.dlg.agent().view(&a.store, 80, 24, a.theme))
+		if !strings.Contains(got, "Agents") {
+			t.Fatalf("title missing:\n%s", got)
+		}
+		if !strings.Contains(got, "●") {
+			t.Fatalf("current agent gutter missing:\n%s", got)
+		}
+		// agentFixture (model_test.go): build, plan, yolo — the session
+		// agent "build" carries the ● gutter
+		for _, tok := range []string{"build", "plan", "yolo"} {
+			if !strings.Contains(got, tok) {
+				t.Fatalf("agent %q missing:\n%s", tok, got)
+			}
+		}
 	})
 
 	t.Run("no agents renders the loading hint", func(t *testing.T) {
 		a := agentApp()
 		a.store.Agents = nil
 		a.openAgentDialog()
-		agentBlock(t, a, "Agents\n  loading…")
+		a.Cmds = nil
+		got := stripANSI(a.dlg.agent().view(&a.store, 80, 24, a.theme))
+		if !strings.Contains(got, "loading…") {
+			t.Fatalf("loading hint missing:\n%s", got)
+		}
+	})
+
+	t.Run("filter narrows the list", func(t *testing.T) {
+		a := openAgentAt()
+		a.handleKey(press('b')) // only "build" matches
+		got := stripANSI(a.dlg.agent().view(&a.store, 80, 24, a.theme))
+		if !strings.Contains(got, "build") || strings.Contains(got, "yolo ") {
+			t.Fatalf("filter did not narrow:\n%s", got)
+		}
+	})
+
+	t.Run("subchoice line is the locked [a]/[b] overlay", func(t *testing.T) {
+		a := openAgentAt()
+		a.handleKey(press(tea.KeyEnter))
+		got := stripANSI(a.dlg.agent().view(&a.store, 80, 24, a.theme))
+		if !strings.Contains(got, "[a] this session  [b] set default") {
+			t.Fatalf("subchoice missing:\n%s", got)
+		}
 	})
 }
 
 func TestAgentDialogKeys(t *testing.T) {
 	t.Run("down/up move with wraparound", func(t *testing.T) {
 		a := openAgentAt()
-		if got := a.dlg.agent().sel; got != 0 {
+		if got := a.dlg.agent().sel.sel; got != 0 {
 			t.Fatalf("initial sel = %d, want 0 (session agent build)", got)
 		}
 		a.handleKey(press(tea.KeyDown))
 		a.handleKey(press(tea.KeyDown))
-		if got := a.dlg.agent().sel; got != 2 {
+		if got := a.dlg.agent().sel.sel; got != 2 {
 			t.Fatalf("after two downs sel = %d, want 2 (yolo)", got)
 		}
 		a.handleKey(press(tea.KeyUp))
 		a.handleKey(press(tea.KeyUp))
 		a.handleKey(press(tea.KeyUp)) // wraps to the last agent
-		if got := a.dlg.agent().sel; got != 2 {
+		if got := a.dlg.agent().sel.sel; got != 2 {
 			t.Fatalf("after wrap sel = %d, want 2", got)
 		}
 	})
@@ -140,14 +155,14 @@ func TestAgentDialogKeys(t *testing.T) {
 		}
 	})
 
-	t.Run("list keys never fall through to the prompt", func(t *testing.T) {
+	t.Run("typed letters feed the filter, not the prompt", func(t *testing.T) {
 		a := openAgentAt()
 		a.handleKey(press('z'))
+		if got := a.dlg.agent().sel.input.Value(); got != "z" {
+			t.Fatalf("filter input = %q, want z (typed letters feed the select filter)", got)
+		}
 		if a.prompt.input.Value() != "" {
 			t.Fatalf("prompt input = %q, must stay empty while the dialog is open", a.prompt.input.Value())
-		}
-		if len(a.Cmds) != 0 {
-			t.Fatalf("key z emitted %d cmds, want 0", len(a.Cmds))
 		}
 	})
 }
@@ -227,15 +242,17 @@ func TestAgentDialogApply(t *testing.T) {
 }
 
 func TestAgentDialogOpen(t *testing.T) {
-	t.Run("ctrl+a opens the agent dialog", func(t *testing.T) {
+	t.Run("leader+a opens the agent dialog", func(t *testing.T) {
 		a := agentApp()
-		a.handleKey(pressCtrlA())
+		a.handleKey(pressLeader())
+		a.Cmds = nil
+		a.handleKey(press('a'))
 		d, ok := a.dlg.top()
 		if !ok || d.kind != dlgAgents || d.agent == nil {
-			t.Fatalf("after ctrl+a: top=%+v agentDlg=%v, want the agent dialog", d, d.agent)
+			t.Fatalf("after leader+a: top=%+v agentDlg=%v, want the agent dialog", d, d.agent)
 		}
 		if len(a.Cmds) != 1 {
-			t.Fatalf("ctrl+a emitted %d cmds, want the catalog fetch", len(a.Cmds))
+			t.Fatalf("leader+a emitted %d cmds, want the catalog fetch", len(a.Cmds))
 		}
 	})
 
@@ -248,19 +265,35 @@ func TestAgentDialogOpen(t *testing.T) {
 		}
 	})
 
-	t.Run("ctrl+a is ignored while a dialog is on top", func(t *testing.T) {
+	t.Run("leader is ignored while a dialog is on top", func(t *testing.T) {
 		a := agentApp()
 		a.dlg.push(dialog{kind: dlgQuit})
-		a.handleKey(pressCtrlA())
+		a.handleKey(pressLeader())
+		if a.pendingLeader {
+			t.Fatal("the leader must not arm while a dialog is open")
+		}
 		d, _ := a.dlg.top()
 		if d.kind != dlgQuit || a.dlg.agent() != nil {
-			t.Fatalf("ctrl+a must not stack dialogs: top=%+v agentDlg=%v", d, a.dlg.agent())
+			t.Fatalf("leader must not stack dialogs: top=%+v agentDlg=%v", d, a.dlg.agent())
+		}
+	})
+
+	t.Run("catalog msg hydrates the store and re-syncs the selection", func(t *testing.T) {
+		a := agentApp()
+		a.store.Agents = nil
+		a.openAgentDialog()
+		a.applyCatalog(catalogMsg{provs: providerFixture(), agents: agentFixture()})
+		sel := a.dlg.agent().sel
+		if sel == nil || sel.sel != 0 {
+			t.Fatalf("after catalog selection = %v, want 0 (session agent build)", sel)
 		}
 	})
 }
 
-// TestTUIAgentDialog is the teatest scenario: open the agent dialog with
-// ctrl+a, select the yolo agent, and set it for this session with [a].
+// TestTUIAgentDialog is the teatest scenario: open the agent dialog with the
+// /agents slash command (S4.2 remap: the ctrl+a opener frees to the prompt
+// input, deviation 211), filter to the yolo agent (typed letter), enter → the
+// subchoice, and set it for this session with [a].
 func TestTUIAgentDialog(t *testing.T) {
 	ts := testutil.Boot(t)
 	c := client.New(ts.URL, ts.Dir)
@@ -275,11 +308,13 @@ func TestTUIAgentDialog(t *testing.T) {
 
 	teatest.WaitFor(t, tm.Output(), hasLine("New session"), teatest.WithDuration(5*time.Second))
 
-	tm.Send(pressCtrlA())
+	for _, r := range "/agents" {
+		tm.Send(press(r))
+	}
+	tm.Send(press(tea.KeyEnter))
 	teatest.WaitFor(t, tm.Output(), hasAgentDialog, teatest.WithDuration(5*time.Second))
 
-	tm.Send(press(tea.KeyDown)) // plan
-	tm.Send(press(tea.KeyDown)) // yolo
+	tm.Send(press('y')) // filter: only yolo matches
 	tm.Send(press(tea.KeyEnter))
 	tm.Send(press('a')) // this session
 
@@ -300,7 +335,7 @@ func TestTUIAgentDialog(t *testing.T) {
 func hasAgentDialog(b []byte) bool {
 	s := stripANSI(string(b))
 	return strings.Contains(s, "Agents") &&
-		strings.Contains(s, "build*") &&
+		strings.Contains(s, "● build") &&
 		strings.Contains(s, "The default agent.") &&
 		strings.Contains(s, "yolo") &&
 		strings.Contains(s, "Yolo agent. Permits everything")

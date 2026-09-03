@@ -23,11 +23,16 @@ epic; `bd ready`) — the resume rail is beads → active spec/plan →
   contradictions resolve per "tests define the contract" (root principle 5)
   and the resolution is logged with severity.
 - Layout: `plans/<date>-<topic>.md` = dated implementation plans (one
-  active, named in the beads epic); `specs/<date>-<topic>-design.md` =
+  active, named in the beads epic); large slice-based plans use a directory
+  `plans/<date>-<topic>/` instead — `plan.md` (master: global constraints,
+   binding bead inventory, slice detail protocol) + one file per slice,
+   each a brief gated on its detail pass (fully detailed once its pass has
+   filled it; see `2026-08-24-opencode-tui-parity/` as the reference);
+   `specs/<date>-<topic>-design.md` =
   approved designs; `DEFERRED.md` = living 0.3.0 work list (OPEN items only;
   closed v0.1.2-review findings frozen in `deferred-archive.md`);
   `reviews/<version>/` = per-wave review findings (e.g. `v0.1.2/`).
-- Subagents strictly one at a time (root principle 7).
+- Subagents at most two at a time (root principle 7).
 
 ## Work Guidance
 

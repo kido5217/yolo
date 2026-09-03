@@ -18,7 +18,7 @@ type recApp struct {
 }
 
 func newRecApp(c *client.Service, s store.State, startSessionID string) *recApp {
-	ra := &recApp{App: NewApp(c, s, startSessionID)}
+	ra := &recApp{App: NewApp(c, s, startSessionID, nil)}
 	ra.emitSink = func(cmds ...tea.Cmd) { ra.Cmds = append(ra.Cmds, cmds...) }
 	return ra
 }
