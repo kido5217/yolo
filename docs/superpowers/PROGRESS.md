@@ -736,3 +736,23 @@ mentionOptions linear scan (bounded 1000×1000, perf note), AllThemes()
 re-parses the 33 embedded assets per call (low-frequency, sync.Once
 option), the epilogue parity-dump step carries an unused 5 s deadline
 (the real settle is the 2 s appendPump).
+Turn-failure wire surface (dev 263 closed, bead yolo-pht — the commit
+pinned "fix: surface turn failures on the wire (Message.Error, dev 263)"):
+the engine now puts a failed turn on the wire. On a failed turn (and on
+user abort, Type "aborted", message "aborted by the user") it persists
+protocol.MessageError on the current round's assistant message
+(message.error_json, migration 3) and publishes message.updated
+carrying the FULL message with Info.Error BEFORE the session.status
+idle — the ordering is load-bearing: the TUI's idle-bell condition (c)
+fires only when not errored, so the error event suppresses the
+done-bell (one bell, not two; upstream order is step.failed then
+idle), while the success path keeps its idle-only order. messageWire
+maps the field (omitempty — goldens byte-identical, verified); the
+S1.8 error box + S5.6 turn-error bell (dev 227 condition (d)) are now
+live on real failures, pinned by the real-stack TestTUIRealStackTurnError
+(fake-driver failure → box row + the bell byte + the stored row) and
+the session turnerror legs (unknown / aborted / no-error on success,
+overflow, and max-tool-rounds; error-before-idle order). A failure
+before any round started publishes nothing (the idle status is the
+surface); overflow and max-tool-rounds end idle without an error
+(non-failures, yolo model).

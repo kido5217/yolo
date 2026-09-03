@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -352,5 +354,57 @@ func TestTUILongReplyWraps(t *testing.T) {
 
 	tm.Send(ctrlCKey)
 	tm.Send(press('y'))
+	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
+}
+
+// TestTUIRealStackTurnError: the dev-263 acceptance test — a real turn
+// failure (the fake driver's pre-stream error, classified non-transient so
+// it reaches the pre-stream failure path without retry) surfaces in the TUI
+// over the wire: the S1.8 error box renders (the box's border+padding row,
+// not just the synthetic note line, which carries no box border) and the
+// S5.6 turn-error bell rings (deviation 227 condition (d) is now live on a
+// real failure). ONE merged condition — the teatest buffer-drain rule makes
+// consecutive WaitFors observe disjoint slices.
+func TestTUIRealStackTurnError(t *testing.T) {
+	drv := fake.New(fake.Turn{Err: errors.New("boom")})
+	ts := testutil.BootWithDriver(t, drv)
+	a := parityApp(t, ts)
+	tm := teatest.NewTestModel(t, a,
+		teatest.WithInitialTermSize(80, 24),
+		// TTY_FORCE + TERM=xterm-256color: the fake terminal is not a TTY,
+		// so without the pin lipgloss strips every style and the box
+		// chrome (the border line) never renders.
+		teatest.WithProgramOptions(tea.WithEnvironment([]string{
+			"TTY_FORCE=1", "TERM=xterm-256color",
+		})),
+	)
+	teatest.WaitFor(t, tm.Output(), hasLine("New session"), teatest.WithDuration(5*time.Second))
+	tm.Send(press('n'))
+	teatest.WaitFor(t, tm.Output(), hasLine("esc abort/back"), teatest.WithDuration(5*time.Second))
+	suiteType(tm, "do it")
+	tm.Send(press(tea.KeyEnter))
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		s := stripANSI(string(b))
+		// (a) the error box row: border + 2 padding spaces + the message
+		// (the synthetic note line is the bare text, no box border).
+		box := strings.Contains(s, "│  boom")
+		// (b) the S5.6 turn-error bell: the terminal bell byte in the raw
+		// stream (attention.go rings tea.Raw("\a")).
+		bell := bytes.Contains(b, []byte{0x07})
+		return box && bell
+	}, teatest.WithDuration(10*time.Second))
+	// the persistence leg (the onDone log line's wire-visible twin): the
+	// assistant row carries the unknown error in storage.
+	msgs := ts.LastMessages(t, a.curSessionID)
+	if len(msgs) != 2 {
+		t.Fatalf("messages = %d, want 2 (user + assistant)", len(msgs))
+	}
+	if msgs[0].Info.Error != nil {
+		t.Fatalf("user row carries an error: %+v", msgs[0].Info.Error)
+	}
+	if msgs[1].Info.Error == nil || msgs[1].Info.Error.Type != "unknown" || msgs[1].Info.Error.Message != "boom" {
+		t.Fatalf("assistant stored error = %+v, want unknown/boom", msgs[1].Info.Error)
+	}
+	_ = tm.Quit()
 	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 }

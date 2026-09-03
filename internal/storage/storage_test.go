@@ -280,6 +280,119 @@ func TestProtocolToPartTextStateJSONBytes(t *testing.T) {
 	}
 }
 
+// TestMessageErrorRoundTrip: the turn-failure error (migration 3
+// error_json) round-trips through create/list/get and SetMessageError; the
+// unset error stays nil (NULL), and the zero-rows update paths map to
+// ErrNotFound.
+func TestMessageErrorRoundTrip(t *testing.T) {
+	t.Parallel()
+	db := openDB(t)
+	if err := db.CreateSession(t.Context(), storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err != nil {
+		t.Fatal(err)
+	}
+	tc := int64(42)
+	if err := db.CreateMessage(t.Context(), storage.MessageRow{
+		ID: "msg_err", SessionID: "ses_1", Role: "assistant", TimeCreated: 2, TimeCompleted: &tc,
+		Error: &protocol.MessageError{Type: "unknown", Message: "boom"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CreateMessage(t.Context(), storage.MessageRow{ID: "msg_ok", SessionID: "ses_1", Role: "user", TimeCreated: 3}); err != nil {
+		t.Fatal(err)
+	}
+	msgs, err := db.ListMessages(t.Context(), "ses_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 2 {
+		t.Fatalf("len = %d, want 2", len(msgs))
+	}
+	if msgs[0].Error == nil || msgs[0].Error.Type != "unknown" || msgs[0].Error.Message != "boom" {
+		t.Fatalf("msg_err Error = %+v, want unknown/boom", msgs[0].Error)
+	}
+	if msgs[0].TimeCompleted == nil || *msgs[0].TimeCompleted != 42 {
+		t.Fatalf("msg_err TimeCompleted = %v, want 42 (the error column must not shift the row)", msgs[0].TimeCompleted)
+	}
+	if msgs[1].Error != nil {
+		t.Fatalf("msg_ok Error = %+v, want nil (NULL round trip)", msgs[1].Error)
+	}
+	row, err := db.GetMessage(t.Context(), "msg_err")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row.Error == nil || row.Error.Type != "unknown" || row.Error.Message != "boom" || row.Role != "assistant" {
+		t.Fatalf("GetMessage = %+v", row)
+	}
+	if err := db.SetMessageError(t.Context(), "msg_ok", protocol.MessageError{Type: "aborted", Message: "aborted by the user"}); err != nil {
+		t.Fatal(err)
+	}
+	back, err := db.GetMessage(t.Context(), "msg_ok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back.Error == nil || back.Error.Type != "aborted" || back.Error.Message != "aborted by the user" {
+		t.Fatalf("SetMessageError round trip = %+v", back.Error)
+	}
+	if back.Role != "user" || back.TimeCreated != 3 {
+		t.Fatalf("SetMessageError must not clobber the row: %+v", back)
+	}
+	if _, err := db.GetMessage(t.Context(), "msg_missing"); !errors.Is(err, storage.ErrNotFound) {
+		t.Fatalf("GetMessage missing id: want ErrNotFound, got %v", err)
+	}
+	if err := db.SetMessageError(t.Context(), "msg_missing", protocol.MessageError{Type: "unknown", Message: "x"}); !errors.Is(err, storage.ErrNotFound) {
+		t.Fatalf("SetMessageError missing id: want ErrNotFound, got %v", err)
+	}
+}
+
+// TestMessageErrorColumnUpgradeFromV2: an existing pre-v3 database (meta at
+// schema_version 2, no error_json column) upgrades in place to v3 with the
+// column present and round-tripping.
+func TestMessageErrorColumnUpgradeFromV2(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "yolo.db")
+	db, err := storage.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Downgrade to the pre-v3 shape: drop the column and pin the meta at 2,
+	// so the reopen runs the real ALTER TABLE upgrade of an existing DB.
+	if _, err := db.Exec(`ALTER TABLE message DROP COLUMN error_json`); err != nil {
+		t.Skipf("sqlite without DROP COLUMN support: %v", err)
+	}
+	if _, err := db.Exec(`UPDATE meta SET value='2' WHERE key='schema_version'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db, err = storage.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	v, err := db.SchemaVersion()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v != 3 {
+		t.Fatalf("schema version = %d, want 3 (in-place upgrade)", v)
+	}
+	if err := db.CreateSession(t.Context(), storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CreateMessage(t.Context(), storage.MessageRow{ID: "msg_1", SessionID: "ses_1", Role: "assistant", TimeCreated: 2,
+		Error: &protocol.MessageError{Type: "unknown", Message: "upgraded"}}); err != nil {
+		t.Fatalf("upgraded column unusable: %v", err)
+	}
+	row, err := db.GetMessage(t.Context(), "msg_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row.Error == nil || row.Error.Message != "upgraded" {
+		t.Fatalf("upgraded round trip = %+v", row.Error)
+	}
+}
+
 func TestNullColumnRoundTrips(t *testing.T) {
 	t.Parallel()
 	db := openDB(t)
@@ -467,8 +580,8 @@ func TestReopenAlreadyMigratedDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v != 2 {
-		t.Fatalf("schema version = %d, want 2", v)
+	if v != 3 {
+		t.Fatalf("schema version = %d, want 3", v)
 	}
 	row, err := db.GetSession(t.Context(), "ses_1")
 	if err != nil {

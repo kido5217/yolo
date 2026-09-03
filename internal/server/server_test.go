@@ -460,3 +460,78 @@ func TestSendLogsFailedTurn(t *testing.T) {
 		t.Fatalf("failed turn not logged to yolo.log:\n%s", data)
 	}
 }
+
+// TestSendSurfacesTurnErrorOnWire: a failed turn persists the MessageError
+// on the assistant row AND the message-list wire JSON carries the error
+// field (messageWire maps it); a clean turn's rows carry none.
+func TestSendSurfacesTurnErrorOnWire(t *testing.T) {
+	t.Parallel()
+	drv := fake.New(fake.Turn{Err: errors.New("boom")}, fake.AutoText())
+	s := testutil.BootWithDriver(t, drv)
+	// dir "" scopes every request at the server work dir (LastMessages
+	// reads there too), so the created session stays in scope.
+	resp, b := testutil.Req(t, s, "POST", "/session", "", `{}`)
+	if resp.StatusCode != 201 {
+		t.Fatalf("create session: %d %s", resp.StatusCode, b)
+	}
+	var ses struct {
+		ID string
+	}
+	if err := json.Unmarshal(b, &ses); err != nil {
+		t.Fatalf("unmarshal session: %v (%s)", err, b)
+	}
+	// failing turn (pre-stream driver error)
+	resp, b = testutil.Req(t, s, "POST", "/session/"+ses.ID+"/message", "", `{"text":"hi"}`)
+	if resp.StatusCode != 202 {
+		t.Fatalf("send: %d %s", resp.StatusCode, b)
+	}
+	s.WaitIdle(t, s.Dir, ses.ID)
+	msgs := s.LastMessages(t, ses.ID)
+	if len(msgs) != 2 {
+		t.Fatalf("messages = %d, want 2 (user + assistant)", len(msgs))
+	}
+	if msgs[0].Info.Error != nil {
+		t.Fatalf("user row carries an error: %+v", msgs[0].Info.Error)
+	}
+	if msgs[1].Info.Role != "assistant" {
+		t.Fatalf("second row role = %q, want assistant", msgs[1].Info.Role)
+	}
+	if msgs[1].Info.Error == nil || msgs[1].Info.Error.Type != "unknown" || msgs[1].Info.Error.Message != "boom" {
+		t.Fatalf("assistant wire error = %+v, want unknown/boom", msgs[1].Info.Error)
+	}
+	// the raw JSON carries the field for the errored row only (omitempty:
+	// the clean user row keeps its byte-identical shape).
+	resp, b = testutil.Req(t, s, "GET", "/session/"+ses.ID+"/message", "", "")
+	if resp.StatusCode != 200 {
+		t.Fatalf("list messages: %d %s", resp.StatusCode, b)
+	}
+	var raw []map[string]any
+	if err := json.Unmarshal(b, &raw); err != nil {
+		t.Fatalf("decode raw: %v (%s)", err, b)
+	}
+	for _, m := range raw {
+		info, _ := m["info"].(map[string]any)
+		if info == nil {
+			continue
+		}
+		id, _ := info["id"].(string)
+		if id == msgs[1].Info.ID {
+			if _, ok := info["error"]; !ok {
+				t.Fatalf("errored row JSON lacks the error key:\n%s", b)
+			}
+		}
+		if id == msgs[0].Info.ID {
+			if _, ok := info["error"]; ok {
+				t.Fatalf("clean row JSON carries an error key:\n%s", b)
+			}
+		}
+	}
+	// the stored row round-trips too (GetMessage)
+	row, err := s.DB.GetMessage(t.Context(), msgs[1].Info.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row.Error == nil || row.Error.Type != "unknown" || row.Error.Message != "boom" {
+		t.Fatalf("stored row error = %+v", row.Error)
+	}
+}

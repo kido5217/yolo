@@ -221,7 +221,7 @@ func (s *Server) handleSessionDelete(w http.ResponseWriter, r *http.Request) {
 func messageWire(m storage.MessageRow) protocol.Message {
 	out := protocol.Message{
 		ID: m.ID, SessionID: m.SessionID, Role: m.Role, Agent: m.Agent,
-		Cost: m.Cost, Tokens: &m.Tokens,
+		Cost: m.Cost, Tokens: &m.Tokens, Error: m.Error,
 		Time: protocol.MessageTime{Created: m.TimeCreated},
 	}
 	if m.TimeCompleted != nil {
