@@ -5,34 +5,34 @@ Resume rail: beads epic (`bd ready`) → active plan slice →
 
 ## Project
 
-**yolo** is a Go TUI + core-server harness in the lineage of [opencode](https://github.com/anomalyco/opencode) **v1.18.18** (TUI + core server only; web/desktop/slack/console dropped). It began as a faithful port whose purpose was to test the capabilities of **Qwen3.8-27B** on a single RTX 5090 behind `https://ai.kido.ws/v1` — that goal is complete (local Qwen 3.8 tested, stable, optimized; the v0.3.0 tree is the stable baseline). From v0.4.0 the project's purpose is to **test various LLM harnesses and frameworks** (yolo drives and evaluates other harnesses). opencode remains a **reference** for how things should be done, not a binding contract (core principle 2; spec `docs/superpowers/specs/2026-08-24-v0.4.0-design.md`).
+**yolo** is a Go TUI + core-server harness in the lineage of [opencode](https://github.com/anomalyco/opencode) **v1.18.18** (TUI + core server only; web/desktop/slack/console dropped). The v0.3.0 tree is the stable baseline. From v0.4.0 the project's purpose is to **test various LLM harnesses and frameworks** (yolo drives and evaluates other harnesses). opencode remains a **reference** for how things should be done, not a binding contract (principle 2; spec `docs/superpowers/specs/2026-08-24-v0.4.0-design.md`).
 
-- Module `github.com/kido5217/yolo`, binary `yolo`, Go ≥ 1.25.
 - Single binary: starts the core HTTP server (REST + SSE) **in-process**, then runs the bubbletea v2 TUI which talks to it **only** via the wire contract.
-- Core layering: `protocol` (wire DTOs, single source of truth) → `server` → `session` (agent loop) → `llm` / `provider` / `tool` / `permission` / `config` / `auth` / `storage` / `bus`.
-- **Dependency policy** — allowlist + agent-proposable; exact versions and the proposal procedure are in "Dependency policy" below.
+- Core layering and package map: `internal/AGENTS.md`.
+- **Dependency policy** — allowlist + agent-proposable (see `Dependency policy` below).
 
 ## Dependency policy
 
-Runtime deps are pinned at exact versions (`go.mod` is the current state). The
+Runtime deps are pinned at exact versions in `go.mod` (the single source of truth). The
 allowlist below is pre-approved; anything outside it requires an agent
 **dep proposal** (in the task's spec/plan or beads issue) BEFORE any
 `go get`/`go mod tidy`.
 
-**Allowlist** (module version — purpose):
+**Allowlist** (module — purpose):
 
-- `charm.land/bubbletea/v2` v2.0.9 — TUI engine
-- `charm.land/lipgloss/v2` v2.0.6 — styling
-- `charm.land/bubbles/v2` v2.2.1 — TUI components
-- `modernc.org/sqlite` v1.57.0 — pure-Go SQLite (no cgo)
-- `tidwall/jsonc` v0.3.3 — JSON-with-comments parsing
-- `github.com/aymanbagabas/go-udiff` v0.4.1 — Myers line diff
-- `github.com/charmbracelet/x/term` v0.2.2 — raw-mode tty for OSC palette detection (already in the graph via bubbletea v2)
-- `charm.land/glamour/v2` v2.0.1 — GFM markdown + chroma syntax highlighting for the transcript (also imports `glamour/ansi` + `chroma/v2/styles` for the global "charm" slot workaround)
-- `charm.land/huh/v2` v2.0.3 — field dialogs: alert/confirm/input
-- `github.com/sahilm/fuzzy` v0.1.3 — subsequence fuzzy filter for the select/palette
-- `github.com/spf13/cobra` v1.10.2 — the v0.6.0 CLI command/flag tree (Apache-2.0 accepted as permissive, so the checklist below reads MIT/BSD/Apache-2.0; transitive indirects `pflag` + `mousetrap`)
-- dev-only: `github.com/charmbracelet/x/exp/teatest/v2` v2.0.0-20260823001701-96af6d2cb5f6 — TUI golden testing; `go.uber.org/goleak` v1.3.0 — goroutine-leak detection via `VerifyTestMain` in the internal/session, internal/server and internal/bus test suites (zero new `go.mod` modules; its test-deps land in `go.sum` only)
+- `charm.land/bubbletea/v2` — TUI engine
+- `charm.land/lipgloss/v2` — styling
+- `charm.land/bubbles/v2` — TUI components
+- `modernc.org/sqlite` — pure-Go SQLite (no cgo)
+- `tidwall/jsonc` — JSON-with-comments parsing
+- `github.com/aymanbagabas/go-udiff` — Myers line diff
+- `github.com/charmbracelet/x/term` — raw-mode tty for OSC palette detection (already in the graph via bubbletea)
+- `charm.land/glamour/v2` — GFM markdown + chroma syntax highlighting for the transcript
+- `charm.land/huh/v2` — field dialogs: alert/confirm/input
+- `github.com/sahilm/fuzzy` — subsequence fuzzy filter for the select/palette
+- `github.com/spf13/cobra` — the v0.6.0 CLI command/flag tree (Apache-2.0 accepted as permissive, so the checklist below reads MIT/BSD/Apache-2.0)
+- `github.com/alecthomas/chroma/v2` — syntax-highlighting engine (direct dep of glamour)
+- dev-only: `github.com/charmbracelet/x/exp/teatest/v2` — TUI golden testing; `go.uber.org/goleak` — goroutine-leak detection via `VerifyTestMain` in the internal/session, internal/server and internal/bus test suites
 
 **Proposal procedure.** Each proposal names module + exact version, with evidence
 from **extensive web search** — the agent MUST treat its own memory as outdated:
@@ -47,26 +47,26 @@ allowlist above + a `docs/superpowers/PROGRESS.md` fact.
 
 | Topic | Source of truth |
 |---|---|
-| Task state (active, next, blocked) | **beads epic (`bd ready`) — read first on resume.** No file |
+| Task state (active, next, blocked) | **beads epic (`bd ready`) — read first on resume** |
 | Verified facts (do not re-litigate) | `docs/superpowers/PROGRESS.md` |
 | Deviation audit (append-only, principle 5) | `docs/superpowers/DEVIATIONS.md` |
-| 0.3.0 work list (deferred findings) | `docs/superpowers/DEFERRED.md` |
+| Deferred backlog (empty; next version seeds here) | `docs/superpowers/DEFERRED.md` |
 | Implementation plan | `docs/superpowers/plans/` — dated, one active at a time (named in the beads epic). **Read ONLY the active task slice** |
 | Approved design | `docs/superpowers/specs/` — dated, the active one is named in the beads epic. Zero-telemetry statement: `2026-08-17-yolo-go-port-design.md` §1 |
 | Upstream reference | `/tmp/opencode-upstream` — clone at tag `v1.18.18`. If missing: `git clone --depth 1 --branch v1.18.18 https://github.com/anomalyco/opencode /tmp/opencode-upstream`. **Never touch `/tmp/opencode`** — pre-existing user data |
-| Golang skills | `.agents/skills/` + `skills-lock.json` — 15 hash-locked (samber/cc-skills-golang) — see Skills below |
+| Golang skills | see `Golang skills` section below |
 
 ## Core principles (non-negotiable)
 
-1. **Zero telemetry.** yolo runs on the end user's machine and must contain zero telemetry: no usage data ever sent to any remote server, no opt-in telemetry. Upstream telemetry surfaces are **skipped, not deferred**: OTEL/OTLP exporter (`packages/core/src/observability/otlp.ts`), OpenTelemetry spans on LLM calls (`experimental.openTelemetry` / `experimental_telemetry` in `packages/opencode/src/session/llm.ts`), telemetry-identity field. `OTEL_*` env vars are inert; the ported config schema omits `experimental.openTelemetry`. Full statement: spec §1.
-2. **Reference, not contract.** opencode v1.18.18 is a *reference* for how things should be done, not a binding contract. The legacy REST paths/JSON shapes and the legacy SSE event set remain mirrored so the baseline stays verifiable against opencode's OpenAPI contract, but yolo may deviate from upstream (wire shapes, behavior, pinned text) on explicit user instruction — every such deviation is logged in `docs/superpowers/DEVIATIONS.md` with severity. Standing baseline deviation: the scoping header is **`x-yolo-directory`** (upstream: `x-opencode-directory`).
-3. **Pins are change gates, not upstream locks.** The 14 session prompt files and all tool `desc/*.txt` files are guarded by sha256 pins in tests. The pins record current intended content, not an upstream lock: pinned text may change in normal work, and an intentional change re-baselines the sha256 pin in the same commit. Never leave a pin dangling.
+1. **Zero telemetry.** yolo runs on the end user's machine and must contain zero telemetry: no usage data ever sent to any remote server, no opt-in telemetry. Upstream telemetry surfaces are **skipped, not deferred**: OTEL/OTLP exporter, OpenTelemetry spans on LLM calls, telemetry-identity field. `OTEL_*` env vars are inert; the ported config schema omits `experimental.openTelemetry`. Full statement: spec §1.
+2. **Reference, not contract.** opencode v1.18.18 is a *reference* for how things should be done, not a binding contract: yolo may deviate from upstream (wire shapes, behavior, pinned text) on explicit user instruction — every such deviation is logged in `docs/superpowers/DEVIATIONS.md` with severity. Standing baseline deviation: the scoping header is **`x-yolo-directory`** (upstream: `x-opencode-directory`).
+3. **Pins are change gates, not upstream locks.** Session prompt files and all tool `desc/*.txt` files are guarded by sha256 pins in tests. The pins record current intended content, not an upstream lock: pinned text may change in normal work, and an intentional change re-baselines the sha256 pin in the same commit. Never leave a pin dangling.
 4. **TUI is a pure client.** Non-test files under `internal/tui/` import only `internal/protocol` + `internal/tui/*` (+ stdlib/charm deps). `_test.go` may use `internal/server/testutil` (escape hatch). Enforced by `TestImportsDirection` (`internal/tui/imports_test.go`).
 5. **Tests define the contract.** When the plan contradicts itself (or its own test code is buggy), resolve per the last-stated call, fix the test, and **log the deviation in `docs/superpowers/DEVIATIONS.md`** with severity.
-6. **Task state in beads; proven knowledge in docs.** Track task state in beads — never duplicate it in files. A stale audit log is a broken resume. File shapes: "Commit & branch discipline."
+6. **Task state in beads; proven knowledge in docs.** Track task state in beads — never duplicate it in files. A stale audit log is a broken resume.
 7. **Subagents, at most one at a time.** Dispatch at most ONE subagent (via the `task` tool) at a time; wait for its full return before dispatching the next. This supersedes any plan/spec wording permitting parallel subagents.
 8. **YOLO spawns only YOLO.** If the root agent is `YOLO`, any subagent it spawns MUST also be `YOLO` — never dispatch a subagent of a different agent type.
-9. **Subagents for every task.** Every requested work item — change, review, audit, research, status report, or explanation — is executed by a subagent (via the `task` tool) whenever it needs repo legwork (file reads, searches, commands, history digging); never inline in the root agent. The test is cost, not form: the deliverable's shape (report, answer, diff) is irrelevant — what is minimized is the root's context, so only summaries and conclusions return. The root's inline surface is closed and limited to: bead lifecycle (claim/close), dispatch, reviewing returned summaries, gate verification, git/PR operations, and pure conversation requiring no repo legwork. Subagent type follows the work (`beads-task-agent` for beads work, `general`/`explore` for implementation/research, `YOLO` per principle 8). This pairs with principle 7 (one at a time) and supersedes any plan/spec wording implying inline root execution.
+9. **Subagents for every task.** Every requested work item — change, review, audit, research, status report, or explanation — is executed by a subagent (via the `task` tool) whenever it needs repo legwork (file reads, searches, commands, history digging); never inline in the root agent. The test is cost, not form: only summaries and conclusions return to the root. The root's inline surface is closed and limited to: bead lifecycle (claim/close), dispatch, reviewing returned summaries, gate verification, git/PR operations, and pure conversation requiring no repo legwork. Subagent type follows the work (`beads-task-agent` for beads work, `general`/`explore` for implementation/research, `YOLO` per principle 8). This pairs with principle 7 (one at a time) and supersedes any plan/spec wording implying inline root execution.
 
 ## Commands & verification
 
@@ -78,37 +78,38 @@ allowlist above + a `docs/superpowers/PROGRESS.md` fact.
 
 ## Commit & branch discipline
 
-- **NEVER commit directly onto `main`** (user directive, 2026-08-22). Every change —
+- **NEVER commit directly onto `main`** (user directive). Every change —
   code, docs, checkpoints, release bookkeeping — is committed on a task branch and
   reaches `main` only via a merged PR (branch → commit → push → PR → merge). The
-  agent merges its own task PRs itself once the CI gate is green (user go-ahead
-  2026-09-03); no further per-PR approval needed.
+  agent merges its own task PRs itself once the CI gate is green (user go-ahead);
+  no further per-PR approval needed. This go-ahead overrides the conservative git
+  default in the managed beads block.
 - Work happens inline on the current task branch (named with the active plan), **one task at a time**.
 - Conventional commits (`feat:`/`fix:`/`docs:`/`test:`/…, imperative, ≤ 72-char subject). Task commits use **the commit message pinned in the plan**. Between tasks: `docs: checkpoint — Task N (...) done, next is Task N+1`.
-- When a fact is proven or a deviation is logged, update `docs/superpowers/PROGRESS.md` (facts) / `docs/superpowers/DEVIATIONS.md` (audit) before moving on. **No per-task history in files, no plan-slice copies:** `git log --oneline` and the plan file are the archive. Deviations are append-only in `docs/superpowers/DEVIATIONS.md` (pre-v0.1.2 items 1–66 frozen in `docs/superpowers/deviations-archive-v0.1.0.md`).
-- **Tags ONLY with explicit user go-ahead.** Versioning: **semantic versioning** — `MAJOR.MINOR.PATCH`, MAJOR = breaking changes, MINOR = new features, PATCH = fixes.
+- When a fact is proven or a deviation is logged, update `docs/superpowers/PROGRESS.md` (facts) / `docs/superpowers/DEVIATIONS.md` (audit) before moving on. **No per-task history in files, no plan-slice copies:** `git log --oneline` and the plan file are the archive. Deviations are append-only in `docs/superpowers/DEVIATIONS.md` (archive: `deviations-archive-v0.1.0.md`).
+- Tags ONLY with explicit user go-ahead; versions are semver.
 
 ## Agent skills
 
 ### Issue tracker
 
-Issues live in beads (`bd` CLI / beads MCP) — local Dolt-backed store. See `docs/agents/issue-tracker.md`.
+Issues live in beads (`bd` CLI / beads MCP). See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
-Five canonical roles, label strings equal to role names. See `docs/agents/triage-labels.md`.
+Canonical triage roles. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
 Single-context: `CONTEXT.md` + `docs/adr/` at the repo root, created lazily. See `docs/agents/domain.md`.
 
-## Golang skills (15, in `.agents/skills/`, hash-locked in `skills-lock.json`)
+## Golang skills (15, samber/cc-skills-golang, in `.agents/skills/`, hash-locked in `skills-lock.json`)
 
 Invoke the relevant `golang-*` skill(s) **per task** — the harness skill list carries each skill's trigger. New code always pairs `golang-naming` + `golang-code-style`. Do not edit skills; they are pinned by hash.
 
 ## User Preferences
 
-- Harnesses: **opencode only** (yolo itself in the future). All agent logic
+- Harnesses: **opencode only**. All agent logic
   lives in `AGENTS.md`; the only managed block is `bd setup opencode` (do not
   hand-edit its markers). The project beads skill at `.agents/skills/beads/`
   is bd-managed and stays.
@@ -123,63 +124,7 @@ Invoke the relevant `golang-*` skill(s) **per task** — the harness skill list 
 
 - AGENTS.md files are binding work contracts for their subtrees
 - Work products, source materials, instructions, records, assets, and durable docs must stay understandable from the nearest applicable AGENTS.md plus every parent AGENTS.md above it
-
-## Read Before Editing
-
-1. Read the root AGENTS.md
-2. Identify every file or folder you expect to touch
-3. Walk from the repository root to each target path
-4. Read every AGENTS.md found along each route
-5. If a parent AGENTS.md lists a child AGENTS.md whose scope contains the path, read that child and continue from there
-6. Use the nearest AGENTS.md as the local contract and parent docs for repo-wide rules
-7. If docs conflict, the closer doc controls local work details, but no child doc may weaken DOX
-
-Do not rely on memory. Re-read the applicable DOX chain in the current session before editing.
-
-## Update After Editing
-
-Every meaningful change requires a DOX pass before the task is done.
-
-Update the closest owning AGENTS.md when a change affects:
-
-- purpose, scope, ownership, or responsibilities
-- durable structure, contracts, workflows, or operating rules
-- required inputs, outputs, permissions, constraints, side effects, or artifacts
-- user preferences about behavior, communication, process, organization, or quality
-- AGENTS.md creation, deletion, move, rename, or index contents
-
-Update parent docs when parent-level structure, ownership, workflow, or child index changes. Update child docs when parent changes alter local rules. Remove stale or contradictory text immediately. Small edits that do not change behavior or contracts may leave docs unchanged, but the DOX pass still must happen.
-
-## Hierarchy
-
-- Root AGENTS.md is the DOX rail: project-wide instructions, global preferences, durable workflow rules, and the top-level Child DOX Index
-- Child AGENTS.md files own domain-specific instructions and their own Child DOX Index
-- Each parent explains what its direct children cover and what stays owned by the parent
-- The closer a doc is to the work, the more specific and practical it must be
-
-## Child Doc Shape
-
-- Create a child AGENTS.md when a folder becomes a durable boundary with its own purpose, rules, responsibilities, workflow, materials, or quality standards
-- Work Guidance must reflect the current standards of the project or user instructions; if there are no specific standards or instructions yet, leave it empty
-- Verification must reflect an existing check; if no verification framework exists yet, leave it empty and update it when one exists
-
-Default section order:
-- Purpose
-- Ownership
-- Local Contracts
-- Work Guidance
-- Verification
-- Child DOX Index
-
-## Style
-
-- Keep docs concise, current, and operational
-- Document stable contracts, not diary entries
-- Put broad rules in parent docs and concrete details in child docs
-- Prefer direct bullets with explicit names
-- Do not duplicate rules across many files unless each scope needs a local version
-- Delete stale notes instead of explaining history
-- Trim obvious statements, repeated rules, misplaced detail, and warnings for risks that no longer exist
+- Full DOX rules (read-before-editing, update-after-editing, hierarchy, child doc shape, style): `docs/dox.md` — read it before editing any AGENTS.md
 
 ## Closeout
 
@@ -194,7 +139,7 @@ Default section order:
 
 - `internal/AGENTS.md` — core packages: package map, layering, pinned text, in-code zero telemetry (children: `internal/protocol`, `internal/tui`)
 - `docs/superpowers/AGENTS.md` — process memory: verified facts (PROGRESS.md), deviation audit (DEVIATIONS.md), 0.3.0 work list (DEFERRED.md), plans/specs/reviews layout
-- Root-owned files: `README.md`, `LICENSE`, `go.mod`, `justfile`, `.golangci.yml`, `.gitignore`, `skills-lock.json`, `cmd/`, `scripts/`, `.agents/skills/` (hash-locked golang skills; `.agents/skills/beads/` is bd-managed), `docs/agents/` (engineering-skill config), and root-level project documentation.
+- Root-owned (no child `AGENTS.md`): `README.md`, `LICENSE`, `go.mod`, `justfile`, `.golangci.yml`, `.gitignore`, `skills-lock.json`, `cmd/`, `scripts/`, `.agents/skills/` (hash-locked golang skills; `.agents/skills/beads/` is bd-managed), `docs/agents/` (engineering-skill config), `docs/dox.md`, and root-level project documentation.
 
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:full hash:19cc25d9 -->
