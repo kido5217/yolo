@@ -7,25 +7,25 @@
    "cols": 80,
    "name": "home",
    "rows": 24,
-   "sha256": "6d8d35aa37db6c935a1c1d8248b141ed813544244bdb6ea253049d464b1e6ae8"
+   "sha256": "22f4ee784c2f99a00b725ca955e0612d776a8f859fbbb6a71f3147ee718767c9"
   },
   {
    "cols": 80,
    "name": "session-text",
    "rows": 24,
-   "sha256": "404f4aa76a1e3163ecad7257232b8bb8c9774e1be701477133568568a5f31968"
+   "sha256": "9c921f2f5f945155e05322bfd3d131083b38852853375b47f27a2f8526f5bf3d"
   },
   {
    "cols": 80,
    "name": "session-tool",
    "rows": 24,
-   "sha256": "a2e71524c2ac85903e38f9e13173028076048e7a8d274e732f10022f7216b0dd"
+   "sha256": "052b6d691a2a2e35a0509c7d3628d971350d64e4df5bc02ef0e179e4f407f5af"
   },
   {
    "cols": 80,
    "name": "palette",
    "rows": 24,
-   "sha256": "66abc056c69b06f43ea0f145da035af6cc29e2e41bc73c929e4e155d7be6f2ec"
+   "sha256": "2a14fdee4b854118cbb014fb7759be520590cb8b0770156592fa0abdd4f746df"
   },
   {
    "cols": 80,
@@ -37,25 +37,25 @@
    "cols": 80,
    "name": "model",
    "rows": 24,
-   "sha256": "856354ef5d51f5b05216c441d3ddc96d65b7c0defa218ed9cb90220ee73ad30c"
+   "sha256": "c1d989e994240b20e61067d2e9a6c7a5a41be7bcb3f9120b5a026e6d7a4ddcff"
   },
   {
    "cols": 80,
    "name": "agent",
    "rows": 24,
-   "sha256": "d638bd7348e81f4321cd94280e2f5f31ead0a60625bbd8d982d6b480b8fdca5c"
+   "sha256": "00ed5edca72cc5b269d49120a0885903c03496b722406c1ca9ba740068d11f1f"
   },
   {
    "cols": 80,
    "name": "theme",
    "rows": 24,
-   "sha256": "d01811899497a04993cae7ece41df1e0fb3e794df299ba7d87af19084988355b"
+   "sha256": "706e476f5214bf2ee7c2bda76e9568f6ecf0ef7947f6ba5d7b5f3b852c66e953"
   },
   {
    "cols": 80,
    "name": "session-list",
    "rows": 24,
-   "sha256": "6f931ae75f2023aa39fdaa6289c81aa11674777afa30a0e93f6417eb9950534b"
+   "sha256": "aef5e2ae443fc8f0b1b56f541d170398d8b2fc5b5ac7ee93a2cdbbf9be345b0b"
   },
   {
    "cols": 80,
@@ -67,7 +67,7 @@
    "cols": 80,
    "name": "session-delete",
    "rows": 24,
-   "sha256": "0960dfaf52e1cf3736f469d95a22c8f176273d6c2ef9d4f1c226fb8944366070"
+   "sha256": "b005398aa90b7e9faf399382b1f7dac214a7645afd83a0182b9a202ba65b0da1"
   },
   {
    "cols": 80,
@@ -79,31 +79,31 @@
    "cols": 80,
    "name": "which-key",
    "rows": 24,
-   "sha256": "6d8d35aa37db6c935a1c1d8248b141ed813544244bdb6ea253049d464b1e6ae8"
+   "sha256": "22f4ee784c2f99a00b725ca955e0612d776a8f859fbbb6a71f3147ee718767c9"
   },
   {
    "cols": 140,
    "name": "sidebar",
    "rows": 30,
-   "sha256": "1fea114b5c1719b7267848c7ea531f0bfb3c764ae91e6b241ec2c319d94393d3"
+   "sha256": "c67b598f7326fb138ad1255002e4fdf6643a6ad8e93545fe99d800a486f47427"
   },
   {
    "cols": 80,
    "name": "prompt-slash",
    "rows": 24,
-   "sha256": "1045e99279dcc1e7e88b37c1f3bb4ffbf5c6ec1e24ff0d06b33a8aa9994ad5c3"
+   "sha256": "7a6ba6387b3d6c315bb7e7f91836130f98bb9bd39455e051f3f8f6f7640f926b"
   },
   {
    "cols": 80,
    "name": "prompt-mention",
    "rows": 24,
-   "sha256": "af110a7aea03fe6401471eff738bebc514df1c79dca4ef81f1e69da52928c80e"
+   "sha256": "ca7c7b4f6fd954627e2aee09ee619a31e8e76ff505f7f6e64ecee9c494e94aa1"
   },
   {
    "cols": 80,
    "name": "epilogue",
    "rows": 24,
-   "sha256": "986e37c4e0313b12d175e4538e1154679ffa045354543bc1e8c4d0b651e79b47"
+   "sha256": "639d30f43e1c064e0a5195231f2cf847b167ecc2ccbc530309259eca10ab2121"
   }
  ]
 }
