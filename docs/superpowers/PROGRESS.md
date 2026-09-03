@@ -854,3 +854,15 @@ no marker/store writes), so the machine output is a CLI-side presentation
 surface (structs in cmd/yolo/output.go), not a wire-contract change
 (principle 2). Shell-completion requests (`__complete`/`__completeNoDesc`)
 are exempt from the check.
+
+Dynamic shell completion (2026-09-04, yolo-k49, the v0.6.0 D1 "static only"
+follow-up): `--profile` (root TUI + `serve`) completes the profile ids and
+names from `config.List` (read-only, no DB — a completion request never
+creates the default profile, so a fresh root yields no candidates), and the
+root positional `sessionID` completes the session ids of the resolved
+`--dir` store (`db.ListSessions`, most-recently updated first, capped at 50)
+— the same single `<data>/yolo/storage/yolo.db` buildDeps opens. The
+functions live in `cmd/yolo/completion.go` and run in the short-lived
+`__complete` process the shell spawns: on any error (bad `--dir`, DB
+failure) they yield no candidates quietly (no stderr, exit 0) and stay
+read-only (no `EnsureActive`, no profile writes).
