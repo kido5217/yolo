@@ -6,6 +6,7 @@ import (
 )
 
 func TestWhichKeyEntriesBase(t *testing.T) {
+	t.Parallel()
 	a := testApp() // home route, base mode
 	a.pendingLeader = true
 	v := stripANSI(a.whichKeyView(80))
@@ -28,6 +29,7 @@ func TestWhichKeyEntriesBase(t *testing.T) {
 }
 
 func TestWhichKeyHiddenWhenNotPending(t *testing.T) {
+	t.Parallel()
 	a := testApp()
 	if v := a.whichKeyView(80); v != "" {
 		t.Fatalf("the overlay must be empty when the leader is not pending, got:\n%s", stripANSI(v))
@@ -35,6 +37,7 @@ func TestWhichKeyHiddenWhenNotPending(t *testing.T) {
 }
 
 func TestWhichKeyHiddenInModal(t *testing.T) {
+	t.Parallel()
 	a := testApp()
 	a.pendingLeader = true
 	a.openModelDialog()
@@ -47,6 +50,7 @@ func TestWhichKeyHiddenInModal(t *testing.T) {
 }
 
 func TestWhichKeyRegistryDriven(t *testing.T) {
+	t.Parallel()
 	a := testApp()
 	a.pendingLeader = true
 	if err := a.keymap.Set("model_list", "none"); err != nil {

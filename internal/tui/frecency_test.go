@@ -7,8 +7,10 @@ import (
 )
 
 func TestFrecencyScore(t *testing.T) {
+	t.Parallel()
 	now := int64(1_000_000_000_000)
 	t.Run("score = frequency / (1 + age-days)", func(t *testing.T) {
+		t.Parallel()
 		e := frecencyEntry{Frequency: 10, LastOpen: now - dayMs} // one day old
 		if got := frecencyScore(&e, now); math.Abs(got-5.0) > 1e-9 {
 			t.Fatalf("one day old = %v, want 5", got)
@@ -24,6 +26,7 @@ func TestFrecencyScore(t *testing.T) {
 }
 
 func TestUpdateFrecency(t *testing.T) {
+	t.Parallel()
 	entries := []frecencyEntry{{Path: "a", Frequency: 1, LastOpen: 1}}
 	got := updateFrecency(entries, "a", 100)
 	if len(got) != 1 || got[0].Frequency != 2 || got[0].LastOpen != 100 {
@@ -39,7 +42,9 @@ func TestUpdateFrecency(t *testing.T) {
 }
 
 func TestParseFrecency(t *testing.T) {
+	t.Parallel()
 	t.Run("dedupe by path (last wins)", func(t *testing.T) {
+		t.Parallel()
 		entries := []frecencyEntry{{Path: "a", Frequency: 1, LastOpen: 1}, {Path: "a", Frequency: 9, LastOpen: 2}}
 		got := parseFrecency(entries)
 		if len(got) != 1 || got[0].Frequency != 9 {
@@ -47,6 +52,7 @@ func TestParseFrecency(t *testing.T) {
 		}
 	})
 	t.Run("cap at 1000", func(t *testing.T) {
+		t.Parallel()
 		big := make([]frecencyEntry, 1200)
 		for i := range big {
 			big[i] = frecencyEntry{Path: fmt.Sprintf("p%d", i), Frequency: 1, LastOpen: int64(i)}

@@ -150,10 +150,6 @@ func tipLines(prefix string, parts []tipPart, w int) []tipLine {
 	if w < 1 || plain == "" {
 		return []tipLine{{runs: []tipRun{{prefix, 0}}}}
 	}
-	effW := w
-	if effW < 1 {
-		effW = 1
-	}
 	var (
 		lines []tipLine
 		cur   []tipWord
@@ -168,10 +164,10 @@ func tipLines(prefix string, parts []tipPart, w int) []tipLine {
 	}
 	for _, wd := range words {
 		fw := runeWidth(wd.word)
-		if fw > effW {
+		if fw > w {
 			flush()
 			for rest := wd.word; len(rest) > 0; {
-				chunk, r := cutWidth(rest, effW)
+				chunk, r := cutWidth(rest, w)
 				lines = append(lines, joinTipLine([]tipWord{{chunk, wd.kind}}))
 				rest = r
 			}
@@ -180,7 +176,7 @@ func tipLines(prefix string, parts []tipPart, w int) []tipLine {
 		switch {
 		case len(cur) == 0:
 			cur, curW = append(cur, wd), fw
-		case curW+1+fw <= effW:
+		case curW+1+fw <= w:
 			cur, curW = append(cur, wd), curW+1+fw
 		default:
 			flush()

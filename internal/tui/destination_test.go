@@ -15,26 +15,36 @@ import (
 
 // TestAbbrevHome pins the ported abbreviateHome (upstream runtime.tsx:3-10).
 func TestAbbrevHome(t *testing.T) {
-	cases := []struct{ dir, home, want string }{
-		{"/home/u/proj", "/home/u", "~/proj"},
-		{"/home/u", "/home/u", "~"},
-		{"/etc", "/home/u", "/etc"},
-		{"/home/u2/x", "/home/u", "/home/u2/x"},
-		{"/home/u/../etc", "/home/u", "/home/u/../etc"},
-		{"", "/home/u", ""},
-		{"/home/u", "", "/home/u"},
-		{"/tmp/xyz/001", "/home/u", "/tmp/xyz/001"},
+	t.Parallel()
+	cases := []struct {
+		name string
+		dir  string
+		home string
+		want string
+	}{
+		{"under home", "/home/u/proj", "/home/u", "~/proj"},
+		{"home itself", "/home/u", "/home/u", "~"},
+		{"outside home", "/etc", "/home/u", "/etc"},
+		{"sibling prefix", "/home/u2/x", "/home/u", "/home/u2/x"},
+		{"dotdot unresolved", "/home/u/../etc", "/home/u", "/home/u/../etc"},
+		{"empty dir", "", "/home/u", ""},
+		{"empty home", "/home/u", "", "/home/u"},
+		{"outside tmp", "/tmp/xyz/001", "/home/u", "/tmp/xyz/001"},
 	}
 	for _, c := range cases {
-		if got := abbrevHome(c.dir, c.home); got != c.want {
-			t.Fatalf("abbrevHome(%q, %q) = %q, want %q", c.dir, c.home, got, c.want)
-		}
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			if got := abbrevHome(c.dir, c.home); got != c.want {
+				t.Fatalf("abbrevHome(%q, %q) = %q, want %q", c.dir, c.home, got, c.want)
+			}
+		})
 	}
 }
 
 // TestSessionDestination pins the scope-dir resolution + the ""-Dir
 // omission (testApp) + the homeDir seam.
 func TestSessionDestination(t *testing.T) {
+	t.Parallel()
 	a := testApp() // Dir "" → the server work dir is unknown → omitted
 	if a.sessionDestination() != "" {
 		t.Fatal("an empty Dir must omit the destination")
@@ -56,6 +66,7 @@ func TestSessionDestination(t *testing.T) {
 // omitted only when both parts are empty, and its render slot (after the
 // help line + tips line, before the footer)).
 func TestHomeFooterLine(t *testing.T) {
+	t.Parallel()
 	a := testApp()
 	// destination omitted (Dir "") → the hint-only line
 	if got := stripANSI(a.homeFooterLine(80)); got != "Show keyboard shortcuts with ctrl+x" {
@@ -84,6 +95,7 @@ func TestHomeFooterLine(t *testing.T) {
 // leader (ctrl+x), the remap-sensitivity, and the leader-disabled
 // omission.
 func TestHomeShortcutsHint(t *testing.T) {
+	t.Parallel()
 	a := testApp()
 	if got := a.homeShortcutsHint(); got != "Show keyboard shortcuts with ctrl+x" {
 		t.Fatalf("hint = %q, want the default-leader form", got)
@@ -105,6 +117,7 @@ func TestHomeShortcutsHint(t *testing.T) {
 // TestHomeFooterLineWithHint pins the S6.5 parts join: destination +
 // hint " · "-joined, each part omittable, the dimmed single line.
 func TestHomeFooterLineWithHint(t *testing.T) {
+	t.Parallel()
 	a := testApp()
 	a.Service.Dir = "/home/u/proj"
 	a.homeDirFunc = func() string { return "/home/u" }

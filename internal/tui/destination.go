@@ -29,6 +29,8 @@ func (a *App) homeDir() string {
 	if a.homeDirFunc != nil {
 		return a.homeDirFunc()
 	}
+	// an unresolvable home degrades to "" (abbrevHome then returns the
+	// raw dir — no abbreviation, no error surface).
 	h, _ := os.UserHomeDir()
 	return h
 }

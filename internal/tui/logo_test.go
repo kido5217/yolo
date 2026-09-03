@@ -29,6 +29,7 @@ func logoBlockText() string {
 }
 
 func TestLogoBlockPinned(t *testing.T) {
+	t.Parallel()
 	sum := sha256.Sum256([]byte(logoBlockText()))
 	if got := hex.EncodeToString(sum[:]); got != wantLogoBlockSHA256 {
 		t.Fatalf("logo block sha256 = %s, want %s — re-baseline the pin in the same commit", got, wantLogoBlockSHA256)
@@ -47,6 +48,7 @@ func logoPlainLines() []string {
 // (nil-engine runs, S0.7): the plain translated glyphs, no SGR, never a
 // panic.
 func TestRenderLogoZeroThemeIsPlain(t *testing.T) {
+	t.Parallel()
 	var zero theme.Theme
 	got := renderLogo(zero)
 	want := strings.Join([]string{

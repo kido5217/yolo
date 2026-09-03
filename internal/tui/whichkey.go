@@ -111,7 +111,7 @@ func (km *Keymap) whichKeyEntries() []whichKeyEntry {
 	if !leader.enabled || len(leader.seqs) == 0 {
 		return nil
 	}
-	var out []whichKeyEntry
+	out := []whichKeyEntry{}
 	for _, name := range contextGroups[km.Current()] {
 		if name == "leader" {
 			continue
