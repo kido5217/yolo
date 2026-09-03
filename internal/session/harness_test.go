@@ -290,12 +290,12 @@ func statusType(t *testing.T, e protocol.Event) protocol.SessionStatus {
 func waitIdle(t *testing.T, h *harness, ses string, fn func()) {
 	t.Helper()
 	fn()
-	deadline := time.Now().Add(5 * time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
 	for h.eng.Status(ses) == protocol.SessionStatusBusy {
-		if time.Now().After(deadline) {
-			t.Fatal("engine did not go idle")
+		if err := h.eng.WaitIdle(ctx, ses); err != nil {
+			t.Fatalf("engine did not go idle: %v", err)
 		}
-		time.Sleep(10 * time.Millisecond)
 	}
 }
 

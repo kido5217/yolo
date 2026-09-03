@@ -3,6 +3,7 @@ package session_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -735,6 +736,60 @@ func TestAbortThenNewTurnCompletes(t *testing.T) {
 	}
 	if turn2Err != nil {
 		t.Fatalf("turn 2 failed after a prior Abort (stale cancel): %v", turn2Err)
+	}
+}
+
+// TestWaitIdleUnknownSession: WaitIdle returns nil immediately for a
+// session with no in-flight turn (unknown id or an idle session) — no
+// polling, no error (yolo-1vp settle API).
+func TestWaitIdleUnknownSession(t *testing.T) {
+	h := newHarness(t)
+	h.build(t)
+	ses := h.startSession(t, t.TempDir())
+	if err := h.eng.WaitIdle(t.Context(), protocol.NewID("ses")); err != nil {
+		t.Fatalf("WaitIdle(unknown session) = %v, want nil", err)
+	}
+	if err := h.eng.WaitIdle(t.Context(), ses); err != nil {
+		t.Fatalf("WaitIdle(idle session) = %v, want nil", err)
+	}
+}
+
+// TestWaitIdleSettlesOnTurnEnd: WaitIdle blocks while a turn is active and
+// returns nil once the turn releases the busy flag (event-driven settle
+// instead of a Status poll; the slow turn holds the busy window open).
+func TestWaitIdleSettlesOnTurnEnd(t *testing.T) {
+	h := newHarness(t)
+	h.build(t)
+	h.slowTurn = true // the slow stream holds the busy window open ~500 ms
+	ses := h.startSession(t, t.TempDir())
+	if _, err := h.eng.Send(t.Context(), ses, "hi", nil); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	waitBusy(t, h, ses)
+	if err := h.eng.WaitIdle(t.Context(), ses); err != nil {
+		t.Fatalf("WaitIdle = %v, want nil", err)
+	}
+	if st := h.eng.Status(ses); st != protocol.SessionStatusIdle {
+		t.Fatalf("status after WaitIdle = %q, want idle", st)
+	}
+}
+
+// TestWaitIdleContextCancel: WaitIdle returns the caller's context error
+// when the context cancels before the turn settles (the slow turn holds
+// the busy window open well past the 50 ms deadline).
+func TestWaitIdleContextCancel(t *testing.T) {
+	h := newHarness(t)
+	h.build(t)
+	h.slowTurn = true // the slow stream holds the busy window open ~500 ms
+	ses := h.startSession(t, t.TempDir())
+	if _, err := h.eng.Send(t.Context(), ses, "hi", nil); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	waitBusy(t, h, ses)
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond) // well inside the hold
+	defer cancel()
+	if err := h.eng.WaitIdle(ctx, ses); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("WaitIdle = %v, want context.DeadlineExceeded", err)
 	}
 }
 

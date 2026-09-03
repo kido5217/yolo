@@ -25,7 +25,7 @@ import (
 
 // ErrSessionBusy is returned by Send when the session already has an active
 // turn.
-var ErrSessionBusy = errors.New("session busy")
+var ErrSessionBusy = errors.New("session: already busy")
 
 // errRoundEnded marks a round already finalized inside streamWithRetry
 // (the overflow path): the caller ends the turn idle without reading a
@@ -85,8 +85,11 @@ type Engine struct {
 	clock     func() int64
 	backoff   func(attempt int) time.Duration
 
-	mu        sync.Mutex
-	busy      map[string]context.CancelFunc
+	mu   sync.Mutex
+	busy map[string]context.CancelFunc
+	// settle is closed when the session's in-flight turn ends: WaitIdle
+	// awaiters observe the settle event instead of polling the busy flag.
+	settle    map[string]chan struct{}
 	shells    map[string]*tool.Shell
 	titleCtx  map[string]*titleCancel
 	titleWait sync.WaitGroup
@@ -146,6 +149,7 @@ func New(d Deps) (*Engine, error) {
 		clock:     clock,
 		backoff:   backoff,
 		busy:      map[string]context.CancelFunc{},
+		settle:    map[string]chan struct{}{},
 		shells:    map[string]*tool.Shell{},
 		titleCtx:  map[string]*titleCancel{},
 		deleted:   map[string]struct{}{},
@@ -193,6 +197,7 @@ func (e *Engine) Send(ctx context.Context, sessionID, text string, onDone func(e
 	}
 	turnCtx, cancel := context.WithCancel(ctx)
 	e.busy[sessionID] = cancel
+	e.settle[sessionID] = make(chan struct{})
 	e.mu.Unlock()
 
 	now := e.clock()
@@ -259,6 +264,27 @@ func (e *Engine) Abort(sessionID string) bool {
 	return active
 }
 
+// WaitIdle blocks until the session's in-flight turn releases the busy flag
+// (its settle signal) or ctx is done, returning ctx.Err() on cancellation.
+// An idle or unknown session returns nil immediately. It awaits the settle
+// event instead of polling Status; the channel is captured under the engine
+// lock, so a turn that ends between the capture and the select has already
+// closed it and the wait returns at once.
+func (e *Engine) WaitIdle(ctx context.Context, sessionID string) error {
+	e.mu.Lock()
+	ch := e.settle[sessionID]
+	e.mu.Unlock()
+	if ch == nil {
+		return nil
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-ch:
+		return nil
+	}
+}
+
 // Close tears down the session's per-work resources: it aborts the
 // in-flight turn, suppresses further events for the session, and closes the
 // bash shell only after the turn settles (bounded wait, then hard close).
@@ -279,17 +305,16 @@ func (e *Engine) Close(sessionID string) {
 
 // settleAndClose waits for the session's in-flight turn to release the busy
 // flag (bounded to 2 s; the Close abort unblocks it, so the wait is short in
-// practice) before closing the shell.
+// practice) before closing the shell. It awaits the settle event (WaitIdle)
+// instead of a status poll; the recheck loop covers a fresh turn that takes
+// the busy slot in the settle window (the wait stays bounded by the ctx).
 func (e *Engine) settleAndClose(sessionID string, s *tool.Shell) {
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		e.mu.Lock()
-		_, busy := e.busy[sessionID]
-		e.mu.Unlock()
-		if !busy || time.Now().After(deadline) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	for e.Status(sessionID) == protocol.SessionStatusBusy {
+		if err := e.WaitIdle(ctx, sessionID); err != nil {
 			break
 		}
-		time.Sleep(5 * time.Millisecond)
 	}
 	_ = s.Close()
 }
@@ -314,18 +339,25 @@ func (e *Engine) Shutdown(ctx context.Context) {
 	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
 		deadline = d
 	}
-	tick := time.NewTicker(10 * time.Millisecond)
-	defer tick.Stop()
+	waitCtx, waitCancel := context.WithDeadline(context.Background(), deadline)
+	defer waitCancel()
 	for {
 		e.mu.Lock()
-		drained := len(e.busy) == 0
+		ids := make([]string, 0, len(e.busy))
+		for id := range e.busy {
+			ids = append(ids, id)
+		}
 		e.mu.Unlock()
-		if drained || time.Now().After(deadline) {
+		if len(ids) == 0 || time.Now().After(deadline) {
 			break
 		}
-		select {
-		case <-ctx.Done():
-		case <-tick.C:
+		// Await this snapshot's settles instead of ticking: a turn that
+		// ends and a replacement that starts in between surface on the
+		// next snapshot pass (the wait stays bounded by waitCtx).
+		for _, id := range ids {
+			if err := e.WaitIdle(waitCtx, id); err != nil {
+				break
+			}
 		}
 	}
 	// Title side-calls are tracked the same way: the bounded wait keeps
@@ -353,13 +385,23 @@ func (e *Engine) Shutdown(ctx context.Context) {
 	}
 }
 
+// endTurn releases the session's busy flag and signals the settle (the
+// WaitIdle awaiters) in one atomic step.
+func (e *Engine) endTurn(sessionID string) {
+	e.mu.Lock()
+	delete(e.busy, sessionID)
+	if ch := e.settle[sessionID]; ch != nil {
+		close(ch)
+		delete(e.settle, sessionID)
+	}
+	e.mu.Unlock()
+}
+
 // releaseBusy drops the session's busy entry without publishing a status:
 // the turn goroutine never started, so no client observed a busy — a lone
 // idle would be a transition with no observed start (spec §3.1 B).
 func (e *Engine) releaseBusy(sessionID string) {
-	e.mu.Lock()
-	delete(e.busy, sessionID)
-	e.mu.Unlock()
+	e.endTurn(sessionID)
 }
 
 func (e *Engine) publish(t string, props any) {
@@ -530,9 +572,7 @@ func (e *Engine) runTurn(ctx context.Context, t *turn, onDone func(error)) {
 			SessionID: t.sessionID,
 			Status:    protocol.SessionStatus{Type: protocol.SessionStatusIdle},
 		})
-		e.mu.Lock()
-		delete(e.busy, t.sessionID)
-		e.mu.Unlock()
+		e.endTurn(t.sessionID)
 		if onDone != nil {
 			onDone(turnErr)
 		}
@@ -658,7 +698,7 @@ func (e *Engine) buildRequest(ctx context.Context, t *turn) (llm.Request, error)
 }
 
 func (e *Engine) loadHistory(ctx context.Context, t *turn) ([]string, []protocol.MessageWithParts, error) {
-	sys, err := BuildSystemPrompt(t.row.ProjectDir, t.model, t.model.ID, t.info.ID)
+	sys, err := BuildSystemPrompt(t.row.ProjectDir, t.model.ID, t.info.ID)
 	if err != nil {
 		return nil, nil, err
 	}
