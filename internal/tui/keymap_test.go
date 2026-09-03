@@ -353,3 +353,29 @@ func TestAppSetKeybinds(t *testing.T) {
 		t.Fatal("SetKeybinds on an unknown key must error (a config error)")
 	}
 }
+
+// TestLeaderReArmIgnoresStaleTimeout pins the timeout generation guard:
+// re-arming the leader inside the pending window starts a fresh timeout,
+// and the first (stale) tick — which bubbletea v2 cannot cancel — must not
+// clear the re-armed pending state (a stale clear would drop the combo key
+// at the old deadline).
+func TestLeaderReArmIgnoresStaleTimeout(t *testing.T) {
+	a := testApp()
+	a.handleKey(pressLeader())
+	stale := a.leaderGen
+	a.handleKey(pressLeader())
+	if !a.pendingLeader {
+		t.Fatal("a leader keypress while pending must re-arm the pending state")
+	}
+	if stale == a.leaderGen {
+		t.Fatal("re-arming the leader must advance the timeout generation")
+	}
+	a.Update(leaderTimeoutMsg{gen: stale})
+	if !a.pendingLeader {
+		t.Fatal("a stale timeout must not clear the re-armed pending leader")
+	}
+	a.Update(leaderTimeoutMsg{gen: a.leaderGen})
+	if a.pendingLeader {
+		t.Fatal("the current timeout must clear the pending leader")
+	}
+}

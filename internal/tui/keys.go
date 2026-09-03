@@ -63,10 +63,14 @@ func (a *App) handleKey(k tea.KeyPressMsg) []tea.Cmd {
 func (a *App) handleAppKeys(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 	km := a.keymap
 	// The leader binding arms (or re-arms, while pending) the pending state
-	// and consumes the key (a leader keypress while pending re-arms).
+	// and consumes the key (a leader keypress while pending re-arms). Each
+	// (re-)arm advances the generation, so the stale tick left in flight by
+	// the previous arm (bubbletea v2 has no tick cancellation) cannot clear
+	// the fresh pending state.
 	if km.Match("leader", k) {
 		a.pendingLeader = true
-		return []tea.Cmd{leaderTick()}, true
+		a.leaderGen++
+		return []tea.Cmd{leaderTick(a.leaderGen)}, true
 	}
 	if a.pendingLeader {
 		// A second key: match a <leader> continuation (base group order); a
@@ -87,9 +91,10 @@ func (a *App) handleAppKeys(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 	return nil, false
 }
 
-// leaderTick arms the leader timeout (the ported registerTimedLeader tick).
-func leaderTick() tea.Cmd {
-	return tea.Tick(LeaderTimeout, func(time.Time) tea.Msg { return leaderTimeoutMsg{} })
+// leaderTick arms the leader timeout (the ported registerTimedLeader tick)
+// for the given arming generation.
+func leaderTick(gen uint64) tea.Cmd {
+	return tea.Tick(LeaderTimeout, func(time.Time) tea.Msg { return leaderTimeoutMsg{gen: gen} })
 }
 
 // matchLeaderContinuation matches a second key against the base group's

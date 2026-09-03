@@ -38,8 +38,13 @@ type themeReapplyMsg struct{} // 250 ms leg: regenerate the system theme
 type themeCustomsMsg struct{} // 1000 ms leg: system theme + customs re-discovery
 
 // leaderTimeoutMsg clears the pending leader (the ported registerTimedLeader
-// timeout — the pending sequence expires after LeaderTimeout).
-type leaderTimeoutMsg struct{}
+// timeout — the pending sequence expires after LeaderTimeout). gen is the
+// arming generation: bubbletea v2 has no tick cancellation, so a re-arm
+// leaves the stale tick in flight and a stale timeout must not clear the
+// re-armed pending state.
+type leaderTimeoutMsg struct {
+	gen uint64
+}
 
 // themeRefreshDelays mirrors upstream THEME_REFRESH_DELAYS
 // (theme.tsx:82): the 250 ms leg re-generates the system theme; the
@@ -91,6 +96,7 @@ type App struct {
 	retrySuppressed map[string]bool
 	keymap          *Keymap // the keymap registry (S4.2)
 	pendingLeader   bool    // the leader pending state is armed
+	leaderGen       uint64  // the leader timeout generation (stale ticks are ignored)
 	// S5.1 prompt history: the entries (most-recent LAST, in-memory until
 	// S5.2's KV load), the recall index (0 = present, -1 = newest, -len =
 	// oldest), the text last set by a recall (the dirty guard), and the
@@ -323,7 +329,9 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 		a.removeToast(m.id)
 		return nil
 	case leaderTimeoutMsg:
-		a.pendingLeader = false
+		if m.gen == a.leaderGen {
+			a.pendingLeader = false
+		}
 		return nil
 	case abortedMsg:
 		if m.err != nil {

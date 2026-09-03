@@ -144,13 +144,18 @@ type chatRequest struct {
 	} `json:"messages"`
 }
 
+// hasToolResult reports whether the request is the tool-result follow-up of
+// the scripted turn. The mock is a single-turn canned driver (one prompt →
+// one tool call → one tool result → ToolReply); the check is therefore keyed
+// off the LAST message (a tool result, or an assistant tool call re-posted
+// without a result), NOT a history scan — a new user prompt after a
+// completed tool turn is a fresh turn, not a follow-up.
 func (q chatRequest) hasToolResult() bool {
-	for _, m := range q.Messages {
-		if m.Role == "tool" || (m.Role == "assistant" && len(m.ToolCalls) > 0) {
-			return true
-		}
+	if len(q.Messages) == 0 {
+		return false
 	}
-	return false
+	last := q.Messages[len(q.Messages)-1]
+	return last.Role == "tool" || (last.Role == "assistant" && len(last.ToolCalls) > 0)
 }
 
 // The wire shapes (field order = byte order — the determinism pin).

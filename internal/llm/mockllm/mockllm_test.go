@@ -326,3 +326,45 @@ func TestCannedMatchesDefault(t *testing.T) {
 		t.Fatalf("canned.json drifted from DefaultBook:\n got %+v\nwant %+v", b, DefaultBook())
 	}
 }
+
+// TestNewPromptAfterToolTurnIsNotToolReply pins the single-turn scope: the
+// tool-result follow-up is keyed off the LAST message — a new user prompt
+// after a completed tool turn is a fresh turn, not a tool-result follow-up
+// (a history-scoped check would answer it with the canned tool reply); the
+// mock re-streams the scripted tool call (the first-prompt behavior).
+func TestNewPromptAfterToolTurnIsNotToolReply(t *testing.T) {
+	body, err := json.Marshal(map[string]any{
+		"stream": true,
+		"messages": []any{
+			map[string]string{"role": "user", "content": "run the parity check"},
+			map[string]any{
+				"role":    "assistant",
+				"content": "",
+				"tool_calls": []any{map[string]any{
+					"id":       "call_canned1",
+					"function": map[string]string{"name": "bash", "arguments": toolCannedArgs},
+				}},
+			},
+			map[string]string{"role": "tool", "tool_call_id": "call_canned1", "content": "parity-ok\n"},
+			map[string]string{"role": "user", "content": "something new"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	p := postStream(t, toolCanned(), string(body))
+	fs := frames(t, p)
+	if len(fs) != 5 {
+		t.Fatalf("frame count = %d, want 5 (the scripted tool call re-streamed, not the tool reply)", len(fs))
+	}
+	if fr := fs[3].Choices[0].FinishReason; fr == nil || *fr != "tool_calls" {
+		t.Fatalf("finish = %+v, want tool_calls (a new prompt must not be answered with the canned tool reply)", fs[3])
+	}
+	var joined string
+	for _, f := range fs[1 : len(fs)-2] {
+		joined += f.Choices[0].Delta.Content
+	}
+	if joined == toolCannedReply {
+		t.Fatalf("a new prompt after a tool turn was answered with the canned tool reply")
+	}
+}
