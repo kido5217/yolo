@@ -8,3 +8,8 @@ e2e-live:
 
 wiki-stale:
     scripts/wiki-stale.sh
+
+# Parity capture (S8.2) — on-demand, user-run, NEVER CI: re-captures the
+# 17 upstream pty fixtures + MANIFEST.json. See scripts/parity/capture.sh.
+parity-capture:
+    bash scripts/parity/capture.sh
