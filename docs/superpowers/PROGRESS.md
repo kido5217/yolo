@@ -24,17 +24,29 @@ cycling, shell engine/endpoint/TUI mode, tips, deviations closeout); the
 0.8.0 deviations (MCP-omission extends 193, `auto` omission, consolidated
 tip drops, git-env hardening, bubbles v2.2.1 width-exact render) land in
 Task 12. Implementation in flight on `feature/0.8.0-home-mock`: Task 1
-(plain-semver version plumbing, Q10) and Task 2 (VCS branch detection,
-core) landed — `plainSemver` (`internal/tui/version.go`), `App.version` +
-`SetVersion` (the SetKeybinds post-construction pattern,
-`internal/tui/app.go`), the `app.SetVersion(version)` wiring
-(`cmd/yolo/main.go`), and `internal/tui/vcs.go` (the `findGitRoot` upward
-`.git` walk — file OR directory — `gitBranch` with the pinned upstream
-`cfg` arg prefix + the decision-4 exit table (0 -> trimmed stdout, any
-other exit / ErrNotFound / deadline / no `.git` -> none, no spawn without
-`.git`), and `sanitizedGitEnv` hardening — the 5 repo-redirecting `GIT_*`
-vars stripped, `GIT_TERMINAL_PROMPT=0` exactly once); next is Task 3 (VCS
-App wiring: bootstrap + re-reads).
+(plain-semver version plumbing, Q10), Task 2 (VCS branch detection, core)
+and Task 3 (VCS App wiring: bootstrap + re-reads, decision-4 cadence —
+ONE bootstrap fetch + HEAD-change re-reads, no polling) landed —
+`plainSemver` (`internal/tui/version.go`), `App.version` + `SetVersion`
+(the SetKeybinds post-construction pattern, `internal/tui/app.go`), the
+`app.SetVersion(version)` wiring (`cmd/yolo/main.go`), `internal/tui/vcs.go`
+(the `findGitRoot` upward `.git` walk — file OR directory — `gitBranch`
+with the pinned upstream `cfg` arg prefix + the decision-4 exit table (0
+-> trimmed stdout, any other exit / ErrNotFound / deadline / no `.git`
+-> none, no spawn without `.git`), `sanitizedGitEnv` hardening — the 5
+repo-redirecting `GIT_*` vars stripped, `GIT_TERMINAL_PROMPT=0` exactly
+once), and Task 3's App wiring (`internal/tui/app.go`: `App.branch` +
+`branchDir` (the stale-fetch race guard) + `branchMsg`, `branchCmd` (the
+scope dir AT LAUNCH capture, 5s ctx + 5s exec timeout), the `branchMsg`
+apply guard (launch-time dir must equal the current scope dir),
+`enterHome` (the repickTip + branchCmd home-entry hook, wired at the three
+plan-named sites — session esc-when-idle + the two `applySessionDelete`
+route-home legs; `NewApp` keeps `repickTip`, the `Init` bootstrap covers
+it), the `Init` bootstrap fetch, and the `branchReRead` EventMsg hook —
+a completed `bash` tool part on the current session, the `onAttention`
+batching precedent — + `vcs_wiring_test.go` (guard/enterHome/hook
+whitebox + the real-stack local-git leg; deviations 271–273); next is
+Task 4 (Home layout frame (E: layout + footer)).
 
 **Status (2026-09-04):** v0.6.0 map (epic `yolo-o75`) complete — the P4
 backlog ships as minor v0.6.0 on top of v0.5.1 (`9f4c340`): cobra v1.10.2
