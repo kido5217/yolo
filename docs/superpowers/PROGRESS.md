@@ -5,8 +5,9 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
-**Status (2026-09-07):** 0.8.0 start-screen parity epic (`yolo-dhf`) at plan
-stage — all three map tickets closed: gap inventory (Q1–Q10) on `yolo-dhf.1`
+**Status (2026-09-07):** 0.8.0 start-screen parity epic (`yolo-dhf`) at
+execution stage — all three map tickets closed: gap inventory
+(Q1–Q10) on `yolo-dhf.1`
 (research doc on branch `research/0.8.0-start-screen-gaps` @ `7f86081`, read
 via `git show`), the user-confirmed render policy on `yolo-dhf.2` (agent
 cycling WIRED; home submit FIXED; FULL shell mode via
@@ -22,7 +23,12 @@ plumbing, VCS branch detection, home frame, prompt box, submit fix, agent
 cycling, shell engine/endpoint/TUI mode, tips, deviations closeout); the
 0.8.0 deviations (MCP-omission extends 193, `auto` omission, consolidated
 tip drops, git-env hardening, bubbles v2.2.1 width-exact render) land in
-Task 12. Implementation branch: `plan/0.8.0-start-screen-parity`.
+Task 12. Implementation in flight on `feature/0.8.0-home-mock`: Task 1
+(plain-semver version plumbing, Q10) landed — `plainSemver`
+(`internal/tui/version.go`), `App.version` + `SetVersion` (the SetKeybinds
+post-construction pattern, `internal/tui/app.go`), the
+`app.SetVersion(version)` wiring (`cmd/yolo/main.go`), unit tests; next is
+Task 2 (VCS branch detection, core).
 
 **Status (2026-09-04):** v0.6.0 map (epic `yolo-o75`) complete — the P4
 backlog ships as minor v0.6.0 on top of v0.5.1 (`9f4c340`): cobra v1.10.2
