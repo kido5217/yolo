@@ -13,7 +13,6 @@ import (
 
 	"github.com/kido5217/yolo/internal/server/testutil"
 	"github.com/kido5217/yolo/internal/tui/client"
-	"github.com/kido5217/yolo/internal/tui/store"
 	"github.com/kido5217/yolo/internal/tui/theme"
 )
 
@@ -33,6 +32,7 @@ var homeFrameSGRTokens = []string{
 	"38;5;75",  // box border fg (secondary)
 	"48;5;234", // box interior bg (backgroundElement)
 	"38;5;244", // footer dir muted (textMuted)
+	"38;5;255", // box meta model name + hint shortcuts (text)
 }
 
 // TestHomeFrameSGR is the teatest SGR golden for the 0.8.0 start-screen
@@ -65,7 +65,10 @@ func TestHomeFrameSGR(t *testing.T) {
 	// the footer's branch segment reads the scope dir's attached branch.
 	runGit(t, ts.Dir, "init", "-q", "-b", "yolo-wire-branch")
 	c := client.New(ts.URL, ts.Dir)
-	a := NewApp(c, store.State{}, "", e)
+	// the homeMeta test seam catalog (the kido provider / "Qwen" model) —
+	// the meta line reads store.Providers (applyHydrate overwrites
+	// store.Config on the home route, never the providers).
+	a := NewApp(c, metaCatalog(), "", e)
 	a.SetVersion("v0.8.0-4-gabcdef")
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a,
@@ -79,7 +82,8 @@ func TestHomeFrameSGR(t *testing.T) {
 	)
 
 	// ONE merged condition (consecutive WaitFors drain each other): the
-	// frame's SGR tokens (box border fg, interior bg, footer muted) + the
+	// frame's SGR tokens (box border fg, interior bg, footer muted, text) +
+	// the box's Task-5 content (placeholder, meta line, hint line) + the
 	// footer's dir :branch suffix + the plain-semver version.
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
 		s := stripANSI(string(b))
@@ -91,7 +95,10 @@ func TestHomeFrameSGR(t *testing.T) {
 				return false
 			}
 		}
-		return strings.Contains(s, ":yolo-wire-branch") && strings.Contains(s, "0.8.0")
+		return strings.Contains(s, mockPlaceholder) &&
+			strings.Contains(s, "Build · Qwen kido") &&
+			strings.Contains(s, "tab agents  ctrl+p commands") &&
+			strings.Contains(s, ":yolo-wire-branch") && strings.Contains(s, "0.8.0")
 	}, teatest.WithDuration(5*time.Second))
 
 	_ = tm.Quit()

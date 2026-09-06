@@ -3,10 +3,13 @@ package tui
 import (
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
+	"github.com/kido5217/yolo/internal/tui/store"
 )
 
 // homeKeyMap is the home-route key set. Up/Down are SHARED bindings (the
@@ -36,35 +39,10 @@ const (
 	homeBoxPad      = 2
 )
 
-// boxBorder renders one border rune (the ┃ left edge / the ╹ bottom edge) in
-// the secondary token (the upstream agent/border color, prompt/index.tsx:1309
-// borderHighlight = the agent color at full fade); a zero Theme degrades to
-// the plain glyph.
-func (a *App) boxBorder(ch string) string {
-	if c, ok := a.theme.Color("secondary"); ok && c.A != 0 {
-		return lipgloss.NewStyle().Foreground(lipgloss.Color(c.Hex()[:7])).Render(ch)
-	}
-	return ch
-}
-
-// boxFill renders the box interior fill in the backgroundElement token
-// (the upstream prompt interior, prompt/index.tsx:1350-1512); a zero Theme
-// degrades to the plain text.
-func (a *App) boxFill(s string) string {
-	if c, ok := a.theme.Color("backgroundElement"); ok && c.A != 0 {
-		return lipgloss.NewStyle().Background(lipgloss.Color(c.Hex()[:7])).Render(s)
-	}
-	return s
-}
-
-// homeBox renders the 5 box rows (the 0.8.0 prompt box, mock rows 24..28 at
-// 200x50): the ┃ left border (rows 0..3) + the ╹ bottom edge (row 4), the
-// backgroundElement interior fill, and the blank interior (Task 4 — the
-// boxInputLine seam is the Task-5 placeholder, empty here). It reads a.size
-// itself (the house idiom, a.termWidth).
-func (a *App) homeBox() []string {
-	w := a.termWidth()
-	contentW := w - 4
+// boxWidth is the prompt box width (homeBoxMaxWidth clamped to the content
+// width; it reads a.size itself — the house idiom, a.termWidth).
+func (a *App) boxWidth() int {
+	contentW := a.termWidth() - 4
 	if contentW < 0 {
 		contentW = 0
 	}
@@ -72,26 +50,317 @@ func (a *App) homeBox() []string {
 	if boxW < 1 {
 		boxW = 1
 	}
-	fill := strings.Repeat(" ", boxW-1)
-	border := a.boxBorder("┃")
-	bottom := a.boxBorder("╹")
-	return []string{
-		border + a.boxFill(fill),
-		border + a.boxFill(fill),
-		border + a.boxFill(fill),
-		border + a.boxFill(fill),
-		bottom + a.boxFill(strings.Repeat("▀", boxW-1)),
+	return boxW
+}
+
+// boxInnerWidth is the box interior width in display cols (boxW-1-
+// 2*homeBoxPad, min 1 — the Task-4 constants).
+func (a *App) boxInnerWidth() int {
+	w := a.boxWidth() - 1 - 2*homeBoxPad
+	if w < 1 {
+		w = 1
+	}
+	return w
+}
+
+// boxHighlight is the border/agent-segment color token (upstream
+// prompt/index.tsx:1288-1293 highlight()): the leader pending state wins
+// ("border"), then the shell mode ("primary"), else the agent-color referent
+// (the "secondary" token — the mock's #5c9cf5).
+func (a *App) boxHighlight() string {
+	switch {
+	case a.pendingLeader:
+		return "border"
+	case a.prompt.mode == "shell":
+		return "primary"
+	default:
+		return "secondary"
 	}
 }
 
-// boxInputLine is the Task-5 seam: the box placeholder row (the mode pool).
-// Task 4 lands the empty-value stub so the gate is green; Task 5 replaces
-// the body in place (the homeBox interior picks it up).
-func (a *App) boxInputLine() string { return "" }
+// boxThemeReady reports whether the box interior can paint (a resolved
+// theme with a visible backgroundElement token); a zero Theme (the whitebox
+// tests) degrades every box run to plain text — the house zero-theme
+// convention (the SGR bytes would break the width-exact plain assertions).
+func (a *App) boxThemeReady() bool {
+	c, ok := a.theme.Color("backgroundElement")
+	return ok && c.A != 0
+}
 
-// homeHintLine is the Task-5 seam: the box hint row (the shortcuts line).
-// Task 4 lands the blank stub; Task 5 fills it.
-func (a *App) homeHintLine() string { return "" }
+// boxInterior renders an interior run s: the fg token (when non-empty) +
+// the backgroundElement bg; a zero Theme degrades to the plain text.
+func (a *App) boxInterior(fgToken, s string) string {
+	bg, ok := a.theme.Color("backgroundElement")
+	if !ok || bg.A == 0 {
+		return s
+	}
+	st := lipgloss.NewStyle().Background(lipgloss.Color(bg.Hex()[:7]))
+	if fgToken != "" {
+		if c, ok := a.theme.Color(fgToken); ok && c.A != 0 {
+			st = st.Foreground(lipgloss.Color(c.Hex()[:7]))
+		}
+	}
+	return st.Render(s)
+}
+
+// boxFg renders a fg-only run s (no bg — the ▀ bottom edge); a zero Theme
+// degrades to the plain text.
+func (a *App) boxFg(fgToken, s string) string {
+	if c, ok := a.theme.Color(fgToken); ok && c.A != 0 {
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(c.Hex()[:7])).Render(s)
+	}
+	return s
+}
+
+// boxBorder renders one border rune (the ┃ left edge / the ╹ bottom edge) in
+// the highlight token (upstream prompt/index.tsx:1309 borderHighlight); a
+// zero Theme degrades to the plain glyph.
+func (a *App) boxBorder(ch string) string {
+	if c, ok := a.theme.Color(a.boxHighlight()); ok && c.A != 0 {
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(c.Hex()[:7])).Render(ch)
+	}
+	return ch
+}
+
+// boxCursor renders the cursor cell: the char with Reverse(true) — the same
+// reverse-block idiom the rest of the app's static cursor uses (the bubbles
+// cursor.View, Blink=false), no explicit fg/bg (the terminal default pen
+// supplies them); a zero Theme degrades to the plain char.
+func (a *App) boxCursor(ch string) string {
+	if !a.boxThemeReady() {
+		return ch
+	}
+	return lipgloss.NewStyle().Reverse(true).Render(ch)
+}
+
+// homeBox renders the 5 prompt-box rows (mock rows mockBoxTop..+4):
+//
+//	row0 border + interior fill
+//	row1 border + 2 pad + the input line (boxInputLine)
+//	row2 border + fill
+//	row3 border + 2 pad + the meta line (boxMetaLine)
+//	row4 the corner (╹, the highlight color) + the bottom (▀ x boxW-1,
+//	     fg backgroundElement)
+//
+// The interior runs (fill/pad/text/meta) carry the backgroundElement bg; the
+// border/corner fg is the highlight token (boxHighlight) with no bg. Every
+// interior cell is a styled run — NO unstyled gap inside the box (the fill
+// width is width-exact: the row is boxW display cols from boxL). A zero
+// Theme degrades to plain runs.
+func (a *App) homeBox() []string {
+	boxW := a.boxWidth()
+	rowFill := a.boxInterior("", strings.Repeat(" ", boxW-1))
+	pad := a.boxInterior("", strings.Repeat(" ", homeBoxPad))
+	border := a.boxBorder("┃")
+	bottom := a.boxBorder("╹")
+	return []string{
+		border + rowFill,
+		border + pad + a.boxInputLine(),
+		border + rowFill,
+		border + pad + a.boxMetaLine(),
+		bottom + a.boxFg("backgroundElement", strings.Repeat("▀", boxW-1)),
+	}
+}
+
+// boxInputLine renders the value/placeholder at the interior width (a custom
+// render — NOT input.View(): bubbles v2.2.1's View/placeholderView render
+// Width+1 display cols (an off-by-one padding quirk) and the textinput's
+// scroll offset is not exported; the box needs width-exact rows, the mock
+// contract):
+//
+//	value == "" -> the placeholder (fg textMuted, bg backgroundElement) +
+//	               fill; NO cursor cell (the mock contract: the placeholder
+//	               state shows no reverse block — upstream's placeholder
+//	               cursor is same-styled and the mock is the visual contract)
+//	value != "" -> pre (fg text, bg) + the cursor cell + post (fg text, bg)
+//	               + fill; the cursor cell = the char at input.Position()
+//	               (a " " when at the end), the boxCursor reverse block.
+//	Scroll: when the value's DISPLAY width (runeWidth) > innerW, the visible
+//	window is innerW columns starting at column min(posCols, valueW-innerW)
+//	where posCols = runeWidth(value[:pos]) — the value end-anchored when the
+//	cursor is at/near the end, the cursor kept in view when moved left (the
+//	session route's own textinput scroll is a richer referent; the box
+//	surface pins this simpler window — logged as a deviation, Task 12).
+//	Width-exact: pre+cursor+post+fill = innerW display cols, every cell a
+//	styled run (no unstyled gap). It computes innerW itself from the size —
+//	the Task-4 constants; it takes no width argument.
+func (a *App) boxInputLine() string {
+	innerW := a.boxInnerWidth()
+	value := a.prompt.input.Value()
+	if value == "" {
+		ph := a.prompt.placeholderText()
+		if len(ph) > innerW {
+			ph, _ = cutWidth(ph, innerW)
+		}
+		return a.boxInterior("textMuted", ph) + a.boxInterior("", strings.Repeat(" ", innerW-len(ph)))
+	}
+	pos := a.prompt.input.Position()
+	vW := runeWidth(value)
+	posCols := runeWidth(value[:pos])
+	start := 0
+	if vW > innerW {
+		start = min(posCols, vW-innerW)
+	}
+	_, tail := cutWidth(value, start)
+	window, _ := cutWidth(tail, innerW)
+	rel := posCols - start
+	if rel > innerW {
+		rel = innerW
+	}
+	preW := min(rel, innerW-1)
+	pre, rest := cutWidth(window, preW)
+	cur, post := " ", ""
+	if pos < len(value) {
+		// the char at the cursor: the first rune of rest (the cursor col
+		// is inside the window here — rel < innerW). At the end (pos ==
+		// len(value)) the cursor block occupies the window's last cell and
+		// the trailing char is pushed out (post stays "").
+		r, size := utf8.DecodeRuneInString(rest)
+		cur = string(r)
+		post = rest[size:]
+	}
+	line := a.boxInterior("text", pre) + a.boxCursor(cur) + a.boxInterior("text", post)
+	return line + a.boxInterior("", strings.Repeat(" ", innerW-preW-1-runeWidth(post)))
+}
+
+// homeMeta returns the meta-line segments (decision 6: NO auto word):
+//
+//	agent    = titlecase(pendingAgentName()) — locale.titlecase, the
+//	           "build" -> "Build" referent
+//	model    = the config model ref's catalog NAME (Provider.Models[mid]
+//	           .Name, the modelOptions referent), falling back to the
+//	           ref's modelID; an unparseable config model is the raw ref
+//	           segment (no provider segment); when config has no model ref:
+//	           the FIRST catalog provider's first model (modelsOf order —
+//	           the upstream fallbackModel's final step); when there is no
+//	           provider at all: the model+provider segments are omitted
+//	           (the upstream no-currentModel shape — agent alone)
+//	provider = the ref's provider ID (the mock contract: the ID, NOT the
+//	           catalog name — the deviation is logged in Task 12; upstream
+//	           parsed() uses name ?? id)
+func (a *App) homeMeta() (agent, model, provider string) {
+	agent = titlecase(a.pendingAgentName())
+	if s, ok := a.store.Config["model"].(string); ok && s != "" {
+		pid, mid, parsed := splitModelRef(s)
+		if !parsed {
+			return agent, s, ""
+		}
+		if name, found := catalogModelName(&a.store, pid, mid); found {
+			return agent, name, pid
+		}
+		return agent, mid, pid
+	}
+	if len(a.store.Providers) > 0 {
+		if ms := modelsOf(a.store.Providers[0]); len(ms) > 0 {
+			return agent, ms[0].Name, a.store.Providers[0].ID
+		}
+	}
+	return agent, "", ""
+}
+
+// pendingAgentName is the home pending agent: the pinned name (a.pendingAgent,
+// set by Task 7's cycle) when set, else the config default (the
+// store.Config["agent"] string), else "build" (the storage column default —
+// internal/storage/migrate.go:23).
+func (a *App) pendingAgentName() string {
+	if a.pendingAgent != "" {
+		return a.pendingAgent
+	}
+	if s, ok := a.store.Config["agent"].(string); ok && s != "" {
+		return s
+	}
+	return "build"
+}
+
+// catalogModelName is the catalog NAME of a model ref (the
+// Provider.Models[mid].Name referent — modelOptions): found when both the
+// provider and the model are in the catalog.
+func catalogModelName(st *store.State, pid, mid string) (string, bool) {
+	for _, p := range st.Providers {
+		if p.ID != pid {
+			continue
+		}
+		if m, ok := p.Models[mid]; ok {
+			return m.Name, true
+		}
+	}
+	return "", false
+}
+
+// boxMetaLine renders the meta line at the interior width: the agent segment
+// (the highlight color) + (normal mode only, when a model is resolved)
+// " " plain + "·" muted + " " plain + model (text) + (when a provider is
+// resolved) " " plain + provider (muted); the tail is the interior fill.
+// Shell mode renders the "Shell" label alone (upstream
+// prompt/index.tsx:1450-1482: the model/provider box is inside the
+// normal-mode Show). Width-exact: the line is boxInnerWidth display cols
+// (an over-wide line on a narrow terminal is cut, not wrapped).
+func (a *App) boxMetaLine() string {
+	type seg struct {
+		text string
+		fg   string // "" = plain (the interior bg only)
+	}
+	agent, model, provider := a.homeMeta()
+	label := agent
+	segs := []seg{{label, a.boxHighlight()}}
+	if a.prompt.mode != "shell" && model != "" {
+		segs = append(segs,
+			seg{" ", ""},
+			seg{"·", "textMuted"},
+			seg{" ", ""},
+			seg{model, "text"},
+		)
+		if provider != "" {
+			segs = append(segs, seg{" ", ""}, seg{provider, "textMuted"})
+		}
+	}
+	var b strings.Builder
+	for _, s := range segs {
+		b.WriteString(a.boxInterior(s.fg, s.text))
+	}
+	innerW := a.boxInnerWidth()
+	content := b.String()
+	cw := ansiWidth(content)
+	if cw > innerW {
+		content, _ = ansiCutWidth(content, innerW)
+		cw = innerW
+	}
+	if cw < innerW {
+		content += a.boxInterior("", strings.Repeat(" ", innerW-cw))
+	}
+	return content
+}
+
+// homeHintLine renders the hint row (mock row mockHintRow, origin at the box
+// LEFT border col, upstream prompt/index.tsx:1655-1690):
+//
+//	normal mode: {Format("agent_cycle")} agents  {Format("command_list")}
+//	commands — shortcuts fg text, the words (" agents"/" commands") fg
+//	textMuted, the 2-col gap (box gap 2). A "none" Format (a user-disabled
+//	binding) drops its segment; both none -> blank row.
+//	shell mode: `esc` (fg text) + ` exit shell mode` (fg textMuted) — the
+//	upstream color split (the yolo-dhf.2 note's "(esc muted)" is a
+//	shorthand; the strict-copy bar pins the upstream source).
+func (a *App) homeHintLine() string {
+	if a.prompt.mode == "shell" {
+		return a.boxFg("text", "esc") + a.boxFg("textMuted", " exit shell mode")
+	}
+	var b strings.Builder
+	seg := func(name, word string) {
+		f := a.keymap.Format(name)
+		if f == "none" {
+			return
+		}
+		if b.Len() > 0 {
+			b.WriteString("  ") // the 2-col gap
+		}
+		b.WriteString(a.boxFg("text", f))
+		b.WriteString(a.boxFg("textMuted", word))
+	}
+	seg("agent_cycle", " agents")
+	seg("command_list", " commands")
+	return b.String()
+}
 
 // homeFooterContentRow renders the 0.8.0 frame footer content row (the
 // 3-row footer block's middle row): the dir (muted) at col 2 =
@@ -203,10 +472,7 @@ func (a *App) homeView(menu, acMenu, perm, toasts, dlg, wk string) string {
 	if logoPad < 0 {
 		logoPad = 0
 	}
-	boxW := min(homeBoxMaxWidth, contentW)
-	if boxW < 1 {
-		boxW = 1
-	}
+	boxW := a.boxWidth()
 	boxL := 2 + (contentW-boxW+1)/2
 	if boxL < 0 {
 		boxL = 0

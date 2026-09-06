@@ -100,6 +100,7 @@ type App struct {
 	retrySuppressed map[string]bool
 	keymap          *Keymap // the keymap registry (S4.2)
 	pendingLeader   bool    // the leader pending state is armed
+	pendingAgent    string  // the home pending agent ("build" default; Task 7's cycle pins it)
 	leaderGen       uint64  // the leader timeout generation (stale ticks are ignored)
 	// S5.1 prompt history: the entries (most-recent LAST, in-memory until
 	// S5.2's KV load), the recall index (0 = present, -1 = newest, -len =
@@ -201,6 +202,11 @@ func NewApp(c *client.Service, s store.State, startSessionID string, engine *the
 		a.curSessionID = startSessionID
 	}
 	a.retheme()
+	// the prompt chrome for the starting route (Task 5): the home box
+	// interior width + the placeholder; the session route keeps the w-3
+	// line and clears the placeholder (no leak onto the session line).
+	a.prompt.mode = "normal"
+	a.applyPromptChrome()
 	a.loadHistory()
 	a.loadFrecency()
 	a.loadTipsHidden()
@@ -229,6 +235,30 @@ func (a *App) SetVersion(v string) { a.version = v }
 
 // Close stops the SSE pump. Call it once the program exits.
 func (a *App) Close() { a.stop() }
+
+// applyPromptChrome sizes the shared prompt input for the active route and
+// sets/clears its Placeholder (the box never uses input.View() — it renders
+// its own rows — but the SESSION route does, so the placeholder must not
+// leak onto the session line):
+//
+//	home    -> SetWidth(boxInnerWidth()) + Placeholder = placeholderText()
+//	session -> SetWidth(w-3) (the WindowSizeMsg rule) + Placeholder = ""
+//
+// Callers: NewApp (after the route is known), openSession (-> session), the
+// enterHome sites (-> home), WindowSizeMsg (both routes), and the shell-mode
+// toggle (Task 10 — the placeholder switches in place).
+func (a *App) applyPromptChrome() {
+	switch a.route {
+	case routeHome:
+		a.prompt.input.SetWidth(a.boxInnerWidth())
+		a.prompt.input.Placeholder = a.prompt.placeholderText()
+	default: // routeSession
+		if w := a.termWidth(); w > 3 {
+			a.prompt.input.SetWidth(w - 3)
+		}
+		a.prompt.input.Placeholder = ""
+	}
+}
 
 // termWidth is the terminal width with the pre-WindowSizeMsg fallback (the
 // session route uses the same 80 for the viewport).
@@ -269,11 +299,11 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 	switch m := msg.(type) {
 	case tea.WindowSizeMsg:
 		a.size = m
-		// textinput's View is prompt(2) + width + cursor(1): subtract all
-		// three so the prompt line never exceeds the terminal width.
-		if m.Width > 3 {
-			a.prompt.input.SetWidth(m.Width - 3)
-		}
+		// the prompt chrome for the active route (Task 5): the home box
+		// interior width + the placeholder; the session route's w-3 line
+		// (textinput's View is prompt(2) + width + cursor(1), so the line
+		// never exceeds the terminal width).
+		a.applyPromptChrome()
 		// The transcript is word-wrapped at the viewport width: re-wrap on
 		// resize instead of clipping at the stale width.
 		a.sess.isDirty = true
@@ -613,11 +643,11 @@ func (a *App) branchReRead(ev protocol.Event) tea.Cmd {
 }
 
 // enterHome is the home-entry hook: re-roll the tip index (the upstream
-// per-mount re-roll) and arm the branch re-read. Callers batch the
-// returned cmd. (The placeholder-index re-roll joins this hook in Task
-// 5 — the call sites do not change.)
+// per-mount re-roll), re-roll the placeholder index (Task 5 — the active
+// mode's pool), and arm the branch re-read. Callers batch the returned cmd.
 func (a *App) enterHome() tea.Cmd {
 	a.repickTip()
+	a.rollPlaceholder()
 	return a.branchCmd()
 }
 

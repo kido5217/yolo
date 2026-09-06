@@ -63,10 +63,15 @@ func TestHomeViewFrame(t *testing.T) {
 		atFrame(t, rows, mockBoxTop+i, mockBoxL, "┃")
 	}
 	atFrame(t, rows, mockBoxTop+4, mockBoxL, "╹")
-	// the hint row (the Task-4 blank stub) is blank at the box edge.
-	if got := rowSegment(rows[mockHintRow], mockBoxL, 10); got != strings.Repeat(" ", 10) {
-		t.Fatalf("hint row %d = %q, want blank", mockHintRow, got)
-	}
+	// the box interior (Task 5): the placeholder at the 2-pad col (the
+	// pool's first entry), and the meta line (the testApp has no providers
+	// and no config model → the agent segment alone).
+	m := mockBoxL + 1 + mockBoxPad
+	atFrame(t, rows, mockBoxTop+1, m, "Ask anything... ")
+	atFrame(t, rows, mockBoxTop+3, m, "Build")
+	// the hint row at the box edge (the defaults tab / ctrl+p, the 2-col
+	// gap).
+	atFrame(t, rows, mockHintRow, mockBoxL, "tab agents  ")
 	// the tip row (the NO_MODELS nudge — testApp has no providers) centered in
 	// the box: rowL = boxL + (boxW-rowW+1)/2 (ceil-first).
 	tipPlain := "● Tip Run /connect to add an AI provider and start coding"

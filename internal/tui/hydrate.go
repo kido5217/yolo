@@ -167,4 +167,7 @@ func (a *App) putSessionFirst(s protocol.Session) {
 func (a *App) openSession(id string) {
 	a.route = routeSession
 	a.curSessionID = id
+	// the session-route prompt chrome (Task 5): the w-3 line + the cleared
+	// placeholder (no leak from the home box).
+	a.applyPromptChrome()
 }

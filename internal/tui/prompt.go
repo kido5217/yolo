@@ -20,6 +20,51 @@ type promptModel struct {
 	input textinput.Model
 	sel   int
 	draft strings.Builder
+	// mode is the prompt input mode ("normal" | "shell" — the 0.8.0 box
+	// state; the toggles that change it land in Task 10).
+	mode string
+	// placeholderIdx is shared across both placeholder pools (the upstream
+	// single store.placeholder counter — each pool wraps by its own length).
+	placeholderIdx int
+}
+
+// placeholder pools (upstream home.tsx:17-20 verbatim + the prefixes from
+// prompt/index.tsx:1314-1321): the normal-mode and shell-mode placeholder
+// strings.
+var (
+	placeholderNormal = []string{
+		`Ask anything... "Fix a TODO in the codebase"`,
+		`Ask anything... "What is the tech stack of this project?"`,
+		`Ask anything... "Fix broken tests"`,
+	}
+	placeholderShell = []string{
+		`Run a command... "ls -la"`,
+		`Run a command... "git status"`,
+		`Run a command... "pwd"`,
+	}
+)
+
+// placeholderText is the active-mode placeholder: the shell pool in shell
+// mode, else the normal pool, at placeholderIdx % len(pool) (the shared
+// index wraps each pool by its own length).
+func (pm *promptModel) placeholderText() string {
+	pool := placeholderNormal
+	if pm.mode == "shell" {
+		pool = placeholderShell
+	}
+	return pool[pm.placeholderIdx%len(pool)]
+}
+
+// rollPlaceholder re-rolls the placeholder index over the active-mode pool
+// (the repickTip idiom — the app's random seam; the active pool is the shell
+// pool in shell mode, else the normal pool). Called from enterHome and the
+// shell-mode toggle (Task 10).
+func (a *App) rollPlaceholder() {
+	pool := placeholderNormal
+	if a.prompt.mode == "shell" {
+		pool = placeholderShell
+	}
+	a.prompt.placeholderIdx = int(a.tipRand() * float64(len(pool)))
 }
 
 // busyToast is the locked message for a send attempted while the session is
