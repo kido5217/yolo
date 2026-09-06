@@ -45,8 +45,22 @@ route-home legs; `NewApp` keeps `repickTip`, the `Init` bootstrap covers
 it), the `Init` bootstrap fetch, and the `branchReRead` EventMsg hook —
 a completed `bash` tool part on the current session, the `onAttention`
 batching precedent — + `vcs_wiring_test.go` (guard/enterHome/hook
-whitebox + the real-stack local-git leg; deviations 271–273); next is
-Task 4 (Home layout frame (E: layout + footer)).
+whitebox + the real-stack local-git leg; deviations 271–273), and Task 4
+(Home layout frame: the home route owns the full terminal frame —
+`App.homeView` in `internal/tui/home.go`, the 20-row centered stack
+(4 pad / 4 logo / 1 pad / 1 box pad / 5 box / 1 hint / 3 tip pad / 1 tip)
++ 3-row footer block (dir at col 2, plain-semver version right-aligned
+ending at col w-2, the dir cut at w-2-len(ver)-5 on collision) + spacers
+ceil-first; the old session-list chrome + footer seam deleted
+(`homeModel`, `relTime`, `helpText`, `maxHomeSessions`, `homeTipsLine`
+→ `App.homeTipsRows`, `homeShortcutsHint`/`homeFooterLine`, the
+`footerView` routeHome branch); `modalChromeMin` home = 10; the
+`view()` home route composes ONLY `homeView` (the session route keeps
+today's composition exactly); `homeview_test.go` (whitebox geometry
+200x50 / 80x24 / 70x30 / 80x10 + footer subtests) + `home_golden_test.go`
+(SGR goldens: box border fg 38;5;75, interior bg 48;5;234, footer muted
+38;5;244, `:yolo-wire-branch` + `0.8.0`)) landed; next is Task 5 (Prompt
+box: placeholder, meta line, hint line).
 
 **Status (2026-09-04):** v0.6.0 map (epic `yolo-o75`) complete — the P4
 backlog ships as minor v0.6.0 on top of v0.5.1 (`9f4c340`): cobra v1.10.2
