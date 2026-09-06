@@ -188,6 +188,22 @@ func (c *Service) SendMessage(ctx context.Context, id, text string) (string, err
 	return out.MessageID, nil
 }
 
+// Shell is POST /session/{id}/shell {command} -> {message_id, part_id}
+// (the shell-mode submit; the transcript updates over SSE).
+func (c *Service) Shell(ctx context.Context, id, command string) (string, string, error) {
+	var out struct {
+		MessageID string `json:"message_id"`
+		PartID    string `json:"part_id"`
+	}
+	if err := c.do(
+		ctx, http.MethodPost, "/session/"+PathEscapeID(id)+"/shell",
+		map[string]string{"command": command}, &out,
+	); err != nil {
+		return "", "", err
+	}
+	return out.MessageID, out.PartID, nil
+}
+
 // Abort is POST /session/{id}/abort.
 func (c *Service) Abort(ctx context.Context, id string) (bool, error) {
 	var out struct {

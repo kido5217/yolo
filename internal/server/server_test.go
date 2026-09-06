@@ -17,7 +17,30 @@ import (
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/server"
 	"github.com/kido5217/yolo/internal/server/testutil"
+	"github.com/kido5217/yolo/internal/storage"
 )
+
+// waitShellPart polls the harness DB until the shell's bash part reaches
+// a terminal status (the Task-8 wait idiom over the DB): the exec
+// goroutine finalizes out-of-band, so a bounded wait keeps the legs
+// deterministic instead of a fixed sleep.
+func waitShellPart(t *testing.T, s *testutil.TestServer, partID string) protocol.Part {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		row, err := s.DB.GetPart(t.Context(), partID)
+		if err == nil {
+			if p, perr := storage.PartToProtocol(row); perr == nil && p.State != nil &&
+				(p.State.Status == "completed" || p.State.Status == "error") {
+				return p
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("part %s did not reach a terminal status within 5s", partID)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
 
 func TestHealthAndPathAndProject(t *testing.T) {
 	t.Parallel()
@@ -563,4 +586,133 @@ func TestSendSurfacesTurnErrorOnWire(t *testing.T) {
 	if row.Error == nil || row.Error.Type != "unknown" || row.Error.Message != "boom" {
 		t.Fatalf("stored row error = %+v", row.Error)
 	}
+}
+
+// TestShellEndpoint pins the POST /session/{id}/shell wire contract (the
+// handleSend test shape): 202 {message_id, part_id} on accept with the
+// bash part finalizing completed out-of-band, plus the 404 / 400 / 409
+// error legs.
+func TestShellEndpoint(t *testing.T) {
+	t.Parallel()
+	s := testutil.Boot(t)
+	d := t.TempDir()
+	other := t.TempDir()
+
+	mkShellSession := func() string {
+		_, b := testutil.Req(t, s, "POST", "/session", d, `{}`)
+		var ses struct{ ID string }
+		if err := json.Unmarshal(b, &ses); err != nil {
+			t.Fatalf("unmarshal: %v (%s)", err, b)
+		}
+		return ses.ID
+	}
+
+	t.Run("202 happy path", func(t *testing.T) {
+		id := mkShellSession()
+		// the happy path lazily spawns the session's persistent shell;
+		// close it (the engine delete path) so its readLoop goroutine
+		// does not outlive the test (goleak)
+		t.Cleanup(func() { s.Eng.Close(id) })
+		resp, b := testutil.Req(t, s, "POST", "/session/"+id+"/shell", d, `{"command":"echo hi"}`)
+		if resp.StatusCode != 202 {
+			t.Fatalf("shell: %d %s", resp.StatusCode, b)
+		}
+		var out struct {
+			MessageID string `json:"message_id"`
+			PartID    string `json:"part_id"`
+		}
+		if err := json.Unmarshal(b, &out); err != nil {
+			t.Fatalf("decode: %v (%s)", err, b)
+		}
+		if out.MessageID == "" || out.PartID == "" {
+			t.Fatalf("ids missing: %s", b)
+		}
+		// The handler returned after the PERSIST half; the exec runs in
+		// the engine goroutine, so the part finalizes out-of-band.
+		part := waitShellPart(t, s, out.PartID)
+		if part.State.Status != "completed" {
+			t.Fatalf("status = %q; want completed", part.State.Status)
+		}
+		if !strings.Contains(part.State.Output, "hi") {
+			t.Fatalf("Output = %q; want it to contain hi", part.State.Output)
+		}
+	})
+
+	t.Run("404 unknown session", func(t *testing.T) {
+		resp, _ := testutil.Req(t, s, "POST", "/session/ses_missing/shell", d, `{"command":"echo hi"}`)
+		if resp.StatusCode != 404 {
+			t.Fatalf("want 404, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("404 cross-scope", func(t *testing.T) {
+		id := mkShellSession()
+		// the session is in d; scoping the shell at another dir is 404
+		// (the x-yolo-directory mismatch, the existing cross-scope
+		// pattern)
+		resp, _ := testutil.Req(t, s, "POST", "/session/"+id+"/shell", other, `{"command":"echo hi"}`)
+		if resp.StatusCode != 404 {
+			t.Fatalf("cross-scope: want 404, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("400 bad bodies", func(t *testing.T) {
+		id := mkShellSession()
+		cases := []struct {
+			name, body, wantMsg string
+		}{
+			{"invalid json", `{"command":`, "invalid body"},
+			{"empty body", "", "empty command"},
+			{"blank command", `{"command":"  "}`, "empty command"},
+		}
+		for _, c := range cases {
+			t.Run(c.name, func(t *testing.T) {
+				resp, b := testutil.Req(t, s, "POST", "/session/"+id+"/shell", d, c.body)
+				if resp.StatusCode != 400 {
+					t.Fatalf("%s = %d, want 400: %s", c.name, resp.StatusCode, b)
+				}
+				var env struct {
+					Error struct{ Message string } `json:"error"`
+				}
+				if err := json.Unmarshal(b, &env); err != nil {
+					t.Fatalf("envelope decode: %v (%s)", err, b)
+				}
+				if env.Error.Message != c.wantMsg {
+					t.Fatalf("envelope message = %q, want %q", env.Error.Message, c.wantMsg)
+				}
+			})
+		}
+	})
+
+	t.Run("409 shell closed", func(t *testing.T) {
+		id := mkShellSession()
+		// the engine's delete path with the row still present (the
+		// shell_test engine-deleted referent): shellFor returns nil
+		s.Eng.Close(id)
+		resp, b := testutil.Req(t, s, "POST", "/session/"+id+"/shell", d, `{"command":"echo hi"}`)
+		if resp.StatusCode != 409 {
+			t.Fatalf("want 409, got %d: %s", resp.StatusCode, b)
+		}
+		var env struct {
+			Error struct{ Message string } `json:"error"`
+		}
+		if err := json.Unmarshal(b, &env); err != nil || env.Error.Message == "" {
+			t.Fatalf("envelope = %s", b)
+		}
+	})
+
+	t.Run("404 after http delete", func(t *testing.T) {
+		id := mkShellSession()
+		resp, _ := testutil.Req(t, s, "DELETE", "/session/"+id, d, "")
+		if resp.StatusCode != 204 {
+			t.Fatalf("delete: %d", resp.StatusCode)
+		}
+		// the HTTP delete removes the row BEFORE the engine close, so
+		// scopedSession answers 404 (the plan's 409 expectation for
+		// this leg is unreachable — deviation 277)
+		resp, _ = testutil.Req(t, s, "POST", "/session/"+id+"/shell", d, `{"command":"echo hi"}`)
+		if resp.StatusCode != 404 {
+			t.Fatalf("after delete: want 404, got %d", resp.StatusCode)
+		}
+	})
 }

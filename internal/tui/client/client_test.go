@@ -2,13 +2,17 @@ package client_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/kido5217/yolo/internal/protocol"
+	"github.com/kido5217/yolo/internal/server/testutil"
 	"github.com/kido5217/yolo/internal/tui/client"
 )
 
@@ -90,5 +94,103 @@ func TestSentinelPrefixes(t *testing.T) {
 		if !strings.HasPrefix(e.Error(), "client: ") {
 			t.Fatalf("sentinel %q lacks the \"client: \" prefix", e.Error())
 		}
+	}
+}
+
+// waitShellPart polls the wire message list until the shell's bash part
+// reaches a terminal status (the Task-8 wait idiom over the wire: the
+// client test package may not reach into storage). The exec goroutine
+// finalizes out-of-band, so a bounded wait keeps the legs deterministic.
+func waitShellPart(t *testing.T, s *testutil.TestServer, sessionID, dir, partID string) protocol.Part {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		resp, b := testutil.Req(t, s, "GET", "/session/"+sessionID+"/message", dir, "")
+		if resp.StatusCode == 200 {
+			var msgs []protocol.MessageWithParts
+			if err := json.Unmarshal(b, &msgs); err == nil {
+				for i := range msgs {
+					for j := range msgs[i].Parts {
+						p := msgs[i].Parts[j]
+						if p.ID == partID && p.State != nil &&
+							(p.State.Status == "completed" || p.State.Status == "error") {
+							return p
+						}
+					}
+				}
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("part %s did not reach a terminal status within 5s", partID)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// TestShellRoundTrip pins the client's Service.Shell against the full
+// harness (testutil.Boot): the 202 id mapping (message + part ids) and
+// the error envelope on 404 (client.ErrNotFound carrying the server
+// message).
+func TestShellRoundTrip(t *testing.T) {
+	t.Parallel()
+	s := testutil.Boot(t)
+	d := t.TempDir()
+	resp, b := testutil.Req(t, s, "POST", "/session", d, `{}`)
+	if resp.StatusCode != 201 {
+		t.Fatalf("create session: %d %s", resp.StatusCode, b)
+	}
+	var ses struct{ ID string }
+	if err := json.Unmarshal(b, &ses); err != nil {
+		t.Fatalf("unmarshal: %v (%s)", err, b)
+	}
+	// the shell run lazily spawns the session's persistent shell; close
+	// it (the engine delete path) so its readLoop goroutine does not
+	// outlive the test
+	t.Cleanup(func() { s.Eng.Close(ses.ID) })
+
+	c := client.New(s.URL, d)
+	msgID, partID, err := c.Shell(t.Context(), ses.ID, "echo client-shell")
+	if err != nil {
+		t.Fatalf("Shell: %v", err)
+	}
+	if msgID == "" || partID == "" {
+		t.Fatalf("ids = %q %q; want both present", msgID, partID)
+	}
+	// The part id maps onto the engine's bash part row: it finalizes
+	// completed with the command output.
+	part := waitShellPart(t, s, ses.ID, d, partID)
+	if part.State.Status != "completed" {
+		t.Fatalf("status = %q; want completed", part.State.Status)
+	}
+	if !strings.Contains(part.State.Output, "client-shell") {
+		t.Fatalf("Output = %q; want it to contain client-shell", part.State.Output)
+	}
+	// The returned message id maps onto the persisted user message row
+	// (the bash part itself lives under the assistant message).
+	resp, b = testutil.Req(t, s, "GET", "/session/"+ses.ID+"/message", d, "")
+	if resp.StatusCode != 200 {
+		t.Fatalf("list messages: %d %s", resp.StatusCode, b)
+	}
+	var msgs []protocol.MessageWithParts
+	if err := json.Unmarshal(b, &msgs); err != nil {
+		t.Fatalf("decode: %v (%s)", err, b)
+	}
+	var user *protocol.MessageWithParts
+	for i := range msgs {
+		if msgs[i].Info.ID == msgID {
+			user = &msgs[i]
+		}
+	}
+	if user == nil || user.Info.Role != "user" {
+		t.Fatalf("message %s not present as a user row: %s", msgID, b)
+	}
+
+	// 404 → client.ErrNotFound (the envelope message is carried).
+	_, _, err = c.Shell(t.Context(), "ses_missing", "echo hi")
+	if !errors.Is(err, client.ErrNotFound) {
+		t.Fatalf("Shell err = %v, want ErrNotFound", err)
+	}
+	if !strings.Contains(err.Error(), "session not found") {
+		t.Fatalf("err = %q; want the server envelope message", err.Error())
 	}
 }

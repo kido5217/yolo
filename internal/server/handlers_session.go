@@ -317,6 +317,44 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleSessionShell runs the command in the session's persistent shell
+// (Engine.Shell): 202 {message_id, part_id} on accept; 404 unknown
+// session (scopedSession + storage.ErrNotFound); 409 session closed
+// (ErrShellClosed — deleted); 400 invalid body / empty command; 500
+// otherwise. The handler returns after the PERSIST half (the exec runs
+// in the engine goroutine — the handleSend 202-after-spawn convention).
+func (s *Server) handleSessionShell(w http.ResponseWriter, r *http.Request) {
+	row, ok := s.scopedSession(w, r)
+	if !ok {
+		return
+	}
+	var in struct {
+		Command string `json:"command"`
+	}
+	if err := decode(w, r, &in); err != nil {
+		envelope(w, http.StatusBadRequest, "invalid body", nil)
+		return
+	}
+	if strings.TrimSpace(in.Command) == "" {
+		envelope(w, http.StatusBadRequest, "empty command", nil)
+		return
+	}
+	res, err := s.Engine.Shell(r.Context(), row.ID, in.Command)
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusAccepted, map[string]string{
+			"message_id": res.MessageID,
+			"part_id":    res.PartID,
+		})
+	case errors.Is(err, session.ErrShellClosed):
+		envelope(w, http.StatusConflict, "session closed", nil)
+	case errors.Is(err, storage.ErrNotFound):
+		envelope(w, http.StatusNotFound, "session not found", nil)
+	default:
+		s.fail(w, http.StatusInternalServerError, "start shell", err)
+	}
+}
+
 func (s *Server) handleAbort(w http.ResponseWriter, r *http.Request) {
 	row, ok := s.scopedSession(w, r)
 	if !ok {
