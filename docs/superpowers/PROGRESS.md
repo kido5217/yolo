@@ -160,15 +160,44 @@ returns (bounded by the command's own 500ms timeout) + the terminal
 part LANDS `error` (the timeout message) + exactly ONE part.updated
 (running) on the bus (the terminal publishes suppressed —
 `eventSuppressed`); deviations 275-276 (275: Step 4's
-`errShellAborted` -> `command aborted` expectation is UNREACHABLE —
-the exec ctx is Background and `Shell.Exec` holds the shell mutex for
-the whole command, so `Close`'s proc-group kill cannot preempt the
-running exec — the test pins the actual contract; 276: the finalize
-call carries the assistant `protocol.Message`, not the bare asstID —
-the full-info publish the finalize spec pins cannot be reconstructed
-from the DB (Model/ParentID are wire-only)); next is Task 9 (Shell:
-endpoint + client — `POST /session/{id}/shell` + the client method;
-Task 6's submit fix stays blocked on it).
+`errShellAborted` -> `command aborted` expectation is
+UNREACHABLE — the exec ctx is Background and `Shell.Exec` holds the
+shell mutex for the whole command, so `Close`'s proc-group kill cannot
+preempt the running exec — the test pins the actual contract; 276: the
+finalize call carries the assistant `protocol.Message`, not the bare
+asstID — the full-info publish the finalize spec pins cannot be
+reconstructed from the DB (Model/ParentID are wire-only))), and Task 9
+(Shell: endpoint + client — `internal/server/handlers_session.go`:
+`handleSessionShell` (next to `handleSend`) — the pinned error table:
+202 `{message_id, part_id}` on accept (the engine call uses
+`r.Context()` for the persist half; the handler returns after the
+PERSIST half — the handleSend 202-after-spawn convention), 404
+unknown/cross-scope session (`scopedSession` + `storage.ErrNotFound`),
+409 session closed (`ErrShellClosed`), 400 invalid body / empty
+command (the `strings.TrimSpace` check, the `handleSend` `empty
+message` referent), 500 otherwise; the route `POST /session/{id}/shell`
+(`server.go`, next to `POST /session/{id}/message`); the client
+`Service.Shell` (`internal/tui/client/client.go`, next to `SendMessage`
+— `POST /session/{id}/shell {command}` -> `{message_id, part_id}`, the
+error envelope mapping via `c.do`, 404 -> `ErrNotFound`);
+`TestShellEndpoint` (the handleSend test shape: 202 happy path —
+`echo hi` -> ids present + the part finalizes `completed` via the
+Task-8 wait idiom over the DB (`waitShellPart`), 404 unknown session,
+404 cross-scope, 400 invalid body / empty body / blank command (pinned
+envelope messages `invalid body` / `empty command`), 409 shell closed
+(engine Close with the row still present — the shell_test
+engine-deleted referent), 404 after http delete) + `TestShellRoundTrip`
+(the wire round-trip over `testutil.Boot`: the id mapping — message_id
+= the persisted user row, part_id = the bash part (under the assistant
+message) finalizing `completed` with the output — + the error envelope
+on 404; the happy-path legs clean up the lazily-spawned persistent
+shell via `s.Eng.Close` so its readLoop does not outlive the test
+(goleak)); deviation 277 (the plan's "409 deleted-session (create +
+delete + shell)" leg is UNREACHABLE — the HTTP delete removes the row
+BEFORE the engine close, so `scopedSession` answers 404 — the 409 leg
+is pinned via the engine-close-with-row-present route and the
+create+delete+shell leg pins the actual 404)); next is Task 6 (Home
+submit fix: the decision-2 submit — the prompt text).
 
 **Status (2026-09-04):** v0.6.0 map (epic `yolo-o75`) complete — the P4
 backlog ships as minor v0.6.0 on top of v0.5.1 (`9f4c340`): cobra v1.10.2
