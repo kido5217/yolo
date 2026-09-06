@@ -114,8 +114,61 @@ shortcuts; the merged WaitFor gains the placeholder + `Build · Qwen
 kido` + `tab agents  ctrl+p commands` content) + `homeview_test.go`
 frame test updated (the box interior placeholder + `Build` meta + the
 hint row content replace the Task-4 blank-stub assertions); deviations
-273->274 (the plan's `a.th.Color` typo -> `a.theme.Color`); next is Task
-6 (Home submit fix: the decision-2 submit — the prompt text).
+273->274 (the plan's `a.th.Color` typo -> `a.theme.Color`)), and Task 8
+(Shell engine — `internal/session/shell.go`: `Engine.Shell` (the pinned
+persist order — user message (row.Agent) + the wire
+`Message{Model: &MessageModel{info.ID, model.ID}}` publish (the
+CreateMessage row carries no model, the wire does — the Send pattern),
+the synthetic text part (the verbatim
+`The following tool was executed by the user`, `IsSynthetic`,
+`Time.Start` only), the assistant message (`ParentID` = the user
+message — wire-only, no storage column; agent + model from the row/
+resolve, the round convention), the RUNNING `bash` tool part
+(`CallID = partID`, `Input {command}`, `Time.Start`) — each persisted
++ published (message.updated / message.part.updated) — then the exec
+goroutine: `context.Background()` (NOT tied to a turn — no abort
+surface beyond the session's Close, the pinned Step-3 call),
+`tools["bash"].Run` with the raw `{command, timeout: int(shellTimeout
+ms)}` + the tool_exec `tool.Env` pattern (Dir/Shell/Limits/OutputDir/
+Storage/SessionID/Log), `loadCfg` a load failure degrades to
+`tool.Limits{}` via `limitsFor`'s nil branch; `finalizeShellPart` —
+`completed`: `Title = out.Title` / `Output = out.Text` / `Metadata =
+out.Meta` / `Time.End = e.clock()`, `error`: `Error = runErr.Error()`
+(the bash tool's pinned messages) / `Output = ""`, persisted via
+`UpsertPart(context.WithoutCancel(…))` (the finalize-must-land pattern
+— the exec ctx is Background so the write cannot be dropped) + the
+part publish + the assistant `MessageUpdatedProps` with `Time.Completed`
+(the FULL info carried — the TUI store's `upsertMessage` REPLACES the
+whole Info, the surfaceTurnError idiom); `ErrShellClosed` +
+`ShellResult` (engine.go, near `ErrSessionBusy`), the
+`Engine.shellTimeout` field (default 120s = the
+`tool.defaultBashTimeoutMS` referent, `Deps.ShellTimeout` seam — the
+Clock/Backoff seam pattern — + the harness pre-build flag), the
+bash-tool-wired guard (a miswired Deps would nil-panic in the detached
+exec goroutine), + `shell_test.go` (happy path — the user row + the
+verbatim flagged synthetic part, the assistant row (agent from the
+row), the bash part `completed` (output containing the command output,
+`Title` = the command, NO `exit` key on exit 0), the part.updated
+sequence running -> completed + the assistant `Time.Completed`;
+`exit 3` -> `completed` + `Metadata["exit"] = 3`; `true` ->
+`(no output)`; `sleep 10` + 300ms -> `error` + the pinned prefix
+`shell tool terminated command after exceeding timeout 300 ms`;
+deleted: engine Close -> `ErrShellClosed` (the Step-4 engine
+delete-path referent, engine.go:306), row deleted ->
+`storage.ErrNotFound`; delete-during-run (Step 4 verified): Close
+returns (bounded by the command's own 500ms timeout) + the terminal
+part LANDS `error` (the timeout message) + exactly ONE part.updated
+(running) on the bus (the terminal publishes suppressed —
+`eventSuppressed`); deviations 275-276 (275: Step 4's
+`errShellAborted` -> `command aborted` expectation is UNREACHABLE —
+the exec ctx is Background and `Shell.Exec` holds the shell mutex for
+the whole command, so `Close`'s proc-group kill cannot preempt the
+running exec — the test pins the actual contract; 276: the finalize
+call carries the assistant `protocol.Message`, not the bare asstID —
+the full-info publish the finalize spec pins cannot be reconstructed
+from the DB (Model/ParentID are wire-only)); next is Task 9 (Shell:
+endpoint + client — `POST /session/{id}/shell` + the client method;
+Task 6's submit fix stays blocked on it).
 
 **Status (2026-09-04):** v0.6.0 map (epic `yolo-o75`) complete — the P4
 backlog ships as minor v0.6.0 on top of v0.5.1 (`9f4c340`): cobra v1.10.2
