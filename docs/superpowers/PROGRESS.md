@@ -59,8 +59,63 @@ ceil-first; the old session-list chrome + footer seam deleted
 today's composition exactly); `homeview_test.go` (whitebox geometry
 200x50 / 80x24 / 70x30 / 80x10 + footer subtests) + `home_golden_test.go`
 (SGR goldens: box border fg 38;5;75, interior bg 48;5;234, footer muted
-38;5;244, `:yolo-wire-branch` + `0.8.0`)) landed; next is Task 5 (Prompt
-box: placeholder, meta line, hint line).
+38;5;244, `:yolo-wire-branch` + `0.8.0`)), and Task 5 (Prompt box:
+placeholder, meta line, hint line — `internal/tui/prompt.go`: the
+`placeholderNormal`/`placeholderShell` pools (upstream home.tsx:17-20
+verbatim + the prefixes) + `promptModel.mode` (`"normal"` initial; the
+shell-mode STATE, the toggles land in Task 10) + `placeholderIdx` (shared
+across both pools, the upstream single `store.placeholder` counter) +
+`placeholderText()` + `App.rollPlaceholder()` (the `tipRand` seam, the
+`repickTip` idiom, called from `enterHome`); `internal/tui/home.go`:
+`boxWidth`/`boxInnerWidth` (boxW-1-2*homeBoxPad, min 1), `boxHighlight`
+(leader pending -> "border" > shell -> "primary" > "secondary"),
+`boxThemeReady`/`boxInterior` (fg token + backgroundElement bg; a zero
+Theme degrades every box run to plain — the SGR bytes would break the
+width-exact plain assertions) / `boxFg` / `boxCursor` (the Reverse block,
+same idiom as the app's static cursor) / `boxBorder` (now the highlight
+token, was hardcoded "secondary"), `homeBox` (the 5 rows: border +
+interior fill / border + 2 pad + `boxInputLine` / border + fill / border
++ 2 pad + `boxMetaLine` / corner ╹ (highlight) + ▀×(boxW-1) fg
+backgroundElement — every interior cell a styled run, no unstyled gap),
+`boxInputLine` (the CUSTOM render — NOT `input.View()`: bubbles v2.2.1's
+View/placeholderView render Width+1 cols + the scroll offset is not
+exported; empty -> placeholder (fg textMuted) + fill, NO cursor cell;
+value -> pre (fg text) + the cursor cell (the char at `Position()`, a
+" " at the end — the end cursor occupies the window's last cell, the
+trailing char pushed out) + post + fill, width-exact innerW cols; the
+scroll window = innerW cols at `min(posCols, valueW-innerW)` — simpler
+than the session textinput's scroll, logged as a deviation in Task 12),
+`homeMeta` (agent = titlecase(pendingAgentName()); model = the config
+model ref's catalog NAME (Provider.Models[mid].Name, the modelOptions
+referent) else the ref's modelID else the raw ref (unparseable, no
+provider segment) else the first provider's first model (modelsOf order)
+else omitted (agent alone); provider = the ref's provider ID — NOT the
+catalog name, the Task-12 deviation), `pendingAgentName` (a.pendingAgent
+> store.Config["agent"] > "build" — internal/storage/migrate.go:23),
+`catalogModelName`, `boxMetaLine` (agent (highlight) + " " plain + "·"
+muted + " " plain + model (text) + " " plain + provider (muted); shell
+mode "Shell" alone — the model/provider box is inside the upstream
+normal-mode Show; width-exact, over-wide cut), `homeHintLine` (normal:
+{Format("agent_cycle")} agents  {Format("command_list")} commands —
+shortcuts fg text, words fg textMuted, 2-col gap, a "none" Format drops
+its segment, both none -> blank; shell: `esc` (text) + ` exit shell mode`
+(muted)); `internal/tui/app.go`: `App.pendingAgent` ("" = unset; Task 7's
+cycle pins it), `App.applyPromptChrome` (home -> SetWidth(boxInnerWidth)
++ Placeholder = placeholderText(); session -> SetWidth(w-3) + Placeholder
+= "" — no leak onto the session line; callers: NewApp, openSession, the
+WindowSizeMsg case (replaces the bare SetWidth), enterHome sites),
+`enterHome` +rollPlaceholder; `internal/tui/hydrate.go`: `openSession`
++applyPromptChrome; `home_box_test.go` (homeMeta seeded-store table /
+boxHighlight 3 states / placeholder pools + re-roll / boxInputLine
+width-exact legs / homeHintLine segments / applyPromptChrome routes) +
+`home_golden_test.go` extended (store seeded with the kido/Qwen catalog,
+SGR token 38;5;255 added — the text token for the model name + hint
+shortcuts; the merged WaitFor gains the placeholder + `Build · Qwen
+kido` + `tab agents  ctrl+p commands` content) + `homeview_test.go`
+frame test updated (the box interior placeholder + `Build` meta + the
+hint row content replace the Task-4 blank-stub assertions); deviations
+273->274 (the plan's `a.th.Color` typo -> `a.theme.Color`); next is Task
+6 (Home submit fix: the decision-2 submit — the prompt text).
 
 **Status (2026-09-04):** v0.6.0 map (epic `yolo-o75`) complete — the P4
 backlog ships as minor v0.6.0 on top of v0.5.1 (`9f4c340`): cobra v1.10.2
