@@ -10,7 +10,8 @@ epic; `bd ready`) — the resume rail is beads → active spec/plan →
 ## Ownership
 
 `PROGRESS.md`, `DEVIATIONS.md`, `DEFERRED.md`, `plans/`, `specs/`,
-`reviews/`, `deviations-archive-v0.1.0.md`, `deferred-archive.md`.
+`reviews/`, `mockups/`, `deviations-archive-v0.1.0.md`,
+`deferred-archive.md`.
 
 ## Local Contracts
 
