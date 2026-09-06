@@ -24,11 +24,17 @@ cycling, shell engine/endpoint/TUI mode, tips, deviations closeout); the
 0.8.0 deviations (MCP-omission extends 193, `auto` omission, consolidated
 tip drops, git-env hardening, bubbles v2.2.1 width-exact render) land in
 Task 12. Implementation in flight on `feature/0.8.0-home-mock`: Task 1
-(plain-semver version plumbing, Q10) landed — `plainSemver`
-(`internal/tui/version.go`), `App.version` + `SetVersion` (the SetKeybinds
-post-construction pattern, `internal/tui/app.go`), the
-`app.SetVersion(version)` wiring (`cmd/yolo/main.go`), unit tests; next is
-Task 2 (VCS branch detection, core).
+(plain-semver version plumbing, Q10) and Task 2 (VCS branch detection,
+core) landed — `plainSemver` (`internal/tui/version.go`), `App.version` +
+`SetVersion` (the SetKeybinds post-construction pattern,
+`internal/tui/app.go`), the `app.SetVersion(version)` wiring
+(`cmd/yolo/main.go`), and `internal/tui/vcs.go` (the `findGitRoot` upward
+`.git` walk — file OR directory — `gitBranch` with the pinned upstream
+`cfg` arg prefix + the decision-4 exit table (0 -> trimmed stdout, any
+other exit / ErrNotFound / deadline / no `.git` -> none, no spawn without
+`.git`), and `sanitizedGitEnv` hardening — the 5 repo-redirecting `GIT_*`
+vars stripped, `GIT_TERMINAL_PROMPT=0` exactly once); next is Task 3 (VCS
+App wiring: bootstrap + re-reads).
 
 **Status (2026-09-04):** v0.6.0 map (epic `yolo-o75`) complete — the P4
 backlog ships as minor v0.6.0 on top of v0.5.1 (`9f4c340`): cobra v1.10.2
