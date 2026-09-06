@@ -27,6 +27,14 @@ import (
 // turn.
 var ErrSessionBusy = errors.New("session: already busy")
 
+// ErrShellClosed is returned by Shell for a DELETED session (shellFor
+// returns nil — no re-spawn of a leaked shell, the tool_exec referent).
+var ErrShellClosed = errors.New("session: shell is closed")
+
+// ShellResult identifies the persisted user message and its bash tool
+// part (the endpoint's response — the TUI tracks both over SSE).
+type ShellResult struct{ MessageID, PartID string }
+
 // errRoundEnded marks a round already finalized inside streamWithRetry
 // (the overflow path): the caller ends the turn idle without reading a
 // stream.
@@ -39,6 +47,12 @@ var errMaxToolRounds = errors.New("session: max tool rounds exceeded")
 
 // maxToolRounds caps the tool round-trips of one turn.
 const maxToolRounds = 50
+
+// defaultShellTimeout bounds each user shell command (Engine.Shell); it
+// mirrors tool.defaultBashTimeoutMS (the bash tool's own default, kept
+// unexported there) so a shell run with no per-command timeout arg gets
+// the same bound as a model-issued bash call.
+const defaultShellTimeout = 120 * time.Second
 
 // maxRetryAttempts caps stream attempts per round (initial request included).
 const maxRetryAttempts = 4
@@ -68,6 +82,9 @@ type Deps struct {
 	// Backoff returns the delay before retry attempt n (1-based); nil =
 	// 1s × 2^(n-1) × jitter uniform(0.8, 1.2).
 	Backoff func(attempt int) time.Duration
+	// ShellTimeout bounds each user shell command (Engine.Shell); zero =
+	// defaultShellTimeout (the tool.defaultBashTimeoutMS referent).
+	ShellTimeout time.Duration
 }
 
 type Engine struct {
@@ -84,6 +101,9 @@ type Engine struct {
 	drivers   map[string]llm.Driver
 	clock     func() int64
 	backoff   func(attempt int) time.Duration
+	// shellTimeout bounds each user shell command (Engine.Shell); it is
+	// passed to the bash tool's timeout arg.
+	shellTimeout time.Duration
 
 	mu   sync.Mutex
 	busy map[string]context.CancelFunc
@@ -138,25 +158,30 @@ func New(d Deps) (*Engine, error) {
 	if lg == nil {
 		lg = log.Noop()
 	}
+	shellTimeout := d.ShellTimeout
+	if shellTimeout <= 0 {
+		shellTimeout = defaultShellTimeout
+	}
 	return &Engine{
-		db:        d.DB,
-		bus:       d.Bus,
-		prov:      d.Prov,
-		perm:      d.Perm,
-		tools:     d.Tools,
-		schemas:   schemas,
-		lg:        lg,
-		dataDir:   d.DataDir,
-		outputDir: outputDirFor(d.DataDir),
-		cfg:       d.Cfg,
-		drivers:   d.Drivers,
-		clock:     clock,
-		backoff:   backoff,
-		busy:      map[string]context.CancelFunc{},
-		turnDone:  map[string]chan struct{}{},
-		shells:    map[string]*tool.Shell{},
-		titleCtx:  map[string]*titleCancel{},
-		deleted:   map[string]struct{}{},
+		db:           d.DB,
+		bus:          d.Bus,
+		prov:         d.Prov,
+		perm:         d.Perm,
+		tools:        d.Tools,
+		schemas:      schemas,
+		lg:           lg,
+		dataDir:      d.DataDir,
+		outputDir:    outputDirFor(d.DataDir),
+		cfg:          d.Cfg,
+		drivers:      d.Drivers,
+		clock:        clock,
+		backoff:      backoff,
+		shellTimeout: shellTimeout,
+		busy:         map[string]context.CancelFunc{},
+		turnDone:     map[string]chan struct{}{},
+		shells:       map[string]*tool.Shell{},
+		titleCtx:     map[string]*titleCancel{},
+		deleted:      map[string]struct{}{},
 	}, nil
 }
 

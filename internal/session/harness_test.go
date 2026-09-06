@@ -41,6 +41,10 @@ type harness struct {
 	// fastBackoff makes the engine's retry backoff 1ms (read lazily per
 	// retry, so it may be set after build, before Send).
 	fastBackoff bool
+	// shellTimeout sets the engine's user-shell command timeout (Deps.
+	// ShellTimeout, read at build — set it before build; zero = the
+	// engine's 120s default).
+	shellTimeout time.Duration
 	// slowTurn holds each scripted stream open for 500ms (fake driver
 	// Delay), so a concurrent Send hits the busy flag.
 	slowTurn bool
@@ -158,8 +162,9 @@ func (h *harness) build(t *testing.T) {
 		// after build) and slows the call by sleeping in the wrapper before
 		// forwarding — not via a fake field, because the title side-call and
 		// the turn call Stream concurrently and a shared field would race.
-		Drivers: map[string]llm.Driver{"kido": h.wiredDriver(drv)},
-		Clock:   func() int64 { return time.Now().UnixMilli() },
+		Drivers:      map[string]llm.Driver{"kido": h.wiredDriver(drv)},
+		Clock:        func() int64 { return time.Now().UnixMilli() },
+		ShellTimeout: h.shellTimeout,
 		Backoff: func(attempt int) time.Duration {
 			if h.fastBackoff {
 				return time.Millisecond
