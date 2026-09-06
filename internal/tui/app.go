@@ -70,7 +70,6 @@ type App struct {
 	store        store.State
 	route        route
 	curSessionID string
-	home         homeModel
 	sess         sessionModel
 	prompt       promptModel
 	dlg          dialogStack
@@ -175,7 +174,6 @@ func NewApp(c *client.Service, s store.State, startSessionID string, engine *the
 		Service: c,
 		store:   s,
 		route:   routeHome,
-		home:    homeModel{now: nowMillis},
 		// pre-WindowSizeMsg defaults: the 80x24 size below, the session
 		// viewport = 24 - the 3 chrome lines (title, divider, help).
 		sess:            newSessionModel(80, 21),
@@ -189,11 +187,6 @@ func NewApp(c *client.Service, s store.State, startSessionID string, engine *the
 		retrySuppressed: map[string]bool{},
 		tipRand:         rand.Float64,
 	}
-	// S6.3: the home tips line seam (the footer seam is S6.4).
-	a.home.tips = func(w int) string { return a.homeTipsLine(w) }
-	// S6.4: the home footer line seam (the destination part; S6.5 joins
-	// the hint part).
-	a.home.footer = func(w int) string { return a.homeFooterLine(w) }
 	in := textinput.New()
 	// textinput's View is prompt(2) + width + cursor(1): size the value
 	// area so the whole line fits the 80-column default terminal.

@@ -282,7 +282,7 @@ func dumpSurface(t *testing.T, outDir string, s paritySurface) {
 		})),
 	)
 	var raw []byte
-	raw = pumpUntil(t, tm, raw, hasLine("New session"), 15*time.Second) // the home settle
+	raw = pumpUntil(t, tm, raw, hasLine(homeLogoLine), 15*time.Second) // the home settle
 	for _, st := range s.steps {
 		if st.text != "" {
 			tm.Type(st.text)

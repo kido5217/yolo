@@ -235,20 +235,28 @@ func (a *App) tipText() string {
 	return strings.ReplaceAll(t, "{theme_count}", strconv.Itoa(themeCount))
 }
 
-// homeTipsLine is the home tips line (the homeModel.tips seam body):
-// "" when hidden (the upstream (!first || !connected) && !hidden gate).
-func (a *App) homeTipsLine(w int) string {
+// homeTipsRows is the 0.8.0 home tip rows (the frame's tip slot, Step 3 of
+// Task 4): nil when hidden (the upstream (!first || !connected) && !hidden
+// gate, tipsVisible unchanged), else the wrapped visual lines at the TIP BOX
+// width (min(75, w-4) — the same box the prompt occupies, home.tsx maxWidth
+// 75). The centering is applied by the frame (homeView), not here; the
+// continuation lines carry NO "●" prefix (the upstream tips view renders the
+// "● Tip" prefix once as a non-shrinking flex item; the old homeTipsLine
+// bare-●-on-continuation was a deviation, dropped for the strict-copy bar).
+func (a *App) homeTipsRows() []string {
 	if !a.tipsVisible() {
-		return ""
+		return nil
+	}
+	w := a.termWidth() - 4
+	if w > 75 {
+		w = 75
 	}
 	lines := tipLines("● Tip ", parseTip(a.tipText()), w)
-	var b strings.Builder
-	for i, l := range lines {
-		if i > 0 {
-			b.WriteByte('\n')
-			b.WriteString("●")
-		}
+	out := make([]string, 0, len(lines))
+	for _, l := range lines {
+		var b strings.Builder
 		writeTipLine(&b, l, a.theme)
+		out = append(out, b.String())
 	}
-	return b.String()
+	return out
 }

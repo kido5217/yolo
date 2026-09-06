@@ -101,22 +101,24 @@ func TestModalFrameLayout(t *testing.T) {
 	if len(lines) != 24 {
 		t.Fatalf("frame = %d lines, want 24", len(lines))
 	}
-	// panel: medium 60, lead (80-60)/2 = 10; home chrome = logo 4 + New 1 +
-	// rows 0 + divider 1 + help 1 = 7 > 24/4 = 6 → panelTop = 7; the panel
-	// top-padding line → "Model" on line 8, "  loading…" on line 9.
-	if want := strings.Repeat(" ", 10) + "Model"; !strings.HasPrefix(stripANSI(lines[8]), want) {
-		t.Fatalf("line 8 = %q, want prefix %q", stripANSI(lines[8]), want)
+	// panel: medium 60, lead (80-60)/2 = 10; the 0.8.0 home chrome is the
+	// homeView frame clamped to modalChromeMin() = 10 > 24/4 = 6 → panelTop
+	// = 10; the panel top-padding line → "Model" on line 11, "  loading…" on
+	// line 12 (the home frame's top spacer pushes the panel one row down).
+	if want := strings.Repeat(" ", 10) + "Model"; !strings.HasPrefix(stripANSI(lines[11]), want) {
+		t.Fatalf("line 11 = %q, want prefix %q", stripANSI(lines[11]), want)
 	}
-	if want := strings.Repeat(" ", 10) + "  loading…"; !strings.HasPrefix(lines[9], want) {
-		t.Fatalf("line 9 = %q, want prefix %q", stripANSI(lines[9]), want)
+	if want := strings.Repeat(" ", 10) + "  loading…"; !strings.HasPrefix(lines[12], want) {
+		t.Fatalf("line 12 = %q, want prefix %q", stripANSI(lines[12]), want)
 	}
 	// the prompt line is suppressed while a modal is open
 	if strings.Contains(a.view(), "> ") {
 		t.Fatalf("prompt must be hidden under the modal:\n%s", a.view())
 	}
-	// the footer stays on the last line
-	if !strings.Contains(lines[23], "no model") {
-		t.Fatalf("footer line = %q, want the home footer", stripANSI(lines[23]))
+	// the home route's footer is inside the frame (homeView) — the modal's
+	// last line is blank (no session footer on the home route).
+	if stripANSI(lines[23]) != "" {
+		t.Fatalf("last line = %q, want blank (home footer is inside the frame)", stripANSI(lines[23]))
 	}
 }
 

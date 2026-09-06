@@ -113,7 +113,7 @@ func TestTUIHelpDialog(t *testing.T) {
 		teatest.WithProgramOptions(tea.WithEnvironment([]string{"TTY_FORCE=1", "TERM=xterm-256color"})),
 	)
 
-	teatest.WaitFor(t, tm.Output(), hasLines("New session"), teatest.WithDuration(5*time.Second))
+	teatest.WaitFor(t, tm.Output(), hasLines(homeLogoLine), teatest.WithDuration(5*time.Second))
 	suiteType(tm, "/help")
 	tm.Send(press(tea.KeyEnter))
 	// ONE merged condition: the plain header + the palette line + the V1

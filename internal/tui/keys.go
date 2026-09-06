@@ -234,10 +234,10 @@ func (a *App) handleAcKey(k tea.KeyPressMsg) []tea.Cmd {
 }
 
 // handlePromptKey is the prompt fallback: up/down recall the prompt history
-// (S5.1 — the session-route prompt behavior: the home route's up/down is
-// consumed by handleHomeKey and the slash menu owns up/down while open),
-// enter sends (or soft-enters a trailing backslash), everything else feeds
-// the input.
+// (S5.1 — both routes: the home route's up/down falls through to here now
+// (Task 4 removed the home-list cursor; the start screen has no list to
+// navigate), the slash menu + @-picker own up/down while open), enter sends
+// (or soft-enters a trailing backslash), everything else feeds the input.
 func (a *App) handlePromptKey(k tea.KeyPressMsg) []tea.Cmd {
 	if key.Matches(k, homeKeyMap.Up) {
 		a.recallHistory(-1)

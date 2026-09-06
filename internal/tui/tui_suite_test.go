@@ -60,7 +60,9 @@ func TestTUIFullTurn(t *testing.T) {
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
-	teatest.WaitFor(t, tm.Output(), hasLine("New session"), teatest.WithDuration(5*time.Second))
+	// the 0.8.0 start screen has no session list: wait for the home frame
+	// (homeLogoLine is the logo's second row — a stable settle marker).
+	teatest.WaitFor(t, tm.Output(), hasLine(homeLogoLine), teatest.WithDuration(5*time.Second))
 	tm.Send(press('n'))
 	teatest.WaitFor(t, tm.Output(), hasLine("esc abort/back"), teatest.WithDuration(5*time.Second))
 	suiteType(tm, "do it")
@@ -191,7 +193,9 @@ func hasPermDialogEcho(b []byte) bool {
 
 func driveToPermDialog(t *testing.T, tm *teatest.TestModel, ts *testutil.TestServer) {
 	t.Helper()
-	teatest.WaitFor(t, tm.Output(), hasLine("New session"), teatest.WithDuration(5*time.Second))
+	// the 0.8.0 start screen has no session list: wait for the home frame
+	// (homeLogoLine is the logo's second row — a stable settle marker).
+	teatest.WaitFor(t, tm.Output(), hasLine(homeLogoLine), teatest.WithDuration(5*time.Second))
 	tm.Send(press('n'))
 	teatest.WaitFor(t, tm.Output(), hasLine("esc abort/back"), teatest.WithDuration(5*time.Second))
 	suiteType(tm, "run it")
@@ -282,7 +286,9 @@ func TestTUIDialogs(t *testing.T) {
 		seq.WriteString(got)
 	}
 
-	capture("New session")
+	// the 0.8.0 start screen has no session list: homeLogoLine is the logo's
+	// second row — a stable settle marker.
+	capture(homeLogoLine)
 	suiteType(tm, "/model")
 	tm.Send(press(tea.KeyEnter))
 	capture("Model", "Kido", "\u00B7 not-required", "\u25CB missing")
@@ -329,7 +335,9 @@ func TestTUILongReplyWraps(t *testing.T) {
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
-	teatest.WaitFor(t, tm.Output(), hasLine("New session"), teatest.WithDuration(5*time.Second))
+	// the 0.8.0 start screen has no session list: wait for the home frame
+	// (the tip is a stable part — the NO_MODELS nudge shows on a fresh boot).
+	teatest.WaitFor(t, tm.Output(), hasLine("● Tip"), teatest.WithDuration(5*time.Second))
 	tm.Send(press('n'))
 	teatest.WaitFor(t, tm.Output(), hasLine("esc abort/back"), teatest.WithDuration(5*time.Second))
 	suiteType(tm, "print 1000 words")
@@ -378,7 +386,9 @@ func TestTUIRealStackTurnError(t *testing.T) {
 			"TTY_FORCE=1", "TERM=xterm-256color",
 		})),
 	)
-	teatest.WaitFor(t, tm.Output(), hasLine("New session"), teatest.WithDuration(5*time.Second))
+	// the 0.8.0 start screen has no session list: wait for the home frame
+	// (homeLogoLine is the logo's second row — a stable settle marker).
+	teatest.WaitFor(t, tm.Output(), hasLine(homeLogoLine), teatest.WithDuration(5*time.Second))
 	tm.Send(press('n'))
 	teatest.WaitFor(t, tm.Output(), hasLine("esc abort/back"), teatest.WithDuration(5*time.Second))
 	suiteType(tm, "do it")

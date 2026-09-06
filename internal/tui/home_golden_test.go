@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -18,36 +17,31 @@ import (
 	"github.com/kido5217/yolo/internal/tui/theme"
 )
 
-// logoSGRTokens are the logo + divider SGR color parameters under the
-// pinned TTY_FORCE=1 + TERM=xterm-256color env (ANSI256 profile: the
-// 24-bit hex tokens quantize onto the xterm-256 gray ramp 232–255).
+// homeFrameSGRTokens are the 0.8.0 start-screen frame SGR color parameters
+// under the pinned TTY_FORCE=1 + TERM=xterm-256color env (ANSI256 profile:
+// the 24-bit hex tokens quantize onto the xterm-256 cube / gray ramp).
 // Derived from the yolo dark-mode tokens (the S0.2 goldens):
 //
-//	textMuted      #808080 -> 244  (128 = (244-232)*10+8, exact)
-//	text           #eeeeee -> 255  (238 = (255-232)*10+8, exact)
-//	Tint(#0a0a0a, #808080, .25) = #282828 -> 235 (40: |38-40|=2 < |48-40|=8)
-//	Tint(#0a0a0a, #eeeeee, .25) = #434343 -> 238 (67: |68-67|=1)
-//	borderSubtle   #3c3c3c  -> 237  (60: |58-60|=2 < |68-60|=8)
+//	secondary          #5c9cf5 -> 75   (cube: R=95,G=175,B=255 = 16+36+18+5)
+//	backgroundElement  #1e1e1e -> 234  (gray ramp: 28 = 8+10*2, index 232+2)
+//	textMuted          #808080 -> 244  (gray ramp: 128 = 8+10*12, index 232+12)
 //
 // Substring assertions (no escape/terminator boundaries): the renderer's
 // pen-diff merges the changed params into ONE CSI whose inner param order
 // is not pinned (the redSGR precedent).
-var logoSGRTokens = []string{
-	"38;5;244", // left lines fg (textMuted)
-	"38;5;255", // right lines fg (text)
-	"48;5;235", // hollow marks bg (the shadow, left)
-	"48;5;238", // hollow marks bg (the shadow, right)
+var homeFrameSGRTokens = []string{
+	"38;5;75",  // box border fg (secondary)
+	"48;5;234", // box interior bg (backgroundElement)
+	"38;5;244", // footer dir muted (textMuted)
 }
 
-// logoBoldRe: the right block is bold (logo.tsx:49–60) — the fg-255 CSI
-// must carry the bold attribute; the param order within the CSI is not
-// pinned, so match both orders.
-var logoBoldRe = regexp.MustCompile(`\x1b\[(?:1;38;5;255|38;5;255;1)m`)
-
-// TestHomeLogoThemeSGR is the teatest SGR golden: boot the app with a
-// REAL theme engine (the S0.7 wiring — the same theme the app uses), let
-// it render home, and pin the logo + divider SGR color parameters.
-func TestHomeLogoThemeSGR(t *testing.T) {
+// TestHomeFrameSGR is the teatest SGR golden for the 0.8.0 start-screen
+// frame: boot the app with a REAL theme engine (the S0.7 wiring — the same
+// theme the app uses), let it render home, and pin the frame's SGR color
+// parameters + the footer's dir/version content. ONE merged condition
+// (consecutive WaitFors drain each other).
+func TestHomeFrameSGR(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	e, err := theme.New(theme.EngineOptions{
 		KVPath:        filepath.Join(dir, "kv.json"),
@@ -67,11 +61,15 @@ func TestHomeLogoThemeSGR(t *testing.T) {
 	}
 
 	ts := testutil.Boot(t)
+	// init a git repo at the test dir (the Task-3 integration fixture shape):
+	// the footer's branch segment reads the scope dir's attached branch.
+	runGit(t, ts.Dir, "init", "-q", "-b", "yolo-wire-branch")
 	c := client.New(ts.URL, ts.Dir)
 	a := NewApp(c, store.State{}, "", e)
+	a.SetVersion("v0.8.0-4-gabcdef")
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a,
-		teatest.WithInitialTermSize(80, 24),
+		teatest.WithInitialTermSize(200, 50),
 		// The fake terminal is not a TTY, so lipgloss strips every style.
 		// Pin the env that derives ANSI256 from TERM alone (suite
 		// convention).
@@ -81,18 +79,19 @@ func TestHomeLogoThemeSGR(t *testing.T) {
 	)
 
 	// ONE merged condition (consecutive WaitFors drain each other): the
-	// logo plain text (left line 2, the stable box-drawing marker),
-	// every logo/divider SGR token, and the right block's bold flag.
+	// frame's SGR tokens (box border fg, interior bg, footer muted) + the
+	// footer's dir :branch suffix + the plain-semver version.
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		if !strings.Contains(stripANSI(string(b)), logoLeft[1]) {
+		s := stripANSI(string(b))
+		if !strings.Contains(s, homeLogoLine) {
 			return false
 		}
-		for _, tok := range logoSGRTokens {
+		for _, tok := range homeFrameSGRTokens {
 			if !bytes.Contains(b, []byte(tok)) {
 				return false
 			}
 		}
-		return logoBoldRe.Match(b)
+		return strings.Contains(s, ":yolo-wire-branch") && strings.Contains(s, "0.8.0")
 	}, teatest.WithDuration(5*time.Second))
 
 	_ = tm.Quit()

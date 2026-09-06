@@ -122,7 +122,7 @@ func TestTUIAttentionBell(t *testing.T) {
 	a := newRecApp(c, store.State{}, "")
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
-	teatest.WaitFor(t, tm.Output(), hasLine("New session"), teatest.WithDuration(5*time.Second))
+	teatest.WaitFor(t, tm.Output(), hasLine(homeLogoLine), teatest.WithDuration(5*time.Second))
 	tm.Send(press('n'))
 	teatest.WaitFor(t, tm.Output(), hasLine("esc abort/back"), teatest.WithDuration(5*time.Second))
 	suiteType(tm, "hello")

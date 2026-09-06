@@ -2,7 +2,6 @@ package tui
 
 import (
 	"regexp"
-	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -29,7 +28,6 @@ func refModel(p, m string) *protocol.ModelRef {
 func testApp(sessions ...protocol.Session) *recApp {
 	a := newRecApp(client.New("http://127.0.0.1:9", ""), store.State{}, "")
 	a.store.Sessions = sessions
-	a.home.now = func() int64 { return testNow }
 	return a
 }
 
@@ -50,135 +48,33 @@ var (
 
 func pressTab() tea.KeyPressMsg { return tea.KeyPressMsg{Code: '\t'} }
 
-func TestRelTime(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name string
-		d    int64 // ms before testNow
-		want string
-	}{
-		{"now", 0, "0s"},
-		{"12s", 12_000, "12s"},
-		{"59s", 59_000, "59s"},
-		{"1m", 60_000, "1m"},
-		{"5m", 300_000, "5m"},
-		{"59m", 3_540_000, "59m"},
-		{"1h", 3_600_000, "1h"},
-		{"3h", 10_800_000, "3h"},
-		{"23h", 82_800_000, "23h"},
-		{"1d", 86_400_000, "1d"},
-		{"4d", 345_600_000, "4d"},
-		{"future", -5_000, "0s"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			if got := relTime(testNow-tt.d, testNow); got != tt.want {
-				t.Errorf("relTime = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestHomeRenderLockedLayout(t *testing.T) {
-	t.Parallel()
-	a := testApp(
-		protocol.Session{
-			ID:    "ses_0",
-			Title: "T1",
-			Model: refModel("kido", "q"),
-			Time:  protocol.SessionTime{Updated: testNow - 120_000},
-		},
-		protocol.Session{
-			ID:    "ses_1",
-			Title: "T2",
-			Model: refModel("opencode", "gpt-5-nano"),
-			Time:  protocol.SessionTime{Updated: testNow - 10_800_000},
-		},
-		protocol.Session{
-			ID:    "ses_2",
-			Title: "old",
-			Model: refModel("kido", "q"),
-			Time:  protocol.SessionTime{Updated: testNow - 345_600_000},
-		},
-	)
-	div := strings.Repeat("─", 28)
-	// S6.3 re-baseline: the tips seam (wired by NewApp) renders the
-	// NO_MODELS nudge after the help line — the testApp has sessions but
-	// no providers (!connected), so the forced NO_MODELS line is pinned
-	// regardless of tipIdx (one line, fits 80).
-	// S6.5 re-baseline: the footer seam's hint part (the S6.4 destination
-	// is omitted — Dir "") renders the hint-only line after the tips line
-	// (the default leader, the registry-rendered ctrl+x).
-	want := strings.Join(append(logoPlainLines(),
-		"  ▸ New session",
-		"  T1 · kido/q · 2m",
-		"  T2 · opencode/gpt-5-nano · 3h",
-		"  old · kido/q · 4d",
-		div,
-		"↑/↓ move · enter open · n new · /help",
-		"● Tip Run /connect to add an AI provider and start coding",
-		"Show keyboard shortcuts with ctrl+x",
-	), "\n")
-	got := stripANSI(a.home.render(&a.store, 80, a.theme))
-	if got != want {
-		t.Errorf("render mismatch:\ngot:\n%q\nwant:\n%q", got, want)
-	}
-}
-
 func TestAppHandleKeyHome(t *testing.T) {
-	three := func() []protocol.Session {
-		return []protocol.Session{
-			{ID: "ses_0", Title: "T1", Time: protocol.SessionTime{Updated: testNow}},
-			{ID: "ses_1", Title: "T2", Time: protocol.SessionTime{Updated: testNow}},
-			{ID: "ses_2", Title: "T3", Time: protocol.SessionTime{Updated: testNow}},
-		}
-	}
+	// the 0.8.0 start screen has no session list: enter creates a new
+	// session (the old cursor-0 "New session" path — Task 6 rewrites it to
+	// the decision-2 submit), n creates, ctrl+c quits, /help opens help.
+	// Up/down fall through to the prompt history recall (no cursor to move).
 
-	t.Run("cursor wraps down and up", func(t *testing.T) {
+	t.Run("enter creates a session without opening", func(t *testing.T) {
 		t.Parallel()
-		a := testApp(three()...)
-		a.handleKey(press(tea.KeyDown))
-		if a.home.cursor != 1 {
-			t.Fatalf("cursor = %d after down, want 1", a.home.cursor)
-		}
-		a.handleKey(press(tea.KeyDown))
-		a.handleKey(press(tea.KeyDown))
-		if a.home.cursor != 3 {
-			t.Fatalf("cursor = %d, want 3", a.home.cursor)
-		}
-		a.handleKey(press(tea.KeyDown)) // wraps
-		if a.home.cursor != 0 {
-			t.Fatalf("cursor = %d after wrap, want 0", a.home.cursor)
-		}
-		a.handleKey(press(tea.KeyUp)) // wraps
-		if a.home.cursor != 3 {
-			t.Fatalf("cursor = %d after wrap, want 3", a.home.cursor)
-		}
-	})
-
-	t.Run("enter on session opens it and hydrates", func(t *testing.T) {
-		t.Parallel()
-		a := testApp(three()...)
-		a.home.cursor = 2 // T2
+		a := testApp()
 		a.handleKey(press(tea.KeyEnter))
-		if a.route != routeSession || a.curSessionID != "ses_1" {
-			t.Fatalf("route=%v cur=%s, want routeSession/ses_1", a.route, a.curSessionID)
-		}
-		if len(a.Cmds) != 1 {
-			t.Fatalf("recorded %d cmds, want 1 hydrate cmd", len(a.Cmds))
-		}
-	})
-
-	t.Run("enter on new session row creates without opening", func(t *testing.T) {
-		t.Parallel()
-		a := testApp(three()...)
-		a.handleKey(press(tea.KeyEnter)) // cursor 0
 		if a.route != routeHome {
 			t.Fatalf("route = %v, want routeHome (open happens on created msg)", a.route)
 		}
 		if len(a.Cmds) != 1 {
 			t.Fatalf("recorded %d cmds, want 1 create cmd", len(a.Cmds))
+		}
+	})
+
+	t.Run("up/down fall through to the prompt input", func(t *testing.T) {
+		t.Parallel()
+		a := testApp()
+		a.prompt.input.SetValue("draft")
+		a.handleKey(press(tea.KeyUp))
+		// the draft is unchanged (no cursor to move; the empty history
+		// recall is a no-op) and the prompt keeps focus.
+		if got := a.prompt.input.Value(); got != "draft" {
+			t.Fatalf("prompt = %q, want %q (up/down no longer moves a home cursor)", got, "draft")
 		}
 	})
 

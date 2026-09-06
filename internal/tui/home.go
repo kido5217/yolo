@@ -1,361 +1,295 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-
-	"github.com/kido5217/yolo/internal/protocol"
-	"github.com/kido5217/yolo/internal/tui/store"
-	"github.com/kido5217/yolo/internal/tui/theme"
 )
 
-// homeModel holds home-route state: the cursor line and the relative-time
-// clock. (The "/<cmd>" buffer was the T23 prototype; T25 replaces it with the
-// always-focused prompt input.)
-type homeModel struct {
-	cursor int
-	now    func() int64
-	// tips is the S6.3 home tips line seam (wired by NewApp to
-	// App.homeTipsLine; nil in direct-construct runs — nil-guarded in
-	// renderClamped).
-	tips func(w int) string
-	// footer is the S6.4 home footer line seam (wired by NewApp to
-	// App.homeFooterLine — the session-destination part, S6.5 joins the
-	// hint; nil in direct-construct runs — nil-guarded in renderClamped).
-	footer func(w int) string
-}
-
+// homeKeyMap is the home-route key set. Up/Down are SHARED bindings (the
+// slash menu, @-picker and prompt history recall all match them — keys.go);
+// the 0.8.0 start screen has no list to navigate, so handleHomeKey no longer
+// consumes up/down (they fall through to the prompt history recall, Task 4).
 var homeKeyMap = struct {
 	Up      key.Binding
 	Down    key.Binding
 	Enter   key.Binding
 	NewSess key.Binding
-	Quit    key.Binding
 }{
 	Up:      key.NewBinding(key.WithKeys("up")),
 	Down:    key.NewBinding(key.WithKeys("down")),
 	Enter:   key.NewBinding(key.WithKeys("enter")),
 	NewSess: key.NewBinding(key.WithKeys("n")),
-	Quit:    key.NewBinding(key.WithKeys("ctrl+c")),
 }
 
 func nowMillis() int64 { return time.Now().UnixMilli() }
 
-// maxHomeSessions locks home to the newest 50 sessions; the server already
-// lists them updated-desc.
-const maxHomeSessions = 50
+// homeBoxMaxWidth is the 0.8.0 prompt box maxWidth (home.tsx:36 default 75) —
+// the tip box shares the width (tips.tsx:27). homeBoxPad is the box interior
+// paddingLeft/Right (prompt/index.tsx:1361-1362; Task 5's interior content
+// seam reads it).
+const (
+	homeBoxMaxWidth = 75
+	homeBoxPad      = 2
+)
 
-// relTime renders locked relative time: <60s "12s", <60m "5m", <24h "3h",
-// else "4d".
-func relTime(then, now int64) string {
-	d := now - then
-	if d < 0 {
-		d = 0
+// boxBorder renders one border rune (the ┃ left edge / the ╹ bottom edge) in
+// the secondary token (the upstream agent/border color, prompt/index.tsx:1309
+// borderHighlight = the agent color at full fade); a zero Theme degrades to
+// the plain glyph.
+func (a *App) boxBorder(ch string) string {
+	if c, ok := a.theme.Color("secondary"); ok && c.A != 0 {
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(c.Hex()[:7])).Render(ch)
 	}
-	s := d / 1000
-	switch {
-	case s < 60:
-		return fmt.Sprintf("%ds", s)
-	case s < 3600:
-		return fmt.Sprintf("%dm", s/60)
-	case s < 86400:
-		return fmt.Sprintf("%dh", s/3600)
-	default:
-		return fmt.Sprintf("%dd", s/86400)
+	return ch
+}
+
+// boxFill renders the box interior fill in the backgroundElement token
+// (the upstream prompt interior, prompt/index.tsx:1350-1512); a zero Theme
+// degrades to the plain text.
+func (a *App) boxFill(s string) string {
+	if c, ok := a.theme.Color("backgroundElement"); ok && c.A != 0 {
+		return lipgloss.NewStyle().Background(lipgloss.Color(c.Hex()[:7])).Render(s)
+	}
+	return s
+}
+
+// homeBox renders the 5 box rows (the 0.8.0 prompt box, mock rows 24..28 at
+// 200x50): the ┃ left border (rows 0..3) + the ╹ bottom edge (row 4), the
+// backgroundElement interior fill, and the blank interior (Task 4 — the
+// boxInputLine seam is the Task-5 placeholder, empty here). It reads a.size
+// itself (the house idiom, a.termWidth).
+func (a *App) homeBox() []string {
+	w := a.termWidth()
+	contentW := w - 4
+	if contentW < 0 {
+		contentW = 0
+	}
+	boxW := min(homeBoxMaxWidth, contentW)
+	if boxW < 1 {
+		boxW = 1
+	}
+	fill := strings.Repeat(" ", boxW-1)
+	border := a.boxBorder("┃")
+	bottom := a.boxBorder("╹")
+	return []string{
+		border + a.boxFill(fill),
+		border + a.boxFill(fill),
+		border + a.boxFill(fill),
+		border + a.boxFill(fill),
+		bottom + a.boxFill(strings.Repeat("▀", boxW-1)),
 	}
 }
 
-// lineParts splits a session row into its title and the metadata tail
-// (" · provider/model · relTime", dimmed like upstream's per-row footer);
-// title+meta is byte-identical to the old lineContent output.
-func lineParts(s protocol.Session, now int64) (title, meta string) {
-	title = s.Title
-	if s.Model != nil {
-		meta += " \u00B7 " + s.Model.ProviderID + "/" + s.Model.ID
+// boxInputLine is the Task-5 seam: the box placeholder row (the mode pool).
+// Task 4 lands the empty-value stub so the gate is green; Task 5 replaces
+// the body in place (the homeBox interior picks it up).
+func (a *App) boxInputLine() string { return "" }
+
+// homeHintLine is the Task-5 seam: the box hint row (the shortcuts line).
+// Task 4 lands the blank stub; Task 5 fills it.
+func (a *App) homeHintLine() string { return "" }
+
+// homeFooterContentRow renders the 0.8.0 frame footer content row (the
+// 3-row footer block's middle row): the dir (muted) at col 2 =
+// a.sessionDestination() + ":"+a.branch when a.branch != "" (decision 4: the
+// ":" with NO space), the plain-semver version (muted) right-aligned ending
+// at col w-2 (left col w-2-len(ver)); when the dir would collide with the
+// version (dir width > w-2-len(ver)-2-3) the dir is silently cut at
+// w-2-len(ver)-5 (no ellipsis — the cutWidth house convention); the version
+// is omitted (no right segment) when empty. The returned string is the
+// content (NOT padded to w — homeView pads the row).
+func (a *App) homeFooterContentRow(w int) string {
+	dir := ""
+	if a.Service.Dir != "" {
+		dir = a.sessionDestination()
+		if a.branch != "" {
+			dir += ":" + a.branch
+		}
 	}
-	return title, meta + " \u00B7 " + relTime(s.Time.Updated, now)
-}
-
-// visible returns the sessions home renders.
-func (h *homeModel) visible(s *store.State) []protocol.Session {
-	ses := s.Sessions
-	if len(ses) > maxHomeSessions {
-		ses = ses[:maxHomeSessions]
+	ver := plainSemver(a.version)
+	verCol := 0
+	if ver != "" {
+		verCol = w - 2 - len(ver)
+		if verCol < 0 {
+			verCol = 0
+		}
 	}
-	return ses
-}
-
-func (h *homeModel) lineCount(s *store.State) int { return 1 + len(h.visible(s)) }
-
-func (h *homeModel) clampCursor(s *store.State) {
-	if h.cursor >= h.lineCount(s) {
-		h.cursor = h.lineCount(s) - 1
-	}
-	if h.cursor < 0 {
-		h.cursor = 0
-	}
-}
-
-func (h *homeModel) moveCursor(s *store.State, d int) {
-	h.clampCursor(s)
-	n := h.lineCount(s)
-	h.cursor = ((h.cursor+d)%n + n) % n
-}
-
-const helpText = "\u2191/\u2193 move \u00B7 enter open \u00B7 n new \u00B7 /help"
-
-func (h *homeModel) render(s *store.State, w int, th theme.Theme) string {
-	return h.renderClamped(s, w, th, -1)
-}
-
-// renderClamped is render with the recent-session row count capped (maxRows
-// -1 = all; the modal stack, S2.2, clamps the chrome so the panel fits).
-// It produces the locked home layout for the store: the 4-line upstream
-// logo (S0.8), the session rows word-wrapped at the terminal width (the
-// cursor stays one stop per session — continuation lines align under the
-// content), the theme borderSubtle divider, the dimmed help line and — when
-// the tips seam is wired and the tips are visible — the S6.3 tips line,
-// and — when the footer seam is wired and the scope dir is known — the
-// S6.4 footer line (the session destination).
-func (h *homeModel) renderClamped(s *store.State, w int, th theme.Theme, maxRows int) string {
-	h.clampCursor(s)
-	rows := h.visible(s)
-	if maxRows >= 0 && len(rows) > maxRows {
-		rows = rows[:maxRows]
+	if ver != "" && dir != "" && 2+runeWidth(dir) > verCol-3 {
+		cut := verCol - 5
+		if cut < 0 {
+			cut = 0
+		}
+		dir, _ = cutWidth(dir, cut)
 	}
 	var b strings.Builder
-	b.WriteString(renderLogo(th))
-	b.WriteByte('\n')
-	b.WriteString(h.renderRow(0, "New session", "", w, th))
-	b.WriteByte('\n')
-	for i, se := range rows {
-		title, meta := lineParts(se, h.now())
-		b.WriteString(h.renderRow(i+1, title, meta, w, th))
-		b.WriteByte('\n')
+	if dir != "" {
+		b.WriteString("  " + dir)
 	}
-	b.WriteString(th.BorderSubtle().Render(dividerLine()))
-	b.WriteByte('\n')
-	b.WriteString(dimWrapped(th, helpText, w))
-	if h.tips != nil {
-		if line := h.tips(w); line != "" {
-			b.WriteByte('\n')
-			b.WriteString(line)
+	if ver != "" {
+		pad := verCol - b.Len()
+		for i := 0; i < pad; i++ {
+			b.WriteByte(' ')
 		}
-	}
-	if h.footer != nil {
-		if line := h.footer(w); line != "" {
-			b.WriteByte('\n')
-			b.WriteString(line)
-		}
+		b.WriteString(ver)
 	}
 	return b.String()
 }
 
-// rowLead splits the row prefix into its leading-space lead (rendered
-// plain) and the styled body ("  ▸ " is two plain spaces + the ▸ run).
-func rowLead(prefix string) (lead, body string) {
-	body = strings.TrimLeft(prefix, " \t")
-	return prefix[:len(prefix)-len(body)], body
+// blankRow is one blank (w-wide) frame row.
+func blankRow(w int) string { return strings.Repeat(" ", w) }
+
+// framePadRight pads s to width w (left-aligned, the frame's row padding).
+func framePadRight(s string, w int) string {
+	cw := ansiWidth(s)
+	if cw >= w {
+		return s
+	}
+	return s + strings.Repeat(" ", w-cw)
 }
 
-// rowLine is one visual line of a wrapped home row, split into its styled
-// runs: cur the "▸" run (cursor rows, first line only), title the title run
-// (its trailing join space when the line continues into the meta), meta the
-// " · provider/model · relTime" tail.
-type rowLine struct {
-	cur   string
-	title string
-	meta  string
+// frameCountLines is the line count of a (possibly multi-line) frame surface
+// (0 when empty).
+func frameCountLines(s string) int {
+	if s == "" {
+		return 0
+	}
+	return 1 + strings.Count(s, "\n")
 }
 
-// wTag is one word of a home row tagged with its run: 0 prefix (the "▸"
-// body), 1 title, 2 meta.
-type wTag struct {
-	word string
-	seg  int
-}
-
-// rowLines wraps the plain home row (prefix + title + meta) at w with the
-// same word-wrap contract as wrapLine (word boundaries, over-long tokens
-// hard-split at the width, single-space rejoin) and re-derives the
-// title/meta split per visual line. A row that fits is returned verbatim as
-// one line (internal spacing preserved).
-func rowLines(prefix, title, meta string, w int) []rowLine {
-	lead, body := rowLead(prefix)
-	plain := prefix + title + meta
-	if w < 1 || plain == "" {
-		return []rowLine{{cur: body, title: title, meta: meta}}
+// placeRow places content at column left and pads the right to width w (the
+// frame's per-row layout; ansiWidth counts the styled content's display
+// width, ansiCutWidth truncates without splitting a CSI escape).
+func placeRow(left int, content string, w int) string {
+	if left < 0 {
+		left = 0
 	}
-	var words []wTag
-	add := func(s string, seg int) {
-		for _, f := range strings.Fields(s) {
-			words = append(words, wTag{f, seg})
-		}
-	}
-	add(body, 0)
-	add(title, 1)
-	add(meta, 2)
-	effW := w - runeWidth(lead)
-	if effW < 1 {
-		effW = 1
-	}
-	var (
-		lines []rowLine
-		cur   []wTag
-		curW  int
-	)
-	flush := func() {
-		if len(cur) == 0 {
-			return
-		}
-		lines = append(lines, joinRowLine(cur))
-		cur, curW = cur[:0], 0
-	}
-	for _, wd := range words {
-		fw := runeWidth(wd.word)
-		if fw > effW {
-			flush()
-			for rest := wd.word; len(rest) > 0; {
-				chunk, r := cutWidth(rest, effW)
-				lines = append(lines, joinRowLine([]wTag{{chunk, wd.seg}}))
-				rest = r
-			}
-			continue
-		}
-		switch {
-		case len(cur) == 0:
-			cur, curW = append(cur, wd), fw
-		case curW+1+fw <= effW:
-			cur, curW = append(cur, wd), curW+1+fw
-		default:
-			flush()
-			cur, curW = append(cur, wd), fw
-		}
-	}
-	flush()
-	return lines
-}
-
-// joinRowLine joins the tagged words of one visual line into its styled
-// runs; a join space belongs to the PRECEDING word's run (a run's trailing
-// space is where the next run starts on the same line; a line-boundary
-// boundary drops it, as wrapLine drops leading spaces on continuation
-// lines).
-func joinRowLine(ws []wTag) rowLine {
-	var l rowLine
-	for i, wd := range ws {
-		var p *string
-		switch wd.seg {
-		case 0:
-			p = &l.cur
-		case 1:
-			p = &l.title
-		default:
-			p = &l.meta
-		}
-		*p += wd.word
-		if i < len(ws)-1 {
-			*p += " "
-		}
-	}
-	return l
-}
-
-// renderRow renders one home row (line 0 is the "New session" row). The
-// cursor row is the SELECTED row (upstream dialog-select active row): every
-// rendered line is painted with the selection background (theme primary —
-// upstream `option.bg ?? theme.primary`) and the text in
-// SelectedForeground; the "▸" cursor run and the title run are bold
-// (upstream bolds the active title), the metadata tail is not (upstream's
-// dimmed description/footer runs). The background covers each rendered
-// line's content only — no background on the plain indent or the empty
-// tail beyond the content. Other rows: the title in the theme text token,
-// the metadata tail in textMuted, no background. A zero Theme (nil-engine
-// runs, S0.7) degrades: the cursor row keeps the cursorStyle bold (plain —
-// a zero Theme has no text token) on the "▸" run with plain content, every
-// other row plain — never a panic.
-func (h *homeModel) renderRow(line int, title, meta string, w int, th theme.Theme) string {
-	cursor := line == h.cursor
-	prefix := "  "
-	if cursor {
-		prefix = "  \u25B8 "
-	}
-	lead, _ := rowLead(prefix)
-	lines := rowLines(prefix, title, meta, w)
-	ind := 2
-	if cursor {
-		ind = 4
+	cw := ansiWidth(content)
+	if left+cw > w {
+		content, _ = ansiCutWidth(content, w-left)
+		cw = w - left
 	}
 	var b strings.Builder
-	for i, l := range lines {
-		if i > 0 {
-			n := ind
-			if ww := runeWidth(l.cur) + runeWidth(l.title) + runeWidth(l.meta); ww+n > w {
-				n = w - ww
-				if n < 0 {
-					n = 0
-				}
-			}
-			b.WriteByte('\n')
-			b.WriteString(strings.Repeat(" ", n))
-		} else {
-			b.WriteString(lead)
-		}
-		writeRowLine(&b, l, cursor, th)
-	}
+	b.WriteString(strings.Repeat(" ", left))
+	b.WriteString(content)
+	b.WriteString(strings.Repeat(" ", w-left-cw))
 	return b.String()
 }
 
-// writeRowLine renders one visual line's styled runs (see renderRow).
-func writeRowLine(b *strings.Builder, l rowLine, selected bool, th theme.Theme) {
-	if !selected {
-		if l.title != "" {
-			b.WriteString(th.Text().Render(l.title))
+// homeView renders the 0.8.0 start-screen frame: exactly size.Height rows of
+// width w — top spacer, the fixed stack (4 pad, 4 logo, 1 pad, 1 box pad,
+// 5 box, 1 hint, 3 tip pad, the tip rows), the overlay rows (menu, acMenu,
+// perm, toasts, dlg, wk, lastErr — in that order, left-aligned per the
+// existing overlay rendering), the bottom spacer, the loading line
+// (deviation 237 slot), and the 3-row footer block (pad / content / pad).
+// Spacers split the free rows ceil-first (top gets the odd row — the fixture
+// convention). When fixed content exceeds the terminal the spacers clamp to
+// 0 and the frame drops the TOP rows (the alt-screen anchor is the bottom —
+// the Q9 note); the full stack fits from 24 rows up.
+func (a *App) homeView(menu, acMenu, perm, toasts, dlg, wk string) string {
+	w := a.termWidth()
+	h := a.size.Height
+	if h < 1 {
+		h = 24
+	}
+	contentW := w - 4
+	if contentW < 0 {
+		contentW = 0
+	}
+	logoPad := 2 + (contentW-logoWidth+1)/2
+	if logoPad < 0 {
+		logoPad = 0
+	}
+	boxW := min(homeBoxMaxWidth, contentW)
+	if boxW < 1 {
+		boxW = 1
+	}
+	boxL := 2 + (contentW-boxW+1)/2
+	if boxL < 0 {
+		boxL = 0
+	}
+	// the fixed stack (each row w-wide).
+	var stack []string
+	stack = append(stack, blankRow(w), blankRow(w), blankRow(w), blankRow(w)) // 4 pad
+	for _, l := range strings.Split(renderLogo(a.theme), "\n") {              // 4 logo
+		stack = append(stack, placeRow(logoPad, l, w))
+	}
+	stack = append(stack, blankRow(w)) // 1 pad
+	stack = append(stack, blankRow(w)) // 1 box pad
+	for _, r := range a.homeBox() {    // 5 box
+		stack = append(stack, placeRow(boxL, r, w))
+	}
+	stack = append(stack, placeRow(boxL, a.homeHintLine(), w))   // 1 hint
+	stack = append(stack, blankRow(w), blankRow(w), blankRow(w)) // 3 tip pad
+	tips := a.homeTipsRows()
+	if len(tips) == 0 {
+		stack = append(stack, blankRow(w)) // 1 blank tip row (hidden)
+	} else {
+		for _, r := range tips {
+			tipL := boxL + (boxW-ansiWidth(r)+1)/2
+			stack = append(stack, placeRow(tipL, r, w))
 		}
-		if l.meta != "" {
-			b.WriteString(th.TextMuted().Render(l.meta))
+	}
+	// the overlay rows (left-aligned, in the session-route order).
+	var overlays []string
+	for _, o := range []string{menu, acMenu, perm, toasts, dlg, wk} {
+		if o != "" {
+			overlays = append(overlays, strings.Split(o, "\n")...)
 		}
-		return
 	}
-	bg, ok := th.Color("primary")
-	if !ok {
-		// zero Theme: the cursorStyle bold (plain — a zero Theme has no
-		// text token) + plain content
-		if l.cur != "" {
-			b.WriteString(cursorStyle(th).Render(l.cur))
+	if a.lastErr != "" {
+		for _, l := range strings.Split(wrapLine("! "+a.lastErr, w), "\n") {
+			overlays = append(overlays, a.theme.Error().Render(l))
 		}
-		b.WriteString(l.title + l.meta)
-		return
 	}
-	sel := th.SelectedForeground()
-	fg := lipgloss.Color(sel.Hex()[:7])
-	bgStyle := lipgloss.Color(bg.Hex()[:7])
-	head := lipgloss.NewStyle().Foreground(fg).Background(bgStyle).Bold(true)
-	tail := lipgloss.NewStyle().Foreground(fg).Background(bgStyle)
-	if l.cur != "" || l.title != "" {
-		b.WriteString(head.Render(l.cur + l.title))
+	// the loading line (deviation 237 slot).
+	loading := a.loadingView(w)
+	// the 3-row footer block (pad / content / pad).
+	footer := []string{blankRow(w), framePadRight(a.homeFooterContentRow(w), w), blankRow(w)}
+	// the free rows (the spacers split ceil-first — top gets the odd row).
+	fixedLen := len(stack) + len(overlays) + frameCountLines(loading) + 3
+	free := h - fixedLen
+	var topSpacer, bottomSpacer int
+	if free > 0 {
+		topSpacer = (free + 1) / 2
+		bottomSpacer = free - topSpacer
 	}
-	if l.meta != "" {
-		b.WriteString(tail.Render(l.meta))
+	// assemble the frame (exactly h rows).
+	var frame []string
+	for i := 0; i < topSpacer; i++ {
+		frame = append(frame, blankRow(w))
 	}
+	frame = append(frame, stack...)
+	frame = append(frame, overlays...)
+	if loading != "" {
+		frame = append(frame, loading)
+	}
+	for i := 0; i < bottomSpacer; i++ {
+		frame = append(frame, blankRow(w))
+	}
+	frame = append(frame, footer...)
+	if len(frame) > h {
+		// fixed content exceeds the terminal: drop the TOP rows (the
+		// alt-screen anchor is the bottom).
+		frame = frame[len(frame)-h:]
+	}
+	for len(frame) < h {
+		frame = append(frame, blankRow(w))
+	}
+	return strings.Join(frame, "\n")
 }
 
-// handleHomeKey dispatches home-route keys: up/down wrap, enter opens or
-// creates, n creates, esc clears the prompt; unhandled keys fall through to
-// the prompt input. (ctrl+c is handled app-wide in handleKey.)
+// handleHomeKey dispatches home-route keys: enter creates (Task 4 — the
+// start screen has no list to select from, so enter always creates; Task 6
+// rewrites it to the decision-2 submit), n creates, esc clears the prompt;
+// unhandled keys fall through to the prompt input (up/down now recall the
+// prompt history — the start screen has no list to navigate). (ctrl+c is
+// handled app-wide in handleKey.)
 func (a *App) handleHomeKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 	switch {
-	case key.Matches(k, homeKeyMap.Up):
-		a.home.moveCursor(&a.store, -1)
-		return nil, true
-	case key.Matches(k, homeKeyMap.Down):
-		a.home.moveCursor(&a.store, 1)
-		return nil, true
 	case key.Matches(k, homeKeyMap.Enter):
 		return a.homeEnter(), true
 	case key.Matches(k, homeKeyMap.NewSess):
@@ -367,15 +301,9 @@ func (a *App) handleHomeKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 	return nil, false
 }
 
+// homeEnter creates a new session (Task 4 — the old cursor-0 "New session"
+// path; the start screen has no list to select from, so enter always
+// creates). Task 6 rewrites this to the decision-2 submit (the prompt text).
 func (a *App) homeEnter() []tea.Cmd {
-	if a.home.cursor == 0 {
-		return a.emit(a.createSessionCmd())
-	}
-	rows := a.home.visible(&a.store)
-	idx := a.home.cursor - 1
-	if idx < 0 || idx >= len(rows) {
-		return nil
-	}
-	a.openSession(rows[idx].ID)
-	return a.emit(a.hydrateCmd())
+	return a.emit(a.createSessionCmd())
 }

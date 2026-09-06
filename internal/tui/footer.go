@@ -38,8 +38,10 @@ func (a *App) statusSeg() string {
 	return ""
 }
 
-// footerView renders the locked status footer (visible on both routes):
-// model · agent · ↑in ↓out · $cost · conn · status.
+// footerView renders the locked status footer (the SESSION route only — the
+// 0.8.0 home route owns its own frame footer, App.homeFooterContentRow, so
+// the model footer HIDES on home): model · agent · ↑in ↓out · $cost · conn ·
+// status.
 func (a *App) footerView() string {
 	var (
 		model  string
@@ -47,31 +49,17 @@ func (a *App) footerView() string {
 		tokens protocol.Tokens
 		cost   float64
 	)
-	switch a.route {
-	case routeSession:
-		if a.store.Current != nil {
-			if mr := a.store.Current.Model; mr != nil {
-				model = mr.ProviderID + "/" + mr.ID
-			} else {
-				model = "no model"
-			}
-			agent = a.store.Current.Agent
-			tokens = a.store.Current.Tokens
-			cost = a.store.Current.Cost
-		} else {
-			model, agent = "no model", "default"
-		}
-	default: // routeHome
-		if m, ok := a.store.Config["model"].(string); ok && m != "" {
-			model = m
+	if a.store.Current != nil {
+		if mr := a.store.Current.Model; mr != nil {
+			model = mr.ProviderID + "/" + mr.ID
 		} else {
 			model = "no model"
 		}
-		if ag, ok := a.store.Config["agent"].(string); ok && ag != "" {
-			agent = ag
-		} else {
-			agent = "default"
-		}
+		agent = a.store.Current.Agent
+		tokens = a.store.Current.Tokens
+		cost = a.store.Current.Cost
+	} else {
+		model, agent = "no model", "default"
 	}
 	muted := a.theme.TextMuted()
 	tokensSeg := "↑" + number(tokens.Input) + " ↓" + number(tokens.Output)

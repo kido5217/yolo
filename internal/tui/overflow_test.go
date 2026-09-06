@@ -98,23 +98,20 @@ func TestModelDlgViewWraps(t *testing.T) {
 	}
 }
 
-func TestHomeRenderWraps(t *testing.T) {
-	a := testApp(protocol.Session{
-		ID: "ses_1", Title: strings.Repeat("long title word ", 10),
-		Model: refModel("kido", "q"), Time: protocol.SessionTime{Updated: testNow - 60000},
-	})
-	// Home carries two fixed-width lines: the logo (a fixed logoWidth
-	// glyph block that never wraps or shrinks — the upstream look;
-	// clipped on <logoWidth-column terminals) and the divider (fixed
-	// dividerWidth runes). Render at dividerWidth+1 so the fitsWidth
-	// contract holds while the long session title still exercises the
-	// wrap.
-	got := stripANSI(a.home.render(&a.store, dividerWidth+1, a.theme))
-	fitsWidth(t, got, dividerWidth+1)
-	// Whitespace-normalized: continuation lines are indented.
-	flat := strings.Join(strings.Fields(rejoined(got)), " ")
-	if !strings.Contains(flat, strings.TrimRight(strings.Repeat("long title word ", 10), " ")) {
-		t.Fatalf("home title lost in wrap:\n%q", got)
+func TestHomeTipsRowsWrap(t *testing.T) {
+	// the home tip wraps at the TIP BOX width (min(75, w-4)): at a narrow
+	// terminal (w=40 → tip box width 36) the NO_MODELS nudge (54 cols —
+	// the testApp has no providers) wraps to 2 rows, each within the box.
+	a := testApp()
+	a.size = tea.WindowSizeMsg{Width: 40, Height: 24}
+	rows := a.homeTipsRows()
+	if len(rows) != 2 {
+		t.Fatalf("tips rows = %d, want 2 (wrapped at the tip box width)", len(rows))
+	}
+	for i, r := range rows {
+		if cw := runeWidth(stripANSI(r)); cw > 36 {
+			t.Fatalf("tips row %d width = %d, want <= 36: %q", i, cw, stripANSI(r))
+		}
 	}
 }
 

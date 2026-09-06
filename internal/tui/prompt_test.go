@@ -129,16 +129,6 @@ func TestPromptMenuKeys(t *testing.T) {
 		}
 	})
 
-	t.Run("menu open: arrows do not move the home cursor", func(t *testing.T) {
-		a := testApp()
-		a.store.Commands = testCommands()
-		typeStr(a, "/")
-		a.handleKey(press(tea.KeyDown))
-		if a.home.cursor != 0 {
-			t.Fatalf("home cursor = %d, want 0 (menu owns arrows)", a.home.cursor)
-		}
-	})
-
 	t.Run("enter with no match clears the input (locked)", func(t *testing.T) {
 		a := testApp()
 		a.store.Commands = testCommands()
@@ -397,33 +387,6 @@ func TestPromptKeyRouting(t *testing.T) {
 		a.handleKey(tea.KeyPressMsg{Code: tea.KeyPgUp})
 		if a.sess.following {
 			t.Fatal("follow must pause on pgup")
-		}
-	})
-
-	t.Run("home: up/down drive the list, letters go to the prompt", func(t *testing.T) {
-		sessions := []protocol.Session{
-			{ID: "ses_0", Title: "T1", Time: protocol.SessionTime{Updated: testNow}},
-			{ID: "ses_1", Title: "T2", Time: protocol.SessionTime{Updated: testNow}},
-		}
-		a := testApp(sessions...)
-		a.store.Commands = testCommands()
-		a.handleKey(press(tea.KeyDown))
-		if a.home.cursor != 1 {
-			t.Fatalf("cursor = %d, want 1", a.home.cursor)
-		}
-		typeStr(a, "hi")
-		if a.prompt.input.Value() != "hi" {
-			t.Fatalf("value = %q, want hi", a.prompt.input.Value())
-		}
-		if a.home.cursor != 1 {
-			t.Fatalf("cursor = %d, want unchanged 1", a.home.cursor)
-		}
-		a.handleKey(press('n'))
-		if len(a.Cmds) != 1 {
-			t.Fatalf("recorded %d cmds, want 1 (n still creates)", len(a.Cmds))
-		}
-		if a.prompt.input.Value() != "hi" {
-			t.Fatalf("value = %q, want hi (n is reserved)", a.prompt.input.Value())
 		}
 	})
 

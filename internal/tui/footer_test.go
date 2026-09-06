@@ -83,17 +83,6 @@ func TestFooterRender(t *testing.T) {
 			mutate: func(s *store.State) { s.Current.Cost = 1.23456 },
 			want:   "kido/q · build · ↑123 ↓45 · $1.23 · ● live",
 		},
-		{
-			name:  "home uses config defaults",
-			route: routeHome,
-			cfg:   map[string]any{"model": "kido/q", "agent": "build"},
-			want:  "kido/q · build · ↑0 ↓0 · ● live",
-		},
-		{
-			name:  "home without config",
-			route: routeHome,
-			want:  "no model · default · ↑0 ↓0 · ● live",
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
