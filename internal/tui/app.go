@@ -46,6 +46,11 @@ type leaderTimeoutMsg struct {
 	gen uint64
 }
 
+// branchMsg reports the scope dir's attached git branch ("" = none — the
+// path-only footer). dir is the scope dir AT LAUNCH (the branchCmd
+// capture): a fetch racing a scope change is dropped by the apply guard.
+type branchMsg struct{ dir, branch string }
+
 // themeRefreshDelays mirrors upstream THEME_REFRESH_DELAYS
 // (theme.tsx:82): the 250 ms leg re-generates the system theme; the
 // 1000 ms leg (the last) also re-discovers customs.
@@ -129,6 +134,13 @@ type App struct {
 	// (main.version, set post-construction via SetVersion — the SetKeybinds
 	// pattern); the footer renders plainSemver at render time.
 	version string
+	// 0.8.0 home footer (decision 4): the scope dir's attached git branch
+	// ("" = none — the footer renders the path-only form) and the scope
+	// dir the last applied fetch was for (the stale-fetch race guard: a
+	// branchMsg carries the launch-time dir, the apply guard drops a fetch
+	// racing a scope change).
+	branch    string
+	branchDir string
 	// S7.2 todo sidebar: the visibility mode ("auto" | "hide", persisted
 	// over the theme KV under kvSidebarModeKey — the S6.3 theme-KV seam,
 	// deviation 223's class) + the forced-open flag (the toggle's visible
@@ -234,9 +246,11 @@ func (a *App) termWidth() int {
 	return a.size.Width
 }
 
-// Init hydrates the starting route and arms the SSE + resync pumps.
+// Init hydrates the starting route and arms the SSE + resync pumps. The
+// 0.8.0 bootstrap branch fetch (decision 4: ONE at TUI start, no polling)
+// joins the initial batch.
 func (a *App) Init() tea.Cmd {
-	cmds := []tea.Cmd{a.hydrateCmd(), a.eventPump(), a.loadArm()}
+	cmds := []tea.Cmd{a.hydrateCmd(), a.eventPump(), a.loadArm(), a.branchCmd()}
 	if c := a.resyncPump(); c != nil {
 		cmds = append(cmds, c)
 	}
@@ -290,6 +304,11 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 		// applied event's cmd.
 		if b := a.onAttention(m.Event); b != nil {
 			cmd = tea.Batch(cmd, b)
+		}
+		// 0.8.0 VCS re-read (decision 4): a completed bash part on the
+		// current session is the only local actor that can move HEAD.
+		if c := a.branchReRead(m.Event); c != nil {
+			cmd = tea.Batch(cmd, c)
 		}
 		return a.afterApply(cmd)
 	case connLostMsg:
@@ -360,6 +379,14 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 		return a.applyRename(m)
 	case authMsg:
 		return a.applyAuth(m)
+	case branchMsg:
+		// The stale-fetch race guard (decision 4): the msg carries the
+		// scope dir AT LAUNCH — a fetch racing a scope change is dropped.
+		if m.dir == a.Service.Dir {
+			a.branch = m.branch
+			a.branchDir = m.dir
+		}
+		return nil
 	case tea.KeyPressMsg:
 		cmds := a.handleKey(m)
 		if len(cmds) == 0 {
@@ -552,6 +579,54 @@ func (a *App) saveFrecency() {
 // repickTip re-rolls the tip index (the per-home-entry re-pick — the
 // upstream per-mount Math.random, no timer; deviation 235 note).
 func (a *App) repickTip() { a.tipIdx = int(a.tipRand() * float64(len(tips))) }
+
+// branchCmd fetches the scope dir's branch in a goroutine (5s ctx, 5s
+// exec timeout — the decision-4 2-5s band, generous end; a local
+// symbolic-ref is ~10ms). The msg carries the scope dir AT LAUNCH so a
+// fetch racing a scope change is dropped by the apply guard.
+func (a *App) branchCmd() tea.Cmd {
+	dir := a.Service.Dir
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		b, _ := gitBranch(ctx, dir, 5*time.Second, sanitizedGitEnv())
+		return branchMsg{dir: dir, branch: b}
+	}
+}
+
+// branchReRead arms the VCS branch re-read on a HEAD change that is
+// locally observable (decision-4 cadence, no polling): a COMPLETED bash
+// tool part on the current session is the only local actor that can move
+// HEAD (a shell-mode submit reuses the bash tool — covered). nil for
+// every other event (no extra cmd beyond the pump).
+func (a *App) branchReRead(ev protocol.Event) tea.Cmd {
+	if ev.Type != protocol.EventTypeMessagePartUpdated {
+		return nil
+	}
+	var p protocol.MessagePartUpdatedProps
+	if json.Unmarshal(ev.Properties, &p) != nil {
+		return nil
+	}
+	if p.Part.Tool != "bash" {
+		return nil
+	}
+	if p.Part.State == nil || p.Part.State.Status != "completed" {
+		return nil
+	}
+	if p.Part.SessionID != a.curSessionID {
+		return nil
+	}
+	return a.branchCmd()
+}
+
+// enterHome is the home-entry hook: re-roll the tip index (the upstream
+// per-mount re-roll) and arm the branch re-read. Callers batch the
+// returned cmd. (The placeholder-index re-roll joins this hook in Task
+// 5 — the call sites do not change.)
+func (a *App) enterHome() tea.Cmd {
+	a.repickTip()
+	return a.branchCmd()
+}
 
 // loadTipsHidden restores the tips_hidden flag (the S5.2 KV seam).
 func (a *App) loadTipsHidden() {
