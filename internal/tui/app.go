@@ -125,6 +125,10 @@ type App struct {
 	tipIdx     int
 	tipRand    func() float64
 	tipsHidden bool
+	// 0.8.0 home footer (Q10): the raw git-describe build string
+	// (main.version, set post-construction via SetVersion — the SetKeybinds
+	// pattern); the footer renders plainSemver at render time.
+	version string
 	// S7.2 todo sidebar: the visibility mode ("auto" | "hide", persisted
 	// over the theme KV under kvSidebarModeKey — the S6.3 theme-KV seam,
 	// deviation 223's class) + the forced-open flag (the toggle's visible
@@ -213,6 +217,10 @@ func (a *App) SetKeybinds(overrides map[string]any) error {
 	a.keymap = km
 	return nil
 }
+
+// SetVersion stores the raw build string (main.version) for the home
+// footer (plainSemver at render time).
+func (a *App) SetVersion(v string) { a.version = v }
 
 // Close stops the SSE pump. Call it once the program exits.
 func (a *App) Close() { a.stop() }
