@@ -97,9 +97,38 @@ plan-internal test fix (NOT one of the 12 spec deviations, so no DEVIATIONS
 entry here): `TestResolveFiles`' exact-max subtest wrote `max.bin` as all-zero
 bytes (valid UTF-8 → text/plain) yet expected application/octet-stream; the test
 now seeds a leading `0xff` so the exact-max file is genuinely binary, matching
-the pinned `utf8.Valid` mime rule. Gate green otherwise (the host-speed
-`TestRenderMessages100KBBudget` is the only failure). Next: Task 9 (`cmd/yolo`
-boot/session/send/event loop + default renderer, `yolo-rem.10`).
+ the pinned `utf8.Valid` mime rule. Gate green otherwise (the host-speed
+`TestRenderMessages100KBBudget` is the only failure). Task 9 (`cmd/yolo`
+boot/session/send/event loop + default renderer, `yolo-rem.10`) landed —
+`cmd/yolo/run_output.go` adds the renderer state machine (`newRenderer`/
+`apply`/`finish`): sessionID filter, header-once on the first assistant
+message.updated, live text deltas verbatim to stdout + the finalize-newline
+rule, tool lines, permission note, error line, thinking-gated reasoning, no
+ANSI; plus the NDJSON envelope (`ndjsonLine`/`stepStartPart`/`stepFinishPart`).
+`runRunE`'s orchestration tail: the typed `--format` switch, boot (in-process
+via the tuiRunE pattern or `--attach`), mint-path `--agent` validation (warn +
+fallback), session resolution (--session 404 → exit 1 > --continue first row
+(ORDER BY time_updated DESC) > mint), SIGINT (first → abort + 130, second →
+force-kill), send (409 busy), and the `runEvents` loop (permission.asked reply
+policy, session.status idle, the §6.3 resync Status check) with the
+ListMessages settle read; `permissionNote`/`settleTurnError`/`firstSigint`.
+Principle-5 resolutions (NOT one of the 12 spec deviations, so no DEVIATIONS
+entry here): (a) the renderer gates the "finalized" check on text/reasoning by
+`Time.End` and on tool by `State.Status` (completed/error) — the plan gated all
+parts on `Time.End`, but its own NDJSON tool part has `End=0` and a completed
+tool's done-signal is its status (this keeps the plan's `part.time={"start":0}`
+pin); (b) the plan's `p.Status == protocol.SessionStatusIdle` doesn't compile
+(`SessionStatus` is a struct) — it's `p.Status.Type`; (c) the NDJSON tool_use
+byte pin now includes `state.time` (`ToolState.Time` has no omitempty — faithful
+wire serialization) and a `step_start` for `msg_9` (a new assistant id emits its
+own step_start per the "step_start on a new assistant id" rule); (d)
+`TestRunContinueSelectsMostRecentlyUpdated`: `seedSessions` now `MkdirAll`s the
+storage dir before `storage.Open` (the run's `openDB` does this on boot; seeding
+runs pre-boot), and the expected message count is 2 (a turn is user +
+assistant), not 1. Gate green otherwise (host-speed / load-dependent timing
+flakes pass in isolation: TUI `TestRenderMessages100KBBudget`,
+`TestMarkdownTextPartSGR`, and cmd/yolo `TestServeSigtermDrainsAndExitsZero`).
+Next: Task 10 (NDJSON output format byte pins, `yolo-rem.11`).
 
 **Status (2026-09-07):** 0.8.0 start-screen parity epic (`yolo-dhf`) — all
 12 plan tasks landed on `feature/0.8.0-home-mock` (plan
