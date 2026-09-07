@@ -1,12 +1,14 @@
 package server_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -715,4 +717,113 @@ func TestShellEndpoint(t *testing.T) {
 			t.Fatalf("after delete: want 404, got %d", resp.StatusCode)
 		}
 	})
+
+	// yolo-i84: a DELETE while a shell command runs must NOT wait out the
+	// command (pre-fix the handler blocked on Engine.Close for the
+	// command's full 120s timeout) — the engine's shell-abort cancel
+	// kills the session's process group and the handler returns promptly.
+	// The session row is cascade-deleted BEFORE the engine close
+	// (deviation 277), so the terminal part cannot re-land — a part
+	// cannot outlive its session (FK) — and its publishes are suppressed:
+	// the kill is observed on the process instead (the `sleep 30` command
+	// child must die with the group). The row-present terminal-state
+	// contract ("command aborted" error, finalize-must-land, suppressed
+	// publishes) is pinned at the engine level (TestShellCloseDuringRun).
+	t.Run("204 delete during run kills the command", func(t *testing.T) {
+		id := mkShellSession()
+		resp, b := testutil.Req(t, s, "POST", "/session/"+id+"/shell", d, `{"command":"sleep 30"}`)
+		if resp.StatusCode != 202 {
+			t.Fatalf("shell: %d %s", resp.StatusCode, b)
+		}
+		// The command must actually be running before the delete, so the
+		// kill below is non-vacuous.
+		waitForProc(t, "sleep 30", true)
+		// A generous bound (well under the 30s sleep and the command's
+		// 120s timeout), not an exact timing pin.
+		t0 := time.Now()
+		resp, b = testutil.Req(t, s, "DELETE", "/session/"+id, d, "")
+		if resp.StatusCode != 204 {
+			t.Fatalf("delete: %d %s", resp.StatusCode, b)
+		}
+		if elapsed := time.Since(t0); elapsed > 2*time.Second {
+			t.Fatalf("delete took %v; want < 2s (the running command is killed, not awaited)", elapsed)
+		}
+		// The running command was actually killed: the proc-group SIGKILL
+		// lands on the session's bash and its sleep child.
+		waitForProc(t, "sleep 30", false)
+		// The session is gone: a subsequent op on it is 404.
+		resp, _ = testutil.Req(t, s, "POST", "/session/"+id+"/shell", d, `{"command":"echo hi"}`)
+		if resp.StatusCode != 404 {
+			t.Fatalf("after delete: want 404, got %d", resp.StatusCode)
+		}
+	})
+}
+
+// procGrandchildAlive reports whether any process with the exact cmdline
+// cmd is a live grandchild of the test binary. The session shell's command
+// child is two hops down (the engine spawns the session bash, the bash
+// execs the command), so the grandparent chain scopes the scan to this
+// test's shell instead of unrelated host processes. A zombie (cmdline
+// empty) reads as dead.
+func procGrandchildAlive(cmd string) bool {
+	self := os.Getpid()
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return false
+	}
+	ppidOf := map[int]int{}
+	cmdlineOf := map[int]string{}
+	for _, en := range entries {
+		if !en.IsDir() {
+			continue
+		}
+		pid, err := strconv.Atoi(en.Name())
+		if err != nil {
+			continue
+		}
+		// stat is "pid (comm) state ppid ...": comm may carry spaces and
+		// parens, so parse from the last ')' (fields after it: state, ppid).
+		stat, err := os.ReadFile(filepath.Join("/proc", en.Name(), "stat"))
+		if err != nil {
+			continue
+		}
+		i := bytes.LastIndexByte(stat, ')')
+		fields := strings.Fields(string(stat[i+1:]))
+		if len(fields) < 2 {
+			continue
+		}
+		ppid, err := strconv.Atoi(fields[1])
+		if err != nil {
+			continue
+		}
+		ppidOf[pid] = ppid
+		cl, err := os.ReadFile(filepath.Join("/proc", en.Name(), "cmdline"))
+		if err != nil {
+			continue
+		}
+		cmdlineOf[pid] = strings.TrimRight(strings.ReplaceAll(string(cl), "\x00", " "), " ")
+	}
+	for pid, ppid := range ppidOf {
+		if cmdlineOf[pid] == cmd && ppidOf[ppid] == self {
+			return true
+		}
+	}
+	return false
+}
+
+// waitForProc polls procGrandchildAlive until a `cmd` grandchild is
+// (wantAlive) / is not alive, failing on a 5 s deadline (a kill that
+// never lands fails the test instead of hanging).
+func waitForProc(t *testing.T, cmd string, wantAlive bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if procGrandchildAlive(cmd) == wantAlive {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("process %q: want alive=%v, still %v after 5s", cmd, wantAlive, !wantAlive)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }

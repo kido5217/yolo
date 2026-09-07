@@ -40,9 +40,27 @@ render contract stays fully pinned in the non-race CI gate)). Follow-ups:
 `yolo-5wy` (auto permission mode), `yolo-26j` (yolo run), `yolo-lj6`
 (session quick-switch) unchanged; `yolo-i84` (P4, discovered in Task 8 —
 the DELETE /session handler blocks up to shellTimeout while a user shell
-command runs) open. Release steps (branch → PR → merge → epic close + tag)
-are the user/HITL step after the PR merge; this task stops at the green
-branch (no push — no upstream).
+command runs) is fixed (branch `fix/delete-shell-wait`): the engine
+carries a per-session shell-abort cancel (the turn-Abort referent —
+`shellAbort map[string]context.CancelFunc`, the exec's ctx is a
+session-scoped cancel stored before the exec spawns and removed by the
+exec on exit; `Engine.Close` cancels it so the kill lands before the
+shell close, `Engine.Shutdown` cancels every entry alongside the turn
+cancels) — deleting the session now KILLS the running shell command
+(process-group SIGKILL) and the DELETE handler returns promptly (pinned
+<2 s vs the 120 s command timeout; pre-fix a `sleep 30` delete took
+30.0 s). The kill surfaces as the bash part's `error` state with the
+pinned "command aborted" message when the row is still present
+(engine-delete case — `TestShellCloseDuringRun` re-baselined, deviation
+295); over the HTTP delete the session row cascade-deletes BEFORE the
+engine close (deviation 277), so the terminal part cannot re-land
+(a part cannot outlive its session — FK; the `UpsertPart` fails
+`FOREIGN KEY constraint failed` and is logged) and the publishes are
+suppressed — the server pin observes the kill on the process (`sleep 30`
+dies with the group) instead. The deviation-275 finalize-must-land +
+suppression contracts are preserved where the rows exist. Release tail:
+PR #47 merged to `main` (`f461124`), epic `yolo-dhf` closed; the 0.8.0
+tag is pending explicit user go-ahead.
 
 **Status (2026-09-04):** v0.6.0 map (epic `yolo-o75`) complete — the P4
 backlog ships as minor v0.6.0 on top of v0.5.1 (`9f4c340`): cobra v1.10.2

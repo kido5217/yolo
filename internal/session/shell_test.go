@@ -272,17 +272,20 @@ func TestShellDeletedSession(t *testing.T) {
 	})
 }
 
-// TestShellCloseDuringRun pins the Step-4 delete-during-run contract:
-// deleting the session while a shell command runs does NOT produce a
-// "command aborted" terminal state — the exec's ctx is context.Background
-// (errShellAborted needs a ctx cancel) and Shell.Close blocks on the
-// shell mutex the running Exec holds, so the proc-group kill lands only
-// AFTER the exec returns on its own (here the per-command timer). The
-// observable contract: Close returns (bounded by the command's own
-// timeout) and the terminal part STILL LANDS (finalize-must-land), its
-// terminal publishes suppressed for the deleted session.
+// TestShellCloseDuringRun pins the delete-during-run contract (yolo-i84):
+// deleting the session while a shell command runs KILLS the command —
+// Close cancels the exec's session-scoped ctx (the turn-Abort referent;
+// pre-yolo-i84 the ctx was context.Background with no abort surface and
+// Close blocked on the shell mutex for the command's full timeout), the
+// bash part finalizes `error` with the pinned "command aborted" message
+// (the abort preempts the per-command timer — that contrast is the pin),
+// and Close returns promptly. The terminal part STILL LANDS
+// (finalize-must-land); its terminal publishes are suppressed for the
+// deleted session.
 func TestShellCloseDuringRun(t *testing.T) {
 	h := newHarness(t)
+	// The 500 ms per-command timeout stays a red herring: the abort must
+	// win — the pinned error is the abort message, not the timeout.
 	h.shellTimeout = 500 * time.Millisecond
 	h.build(t)
 	d := t.TempDir()
@@ -292,16 +295,23 @@ func TestShellCloseDuringRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Delete the session while the command runs; Close returns once the
-	// running exec settles (the 500 ms timer fires first).
+	// Delete the session while the command runs; Close cancels the exec's
+	// ctx and returns once the running exec is killed (promptly — NOT
+	// bounded by the command's own timeout).
+	t0 := time.Now()
 	h.eng.Close(ses)
+	if elapsed := time.Since(t0); elapsed > 2*time.Second {
+		t.Fatalf("Close took %v; want < 2s (the running command is killed, not awaited)", elapsed)
+	}
 
 	part := waitShellPart(t, h, res.PartID, 5*time.Second)
 	if part.State.Status != "error" {
 		t.Fatalf("status = %q; want error", part.State.Status)
 	}
-	if !strings.Contains(part.State.Error, "exceeding timeout 500 ms") {
-		t.Fatalf("Error = %q; want the timeout message", part.State.Error)
+	// The kill surfaces through the bash tool's pinned abort message
+	// (the errShellAborted rewrite), not the per-command timeout message.
+	if part.State.Error != "command aborted" {
+		t.Fatalf("Error = %q; want the pinned abort message", part.State.Error)
 	}
 	// The terminal publish is suppressed (deleted session): the part saw
 	// exactly one part.updated (the running frame) on the bus.

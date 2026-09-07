@@ -109,10 +109,19 @@ type Engine struct {
 	busy map[string]context.CancelFunc
 	// turnDone is closed when the session's in-flight turn ends: WaitIdle
 	// awaiters observe the done event instead of polling the busy flag.
-	turnDone  map[string]chan struct{}
-	shells    map[string]*tool.Shell
-	titleCtx  map[string]*titleCancel
-	titleWait sync.WaitGroup
+	turnDone map[string]chan struct{}
+	// shells holds the lazily-spawned per-session shell.
+	shells map[string]*tool.Shell
+	// shellAbort is the per-session shell-exec cancel (the busy-map
+	// referent for user shell commands): the exec runs on a cancelable
+	// ctx that Close/Shutdown cancel to KILL a running command, so Close
+	// no longer blocks on the shell mutex for the command's full timeout
+	// (yolo-i84). The entry is stored before the exec goroutine spawns
+	// and removed by the exec on exit (the endTurn referent) or by
+	// Close/Shutdown; cancelling a removed entry is a no-op.
+	shellAbort map[string]context.CancelFunc
+	titleCtx   map[string]*titleCancel
+	titleWait  sync.WaitGroup
 	// deleted suppresses events for closed sessions (troubleshoot-5). It is
 	// unbounded by design: an entry can never be removed safely (a late event
 	// or a late turn must stay suppressed), and a session-id set per process
@@ -180,6 +189,7 @@ func New(d Deps) (*Engine, error) {
 		busy:         map[string]context.CancelFunc{},
 		turnDone:     map[string]chan struct{}{},
 		shells:       map[string]*tool.Shell{},
+		shellAbort:   map[string]context.CancelFunc{},
 		titleCtx:     map[string]*titleCancel{},
 		deleted:      map[string]struct{}{},
 	}, nil
@@ -320,18 +330,28 @@ func (e *Engine) WaitIdle(ctx context.Context, sessionID string) error {
 }
 
 // Close tears down the session's per-work resources: it aborts the
-// in-flight turn, suppresses further events for the session, and closes the
-// bash shell only after the turn settles (bounded wait, then hard close).
-// Deleting a session must not leave a live turn publishing events for a gone
-// session or a post-Close tool call re-spawning a leaked shell
-// (troubleshoot-5; deviation 94 — upstream lets the main turn run on).
+// in-flight turn, cancels the running shell command (the turn-Abort
+// referent, yolo-i84), suppresses further events for the session, and
+// closes the bash shell only after the turn settles (bounded wait, then
+// hard close). Deleting a session must not leave a live turn publishing
+// events for a gone session or a post-Close tool call re-spawning a leaked
+// shell (troubleshoot-5; deviation 94 — upstream lets the main turn run on).
 func (e *Engine) Close(sessionID string) {
 	e.Abort(sessionID)
 	e.mu.Lock()
 	e.deleted[sessionID] = struct{}{}
 	s, ok := e.shells[sessionID]
 	delete(e.shells, sessionID)
+	cancelShell, hasShell := e.shellAbort[sessionID]
+	delete(e.shellAbort, sessionID)
 	e.mu.Unlock()
+	// Kill the session's running shell command (if any) OUTSIDE the lock:
+	// the exec holds the shell mutex, so cancelling its ctx is what makes
+	// the s.Close() below return promptly instead of blocking until the
+	// command's own timeout fires.
+	if hasShell {
+		cancelShell()
+	}
 	if ok {
 		e.settleAndClose(sessionID, s)
 	}
@@ -354,16 +374,21 @@ func (e *Engine) settleAndClose(sessionID string, s *tool.Shell) {
 }
 
 // Shutdown drains the engine for process exit: it cancels every active
-// turn, waits for the turn goroutines to release (at most 5 s, or until
-// ctx is done), then releases all session shells.
+// turn and running shell command (so the shell releases below are not
+// blocked on a command's full timeout — yolo-i84), waits for the turn
+// goroutines to release (at most 5 s, or until ctx is done), then
+// releases all session shells.
 func (e *Engine) Shutdown(ctx context.Context) {
 	e.mu.Lock()
-	cancels := make([]context.CancelFunc, 0, len(e.busy)+len(e.titleCtx))
+	cancels := make([]context.CancelFunc, 0, len(e.busy)+len(e.titleCtx)+len(e.shellAbort))
 	for _, cancel := range e.busy {
 		cancels = append(cancels, cancel)
 	}
 	for _, tc := range e.titleCtx {
 		cancels = append(cancels, tc.cancel)
+	}
+	for _, cancel := range e.shellAbort {
+		cancels = append(cancels, cancel)
 	}
 	e.mu.Unlock()
 	for _, cancel := range cancels {
