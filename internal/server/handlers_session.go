@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"path/filepath"
@@ -274,21 +275,51 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+// validateFileEntries checks a send request's file entries (spec §4.2):
+// an empty MIME or URL is an invalid entry; a data: URL must parse as
+// data:<mime>;base64,<b64>, decode, and fit AttachFileMaxBytes — a
+// failure is `file too large`. Non-data URLs skip the size re-check
+// (hardening for direct API users; yolo's client always sends data
+// URLs). Envelope strings are lowercase per the existing convention.
+func validateFileEntries(files []protocol.FileRef) (string, bool) {
+	for i := range files {
+		f := &files[i]
+		if f.MIME == "" || f.URL == "" {
+			return "invalid file entry", false
+		}
+		if !strings.HasPrefix(f.URL, "data:") {
+			continue
+		}
+		rest := f.URL[len("data:"):]
+		comma := strings.IndexByte(rest, ',')
+		if comma < 0 || !strings.HasSuffix(rest[:comma], ";base64") {
+			return "file too large", false
+		}
+		raw, err := base64.StdEncoding.DecodeString(rest[comma+1:])
+		if err != nil || len(raw) > protocol.AttachFileMaxBytes {
+			return "file too large", false
+		}
+	}
+	return "", true
+}
+
 func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 	row, ok := s.scopedSession(w, r)
 	if !ok {
 		return
 	}
 	id := row.ID
-	var in struct {
-		Text string `json:"text"`
-	}
-	if err := decode(w, r, &in); err != nil {
+	var in protocol.SendMessageRequest
+	if err := decodeWithLimit(w, r, &in, maxSendBodyBytes); err != nil {
 		envelope(w, http.StatusBadRequest, "invalid body", nil)
 		return
 	}
 	if strings.TrimSpace(in.Text) == "" {
 		envelope(w, http.StatusBadRequest, "empty message", nil)
+		return
+	}
+	if msg, ok := validateFileEntries(in.Files); !ok {
+		envelope(w, http.StatusBadRequest, msg, nil)
 		return
 	}
 	// The send boundary is the single log site for a turn's terminal
