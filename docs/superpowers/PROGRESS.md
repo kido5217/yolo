@@ -144,8 +144,35 @@ conditional fix was unnecessary), verifying the two engine facts the emitter
 must not normalize away: tool parts carry real timestamps in `state.time` only
 (part-level `time` is zero → `,"time":{"start":0}}`) and `cost 0.001` renders as
 `0.001`. Gate green otherwise (the host-speed `TestRenderMessages100KBBudget` is
-the only failure). Next: Task 11 (SIGINT/abort, `--auto`, exit-code legs,
-`--attach`, `yolo-rem.12`).
+ the only failure). Task 11 (signals, abort, exit codes, `yolo-rem.12`)
+landed — the remaining spec §9 legs, all pinned against Task 9's
+implementation: `TestRunFirstSigint` (leg h: the first-SIGINT handler aborts
+an in-flight turn against a REAL in-process server + fake-driver busy turn,
+returns 130, under the 10 s cap, then settles idle), `TestRunAutoPermission`
+(leg: `--auto`, spec §7.2 — default policy auto-rejects with the
+`permission requested: <perm> (<patterns>); auto-rejecting` note; `--auto`
+answers once with no note), `TestRunExitCodes` (leg i — the exit-1 rows not
+yet pinned: unknown model → send-side 500 → exit 1 with the `yolo run: `
+prefix; busy session → 409 → exit 1), and `TestRunAttach` (leg g's `--attach`
+half: the run points at a SECOND in-process server — no in-process boot in
+the run process — and the turn completes there), plus the `waitForStatus`
+poll helper. Principle-5 resolution (the plan's leg was buggy; no DEVIATIONS
+entry until the Task 12 batch): the plan's `TestRunAutoPermission` assumed
+`bash` is a permission ask by default, but the verified builtins design
+auto-allows `bash` via the `*` catch-all (the `{*,*,allow}` rule stands in for
+upstream's no-rule default of ALLOW for known core actions — `bash` ∈
+corePermissions), so no `permission.asked` is ever emitted for bash and the
+auto-reject note never fires; the leg was re-pointed to a `read` of `foo.env`,
+which DOES reach the bus via the builtins' `{read,*.env,ask}` rule, preserving
+the spec §7.2 behavior being pinned (verified empirically: default →
+`permission requested: read (foo.env); auto-rejecting` + reject; `--auto` →
+granted, no note, turn completes with the scripted text). Gate: vet + gofmt
+clean; `go test ./cmd/... -race` clean (the plan's pre-Task-12 race check on
+the signal goroutine + loop); full suite green except the host-speed
+`TestRenderMessages100KBBudget` (measured ~214–233 ms vs the 150 ms budget on
+this host — the established deviation 163/294 timing flake; the change is
+confined to `cmd/yolo/` and never touches the `internal/tui` render path).
+Next: Task 12 (closeout — deviations, PROGRESS, P4 beads, `yolo-rem.13`).
 
 **Status (2026-09-07):** 0.8.0 start-screen parity epic (`yolo-dhf`) — all
 12 plan tasks landed on `feature/0.8.0-home-mock` (plan
