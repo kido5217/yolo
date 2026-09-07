@@ -138,7 +138,11 @@ input. Chrome (theme-token, per the settled design grill):
 
 **Selection model** — up/down move the selection index with **wraparound**
 (current `moveMenuSel`, prompt.go:251-257, unchanged); **no scroll window** —
-the cap-10 list is fully rendered and the selection index is the row.
+the cap-10 list is fully rendered and the selection index is the row. A
+**query change** (the typed filter changes) resets the selection to 0 — the
+upstream `createEffect` resets `selected` whenever the filter re-runs
+(autocomplete.tsx:527-530); part of the parity port, not a deviation (yolo's
+current stale `sel` on query change is dropped).
 
 **Mouse** — cell-based, scoped to the slash dropdown (the `@` spec reuses the
 same hit-test): `tea.WithMouseCellMotion` on the Program options (main.go:768),
@@ -314,13 +318,20 @@ Per the yolo inventory's re-baseline inventory; one line each (file:line):
   any teatest substring leg that asserts `no match` on the slash menu (search the
   `_test.go` for `no match` before the gate — the `@`/palette legs are out of
   scope).
-- **sha256 pins** — `TestParityFixturesPinned` (parity_fixture_test.go:34) pins
-  the **upstream** reference fixtures (`testdata/parity/upstream/*.screen.json`,
-  incl. `prompt-slash`) + `MANIFEST.json`/`catalog-pin.json`/`canned.json` — the
-  frozen upstream reference, **NOT re-baselined** by yolo's menu work (it does not
-  capture yolo's empty-state text). No yolo-side sha256 pin captures the slash
-  menu's `no match` text (the teatest legs are substring-based, the unit tests
-  assert `a.prompt.sel`). **No pin re-baseline** for the empty-state text.
+- **sha256 pins** — the four sha256-pinned tests, one line each (none
+  re-baselined by this work):
+  - `TestLogoBlockPinned` (internal/tui/logo_test.go:31) — the home logo block.
+  - `TestTipsPinned` (internal/tui/tips_test.go:30) — the ported tips set.
+  - `TestDescPinned` (internal/tool/read_test.go:197) — the `tool/desc/*.txt`
+    tool descriptions.
+  - `TestParityFixturesPinned` (internal/tui/parity_fixture_test.go:34) — the
+    **upstream** reference fixtures (`testdata/parity/upstream/*.screen.json`,
+    incl. `prompt-slash`) + `MANIFEST.json`/`catalog-pin.json`/`canned.json`, the
+    frozen upstream reference, **NOT re-baselined** by yolo's menu work (it does
+    not capture yolo's empty-state text).
+  No yolo-side sha256 pin captures the slash menu's `no match` text (the teatest
+  legs are substring-based, the unit tests assert `a.prompt.sel`). **No pin
+  re-baseline** for the empty-state text.
 - **Home mock** — the mock currently shows the **clean home** (menu closed).
   Add a **second mock file** `docs/superpowers/mockups/home-mock-200x50-slash-open.txt`,
   generated the same way (a hand-assembled `TestHomeMockRender`-style render,
@@ -377,11 +388,14 @@ re-baselines last.**
   (the menu path intercepts `tab` before `handleAppKeys`, no keymap rebind):
   `tab` with the menu open completes the selected command (`/name ` trailing
   space, menu closes); `tab` closed cycles the agent; `shift+tab` unchanged;
-  `esc` with the menu open clears the entire input (kept). The home hint's first
-  segment becomes context-aware (`tab complete` open / `tab agents` closed,
-  home.go:355). Acceptance: a key test pins `tab`-open = input `/name ` + menu
-  closed + command NOT run; `tab`-closed = agent cycled; `esc`-open = input
-  cleared; the hint renders `tab complete` while the menu is open. Delivers: §3.2.
+  `esc` with the menu open clears the entire input (kept); a query change
+  resets the selection to 0 (the upstream parity reset,
+  autocomplete.tsx:527-530). The home hint's first segment becomes context-aware
+  (`tab complete` open / `tab agents` closed, home.go:355). Acceptance: a key
+  test pins `tab`-open = input `/name ` + menu closed + command NOT run;
+  `tab`-closed = agent cycled; `esc`-open = input cleared; a typed query change
+  resets `sel` to 0; the hint renders `tab complete` while the menu is open.
+  Delivers: §3.2.
 - **S7 — empty text + re-baselines + mock.** Change the empty-state text to
   `No matching items` (prompt.go:178); re-baseline the tests per §5 (the wrap
   test, the teatest legs, the empty-text legs); add the second mock file
@@ -404,8 +418,11 @@ re-baselines last.**
 - **Command-set subset** — yolo's command list is a subset of upstream's 32
   (deviation 226); the menu ranks whatever `mergedCommands` (commands.go:171)
   returns. Adding upstream's full command set is a separate concern.
-- **`shell`-mode interaction** — the `@`-picker is only active in `shell` mode
-  (keys.go:47); the slash menu is mode-independent. No change to the mode gate.
+- **`shell`-mode interaction** — both menus are value-derived, active whenever
+  the prompt content matches the trigger, in any mode (`slashActive`: the input
+  starts with `/`, prompt.go:97-100; `mentionActive`: an `@`-trigger is present,
+  prompt.go:204-207, mention.go:36-50); keys.go:44-48 are ladder steps, not a
+  mode gate.
 
 ## 8. Zero telemetry
 
