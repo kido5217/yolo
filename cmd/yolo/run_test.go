@@ -8,9 +8,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kido5217/yolo/internal/protocol"
+	"github.com/kido5217/yolo/internal/server"
 	"github.com/kido5217/yolo/internal/storage"
+	"github.com/kido5217/yolo/internal/tui/client"
 )
 
 // captureRun runs run(args) with stdout/stderr swapped for pipes and
@@ -356,5 +359,216 @@ func TestRunNDJSONIntegration(t *testing.T) {
 	}
 	if errOut != "" {
 		t.Fatalf("json-mode stderr = %q, want empty (clean turn)", errOut)
+	}
+}
+
+// waitForStatus polls client.Status until the session reports want.
+func waitForStatus(t *testing.T, cl *client.Service, sessionID, want string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		st, err := cl.Status(t.Context())
+		if err == nil && st[sessionID] == want {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("status never reached %s (last: %v, %v)", want, st, err)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// TestRunFirstSigint pins leg (h): the first-SIGINT handler aborts the
+// in-flight turn against a REAL in-process server + fake-driver busy
+// turn (the wall-clock bound asserts < 10 s, the cap — the endpoint's
+// <=2 s settle makes it typically < 3 s), and returns 130.
+func TestRunFirstSigint(t *testing.T) {
+	root := t.TempDir()
+	wd := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
+	t.Setenv("YOLO_LLM", "fake")
+	script := filepath.Join(root, "script.json")
+	// a slow turn: the stream stays open long enough to abort in flight
+	data := `[{"parts":[{"kind":"text","text":"slow","finish":"stop","usage":{"input":1,"output":1}}],"delay_ms":2000}]`
+	if err := os.WriteFile(script, []byte(data), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("YOLO_FAKE_SCRIPT", script)
+
+	deps, closeDB := buildStack(t)
+	defer closeDB()
+	srv := server.NewServer(*deps)
+	ln, err := srv.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer srv.Close()
+	cl := client.New("http://"+ln.String(), wd)
+	ctx := t.Context()
+	ses, err := cl.CreateSessionWith(ctx, "", "", "")
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	if _, err := cl.SendMessage(ctx, ses.ID, protocol.SendMessageRequest{Text: "go"}); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	waitForStatus(t, cl, ses.ID, protocol.SessionStatusBusy)
+
+	start := time.Now()
+	code := firstSigint(cl, ses.ID, true)
+	if code != 130 {
+		t.Fatalf("exit code = %d, want 130", code)
+	}
+	if elapsed := time.Since(start); elapsed >= 10*time.Second {
+		t.Fatalf("first SIGINT took %s, want < 10 s (the cap)", elapsed)
+	}
+	waitForStatus(t, cl, ses.ID, protocol.SessionStatusIdle) // the <=2 s settle
+}
+
+// TestRunAutoPermission pins the §7.2 policy legs (leg: --auto). The fake
+// turn calls read on foo.env — a permission ask by default via the builtins'
+// {read,*.env,ask} rule (bash would NOT ask: the builtins' * catch-all
+// auto-allows the core actions, so read-of-*.env is the tool that actually
+// reaches the bus) — and the default policy auto-rejects (the stderr note)
+// while --auto answers once (no note, the tool executes).
+func TestRunAutoPermission(t *testing.T) {
+	toolScript := `[{"parts":[{"kind":"tool","name":"read","call_id":"c1","args":{"filePath":"foo.env"},"finish":"tool_calls"},{"kind":"text","text":"done","finish":"stop","usage":{"input":1,"output":1}}]}]`
+	t.Run("default policy auto-rejects", func(t *testing.T) {
+		root := t.TempDir()
+		wd := t.TempDir()
+		_ = os.WriteFile(filepath.Join(wd, "foo.env"), []byte("SECRET=1"), 0o644)
+		t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+		t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
+		t.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
+		t.Setenv("YOLO_LLM", "fake")
+		script := filepath.Join(root, "script.json")
+		if err := os.WriteFile(script, []byte(toolScript), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("YOLO_FAKE_SCRIPT", script)
+		code, _, errOut := captureRun(t, "run", "go", "--dir", wd)
+		if code != 0 {
+			t.Fatalf("exit = %d, want 0 (stderr: %s)", code, errOut)
+		}
+		if !strings.Contains(errOut, "permission requested: read") || !strings.Contains(errOut, "; auto-rejecting") {
+			t.Fatalf("stderr missing the auto-reject note:\n%s", errOut)
+		}
+	})
+	t.Run("--auto answers once, no note", func(t *testing.T) {
+		root := t.TempDir()
+		wd := t.TempDir()
+		_ = os.WriteFile(filepath.Join(wd, "foo.env"), []byte("SECRET=1"), 0o644)
+		t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+		t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
+		t.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
+		t.Setenv("YOLO_LLM", "fake")
+		script := filepath.Join(root, "script.json")
+		if err := os.WriteFile(script, []byte(toolScript), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("YOLO_FAKE_SCRIPT", script)
+		code, out, errOut := captureRun(t, "run", "go", "--dir", wd, "--auto")
+		if code != 0 {
+			t.Fatalf("exit = %d, want 0 (stderr: %s)", code, errOut)
+		}
+		if strings.Contains(errOut, "permission requested") {
+			t.Fatalf("--auto must not print the note:\n%s", errOut)
+		}
+		if want := "done\n"; out != want {
+			t.Fatalf("stdout = %q, want %q (the tool ran, the turn completed)", out, want)
+		}
+	})
+}
+
+// TestRunExitCodes pins the §7.3 rows (leg i): the exit-1 runtime legs
+// not yet covered (a send-side 500 via an unknown model, and a busy
+// session); the exit-2 legs are pinned in TestRunPreflight (Task 8) and
+// the clean-turn exit 0 in TestRunCleanTurn (Task 9).
+func TestRunExitCodes(t *testing.T) {
+	t.Run("unknown model: send-side failure exits 1", func(t *testing.T) {
+		_, wd := runEnv(t)
+		code, _, errOut := captureRun(t, "run", "hi", "--dir", wd, "--model", "kido/doesnotexist")
+		if code != 1 {
+			t.Fatalf("exit = %d, want 1 (stderr: %s)", code, errOut)
+		}
+		if !strings.HasPrefix(errOut, "yolo run: ") {
+			t.Fatalf("stderr = %q, want the yolo run: prefix", errOut)
+		}
+	})
+	t.Run("busy session: 409 exits 1", func(t *testing.T) {
+		root := t.TempDir()
+		wd := t.TempDir()
+		t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+		t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
+		t.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
+		t.Setenv("YOLO_LLM", "fake")
+		script := filepath.Join(root, "script.json")
+		// a slow turn holds the session busy for the second send
+		data := `[{"parts":[{"kind":"text","text":"slow","finish":"stop","usage":{"input":1,"output":1}}],"delay_ms":2000}]`
+		if err := os.WriteFile(script, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("YOLO_FAKE_SCRIPT", script)
+		deps, closeDB := buildStack(t)
+		defer closeDB()
+		srv := server.NewServer(*deps)
+		ln, err := srv.Start("127.0.0.1:0")
+		if err != nil {
+			t.Fatalf("listen: %v", err)
+		}
+		defer srv.Close()
+		cl := client.New("http://"+ln.String(), wd)
+		ctx := t.Context()
+		ses, err := cl.CreateSessionWith(ctx, "", "", "")
+		if err != nil {
+			t.Fatalf("create session: %v", err)
+		}
+		if _, err := cl.SendMessage(ctx, ses.ID, protocol.SendMessageRequest{Text: "first"}); err != nil {
+			t.Fatalf("send: %v", err)
+		}
+		waitForStatus(t, cl, ses.ID, protocol.SessionStatusBusy)
+		// the run attaches to the busy session -> 409 -> exit 1
+		code, _, errOut := captureRun(t, "run", "second", "--dir", wd, "--attach", "http://"+ln.String(), "--session", ses.ID)
+		if code != 1 {
+			t.Fatalf("exit = %d, want 1 (stderr: %s)", code, errOut)
+		}
+		if want := "yolo run: session busy: " + ses.ID; !strings.Contains(errOut, want) {
+			t.Fatalf("stderr missing %q:\n%s", want, errOut)
+		}
+	})
+}
+
+// TestRunAttach pins leg (g)'s --attach half: the run points at a
+// SECOND in-process server (the serve target) — no in-process boot in
+// the run process — and the turn completes THERE.
+func TestRunAttach(t *testing.T) {
+	root := t.TempDir()
+	wd := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
+	t.Setenv("YOLO_LLM", "fake")
+	script := filepath.Join(root, "script.json")
+	if err := os.WriteFile(script, []byte(fakeScriptOK), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("YOLO_FAKE_SCRIPT", script)
+
+	deps, closeDB := buildStack(t)
+	defer closeDB()
+	srv := server.NewServer(*deps)
+	ln, err := srv.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer srv.Close()
+	code, out, _ := captureRun(t, "run", "hi", "--attach", "http://"+ln.String(), "--dir", wd)
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	if want := "ok\n"; out != want {
+		t.Fatalf("stdout = %q, want %q", out, want)
 	}
 }
