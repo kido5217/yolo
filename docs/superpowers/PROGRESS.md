@@ -66,10 +66,18 @@ directly as the body (was `map[string]string{"text": text}`); a no-files body
 stays byte-identical to today (`{"text":"hi"}`, deviation 10, pinned by
 `TestSendMessageBodyShape`), and all call sites (the TUI senders in
 `commands.go`, the 409 leg, `app_test`/`resync_test`/`permission_test`/
-`cmd` callers) pass text-only requests. Gate green otherwise (the `internal/tui`
-legs are load-sensitive on this host: `TestMarkdownTextPartSGR` flaked once
-under full-suite parallel load, passes in isolation). Next: Task 7 (TUI
-`renderUser` file chips, `yolo-rem.8`).
+`cmd` callers) pass text-only requests. Task 7 (TUI `renderUser` file chips,
+`yolo-rem.8`) landed — `renderUser` gains the `file` render case: one plain
+chip line per file part, in part order, AFTER the text lines, byte-exactly
+`file: <filename> (<mime>)` (spec §8); a file-only message renders `User:` +
+chips; no new imports (`fmt` already imported — TUI layering rule untouched);
+the detail-dialog part switch (`messagedlg.go`) is intentionally NOT touched
+(its `default: continue` skips file parts there — out of approved scope).
+Pinned by `TestRenderUserFileChips`; `TestRenderMessages`' existing `User:`
+pins stay green (the fixture has no file parts). Gate green otherwise (the
+`internal/tui` legs are load-sensitive on this host: `TestMarkdownTextPartSGR`
+flaked under full-suite parallel load, passes in isolation). Next: Task 8
+(`cmd/yolo` run command skeleton + file validation, `yolo-rem.9`).
 
 **Status (2026-09-07):** 0.8.0 start-screen parity epic (`yolo-dhf`) — all
 12 plan tasks landed on `feature/0.8.0-home-mock` (plan
