@@ -199,6 +199,21 @@ func TestAbortTurnSurfacesAbortedError(t *testing.T) {
 	if !found {
 		t.Fatalf("no assistant row with an aborted error: %+v", msgs)
 	}
+	// The terminal idle is the turn's last publish (the error event
+	// precedes it) and bus delivery is order-preserving, so waiting for it
+	// on the bus proves the error event is folded into the recorder (a
+	// count straight after waitIdle — a status poll, not the bus — races
+	// the collector).
+	h.waitForEvent(t, func(e protocol.Event) bool {
+		if e.Type != protocol.EventTypeSessionStatus {
+			return false
+		}
+		var p protocol.SessionStatusProps
+		if json.Unmarshal(e.Properties, &p) != nil || p.SessionID != ses {
+			return false
+		}
+		return p.Status.Type == protocol.SessionStatusIdle
+	})
 	// the wire event carries the aborted error too
 	if n := h.countErrorEvents(); n != 1 {
 		t.Fatalf("error events = %d, want 1", n)

@@ -297,6 +297,20 @@ func TestTextDeltasEmitSSEAndPersistAtFinalize(t *testing.T) {
 			t.Fatalf("Send: %v", err)
 		}
 	})
+	// The terminal idle is the turn's last publish and bus delivery is
+	// order-preserving, so waiting for it on the bus proves every earlier
+	// delta event is folded into the recorder (a count straight after
+	// waitIdle — a status poll, not the bus — races the collector).
+	h.waitForEvent(t, func(e protocol.Event) bool {
+		if e.Type != protocol.EventTypeSessionStatus {
+			return false
+		}
+		var p protocol.SessionStatusProps
+		if json.Unmarshal(e.Properties, &p) != nil || p.SessionID != ses {
+			return false
+		}
+		return p.Status.Type == protocol.SessionStatusIdle
+	})
 	if n := h.eventCount(func(e protocol.Event) bool { return e.Type == protocol.EventTypeMessagePartDelta }); n != 3 {
 		t.Fatalf("message.part.delta events = %d, want 3", n)
 	}
