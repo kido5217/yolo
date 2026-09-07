@@ -69,7 +69,7 @@ func TestTurnFailureSurfacesMessageError(t *testing.T) {
 	ses := h.startSession(t, d)
 	h.drv.Turns = []fake.Turn{{Err: errors.New("boom")}}
 	done := make(chan error, 1)
-	if _, err := h.eng.Send(context.Background(), ses, "hi", func(e error) { done <- e }); err != nil {
+	if _, err := h.eng.Send(context.Background(), ses, "hi", nil, func(e error) { done <- e }); err != nil {
 		t.Fatal(err)
 	}
 	waitIdle(t, h, ses, func() {})
@@ -161,7 +161,7 @@ func TestAbortTurnSurfacesAbortedError(t *testing.T) {
 		}},
 	}
 	h.slowTurn = true // hold the stream open so the abort lands mid-turn
-	if _, err := h.eng.Send(context.Background(), ses, "slow", nil); err != nil {
+	if _, err := h.eng.Send(context.Background(), ses, "slow", nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	waitBusy(t, h, ses)
@@ -241,7 +241,7 @@ func TestSuccessfulTurnHasNoErrorSurface(t *testing.T) {
 		{Parts: []llm.Part{{Kind: "text", Text: "hello", Finish: "stop", Usage: &llm.Usage{Input: 42, Output: 7}}}},
 	}
 	done := make(chan error, 1)
-	if _, err := h.eng.Send(context.Background(), ses, "hi", func(e error) { done <- e }); err != nil {
+	if _, err := h.eng.Send(context.Background(), ses, "hi", nil, func(e error) { done <- e }); err != nil {
 		t.Fatal(err)
 	}
 	waitIdle(t, h, ses, func() {})
@@ -278,7 +278,7 @@ func TestMaxToolRoundsEndsIdleWithoutError(t *testing.T) {
 	turns = append(turns, fake.Turn{Parts: []llm.Part{endPart}})
 	h.drv.Turns = turns
 	done := make(chan error, 1)
-	if _, err := h.eng.Send(context.Background(), ses, "spin", func(e error) { done <- e }); err != nil {
+	if _, err := h.eng.Send(context.Background(), ses, "spin", nil, func(e error) { done <- e }); err != nil {
 		t.Fatal(err)
 	}
 	waitIdle(t, h, ses, func() {})
@@ -305,7 +305,7 @@ func TestOverflowEndsIdleWithoutError(t *testing.T) {
 	h.drv.Turns = []fake.Turn{
 		{Parts: []llm.Part{{Kind: "text", Text: "big", Finish: "stop", Usage: &llm.Usage{Input: 100001, Output: 5}}}},
 	}
-	if _, err := h.eng.Send(context.Background(), ses, "big", nil); err != nil {
+	if _, err := h.eng.Send(context.Background(), ses, "big", nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	waitIdle(t, h, ses, func() {})

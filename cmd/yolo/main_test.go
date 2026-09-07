@@ -490,7 +490,7 @@ func TestServeDrainForceKill(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if _, err := engine.Send(ctx, sid, "hang", func(error) {}); err != nil {
+	if _, err := engine.Send(ctx, sid, "hang", nil, func(error) {}); err != nil {
 		t.Fatalf("Send: %v", err)
 	}
 	deadline := time.Now().Add(5 * time.Second)

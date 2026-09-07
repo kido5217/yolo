@@ -28,7 +28,7 @@ func TestBashTruncatedOutputTellsModelWhereFullOutputIs(t *testing.T) {
 	}
 	ses := h.startSession(t, t.TempDir())
 	waitIdle(t, h, ses, func() {
-		if _, err := h.eng.Send(t.Context(), ses, "run seq", nil); err != nil {
+		if _, err := h.eng.Send(t.Context(), ses, "run seq", nil, nil); err != nil {
 			t.Fatalf("Send: %v", err)
 		}
 	})

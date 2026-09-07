@@ -97,7 +97,7 @@ func TestPermissionDenyStopsToolButNotTurn(t *testing.T) {
 		{Parts: []llm.Part{{Kind: "text", Text: "ok", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}},
 	}
 	waitIdle(t, h, ses, func() {
-		if _, err := h.eng.Send(t.Context(), ses, "sneak", nil); err != nil {
+		if _, err := h.eng.Send(t.Context(), ses, "sneak", nil, nil); err != nil {
 			t.Fatalf("Send: %v", err)
 		}
 	})
@@ -144,7 +144,7 @@ func TestPermissionAlwaysPersistsAndSkipsNext(t *testing.T) {
 	}
 	h.queueReplies("always")
 	waitIdle(t, h, ses, func() {
-		if _, err := h.eng.Send(t.Context(), ses, "read env", nil); err != nil {
+		if _, err := h.eng.Send(t.Context(), ses, "read env", nil, nil); err != nil {
 			t.Fatalf("Send: %v", err)
 		}
 	})
@@ -189,7 +189,7 @@ func TestHiddenToolNotSentToModel(t *testing.T) {
 	d := t.TempDir()
 	ses := h.startSession(t, d)
 	waitIdle(t, h, ses, func() {
-		if _, err := h.eng.Send(t.Context(), ses, "hi", nil); err != nil {
+		if _, err := h.eng.Send(t.Context(), ses, "hi", nil, nil); err != nil {
 			t.Fatalf("Send: %v", err)
 		}
 	})
@@ -224,7 +224,7 @@ func TestDoomLoopThirdIdenticalAsks(t *testing.T) {
 	}
 	h.queueReplies("once", "once")
 	waitIdle(t, h, ses, func() {
-		if _, err := h.eng.Send(t.Context(), ses, "loop", nil); err != nil {
+		if _, err := h.eng.Send(t.Context(), ses, "loop", nil, nil); err != nil {
 			t.Fatalf("Send: %v", err)
 		}
 	})
@@ -286,7 +286,7 @@ func TestPermissionAbortDuringAskAbortsTool(t *testing.T) {
 	var sendErr error
 	finished := make(chan struct{})
 	go func() {
-		if _, err := h.eng.Send(t.Context(), ses, "read env", nil); err != nil {
+		if _, err := h.eng.Send(t.Context(), ses, "read env", nil, nil); err != nil {
 			sendErr = err
 		}
 		close(finished)

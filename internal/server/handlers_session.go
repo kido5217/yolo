@@ -326,7 +326,7 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 	// state: an aborted turn is user-initiated (info), a failed model
 	// turn must not vanish (the 202 is already on its way and the TUI
 	// stays idle-looking — upstream promptAsync logs it too).
-	res, err := s.Engine.Send(context.Background(), id, in.Text, func(err error) {
+	res, err := s.Engine.Send(context.Background(), id, in.Text, in.Files, func(err error) {
 		if err == nil {
 			return
 		}
