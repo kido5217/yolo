@@ -196,8 +196,61 @@ shell via `s.Eng.Close` so its readLoop does not outlive the test
 delete + shell)" leg is UNREACHABLE — the HTTP delete removes the row
 BEFORE the engine close, so `scopedSession` answers 404 — the 409 leg
 is pinned via the engine-close-with-row-present route and the
-create+delete+shell leg pins the actual 404)); next is Task 6 (Home
-submit fix: the decision-2 submit — the prompt text).
+create+delete+shell leg pins the actual 404)); and Task 6 (Home submit
+fix — the decision-2 submit, the Q1 behavior delta —
+`internal/tui/client/client.go`: `Service.CreateSessionWith` (POST
+/session with the `{title, agent, model}` seeds — the server already
+accepts them, `handleSessionCreate`; blank agent -> the storage default
+"build", blank model -> the catalog default — `CreateSession` stays for
+the `n`/`<leader>n`/`/new` empty-session paths); `internal/tui/commands.go`:
+`homeSubmitMsg{ses, text, err}` + `App.homeSubmitCmd` (mint the session
+seeded with `pendingAgentName()` + the new `configModel()` helper
+(`store.Config["model"]` string or `""` — the server applies the catalog
+default on blank, matching `newSession`'s blank-model branch), title
+`""` -> "New session", then send the typed text as its first message —
+two sequential wire calls under per-stage 5s timeouts (the
+createSessionCmd/sendMessageCmd convention — the mint's deadline does
+not eat the send's budget)) + `App.homeShellCmd` (the shell-mode twin:
+mint, then POST `/session/{id}/shell {command}` — Task 9's client
+`Shell` method; the same `homeSubmitMsg`) + `shellCmd`/`shellMsg`/
+`applyShell` (the session-route shell post — NO busy gate: the
+per-session shell mutex serializes a shell submit during a turn (the
+documented, decision-silent behavior); the applySend post-send state —
+clear input + draft + `appendHistory` + the S3.7 retry-suppression
+clear; the transcript updates via SSE, `isDirty` on the applied event);
+`internal/tui/hydrate.go`: `App.applyHomeSubmit` (success ->
+`putSessionFirst` + `openSession` + hydrate (the applySessionCreated
+navigation) + the applySend post-send state; error -> `lastErr` (the
+ErrBusy -> busy toast convention) — a failure keeps the text for
+retry); `internal/tui/home.go`: the `homeEnter` rewrite (the
+trailing-backslash soft-enter draft parity — the promptEnter behavior —
+then: empty text (draft+trimmed) -> no-op (input kept), shell mode ->
+`homeShellCmd`, normal -> `homeSubmitCmd`; the old create-on-enter body
+deleted); `internal/tui/keys.go`: `promptEnter` + the shell branch
+(after the soft-enter + empty checks, BEFORE the busy gate:
+`a.prompt.mode == "shell"` -> `shellCmd`); `internal/tui/app.go`:
+`updateMsg` wires `homeSubmitMsg` (the `sessionCreatedMsg` case site) +
+`shellMsg` (next to `sendMsg`); `home_test.go`: the
+`TestAppHandleKeyHome` re-baseline (the old "enter creates" subtest
+retired per the decision-2 rewrite) + the pinned legs — enter with
+empty text is a no-op (no cmd; a whitespace-only line is a no-op too,
+kept for retry), the trailing-backslash soft-enter draft parity (draft
+`line1\n` + cleared input, then the draft+line submit cmd), up/down
+recall the prompt history on home (no cursor; up with history -> the
+newest entry), `n` still mints an EMPTY session with the server
+defaults (the `sessionCreatedMsg` assert: agent `build` + model
+`kido/q`), enter with text mints the seeded session + sends (the
+`testutil.Boot` client: the `homeSubmitMsg` carries the minted session
+(agent `build`, model `kido/q` the catalog default — no config model
+ref) + the typed text; after the apply: route session + `curSessionID`
++ the session first in `store.Sessions` + cleared input/draft + the
+hydrate leg's message list holds the typed user message), shell-mode
+enter mints + posts the shell command (the user row + the assistant's
+bash tool part finalizing over the wire — the waitShellPart idiom via
+the client `ListMessages`; the lazily-spawned persistent shell closed
+in cleanup so its readLoop does not outlive the test)); no
+deviations); next is Task 7 (Agent cycling: the tab/shift+tab
+pending-agent cycle, decision 1).
 
 **Status (2026-09-04):** v0.6.0 map (epic `yolo-o75`) complete — the P4
 backlog ships as minor v0.6.0 on top of v0.5.1 (`9f4c340`): cobra v1.10.2
