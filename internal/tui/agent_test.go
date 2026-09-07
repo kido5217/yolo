@@ -340,3 +340,159 @@ func hasAgentDialog(b []byte) bool {
 		strings.Contains(s, "yolo") &&
 		strings.Contains(s, "Yolo agent. Permits everything")
 }
+
+// TestCyclePendingAgent pins the home pending-agent cycle (0.8.0 Task 7,
+// decision 1): the walk over store.Agents (wire order), the wrap both
+// directions, the config-only start positions, the empty-list no-op, and
+// the pin-sticks contract.
+func TestCyclePendingAgent(t *testing.T) {
+	t.Parallel()
+	agents := agentFixture() // build, plan, yolo (the GET /agent wire order)
+
+	t.Run("wraps both directions", func(t *testing.T) {
+		a := testApp()
+		a.store.Agents = agents
+		if got := a.pendingAgentName(); got != "build" {
+			t.Fatalf("initial = %q, want build (the unset default)", got)
+		}
+		a.cyclePendingAgent(1)
+		if got := a.pendingAgent; got != "plan" {
+			t.Fatalf("after tab = %q, want plan", got)
+		}
+		a.cyclePendingAgent(1)
+		if got := a.pendingAgent; got != "yolo" {
+			t.Fatalf("after tab = %q, want yolo", got)
+		}
+		a.cyclePendingAgent(1)
+		if got := a.pendingAgent; got != "build" {
+			t.Fatalf("after tab = %q, want build (the forward wrap)", got)
+		}
+		a.cyclePendingAgent(-1)
+		if got := a.pendingAgent; got != "yolo" {
+			t.Fatalf("after shift+tab = %q, want yolo (the reverse wrap)", got)
+		}
+	})
+
+	t.Run("a config-only current agent starts at the direction end", func(t *testing.T) {
+		a := testApp()
+		a.store.Agents = agents
+		a.store.Config = map[string]any{"agent": "custom"} // not in the list
+		a.cyclePendingAgent(1)
+		if got := a.pendingAgent; got != "build" {
+			t.Fatalf("forward start = %q, want build (index 0)", got)
+		}
+		a.pendingAgent = ""
+		a.cyclePendingAgent(-1)
+		if got := a.pendingAgent; got != "yolo" {
+			t.Fatalf("reverse start = %q, want yolo (index len-1)", got)
+		}
+	})
+
+	t.Run("an empty agent list is a no-op", func(t *testing.T) {
+		a := testApp()
+		a.cyclePendingAgent(1)
+		if a.pendingAgent != "" {
+			t.Fatalf("pendingAgent = %q, want the empty no-op", a.pendingAgent)
+		}
+	})
+
+	t.Run("the pin sticks over a later config change", func(t *testing.T) {
+		a := testApp()
+		a.store.Agents = agents
+		a.cyclePendingAgent(1)
+		if got := a.pendingAgent; got != "plan" {
+			t.Fatalf("after the cycle = %q, want plan (the pin)", got)
+		}
+		a.store.Config = map[string]any{"agent": "custom"} // a later change
+		a.cyclePendingAgent(1)
+		if got := a.pendingAgent; got != "yolo" {
+			t.Fatalf("after the config change + cycle = %q, want yolo (the pin walked on, it did not re-flow from the config)", got)
+		}
+	})
+}
+
+// TestAgentCycleKeyDispatch pins the BaseMode wiring (0.8.0 Task 7,
+// decision 1): tab/shift+tab cycle the pending agent on home AND the
+// session route (the tab char is no longer inserted), a SetKeybinds
+// override remaps the cycle, and the ladder precedence (a dialog open or
+// a pending permission) suppresses the cycle.
+func TestAgentCycleKeyDispatch(t *testing.T) {
+	t.Parallel()
+	agents := agentFixture() // build, plan, yolo
+
+	t.Run("tab cycles the pending agent on home", func(t *testing.T) {
+		a := testApp()
+		a.store.Agents = agents
+		a.handleKey(pressTab())
+		if got := a.pendingAgent; got != "plan" {
+			t.Fatalf("after tab = %q, want plan", got)
+		}
+		if got := a.prompt.input.Value(); got != "" {
+			t.Fatalf("input = %q, want empty (the tab is consumed, not inserted)", got)
+		}
+	})
+
+	t.Run("tab cycles the pending agent on the session route", func(t *testing.T) {
+		a := testApp()
+		a.store.Agents = agents
+		a.route = routeSession
+		a.curSessionID = "ses_1"
+		a.handleKey(pressTab())
+		if got := a.pendingAgent; got != "plan" {
+			t.Fatalf("after tab = %q, want plan (BaseMode owns any route)", got)
+		}
+		if got := a.prompt.input.Value(); got != "" {
+			t.Fatalf("input = %q, want empty (the tab no longer inserts a tab char)", got)
+		}
+	})
+
+	t.Run("shift+tab reverses", func(t *testing.T) {
+		a := testApp()
+		a.store.Agents = agents
+		a.handleKey(pressTab())
+		a.handleKey(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
+		if got := a.pendingAgent; got != "build" {
+			t.Fatalf("after tab + shift+tab = %q, want build", got)
+		}
+	})
+
+	t.Run("a SetKeybinds override remaps agent_cycle", func(t *testing.T) {
+		a := testApp()
+		a.store.Agents = agents
+		if err := a.SetKeybinds(map[string]any{"agent_cycle": "f5"}); err != nil {
+			t.Fatal(err)
+		}
+		a.prompt.input.SetValue("x")
+		a.handleKey(pressTab())
+		if a.pendingAgent != "" {
+			t.Fatalf("after tab = %q, want the cycle off (the override replaces the default)", a.pendingAgent)
+		}
+		if got := a.prompt.input.Value(); got != "x" {
+			t.Fatalf("input = %q, want x unchanged (tab fell through to the prompt; the named key carries no text to insert — deviation 278)", got)
+		}
+		a.handleKey(tea.KeyPressMsg{Code: tea.KeyF5})
+		if got := a.pendingAgent; got != "plan" {
+			t.Fatalf("after f5 = %q, want plan (the new key cycles)", got)
+		}
+	})
+
+	t.Run("a dialog open does not fire the cycle (the ladder precedence)", func(t *testing.T) {
+		a := testApp()
+		a.store.Agents = agents
+		a.dlg.push(dialog{kind: dlgQuit})
+		a.handleKey(pressTab())
+		if a.pendingAgent != "" {
+			t.Fatalf("after tab with the dialog open = %q, want the cycle suppressed", a.pendingAgent)
+		}
+	})
+
+	t.Run("a pending permission does not fire the cycle (the ladder precedence)", func(t *testing.T) {
+		a := testApp()
+		a.store.Agents = agents
+		a.store.Pending = []protocol.PermissionAskedProps{permProps()}
+		a.handleKey(pressTab())
+		if a.pendingAgent != "" {
+			t.Fatalf("after tab with the pending permission = %q, want the cycle suppressed", a.pendingAgent)
+		}
+	})
+}

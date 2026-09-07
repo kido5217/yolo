@@ -139,6 +139,14 @@ func (a *App) dispatchCommand(name string) []tea.Cmd {
 		return a.openModelDialog()
 	case "agent_list":
 		return a.openAgentDialog()
+	case "agent_cycle":
+		// 0.8.0 Task 7 (decision 1): the home pending agent cycles over
+		// store.Agents on any route (the visible effect is home only —
+		// the meta segment reads pendingAgentName). No cmds — bubbletea
+		// re-renders after every Update.
+		a.cyclePendingAgent(1)
+	case "agent_cycle_reverse":
+		a.cyclePendingAgent(-1)
 	case "status_view":
 		return a.openStatusDialog()
 	case "theme_list":

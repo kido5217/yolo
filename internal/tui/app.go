@@ -233,6 +233,36 @@ func (a *App) SetKeybinds(overrides map[string]any) error {
 // footer (plainSemver at render time).
 func (a *App) SetVersion(v string) { a.version = v }
 
+// cyclePendingAgent walks store.Agents (wire order) by d (+1/-1),
+// wrapping both directions, and pins a.pendingAgent to the next agent's
+// NAME. The current index = the index of pendingAgentName() in the
+// list; when the current name is NOT in the list (a config-only agent)
+// the cycle starts at 0 (d > 0) or len-1 (d < 0). An empty list is a
+// no-op. The pin sticks (later config changes do not re-flow it) until
+// the next cycle.
+func (a *App) cyclePendingAgent(d int) {
+	agents := a.store.Agents
+	if len(agents) == 0 {
+		return
+	}
+	idx := -1
+	cur := a.pendingAgentName()
+	for i, ag := range agents {
+		if ag.Name == cur {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 && d < 0 {
+		idx = 0
+	}
+	next := (idx + d) % len(agents)
+	if next < 0 {
+		next += len(agents)
+	}
+	a.pendingAgent = agents[next].Name
+}
+
 // Close stops the SSE pump. Call it once the program exits.
 func (a *App) Close() { a.stop() }
 
