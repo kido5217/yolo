@@ -15,11 +15,19 @@ spec §4.1), `internal/protocol/send.go` (`FileRef`, `SendMessageRequest`,
 §4.1 struct layout — the deviation entry lands in Task 12). Pre-task fix
 `yolo-o1a`: the engine test harness's event-count assertions now wait for the
 terminal idle on the bus before counting (the collector-goroutine race flaked
-deterministically on this host — `TestTextDeltas…` + `TestAbortTurn…`). Host
-note: `TestRenderMessages100KBBudget` fails on this host at ~220 ms vs the
-150 ms budget (~100 ms on the reference machine, deviation 163) —
-machine-speed, not a regression; no re-baseline. Gate green otherwise. Next:
-Task 2 (storage file-part round-trip, `yolo-rem.3`).
+deterministically on this host — `TestTextDeltas…` + `TestAbortTurn…`).
+Task 2 (storage file-part round-trip, `yolo-rem.3`) landed — `ProtocolToPart`
+gains the `file` case (spec §4.3 merged envelope document: `{end?, filename,
+mime, synthetic?, url}`, alphabetical keys, compact separators,
+end/synthetic conditional; NO migration — `part.type` has no check
+constraint) and `PartToProtocol` the inverse `case "file"` (MIME/Filename/
+URL/Time.End/IsSynthetic; Text stays `""`); byte-pinned state-JSON table
+(`TestProtocolToFilePartStateJSONBytes`) + the DAO round-trip leg
+(`TestFilePartRoundTrip`). Host note: `TestRenderMessages100KBBudget` fails
+on this host at ~220 ms vs the 150 ms budget (~100 ms on the reference
+machine, deviation 163) — machine-speed, not a regression; no re-baseline.
+Gate green otherwise. Next: Task 3 (server handleSend files + validation +
+20 MiB cap, `yolo-rem.4`).
 
 **Status (2026-09-07):** 0.8.0 start-screen parity epic (`yolo-dhf`) — all
 12 plan tasks landed on `feature/0.8.0-home-mock` (plan
