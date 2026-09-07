@@ -409,8 +409,9 @@ re-baselines last.**
 
 - **Out of scope (sibling specs):** the `@` mention picker (yolo-old.5 — reuses
   `dropdown.go`, its own frecency `no match` text, the 259-class `esc`
-  strip-@-trigger behavior) and the `ctrl+p` palette (yolo-old.6 — reuses
-  `dropdown.go`, the Suggested-bucket frecency, deviation 212).
+  strip-@-trigger behavior) and the `ctrl+p` palette (yolo-old.6 — the modal
+  sibling, its own borderless `backgroundPanel` treatment, the seed-driven
+  Suggested bucket, no frecency; supersedes deviations 212 and 166).
 - **Shared-foundation epic structure** — the wayfinder map defers the
   shared-foundation epic (the `dropdown.go` + frecency-store + mouse plumbing the
   three specs share) to a sharpened decision **after the three specs** (slash,
