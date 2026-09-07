@@ -46,7 +46,21 @@ signature). Pinned by `TestSendPersistsAndPublishesFileParts` (leg e
 persistence half: text + 2 file parts in order, 2 file part.updated events).
 Gate green otherwise (the `internal/tui` legs are load-sensitive:
 `TestTUIFullTurn` flaked once under full-suite parallel load, passes in
-isolation). Next: Task 5 (history `userContent` seam, `yolo-rem.6`).
+isolation). Task 5 (history `userContent` seam, `yolo-rem.6`) landed — the
+`mapHistory` user case is now `userContent(mw.Parts)` (spec §5.2): text-mime
+file parts inline their stored data-URL content in the pinned
+`--- BEGIN/END FILE` block format, everything else (binary mime / malformed
+data URL) degrades to the `[Attached <mime>: <filename>]` placeholder line
+(deviation 6), and with no file parts the bytes are `joinTextParts`' alone
+(zero-change guarantee — `TestMapHistoryPinsLockedMapping` stays green).
+Replay is from the STORED data URL (the original file may be deleted between
+turns — leg e `TestSendFilesReplayFromStoredDataURL`). Host note: the
+`internal/session` permission/turn tests read `h.events` after a `waitIdle`
+STATUS poll and race the bus collector under load on this slow host (the
+yolo-o1a race class — `TestPermissionAlwaysPersistsAndSkipsNext` and
+`TestDoomLoopThirdIdenticalAsks` each flaked once under repeated full-package
+runs, pass in isolation); pre-existing, not introduced by this epic.
+Next: Task 6 (client `SendMessage` request-struct migration, `yolo-rem.7`).
 
 **Status (2026-09-07):** 0.8.0 start-screen parity epic (`yolo-dhf`) — all
 12 plan tasks landed on `feature/0.8.0-home-mock` (plan
