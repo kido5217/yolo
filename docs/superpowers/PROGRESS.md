@@ -1130,3 +1130,11 @@ functions live in `cmd/yolo/completion.go` and run in the short-lived
 `__complete` process the shell spawns: on any error (bad `--dir`, DB
 failure) they yield no candidates quietly (no stderr, exit 0) and stay
 read-only (no `EnsureActive`, no profile writes).
+
+100 KB render budget gate (2026-09-07, deviation 163): the non-race
+`TestRenderMessages100KBBudget` 150 ms gate is host-load-sensitive — on
+the baseline CPU (AMD Ryzen 7 5800X3D) at load average ~40 (16 threads)
+min-of-5 measured 210–460 ms and the gate failed; at idle (load ~0.1) the
+full `go vet ./... && go test ./...` gate is green. A failure at high load
+is a machine-load artifact, not a render regression — re-run the gate at
+idle before re-baselining the gate value.
