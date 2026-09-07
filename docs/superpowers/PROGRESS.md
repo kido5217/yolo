@@ -249,8 +249,31 @@ enter mints + posts the shell command (the user row + the assistant's
 bash tool part finalizing over the wire — the waitShellPart idiom via
 the client `ListMessages`; the lazily-spawned persistent shell closed
 in cleanup so its readLoop does not outlive the test)); no
-deviations); next is Task 7 (Agent cycling: the tab/shift+tab
-pending-agent cycle, decision 1).
+deviations); Task 7 (Agent cycling (A) — decision 1 —
+`internal/tui/app.go`: `cyclePendingAgent` (walks `store.Agents` wire
+order by d (+1/-1), wraps both directions, pins `a.pendingAgent` to the
+next agent's NAME — current index = the index of `pendingAgentName()`;
+config-only current (not in the list) → the first pin lands at index 0
+(d > 0) / len-1 (d < 0); empty list a no-op; the pin sticks until the
+next cycle); `internal/tui/keymap.go`: `contextGroups[BaseMode]` +
+`"agent_cycle", "agent_cycle_reverse"` (END of the list — the tab /
+shift+tab registry entries existed but were dead, Q2);
+`internal/tui/keys.go`: the `dispatchCommand` cases (no cmds —
+bubbletea re-renders after every Update); `agent_test.go`:
+`TestCyclePendingAgent` (wrap both directions
+build→plan→yolo→build + reverse / the config-only start positions /
+the empty no-op / the pin sticks over a later config change) +
+`TestAgentCycleKeyDispatch` (tab cycles on home AND the session route —
+the BaseMode any-route consequence: tab no longer reaches the prompt /
+shift+tab reverses / a `SetKeybinds` `agent_cycle`→f5 remap — the new
+key cycles, tab falls through harmlessly / a dialog open + a pending
+permission suppress the cycle — the ladder precedence); deviation 278
+(the plan's "today tab on session inserts a tab char" premise is
+inaccurate against the pinned bubbles v2.2.1 textinput — tab is the
+`AcceptSuggestion` binding, a no-op with no suggestions + the named
+key carries empty Text — the override subtest pins the fallthrough as
+"input unchanged")); next is Task 10 (Shell: TUI mode (C —
+granular) — the `!` toggle, the exits, the placeholder/meta swap).
 
 **Status (2026-09-04):** v0.6.0 map (epic `yolo-o75`) complete — the P4
 backlog ships as minor v0.6.0 on top of v0.5.1 (`9f4c340`): cobra v1.10.2
