@@ -76,8 +76,30 @@ the detail-dialog part switch (`messagedlg.go`) is intentionally NOT touched
 Pinned by `TestRenderUserFileChips`; `TestRenderMessages`' existing `User:`
 pins stay green (the fixture has no file parts). Gate green otherwise (the
 `internal/tui` legs are load-sensitive on this host: `TestMarkdownTextPartSGR`
-flaked under full-suite parallel load, passes in isolation). Next: Task 8
-(`cmd/yolo` run command skeleton + file validation, `yolo-rem.9`).
+flaked under full-suite parallel load, passes in isolation). Task 8 (`cmd/yolo`
+run command skeleton + file validation, `yolo-rem.9`) landed — `cmd/yolo/run.go`
+adds the `yolo run` cobra leaf (`newRunCmd`, the full §2 flag set,
+`Args: cobra.ArbitraryArgs`), registered in `newRootCmd`; `runRunE`'s pinned
+pre-flight order (flag parse (cobra) → `--format` → `--dir` → files → message)
+ends at the message-presence check (`return nil`), the boot/send/loop body
+landing in Task 9. `resolveFiles` (the §3 pure function) resolves each `--file`
+against the workdir, stats (a missing path → `File not found`), enforces
+regular-file + the 10 MiB cap via `protocol.AttachFileMaxBytes`, reads once,
+classifies mime by `utf8.Valid` (text/plain vs application/octet-stream), and
+builds the RFC4648 data URL; `composeRunMessage` joins positionals and appends
+non-TTY stdin. Two supporting notes: `--output json` is rejected by the
+EXISTING root `checkOutputFormat` `PersistentPreRunE` (`yolo run: --output is
+not supported by run`) since `run` is not in its supported set — no new handling;
+and `workDir` now reports a missing `--dir` as `not a directory: <abs>` (was a
+raw stat error) to pin the bad-dir pre-flight line (safe: no test pinned the old
+stat-error text, completion handles `workDir` errors generically). Principle-5
+plan-internal test fix (NOT one of the 12 spec deviations, so no DEVIATIONS
+entry here): `TestResolveFiles`' exact-max subtest wrote `max.bin` as all-zero
+bytes (valid UTF-8 → text/plain) yet expected application/octet-stream; the test
+now seeds a leading `0xff` so the exact-max file is genuinely binary, matching
+the pinned `utf8.Valid` mime rule. Gate green otherwise (the host-speed
+`TestRenderMessages100KBBudget` is the only failure). Next: Task 9 (`cmd/yolo`
+boot/session/send/event loop + default renderer, `yolo-rem.10`).
 
 **Status (2026-09-07):** 0.8.0 start-screen parity epic (`yolo-dhf`) — all
 12 plan tasks landed on `feature/0.8.0-home-mock` (plan
