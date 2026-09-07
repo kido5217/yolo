@@ -1,0 +1,213 @@
+package main
+
+import (
+	"encoding/base64"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/kido5217/yolo/internal/protocol"
+)
+
+// captureRun runs run(args) with stdout/stderr swapped for pipes and
+// stdin pointed at /dev/null (composeRunMessage must not block on the
+// test process's inherited stdin), returning (exit code, stdout,
+// stderr).
+func captureRun(t *testing.T, args ...string) (int, string, string) {
+	t.Helper()
+	oldOut, oldErr, oldIn := os.Stdout, os.Stderr, os.Stdin
+	devNull, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		os.Stdout, os.Stderr, os.Stdin = oldOut, oldErr, oldIn
+		_ = devNull.Close()
+	})
+	outR, outW, _ := os.Pipe()
+	errR, errW, _ := os.Pipe()
+	os.Stdout, os.Stderr, os.Stdin = outW, errW, devNull
+	code := run(args)
+	_ = outW.Close()
+	_ = errW.Close()
+	outB, _ := io.ReadAll(outR)
+	errB, _ := io.ReadAll(errR)
+	return code, string(outB), string(errB)
+}
+
+// runEnv points the XDG roots at a fresh temp dir and arms the
+// fake-driver env (fakeScriptOK); it returns the data root and a fresh
+// workdir. Integration legs set the env before captureRun.
+func runEnv(t *testing.T) (string, string) {
+	t.Helper()
+	root := t.TempDir()
+	wd := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
+	t.Setenv("YOLO_LLM", "fake")
+	script := filepath.Join(root, "script.json")
+	if err := os.WriteFile(script, []byte(fakeScriptOK), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("YOLO_FAKE_SCRIPT", script)
+	return filepath.Join(root, "data"), wd
+}
+
+// TestResolveFiles pins the §3 file-validation table (leg a): resolve,
+// existence, regularity+size, read-once, mime, filename, data-URL bytes.
+func TestResolveFiles(t *testing.T) {
+	base := t.TempDir()
+	hello := []byte("hello")
+	helloB64 := base64.StdEncoding.EncodeToString(hello)
+	bin := []byte{0x01, 0x02, 0xff, 0xfe}
+	binB64 := base64.StdEncoding.EncodeToString(bin)
+
+	t.Run("missing file", func(t *testing.T) {
+		_, err := resolveFiles(base, []string{"nope.txt"})
+		if err == nil || err.Error() != "File not found: nope.txt" {
+			t.Fatalf("err = %v", err)
+		}
+	})
+	t.Run("directory is a special file", func(t *testing.T) {
+		sub := filepath.Join(base, "sub")
+		if err := os.Mkdir(sub, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		_, err := resolveFiles(base, []string{"sub"})
+		if err == nil || err.Error() != "Cannot attach local file larger than 10 MiB or a special file: sub" {
+			t.Fatalf("err = %v", err)
+		}
+	})
+	t.Run("oversized rejected, exact max accepted", func(t *testing.T) {
+		big := filepath.Join(base, "big.bin")
+		if err := os.WriteFile(big, make([]byte, 10<<20+1), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		_, err := resolveFiles(base, []string{"big.bin"})
+		if err == nil || err.Error() != "Cannot attach local file larger than 10 MiB or a special file: big.bin" {
+			t.Fatalf("err = %v", err)
+		}
+		max := filepath.Join(base, "max.bin")
+		maxData := make([]byte, 10<<20)
+		maxData[0] = 0xff // invalid UTF-8: the exact-max file is binary, not
+		// a run of valid (null) bytes that utf8.Valid would call text/plain.
+		if err := os.WriteFile(max, maxData, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		got, err := resolveFiles(base, []string{"max.bin"})
+		if err != nil {
+			t.Fatalf("exact-max file: %v", err)
+		}
+		if got[0].MIME != "application/octet-stream" || got[0].Filename != "max.bin" {
+			t.Fatalf("max file = %+v", got[0])
+		}
+	})
+	t.Run("symlink to a regular file is accepted", func(t *testing.T) {
+		target := filepath.Join(base, "target.txt")
+		if err := os.WriteFile(target, hello, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(base, "link.txt")
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+		got, err := resolveFiles(base, []string{"link.txt"})
+		if err != nil {
+			t.Fatalf("symlink: %v", err)
+		}
+		// stat follows the link (the target's size is checked); the
+		// filename is the Base of the RESOLVED (link) path, and the URL
+		// carries the target's content.
+		if got[0].Filename != "link.txt" || got[0].URL != "data:text/plain;base64,"+helloB64 {
+			t.Fatalf("symlink ref = %+v", got[0])
+		}
+	})
+	t.Run("utf8 content is text/plain, pinned data URL", func(t *testing.T) {
+		p := filepath.Join(base, "notes.txt")
+		if err := os.WriteFile(p, hello, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		got, err := resolveFiles(base, []string{"notes.txt"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := protocol.FileRef{MIME: "text/plain", Filename: "notes.txt", URL: "data:text/plain;base64," + helloB64}
+		if got[0] != want {
+			t.Fatalf("ref = %+v, want %+v", got[0], want)
+		}
+	})
+	t.Run("invalid utf8 is application/octet-stream, pinned data URL", func(t *testing.T) {
+		p := filepath.Join(base, "bin.dat")
+		if err := os.WriteFile(p, bin, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		got, err := resolveFiles(base, []string{"bin.dat"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := protocol.FileRef{MIME: "application/octet-stream", Filename: "bin.dat", URL: "data:application/octet-stream;base64," + binB64}
+		if got[0] != want {
+			t.Fatalf("ref = %+v, want %+v", got[0], want)
+		}
+	})
+	t.Run("absolute paths as-is, flag order preserved", func(t *testing.T) {
+		a := filepath.Join(base, "a.txt")
+		b := filepath.Join(base, "b.txt")
+		if err := os.WriteFile(a, hello, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(b, hello, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		got, err := resolveFiles(base, []string{b, "a.txt"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got[0].Filename != "b.txt" || got[1].Filename != "a.txt" {
+			t.Fatalf("order = %+v", got)
+		}
+	})
+}
+
+// TestRunPreflight pins the pre-boot legs (spec §2 order + §7.3 rows):
+// the exit-2 usage legs and the exit-1 file legs (the file error sits
+// beside yolo's usage=2 rule by design — deviation 3).
+func TestRunPreflight(t *testing.T) {
+	_, wd := runEnv(t)
+	big := filepath.Join(wd, "big.bin")
+	if err := os.WriteFile(big, make([]byte, 10<<20+1), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name   string
+		args   []string
+		want   int
+		stderr string
+	}{
+		{"missing message", []string{"run"}, 2, "yolo run: message required"},
+		{"unknown format", []string{"run", "--format", "bogus", "hi"}, 2, `yolo run: unknown format value "bogus"`},
+		{"--output json", []string{"run", "--output", "json", "hi"}, 2, "yolo run: --output is not supported by run"},
+		{"unknown flag", []string{"run", "--nope"}, 2, "yolo run: unknown flag"},
+		{"bad dir", []string{"run", "--dir", filepath.Join(wd, "nope"), "hi"}, 2, "yolo run: not a directory: " + filepath.Join(wd, "nope")},
+		{"file not found", []string{"run", "hi", "--dir", wd, "--file", "missing.txt"}, 1, "yolo run: File not found: missing.txt"},
+		{"file too large", []string{"run", "hi", "--dir", wd, "--file", "big.bin"}, 1, "yolo run: Cannot attach local file larger than 10 MiB or a special file: big.bin"},
+		{"file error precedes the message check", []string{"run", "--dir", wd, "--file", "missing.txt"}, 1, "yolo run: File not found: missing.txt"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			code, out, errOut := captureRun(t, c.args...)
+			if code != c.want {
+				t.Fatalf("exit = %d, want %d (stderr: %s)", code, c.want, errOut)
+			}
+			if !strings.Contains(errOut, c.stderr) {
+				t.Fatalf("stderr = %q, want it to contain %q", errOut, c.stderr)
+			}
+			if out != "" {
+				t.Fatalf("stdout = %q, want empty (pre-flight legs print nothing on stdout)", out)
+			}
+		})
+	}
+}
