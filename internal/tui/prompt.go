@@ -67,6 +67,26 @@ func (a *App) rollPlaceholder() {
 	a.prompt.placeholderIdx = int(a.tipRand() * float64(len(pool)))
 }
 
+// enterShellMode is the `!` toggle-in (upstream prompt/index.tsx:830-837):
+// re-roll the placeholder index over the shell pool and switch the mode; the
+// input value is KEPT (a cursor-0 non-empty value becomes the command — the
+// upstream referent). The mode is set BEFORE the re-roll so rollPlaceholder
+// reads the shell pool.
+func (a *App) enterShellMode() {
+	a.prompt.mode = "shell"
+	a.rollPlaceholder()
+	a.applyPromptChrome()
+}
+
+// exitShellMode is the shell-mode exit (decision 3): back to normal with the
+// NORMAL placeholder — NO re-roll (the index persists; the decision's
+// re-rolls are home-entry + `!` only) — via the applyPromptChrome placeholder
+// swap.
+func (a *App) exitShellMode() {
+	a.prompt.mode = "normal"
+	a.applyPromptChrome()
+}
+
 // busyToast is the locked message for a send attempted while the session is
 // busy, whether by the store-side pre-check or a server 409 (client.ErrBusy).
 const busyToast = "abort or wait (esc aborts)"

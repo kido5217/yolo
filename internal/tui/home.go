@@ -239,6 +239,12 @@ func (a *App) boxInputLine() string {
 //	           catalog name — the deviation is logged in Task 12; upstream
 //	           parsed() uses name ?? id)
 func (a *App) homeMeta() (agent, model, provider string) {
+	// shell mode renders "Shell" alone (upstream prompt/index.tsx:1450:
+	// store.mode === "shell" ? "Shell" : titlecase(agent.name)) — the
+	// model/provider box is inside the normal-mode Show.
+	if a.prompt.mode == "shell" {
+		return "Shell", "", ""
+	}
 	agent = titlecase(a.pendingAgentName())
 	if s, ok := a.store.Config["model"].(string); ok && s != "" {
 		pid, mid, parsed := splitModelRef(s)
@@ -561,6 +567,12 @@ func (a *App) handleHomeKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 	case key.Matches(k, homeKeyMap.NewSess):
 		return a.emit(a.createSessionCmd()), true
 	case key.Matches(k, escBinding):
+		// shell mode: esc EXITS the shell (decision 3) — it does NOT clear
+		// the prompt (the normal-mode behavior).
+		if a.prompt.mode == "shell" {
+			a.exitShellMode()
+			return nil, true
+		}
 		a.clearPrompt()
 		return nil, true
 	}

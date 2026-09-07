@@ -10,6 +10,10 @@ import (
 
 var escBinding = key.NewBinding(key.WithKeys("esc"))
 
+// backspaceBinding is the shell-mode backspace exit (upstream
+// prompt/index.tsx:851-861: backspace at cursor offset 0 exits shell mode).
+var backspaceBinding = key.NewBinding(key.WithKeys("backspace"))
+
 // dlgCtrlC is the modal's second close binding (upstream dialog.tsx: esc AND
 // ctrl+c are both "Close dialog").
 var dlgCtrlC = key.NewBinding(key.WithKeys("ctrl+c"))
@@ -245,7 +249,8 @@ func (a *App) handleAcKey(k tea.KeyPressMsg) []tea.Cmd {
 // (S5.1 — both routes: the home route's up/down falls through to here now
 // (Task 4 removed the home-list cursor; the start screen has no list to
 // navigate), the slash menu + @-picker own up/down while open), enter sends
-// (or soft-enters a trailing backslash), everything else feeds the input.
+// (or soft-enters a trailing backslash), the `!` toggle + the shell-mode
+// exits (Task 10), everything else feeds the input.
 func (a *App) handlePromptKey(k tea.KeyPressMsg) []tea.Cmd {
 	if key.Matches(k, homeKeyMap.Up) {
 		a.recallHistory(-1)
@@ -257,6 +262,30 @@ func (a *App) handlePromptKey(k tea.KeyPressMsg) []tea.Cmd {
 	}
 	if key.Matches(k, promptEnter) {
 		return a.promptEnter()
+	}
+	// the `!` toggle (upstream prompt/index.tsx:819-823 gate): normal mode +
+	// cursor offset 0 (input.Position() == 0 — the upstream
+	// visualCursor.offset referent; a non-empty value with the cursor moved
+	// to 0 toggles too, the value kept) + the "!" keypress -> enterShellMode
+	// (consumed — the "!" is NOT inserted). A "!" at a non-zero cursor or in
+	// shell mode falls through to inputUpdate (the char is INSERTED).
+	if a.prompt.mode == "normal" && a.prompt.input.Position() == 0 && k.Text == "!" {
+		a.enterShellMode()
+		return nil
+	}
+	// shell-mode exits: esc -> exitShellMode; backspace at offset 0 ->
+	// exitShellMode (both consumed). The route handlers own esc on their
+	// routes (the home esc case + the session esc branch); this is the
+	// prompt-level fallback for both routes.
+	if a.prompt.mode == "shell" {
+		if key.Matches(k, escBinding) {
+			a.exitShellMode()
+			return nil
+		}
+		if key.Matches(k, backspaceBinding) && a.prompt.input.Position() == 0 {
+			a.exitShellMode()
+			return nil
+		}
 	}
 	return a.inputUpdate(k)
 }
