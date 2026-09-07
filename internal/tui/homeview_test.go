@@ -14,19 +14,24 @@ import (
 // the external tui_test package, uses the literal).
 var homeLogoLine = logoLeft[1] + " " + logoRight[1]
 
-// atFrame is the whitebox frame assertion helper (row, col, want).
+// atFrame is the whitebox frame assertion helper (row, col, want). The row is
+// stripped (stripANSI) before the col slice — the SGR styling is zero-width
+// glue, so the cols address the visible row.
 func atFrame(t *testing.T, rows []string, row, col int, want string) {
 	t.Helper()
 	if row < 0 || row >= len(rows) {
 		t.Fatalf("row %d out of range (frame has %d rows)", row, len(rows))
 	}
-	if got := rowSegment(rows[row], col, runeWidth(want)); got != want {
+	if got := rowSegment(stripANSI(rows[row]), col, runeWidth(want)); got != want {
 		t.Fatalf("row %d col %d = %q, want %q", row, col, got, want)
 	}
 }
 
 // fitsFrame asserts the frame is exactly h rows, each of width w display cols
-// (the alt-screen fixed-frame contract).
+// (the alt-screen fixed-frame contract). The width is measured on the
+// stripped row (stripANSI — the SGR styling is zero-width glue, the
+// package's ANSI-aware measurement idiom), so a styled row (the degraded
+// bold selection) measures its visible width, not its escape bytes.
 func fitsFrame(t *testing.T, out string, w, h int) []string {
 	t.Helper()
 	rows := strings.Split(out, "\n")
@@ -34,7 +39,7 @@ func fitsFrame(t *testing.T, out string, w, h int) []string {
 		t.Fatalf("frame rows = %d, want %d", len(rows), h)
 	}
 	for i, r := range rows {
-		if cw := runeWidth(r); cw != w {
+		if cw := runeWidth(stripANSI(r)); cw != w {
 			t.Fatalf("row %d width = %d, want %d", i, cw, w)
 		}
 	}
@@ -53,7 +58,7 @@ func TestHomeViewFrame(t *testing.T) {
 	a.branch = "main"
 	a.version = "v0.8.0-4-gabcdef"
 
-	rows := fitsFrame(t, a.homeView("", "", "", "", "", ""), mockW, mockH)
+	rows := fitsFrame(t, a.homeView(nil, "", "", "", "", ""), mockW, mockH)
 	// the logo (rows mockLogoTop..+3) at the mock's left margin.
 	for i, l := range logoPlainLines() {
 		atFrame(t, rows, mockLogoTop+i, mockLogoL, l)
@@ -102,7 +107,7 @@ func TestHomeViewFrame(t *testing.T) {
 func TestHomeViewFits80x24(t *testing.T) {
 	t.Parallel()
 	a := testApp() // NewApp default size 80x24
-	rows := fitsFrame(t, a.homeView("", "", "", "", "", ""), 80, 24)
+	rows := fitsFrame(t, a.homeView(nil, "", "", "", "", ""), 80, 24)
 	// boxW = min(75, 80-4) = 75 (innerW = 75-1-2*2 = 70); boxL = 2 +
 	// (76-75+1)/2 = 3.
 	const boxL = 3
@@ -124,7 +129,7 @@ func TestHomeViewClamps70x30(t *testing.T) {
 	t.Parallel()
 	a := testApp()
 	a.size = tea.WindowSizeMsg{Width: 70, Height: 30}
-	rows := fitsFrame(t, a.homeView("", "", "", "", "", ""), 70, 30)
+	rows := fitsFrame(t, a.homeView(nil, "", "", "", "", ""), 70, 30)
 	const contentW = 66 // 70 - 4
 	// boxW = min(75, 66) = 66 (innerW = 66-1-4 = 61); boxL = 2 + (66-66+1)/2 = 2.
 	const boxL = 2
@@ -148,7 +153,7 @@ func TestHomeViewOverflow80x10(t *testing.T) {
 	t.Parallel()
 	a := testApp()
 	a.size = tea.WindowSizeMsg{Width: 80, Height: 10}
-	rows := fitsFrame(t, a.homeView("", "", "", "", "", ""), 80, 10)
+	rows := fitsFrame(t, a.homeView(nil, "", "", "", "", ""), 80, 10)
 	// the footer content is the last-but-one row (h-2 = 8).
 	// the box bottom (╹) is near the top: the content rows 0..22, the visible
 	// frame is rows 13..22 (10 rows); content row 14 (the ╹ bottom border) is
@@ -228,4 +233,45 @@ func TestHomeFooterContentRow(t *testing.T) {
 			t.Fatalf("footer = %q, want %q", got, want)
 		}
 	})
+}
+
+// TestHomeViewSlashMenuAnchors pins the S3 home anchor (spec §6 S3): with the
+// slash menu open (input "/"), the dropdown sits above the box top edge at the
+// box's left edge / width, overlaying the logo rows while open. The box + hint
+// stay intact below (the 0.8.0 placement put the slash menu on the left-overlay
+// rows below the tips).
+func TestHomeViewSlashMenuAnchors(t *testing.T) {
+	t.Parallel()
+	a := testApp()
+	a.size = tea.WindowSizeMsg{Width: mockW, Height: mockH}
+	a.store.Commands = testCommands()
+	a.prompt.input.SetValue("/")
+	a.prompt.sel = 0
+	items := a.menuItems()
+	if items == nil {
+		t.Fatal("slash menu should be open for input \"/\"")
+	}
+	n := len(items)
+	if n > maxDropdownRows {
+		n = maxDropdownRows
+	}
+	rows := fitsFrame(t, a.homeView(items, "", "", "", "", ""), mockW, mockH)
+	// the dropdown's bottom row is right above the box top edge (mockBoxTop-1);
+	// the top row (n rows above) is the selected row (sel=0).
+	top := mockBoxTop - n
+	bottom := mockBoxTop - 1
+	atFrame(t, rows, top, mockBoxL, "|")
+	atFrame(t, rows, bottom, mockBoxL, "|")
+	// the logo is overlaid while open: the mock logo row (mockLogoTop+1) now
+	// carries the dropdown border at the box's left edge (not the logo art at
+	// mockLogoL).
+	atFrame(t, rows, mockLogoTop+1, mockBoxL, "|")
+	// the selected row (sel=0) is the first merged command at the box's left
+	// edge (the dropdown's top row).
+	if !strings.Contains(stripANSI(rows[top]), "/sessions") {
+		t.Fatalf("selected dropdown row = %q, want the first merged command (/sessions)", rows[top])
+	}
+	// the box + hint stay intact below the dropdown.
+	atFrame(t, rows, mockBoxTop, mockBoxL, "┃")
+	atFrame(t, rows, mockHintRow, mockBoxL, "tab agents")
 }

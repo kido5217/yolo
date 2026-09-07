@@ -167,26 +167,40 @@ func (a *App) menuItems() []protocol.Command {
 	return out
 }
 
-// menuView renders the slash menu's items through the shared bordered
-// dropdown (spec §6 S2; the filtering is App.menuItems): the box chrome, the
-// selection row (primary bg + the SelectedForeground), the over-wide row
-// truncated at the box content width (no wrap). The no-match line keeps the
-// current text (the "No matching items" text lands in S7).
-func (pm *promptModel) menuView(items []protocol.Command, w int, th theme.Theme) string {
+// slashRows renders the slash menu's surface for a placement (width w, the
+// space-above clamp): the bordered dropdown's rows (the matches case) or the
+// single no-match line (the empty case). Nil (the menu is closed) returns no
+// rows. The rows are the dropdown's view, split; the caller owns the vertical
+// placement (bottom-aligned to the anchor's top edge). S3 owns the anchors —
+// the placement supplies the real width + spaceAbove (home: the box's left
+// edge / width and the pre-box rows; session: the terminal width and the
+// viewport rows), so the space-above clamp is real, not a no-op.
+func (pm *promptModel) slashRows(items []protocol.Command, w, spaceAbove int, th theme.Theme) []string {
 	if items == nil {
-		return ""
+		return nil
 	}
 	if len(items) == 0 {
-		return th.TextMuted().Render("  no match")
+		return []string{th.TextMuted().Render("  no match")}
 	}
 	rows := make([]dropdownRow, len(items))
 	for i, c := range items {
 		rows[i] = dropdownRow{label: c.Name, description: c.Description}
 	}
-	// menuItems caps the list at maxPickerOptions (= maxDropdownRows), so the
-	// space-above clamp is a no-op at the current placement (S3 owns the
-	// anchors): pass the menu's own height.
-	return newDropdown(rows, pm.sel, w, len(rows), th).view()
+	d := newDropdown(rows, pm.sel, w, spaceAbove, th)
+	if d.vis == 0 {
+		return nil
+	}
+	return strings.Split(d.view(), "\n")
+}
+
+// menuView renders the slash menu's box (the standalone render the unit pins
+// use): the box chrome, the selection row (primary bg + the SelectedForeground),
+// the over-wide row truncated at the box content width (no wrap). The no-match
+// line keeps the current text (the "No matching items" text lands in S7). The
+// space-above clamp is the menu's own height (a no-op at this standalone
+// placement — S3's placement supplies the real spaceAbove via slashRows).
+func (pm *promptModel) menuView(items []protocol.Command, w int, th theme.Theme) string {
+	return strings.Join(pm.slashRows(items, w, len(items), th), "\n")
 }
 
 // view renders the prompt line (the textinput carries the "> " prompt).
