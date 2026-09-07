@@ -167,7 +167,7 @@ func (a *App) sessionChrome(w, vh int) string {
 
 // viewModal renders the modal frame (port of dialog.tsx): the route chrome
 // clamped to the panel top, plain blank backdrop lines (deviation 166 —
-// the upstream rgba(0,0,0,0.15) dim has no SGR equivalent), the centered
+// the upstream rgba(0,0,0,150/255) dim has no SGR equivalent), the centered
 // panel (backgroundPanel fill, width min(size, w-2), top padding 1, top at
 // max(h/4, chromeMin)) and the footer on the last line. Prompt, menu,
 // toasts and lastErr are suppressed while a modal is open.

@@ -104,8 +104,9 @@ is open", and the `@`-precedence rule below means only one menu is ever open).
   via `viewSession`'s menu parameters (view.go:46-52). The session placement
   is already the target layout; the home placement is not.
 - **Mouse**: none on the `@` picker (no mouse events, no hover, no
-  click-select). The app-level `tea.WithMouseCellMotion()` is already on
-  (app.go:63 — the slash S1 prerequisite).
+  click-select). The app-level `tea.WithMouseCellMotion()` is not yet on
+  (main.go:768) — the shared prerequisite the slash epic's S5 (the mouse
+  slice) lands; this spec's S4 (mouse) also depends on it.
 - **Chrome tokens** (theme/styles.go): all present — `Border()` :108,
   `BackgroundMenu()` :114, `Primary()` :101, `SelectedForeground()` :77-97
   (the adaptive contrast rule), `Text()` :99, `TextMuted()` :100. The slash
@@ -291,8 +292,9 @@ planned entry 4, §4.1, covers the slash only) — planned entry 6 (§4.1).
 ### 3.8 — Mouse (locked decision 6; cross-ref: slash spec S5, the mouse slice)
 
 Cell-based, the same model as the slash spec: the app-level
-`tea.WithMouseCellMotion()` (app.go:63, already on) + `MouseMsg` handling in
-the `@` path + row hit-testing over the dropdown rows. **Hover** (mouse move
+`tea.WithMouseCellMotion()` (not yet on — the shared prerequisite the slash
+S5 lands on the Program options, main.go:768) + `MouseMsg` handling in the
+`@` path + row hit-testing over the dropdown rows. **Hover** (mouse move
 over a row) = move the selection (`sel` → the row, the upstream
 `onMouseOver` → `moveTo`, autocomplete.tsx:642-645); **click** (release over
 a row) = the **enter action** — insert the selected part (`@<path> ` +
@@ -512,10 +514,11 @@ first; the re-baselines, the mock, and the DEVIATIONS land last (S6).**
    `TestAcInsert` re-baselined (the `@`-prefixed insert, the space rule, the
    expand branch); the touch legs (insert touches; expand does not).
 4. **S4 — mouse.** The `@`-path mouse handling on the app-level
-   `WithMouseCellMotion()` (app.go:63): row hit-testing over the dropdown
-   rows; hover = move the selection; click = the enter action (insert
-   `@<path> ` + close — no expand on click, §3.8). The `a.mouseInput`
-   semantics mirror the slash S5. Acceptance: the hover leg (hover over row
+   `WithMouseCellMotion()` (main.go:768 — the shared S5 prerequisite):
+   row hit-testing over the dropdown rows; hover = move the selection;
+   click = the enter action (insert `@<path> ` + close — no expand on
+   click, §3.8). The `a.mouseInput` semantics mirror the slash S5.
+   Acceptance: the hover leg (hover over row
    N → `sel == N` → the next enter inserts N); the click leg (click a row →
    the insert appears in the drained output, the menu closes).
 5. **S5 — keys + hint interaction.** The `tab` intercept in the `@` path
