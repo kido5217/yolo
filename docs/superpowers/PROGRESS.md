@@ -5,6 +5,22 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
+**Status (2026-09-07):** 0.9.0 `yolo run` epic (`yolo-rem`) in flight on
+`feature/run-command` (plan `docs/superpowers/plans/2026-09-07-yolo-run.md`):
+Task 1 (protocol file parts + send-request DTO, `yolo-rem.2`) landed — the
+`PartType*` constants, the `Part` omitempty file fields (after `Metadata`,
+spec §4.1), `internal/protocol/send.go` (`FileRef`, `SendMessageRequest`,
+`AttachFileMaxBytes`) + the byte-pinned wire tests (the plan's
+`TestFilePartWireShape` want-string field-order bug re-baselined per the spec
+§4.1 struct layout — the deviation entry lands in Task 12). Pre-task fix
+`yolo-o1a`: the engine test harness's event-count assertions now wait for the
+terminal idle on the bus before counting (the collector-goroutine race flaked
+deterministically on this host — `TestTextDeltas…` + `TestAbortTurn…`). Host
+note: `TestRenderMessages100KBBudget` fails on this host at ~220 ms vs the
+150 ms budget (~100 ms on the reference machine, deviation 163) —
+machine-speed, not a regression; no re-baseline. Gate green otherwise. Next:
+Task 2 (storage file-part round-trip, `yolo-rem.3`).
+
 **Status (2026-09-07):** 0.8.0 start-screen parity epic (`yolo-dhf`) — all
 12 plan tasks landed on `feature/0.8.0-home-mock` (plan
 `docs/superpowers/plans/2026-09-07-0.8.0-start-screen-parity.md`; gate green
