@@ -302,8 +302,39 @@ session shell submit (no mint) posts to the current session); deviation
 279 (the plan's Task-5 "homeMeta returns ("Shell","","") in shell mode"
 premise is inaccurate — Task 5 landed the agent name; the shell branch
 lands HERE, pinned by TestHomeMetaShell which FAILs without it:
-("Build","Qwen","kido") vs ("Shell","",""))); next is Task 11 (Tips pool:
-drops + 2 adds (F) — `yolo-dhf.14`).
+("Build","Qwen","kido") vs ("Shell","",""))); and Task 11 (Tips pool:
+drops + 2 adds (F) — decision 7 — `internal/tui/tips.go`: the Step-1
+audit walked every pool entry against the live feature surface (the
+commands catalog `handlers_catalog.go` + localCommands `commands.go`,
+`protocol.Config`, the keymap registry + the keys.go wiring, the theme
+engine, the permission builtins) — every KEPT entry names a feature yolo
+has, so the audit drops ZERO live entries (the plan's known-missing
+list's features are already out of the pool — the S6.2 reduction,
+deviation 234; verified against the live tree per the plan's
+verify-before-delete method: `messages_page_up`/`messages_page_down` ARE
+bound (pageup/pagedown + ctrl+alt+b/f) + wired (the session route), its
+tip stands — the known-missing list's "page" item resolves to present,
+no deviation; the sidebar tip is absent from the pool though the feature
+exists (the session-route todo sidebar, S7.2) — recorded in the audit
+block as an S6.2-reduction drop, not a feature drop; the dead-registry
+class — `messages_copy/first/last/toggle_conceal`, `model_cycle_recent`,
+`input_clear`, `terminal_suspend`, `messages_undo/redo` — is registry-only
+with no keys.go wiring, the deviation-278 class); the audit evidence
+block above the `tips` var lists the 63 dropped upstream TIPS entries
+(tips-view.tsx:164-283 + the 2 platform tips) grouped by the missing
+feature each names (the 3 yolo-run entries → `yolo-26j` P4 — the
+Task-12 consolidated deviation cites this block); the 2 adds at the pool
+HEAD (the upstream TIPS[1]/TIPS[2] relative order): `Start a message
+with {highlight}!{/highlight} to run shell commands (e.g.,
+{highlight}!ls -la{/highlight})` + `Press {highlight}<agent_cycle>{/highlight} to
+cycle between Build and Plan agents` (the upstream `press()` form with
+the yolo `<binding>` token — renders `tab` under the default keymap,
+matching the yolo-dhf.3 mock's `mockTipText`); `tipBindings` +
+`agent_cycle` (the integrity test both directions); pin re-baselined in
+the same commit (`wantTipsPinnedSHA256` f06ed598…, `TestTipsShape` 37→39
+— the pin is the content contract, no pool test added beyond it);
+`home_mock_test.go` unaffected (self-contained `mockTipText`)); next is
+Task 12 (Deviations, PROGRESS, closeout (G) — `yolo-dhf.15`).
 
 **Status (2026-09-04):** v0.6.0 map (epic `yolo-o75`) complete — the P4
 backlog ships as minor v0.6.0 on top of v0.5.1 (`9f4c340`): cobra v1.10.2
