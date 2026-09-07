@@ -188,3 +188,98 @@ func TestRunNDJSONBasics(t *testing.T) {
 		t.Fatalf("json-mode stderr = %q, want %q (header/tool lines suppressed)", errw.String(), want)
 	}
 }
+
+// TestRunNDJSONFullTurn pins the spec §6.2 worked example byte-for-byte
+// (one scripted turn, --thinking on; the timestamp field is pinned via
+// the renderer's injected now counter).
+func TestRunNDJSONFullTurn(t *testing.T) {
+	var out, errw bytes.Buffer
+	nts := []int64{1725676800000, 1725676800050, 1725676800100, 1725676800150, 1725676800200}
+	i := 0
+	now := func() int64 { v := nts[i]; i++; return v }
+	r := newRenderer(formatJSON, true, "ses_abc", "", now, &out, &errw)
+	r.apply(mkEv(t, protocol.EventTypeMessageUpdated, protocol.MessageUpdatedProps{
+		SessionID: "ses_abc", Info: protocol.Message{ID: "msg_1", Role: "assistant"},
+	}))
+	r.apply(mkEv(t, protocol.EventTypeMessagePartDelta, protocol.MessagePartDeltaProps{SessionID: "ses_abc", PartID: "prt_r", Field: "reasoning", Delta: "Let me check."}))
+	r.apply(mkEv(t, protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
+		SessionID: "ses_abc", Part: protocol.Part{ID: "prt_r", SessionID: "ses_abc", MessageID: "msg_1", Type: protocol.PartTypeReasoning, Text: "Let me check.", Time: protocol.PartTime{Start: 1725676800010, End: 1725676800050}},
+	}))
+	r.apply(mkEv(t, protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
+		SessionID: "ses_abc", Part: protocol.Part{ID: "prt_1", SessionID: "ses_abc", MessageID: "msg_1", Type: protocol.PartTypeTool, CallID: "prt_1", Tool: "bash",
+			State: &protocol.ToolState{Status: "completed", Input: map[string]any{"command": "ls"}, Title: "ls", Output: "notes.txt", Time: protocol.PartTime{Start: 1725676800060, End: 1725676800100}},
+		},
+	}))
+	r.apply(mkEv(t, protocol.EventTypeMessagePartDelta, protocol.MessagePartDeltaProps{SessionID: "ses_abc", PartID: "prt_2", Field: "text", Delta: "Hello"}))
+	r.apply(mkEv(t, protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
+		SessionID: "ses_abc", Part: protocol.Part{ID: "prt_2", SessionID: "ses_abc", MessageID: "msg_1", Type: protocol.PartTypeText, Text: "Hello", Time: protocol.PartTime{Start: 1725676800110, End: 1725676800150}},
+	}))
+	// the finishRound-shaped assistant message.updated (full info before
+	// the idle — the load-bearing order, spec §6.2)
+	r.apply(mkEv(t, protocol.EventTypeMessageUpdated, protocol.MessageUpdatedProps{
+		SessionID: "ses_abc", Info: protocol.Message{ID: "msg_1", Role: "assistant", Finish: "stop", Tokens: &protocol.Tokens{Input: 42, Output: 7}, Cost: 0.001},
+	}))
+	r.finish()
+
+	want := []string{
+		`{"type":"step_start","timestamp":1725676800000,"sessionID":"ses_abc","part":{"type":"step-start","messageID":"msg_1"}}`,
+		`{"type":"reasoning","timestamp":1725676800050,"sessionID":"ses_abc","part":{"id":"prt_r","sessionID":"ses_abc","messageID":"msg_1","type":"reasoning","text":"Let me check.","time":{"start":1725676800010,"end":1725676800050}}}`,
+		`{"type":"tool_use","timestamp":1725676800100,"sessionID":"ses_abc","part":{"id":"prt_1","sessionID":"ses_abc","messageID":"msg_1","type":"tool","callID":"prt_1","tool":"bash","state":{"status":"completed","input":{"command":"ls"},"title":"ls","output":"notes.txt","time":{"start":1725676800060,"end":1725676800100}},"time":{"start":0}}}`,
+		`{"type":"text","timestamp":1725676800150,"sessionID":"ses_abc","part":{"id":"prt_2","sessionID":"ses_abc","messageID":"msg_1","type":"text","text":"Hello","time":{"start":1725676800110,"end":1725676800150}}}`,
+		`{"type":"step_finish","timestamp":1725676800200,"sessionID":"ses_abc","part":{"type":"step-finish","reason":"stop","tokens":{"input":42,"output":7,"reasoning":0,"cache":{"read":0,"write":0}},"cost":0.001}}`,
+	}
+	lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
+	if len(lines) != len(want) {
+		t.Fatalf("ndjson lines = %d:\n%s", len(lines), out.String())
+	}
+	for i := range want {
+		if lines[i] != want[i] {
+			t.Fatalf("line[%d] =\n%s\nwant\n%s", i, lines[i], want[i])
+		}
+	}
+	if i != len(nts) {
+		t.Fatalf("now() called %d times, want %d", i, len(nts))
+	}
+	if errw.Len() != 0 {
+		t.Fatalf("json-mode stderr = %q, want empty (no permission/error in this turn)", errw.String())
+	}
+}
+
+// TestRunNDJSONThinkingOff pins the --thinking gate in json mode: the
+// flag off -> zero reasoning lines.
+func TestRunNDJSONThinkingOff(t *testing.T) {
+	var out bytes.Buffer
+	r := newRenderer(formatJSON, false, "ses_abc", "", func() int64 { return 1 }, &out, &bytes.Buffer{})
+	r.apply(mkEv(t, protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
+		SessionID: "ses_abc", Part: protocol.Part{ID: "prt_r", SessionID: "ses_abc", MessageID: "msg_1", Type: protocol.PartTypeReasoning, Text: "hidden", Time: protocol.PartTime{End: 1}},
+	}))
+	if out.Len() != 0 {
+		t.Fatalf("thinking off: reasoning line emitted:\n%s", out.String())
+	}
+}
+
+// TestRunNDJSONNoAssistantNoFinish pins the step_finish gate: a failure
+// before any assistant message.updated -> no step_finish line.
+func TestRunNDJSONNoAssistantNoFinish(t *testing.T) {
+	var out, errw bytes.Buffer
+	r := newRenderer(formatJSON, true, "ses_abc", "", func() int64 { return 1 }, &out, &errw)
+	r.finish()
+	if out.Len() != 0 {
+		t.Fatalf("no assistant seen: step_finish emitted:\n%s", out.String())
+	}
+}
+
+// TestRunNDJSONFilePartIgnored pins that a file part (Time.End == 0 —
+// Start only, same shape as the user text part) never finalizes, so it
+// produces no line in either format (leg b's scripted stream includes
+// one).
+func TestRunNDJSONFilePartIgnored(t *testing.T) {
+	var out bytes.Buffer
+	r := newRenderer(formatJSON, true, "ses_abc", "", func() int64 { return 1 }, &out, &bytes.Buffer{})
+	r.apply(mkEv(t, protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
+		SessionID: "ses_abc", Part: protocol.Part{ID: "prt_f", SessionID: "ses_abc", MessageID: "msg_u", Type: protocol.PartTypeFile, MIME: "text/plain", Filename: "notes.txt", URL: "data:text/plain;base64,aGVsbG8=", Time: protocol.PartTime{Start: 1}},
+	}))
+	if out.Len() != 0 {
+		t.Fatalf("file part emitted a line:\n%s", out.String())
+	}
+}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -318,5 +319,42 @@ func TestRunContinueSelectsMostRecentlyUpdated(t *testing.T) {
 	// updated session) holds both, a holds none.
 	if len(msgsA) != 0 || len(msgsB) != 2 {
 		t.Fatalf("turn landed in the wrong session: a=%d msgs, b=%d msgs", len(msgsA), len(msgsB))
+	}
+}
+
+// TestRunNDJSONIntegration pins the end-to-end json mode: --format json
+// -> NDJSON on stdout (step_start ... step_finish), exit 0, no stderr
+// decoration (the machine channel is stdout).
+func TestRunNDJSONIntegration(t *testing.T) {
+	_, wd := runEnv(t)
+	code, out, errOut := captureRun(t, "run", "hi", "--dir", wd, "--format", "json")
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0 (stderr: %s)", code, errOut)
+	}
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected >= 2 NDJSON lines, got %d:\n%s", len(lines), out)
+	}
+	var first, last struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal([]byte(lines[0]), &first); err != nil || first.Type != "step_start" {
+		t.Fatalf("first line = %s (err %v), want step_start", lines[0], err)
+	}
+	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &last); err != nil || last.Type != "step_finish" {
+		t.Fatalf("last line = %s (err %v), want step_finish", lines[len(lines)-1], err)
+	}
+	for _, l := range lines {
+		var env struct {
+			Type      string `json:"type"`
+			Timestamp int64  `json:"timestamp"`
+			SessionID string `json:"sessionID"`
+		}
+		if err := json.Unmarshal([]byte(l), &env); err != nil || env.Type == "" || env.Timestamp == 0 || env.SessionID == "" {
+			t.Fatalf("line %q is not a well-formed envelope: %v", l, err)
+		}
+	}
+	if errOut != "" {
+		t.Fatalf("json-mode stderr = %q, want empty (clean turn)", errOut)
 	}
 }
