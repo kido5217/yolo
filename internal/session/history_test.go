@@ -1,6 +1,7 @@
 package session
 
 import (
+	"encoding/base64"
 	"testing"
 	"time"
 
@@ -116,4 +117,47 @@ func TestMapHistoryPinsLockedMapping(t *testing.T) {
 			t.Fatalf("last = %+v, want user %q", last, want)
 		}
 	})
+}
+
+// TestUserContentBlocks pins the spec §5.2 rule: block format, the
+// placeholder, the blank-line joins, the no-files zero-change guarantee,
+// and the malformed-URL degradation.
+func TestUserContentBlocks(t *testing.T) {
+	b64 := func(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
+	mk := func(filename, mime, url string) protocol.Part {
+		return protocol.Part{Type: protocol.PartTypeFile, Filename: filename, MIME: mime, URL: url}
+	}
+	text := func(s string) protocol.Part { return protocol.Part{Type: "text", Text: s} }
+	cases := []struct {
+		name  string
+		parts []protocol.Part
+		want  string
+	}{
+		{"no files is joinTextParts", []protocol.Part{text("a"), text("b")}, "a\nb"},
+		{"single file, no trailing newline", []protocol.Part{
+			mk("a.txt", "text/plain", "data:text/plain;base64,"+b64("hello")),
+			text("What do these say?"),
+		}, "--- BEGIN FILE a.txt ---\nhello\n--- END FILE a.txt ---\n\nWhat do these say?"},
+		{"the spec §5.2 full example", []protocol.Part{
+			mk("a.txt", "text/plain", "data:text/plain;base64,"+b64("hello")),
+			mk("b.txt", "text/plain", "data:text/plain;base64,"+b64("world\n")),
+			mk("bin.dat", "application/octet-stream", "data:application/octet-stream;base64,"+b64("\x01\x02")),
+			text("What do these say?"),
+		}, "--- BEGIN FILE a.txt ---\nhello\n--- END FILE a.txt ---\n\n" +
+			"--- BEGIN FILE b.txt ---\nworld\n--- END FILE b.txt ---\n\n" +
+			"[Attached application/octet-stream: bin.dat]\n\nWhat do these say?"},
+		{"files only, no text", []protocol.Part{
+			mk("a.txt", "text/plain", "data:text/plain;base64,"+b64("hello")),
+		}, "--- BEGIN FILE a.txt ---\nhello\n--- END FILE a.txt ---"},
+		{"malformed data url degrades to the placeholder", []protocol.Part{
+			mk("a.txt", "text/plain", "data:text/plain;base64,!!!"),
+		}, "[Attached text/plain: a.txt]"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := userContent(c.parts); got != c.want {
+				t.Fatalf("userContent =\n%q\nwant\n%q", got, c.want)
+			}
+		})
+	}
 }

@@ -1,7 +1,9 @@
 package session
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/kido5217/yolo/internal/llm"
@@ -46,7 +48,7 @@ func mapHistory(hist []protocol.MessageWithParts, agent string, sys []string) []
 	for i, mw := range hist {
 		switch mw.Info.Role {
 		case "user":
-			content := joinTextParts(mw.Parts)
+			content := userContent(mw.Parts)
 			if i == lastUserIdx {
 				content = appendReminders(content, reminders)
 			}
@@ -97,6 +99,69 @@ func joinTextParts(parts []protocol.Part) string {
 		}
 	}
 	return strings.Join(texts, "\n")
+}
+
+// userContent renders a user message's parts as the model input (spec
+// §5.2): the file parts' inline blocks (or placeholder lines) joined with
+// blank lines, then the text parts, separated by one blank line. With no
+// file parts the result is joinTextParts' bytes — the zero-change
+// guarantee for every file-less session.
+func userContent(parts []protocol.Part) string {
+	var blocks []string
+	for _, p := range parts {
+		if p.Type != protocol.PartTypeFile {
+			continue
+		}
+		if strings.HasPrefix(p.MIME, "text/") {
+			if c, ok := decodeDataURL(p.URL); ok {
+				blocks = append(blocks, fileBlock(p.Filename, c))
+				continue
+			}
+		}
+		blocks = append(blocks, fmt.Sprintf("[Attached %s: %s]", p.MIME, p.Filename))
+	}
+	text := joinTextParts(parts)
+	if len(blocks) == 0 {
+		return text
+	}
+	if text == "" {
+		return strings.Join(blocks, "\n\n")
+	}
+	return strings.Join(blocks, "\n\n") + "\n\n" + text
+}
+
+// fileBlock is the inline block format pin (spec §5.2):
+// "--- BEGIN FILE F ---\n" + C + ("\n" if C has no trailing newline) +
+// "--- END FILE F ---". F is the stored filename — NO sanitization (a
+// newline-bearing filename degrades the markers; the client pins F from
+// the OS, an accepted edge).
+func fileBlock(filename, content string) string {
+	s := "--- BEGIN FILE " + filename + " ---\n" + content
+	if !strings.HasSuffix(s, "\n") {
+		s += "\n"
+	}
+	return s + "--- END FILE " + filename + " ---"
+}
+
+// decodeDataURL decodes a data:<mime>;base64,<b64> URL's content; a
+// malformed URL reports false (the caller degrades to the placeholder —
+// an invariant violation, since client and server both validate, never a
+// turn failure).
+func decodeDataURL(url string) (string, bool) {
+	const prefix = "data:"
+	if !strings.HasPrefix(url, prefix) {
+		return "", false
+	}
+	rest := url[len(prefix):]
+	comma := strings.IndexByte(rest, ',')
+	if comma < 0 || !strings.HasSuffix(rest[:comma], ";base64") {
+		return "", false
+	}
+	raw, err := base64.StdEncoding.DecodeString(rest[comma+1:])
+	if err != nil {
+		return "", false
+	}
+	return string(raw), true
 }
 
 func appendReminders(content string, reminders []string) string {

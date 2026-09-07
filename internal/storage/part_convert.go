@@ -26,8 +26,10 @@ func nullPtr(p *int64) any {
 
 // ProtocolToPart encodes a wire part into a row. Text/reasoning parts store
 // {"text":..., "end":n, "synthetic":true} (end/synthetic omitted when unset);
-// tool parts store the full protocol.ToolState JSON. CallID is transient and
-// not persisted. A marshal failure (e.g. NaN in a tool state) is an error —
+// file parts store the merged envelope document
+// {end?, filename, mime, synthetic?, url} (alphabetical keys); tool parts
+// store the full protocol.ToolState JSON. CallID is transient and not
+// persisted. A marshal failure (e.g. NaN in a tool state) is an error —
 // persisting "" would 500 every later read.
 func ProtocolToPart(p protocol.Part) (PartRow, error) {
 	r := PartRow{
@@ -44,6 +46,41 @@ func ProtocolToPart(p protocol.Part) (PartRow, error) {
 		if err != nil {
 			return PartRow{}, fmt.Errorf("part %s state: %w", p.ID, err)
 		}
+		r.StateJSON = string(b)
+	case p.Type == protocol.PartTypeFile:
+		// File part (yolo run, spec §4.3): the merged envelope document —
+		// file fields plus the end/synthetic envelope shape, keys in
+		// alphabetical order (end < filename < mime < synthetic < url),
+		// compact separators (the hot-path text convention).
+		f, err := json.Marshal(p.Filename)
+		if err != nil {
+			return PartRow{}, fmt.Errorf("part %s filename: %w", p.ID, err)
+		}
+		m, err := json.Marshal(p.MIME)
+		if err != nil {
+			return PartRow{}, fmt.Errorf("part %s mime: %w", p.ID, err)
+		}
+		u, err := json.Marshal(p.URL)
+		if err != nil {
+			return PartRow{}, fmt.Errorf("part %s url: %w", p.ID, err)
+		}
+		b := make([]byte, 0, len(f)+len(m)+len(u)+32)
+		b = append(b, '{')
+		if p.Time.End != 0 {
+			b = append(b, `"end":`...)
+			b = strconv.AppendInt(b, p.Time.End, 10)
+			b = append(b, ',')
+		}
+		b = append(b, `"filename":`...)
+		b = append(b, f...)
+		b = append(b, `,"mime":`...)
+		b = append(b, m...)
+		if p.IsSynthetic != nil && *p.IsSynthetic {
+			b = append(b, `,"synthetic":true`...)
+		}
+		b = append(b, `,"url":`...)
+		b = append(b, u...)
+		b = append(b, '}')
 		r.StateJSON = string(b)
 	default:
 		// Hot path (streamed deltas): build the fixed 3-key document
@@ -87,6 +124,20 @@ func PartToProtocol(r PartRow) (protocol.Part, error) {
 			return p, fmt.Errorf("part %s state: %w", r.ID, err)
 		}
 		p.State = st
+	case "file":
+		var st struct {
+			Filename  string `json:"filename"`
+			MIME      string `json:"mime"`
+			URL       string `json:"url"`
+			End       int64  `json:"end"`
+			Synthetic *bool  `json:"synthetic"`
+		}
+		if err := json.Unmarshal([]byte(r.StateJSON), &st); err != nil {
+			return p, fmt.Errorf("part %s state: %w", r.ID, err)
+		}
+		p.Filename, p.MIME, p.URL = st.Filename, st.MIME, st.URL
+		p.Time = protocol.PartTime{Start: r.TimeCreated, End: st.End}
+		p.IsSynthetic = st.Synthetic
 	default:
 		var st struct {
 			Text      string `json:"text"`

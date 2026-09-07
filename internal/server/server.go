@@ -259,14 +259,27 @@ func (s *Server) scope(r *http.Request) (string, error) {
 // is user-overridable, so an unbounded body is a memory-exhaustion vector.
 const maxBodyBytes = 10 << 20
 
-// decode JSON-decodes the request body into v; an empty body leaves v
-// untouched. Bodies over maxBodyBytes fail with http.MaxBytesError (the
-// caller answers 400; MaxBytesReader itself may already have sent 413).
+// maxSendBodyBytes bounds the send endpoint's body: a 10 MiB file
+// base64-encodes to ~13.3 MiB inside the JSON body, so the global 10 MiB
+// decoded-body cap would 413 the maximum legal file (deviation 9). 20 MiB
+// covers one max file plus JSON overhead with room for a second; all other
+// endpoints keep the global cap.
+const maxSendBodyBytes = 20 << 20
+
+// decode is decodeWithLimit under the global cap.
 func decode(w http.ResponseWriter, r *http.Request, v any) error {
+	return decodeWithLimit(w, r, v, maxBodyBytes)
+}
+
+// decodeWithLimit JSON-decodes the request body into v under an
+// endpoint-specific byte cap; an empty body leaves v untouched. Bodies
+// over limit fail with http.MaxBytesError (the caller answers 400;
+// MaxBytesReader itself may already have sent 413).
+func decodeWithLimit(w http.ResponseWriter, r *http.Request, v any, limit int64) error {
 	if r.Body == nil {
 		return nil
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
 		if errors.Is(err, io.EOF) {
 			return nil

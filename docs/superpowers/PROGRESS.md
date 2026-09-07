@@ -5,6 +5,213 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
+**Status (2026-09-07):** 0.9.0 `yolo run` epic (`yolo-rem`) — all 12 plan
+tasks landed on `feature/run-command` (plan
+`docs/superpowers/plans/2026-09-07-yolo-run.md`; spec
+`docs/superpowers/specs/2026-09-07-yolo-run-design.md`, bead `yolo-26j`; gate
+green — see the completion summary at the end of this entry). Task log:
+Task 1 (protocol file parts + send-request DTO, `yolo-rem.2`) landed — the
+`PartType*` constants, the `Part` omitempty file fields (after `Metadata`,
+spec §4.1), `internal/protocol/send.go` (`FileRef`, `SendMessageRequest`,
+`AttachFileMaxBytes`) + the byte-pinned wire tests (the plan's
+`TestFilePartWireShape` want-string field-order bug re-baselined per the spec
+§4.1 struct layout — the deviation entry lands in Task 12). Pre-task fix
+`yolo-o1a`: the engine test harness's event-count assertions now wait for the
+terminal idle on the bus before counting (the collector-goroutine race flaked
+deterministically on this host — `TestTextDeltas…` + `TestAbortTurn…`).
+Task 2 (storage file-part round-trip, `yolo-rem.3`) landed — `ProtocolToPart`
+gains the `file` case (spec §4.3 merged envelope document: `{end?, filename,
+mime, synthetic?, url}`, alphabetical keys, compact separators,
+end/synthetic conditional; NO migration — `part.type` has no check
+constraint) and `PartToProtocol` the inverse `case "file"` (MIME/Filename/
+URL/Time.End/IsSynthetic; Text stays `""`); byte-pinned state-JSON table
+(`TestProtocolToFilePartStateJSONBytes`) + the DAO round-trip leg
+(`TestFilePartRoundTrip`). Host note: `TestRenderMessages100KBBudget` fails
+on this host at ~220 ms vs the 150 ms budget (~100 ms on the reference
+machine, deviation 163) — machine-speed, not a regression; no re-baseline.
+Task 3 (server handleSend files + validation + 20 MiB cap, `yolo-rem.4`)
+landed — `decode` is now `decodeWithLimit` under the global 10 MiB cap; the
+send endpoint decodes `protocol.SendMessageRequest` under its own
+`maxSendBodyBytes = 20 MiB` (deviation 9 — a 10 MiB file base64s to ~13.3 MiB,
+so the global cap would 413 the max legal file) and `validateFileEntries`
+returns the three 400 legs (empty MIME/URL → `invalid file entry`; bad
+base64 / decoded > `AttachFileMaxBytes` → `file too large`; non-data URLs skip
+the re-check). The global-cap pin moved from `POST /message` to
+`PATCH /session/{id}` (`TestOversizedBodyRejected`); the send cap + validation
+get their own tests (`TestSendFilesValidation`, `TestSendFileTooLarge`,
+`TestSendOversizedBodyRejected`). Task 4 (engine `Send` files, `yolo-rem.5`)
+landed — `Send` gains `files []protocol.FileRef` (spec §5.1): after the user
+text part it persists one `file` part per entry in flag order and publishes it
+(type-agnostic `publish`); the server passes `in.Files`, every harness/cmd
+call site passes `nil` (the plan's file list omitted `lifecycle_test.go`,
+`turnerror_test.go`, `cmd/yolo/main_test.go` — all updated for the 5-arg
+signature). Pinned by `TestSendPersistsAndPublishesFileParts` (leg e
+persistence half: text + 2 file parts in order, 2 file part.updated events).
+Gate green otherwise (the `internal/tui` legs are load-sensitive:
+`TestTUIFullTurn` flaked once under full-suite parallel load, passes in
+isolation). Task 5 (history `userContent` seam, `yolo-rem.6`) landed — the
+`mapHistory` user case is now `userContent(mw.Parts)` (spec §5.2): text-mime
+file parts inline their stored data-URL content in the pinned
+`--- BEGIN/END FILE` block format, everything else (binary mime / malformed
+data URL) degrades to the `[Attached <mime>: <filename>]` placeholder line
+(deviation 6), and with no file parts the bytes are `joinTextParts`' alone
+(zero-change guarantee — `TestMapHistoryPinsLockedMapping` stays green).
+Replay is from the STORED data URL (the original file may be deleted between
+turns — leg e `TestSendFilesReplayFromStoredDataURL`). Host note: the
+`internal/session` permission/turn tests read `h.events` after a `waitIdle`
+STATUS poll and race the bus collector under load on this slow host (the
+yolo-o1a race class — `TestPermissionAlwaysPersistsAndSkipsNext` and
+`TestDoomLoopThirdIdenticalAsks` each flaked once under repeated full-package
+runs, pass in isolation); pre-existing, not introduced by this epic.
+Task 6 (client `SendMessage` request-struct migration, `yolo-rem.7`) landed —
+`SendMessage(ctx, id, protocol.SendMessageRequest)` posts the request struct
+directly as the body (was `map[string]string{"text": text}`); a no-files body
+stays byte-identical to today (`{"text":"hi"}`, deviation 10, pinned by
+`TestSendMessageBodyShape`), and all call sites (the TUI senders in
+`commands.go`, the 409 leg, `app_test`/`resync_test`/`permission_test`/
+`cmd` callers) pass text-only requests. Task 7 (TUI `renderUser` file chips,
+`yolo-rem.8`) landed — `renderUser` gains the `file` render case: one plain
+chip line per file part, in part order, AFTER the text lines, byte-exactly
+`file: <filename> (<mime>)` (spec §8); a file-only message renders `User:` +
+chips; no new imports (`fmt` already imported — TUI layering rule untouched);
+the detail-dialog part switch (`messagedlg.go`) is intentionally NOT touched
+(its `default: continue` skips file parts there — out of approved scope).
+Pinned by `TestRenderUserFileChips`; `TestRenderMessages`' existing `User:`
+pins stay green (the fixture has no file parts). Gate green otherwise (the
+`internal/tui` legs are load-sensitive on this host: `TestMarkdownTextPartSGR`
+flaked under full-suite parallel load, passes in isolation). Task 8 (`cmd/yolo`
+run command skeleton + file validation, `yolo-rem.9`) landed — `cmd/yolo/run.go`
+adds the `yolo run` cobra leaf (`newRunCmd`, the full §2 flag set,
+`Args: cobra.ArbitraryArgs`), registered in `newRootCmd`; `runRunE`'s pinned
+pre-flight order (flag parse (cobra) → `--format` → `--dir` → files → message)
+ends at the message-presence check (`return nil`), the boot/send/loop body
+landing in Task 9. `resolveFiles` (the §3 pure function) resolves each `--file`
+against the workdir, stats (a missing path → `File not found`), enforces
+regular-file + the 10 MiB cap via `protocol.AttachFileMaxBytes`, reads once,
+classifies mime by `utf8.Valid` (text/plain vs application/octet-stream), and
+builds the RFC4648 data URL; `composeRunMessage` joins positionals and appends
+non-TTY stdin. Two supporting notes: `--output json` is rejected by the
+EXISTING root `checkOutputFormat` `PersistentPreRunE` (`yolo run: --output is
+not supported by run`) since `run` is not in its supported set — no new handling;
+and `workDir` now reports a missing `--dir` as `not a directory: <abs>` (was a
+raw stat error) to pin the bad-dir pre-flight line (safe: no test pinned the old
+stat-error text, completion handles `workDir` errors generically). Principle-5
+plan-internal test fix (NOT one of the 12 spec deviations, so no DEVIATIONS
+entry here): `TestResolveFiles`' exact-max subtest wrote `max.bin` as all-zero
+bytes (valid UTF-8 → text/plain) yet expected application/octet-stream; the test
+now seeds a leading `0xff` so the exact-max file is genuinely binary, matching
+ the pinned `utf8.Valid` mime rule. Gate green otherwise (the host-speed
+`TestRenderMessages100KBBudget` is the only failure). Task 9 (`cmd/yolo`
+boot/session/send/event loop + default renderer, `yolo-rem.10`) landed —
+`cmd/yolo/run_output.go` adds the renderer state machine (`newRenderer`/
+`apply`/`finish`): sessionID filter, header-once on the first assistant
+message.updated, live text deltas verbatim to stdout + the finalize-newline
+rule, tool lines, permission note, error line, thinking-gated reasoning, no
+ANSI; plus the NDJSON envelope (`ndjsonLine`/`stepStartPart`/`stepFinishPart`).
+`runRunE`'s orchestration tail: the typed `--format` switch, boot (in-process
+via the tuiRunE pattern or `--attach`), mint-path `--agent` validation (warn +
+fallback), session resolution (--session 404 → exit 1 > --continue first row
+(ORDER BY time_updated DESC) > mint), SIGINT (first → abort + 130, second →
+force-kill), send (409 busy), and the `runEvents` loop (permission.asked reply
+policy, session.status idle, the §6.3 resync Status check) with the
+ListMessages settle read; `permissionNote`/`settleTurnError`/`firstSigint`.
+Principle-5 resolutions (NOT one of the 12 spec deviations, so no DEVIATIONS
+entry here): (a) the renderer gates the "finalized" check on text/reasoning by
+`Time.End` and on tool by `State.Status` (completed/error) — the plan gated all
+parts on `Time.End`, but its own NDJSON tool part has `End=0` and a completed
+tool's done-signal is its status (this keeps the plan's `part.time={"start":0}`
+pin); (b) the plan's `p.Status == protocol.SessionStatusIdle` doesn't compile
+(`SessionStatus` is a struct) — it's `p.Status.Type`; (c) the NDJSON tool_use
+byte pin now includes `state.time` (`ToolState.Time` has no omitempty — faithful
+wire serialization) and a `step_start` for `msg_9` (a new assistant id emits its
+own step_start per the "step_start on a new assistant id" rule); (d)
+`TestRunContinueSelectsMostRecentlyUpdated`: `seedSessions` now `MkdirAll`s the
+storage dir before `storage.Open` (the run's `openDB` does this on boot; seeding
+runs pre-boot), and the expected message count is 2 (a turn is user +
+assistant), not 1. Gate green otherwise (host-speed / load-dependent timing
+ flakes pass in isolation: TUI `TestRenderMessages100KBBudget`,
+`TestMarkdownTextPartSGR`, and cmd/yolo `TestServeSigtermDrainsAndExitsZero`).
+Task 10 (NDJSON output format byte pins, `yolo-rem.11`) landed — the spec §6.2
+byte pins: `TestRunNDJSONFullTurn` (the worked example: the reasoning line, the
+tool_use line carrying the real `state.time` and the `,"time":{"start":0}}`
+part-level tail, the text line, and the step_finish with reason/tokens/cost;
+timestamps pinned via the injected `now` counter, asserted called exactly 5×),
+`TestRunNDJSONThinkingOff` (--thinking off in json mode → zero reasoning lines),
+`TestRunNDJSONNoAssistantNoFinish` (no assistant → no step_finish),
+`TestRunNDJSONFilePartIgnored` (a file part with Time.End==0 never finalizes →
+no line), and `TestRunNDJSONIntegration` (end-to-end `--format json`: first line
+step_start, last line step_finish, every line a well-formed envelope, no stderr
+on a clean turn). The pins confirmed Task 9's implementation with NO
+implementation fix needed (no drift from the spec bytes — the plan's Step-3
+conditional fix was unnecessary), verifying the two engine facts the emitter
+must not normalize away: tool parts carry real timestamps in `state.time` only
+(part-level `time` is zero → `,"time":{"start":0}}`) and `cost 0.001` renders as
+`0.001`. Gate green otherwise (the host-speed `TestRenderMessages100KBBudget` is
+ the only failure). Task 11 (signals, abort, exit codes, `yolo-rem.12`)
+landed — the remaining spec §9 legs, all pinned against Task 9's
+implementation: `TestRunFirstSigint` (leg h: the first-SIGINT handler aborts
+an in-flight turn against a REAL in-process server + fake-driver busy turn,
+returns 130, under the 10 s cap, then settles idle), `TestRunAutoPermission`
+(leg: `--auto`, spec §7.2 — default policy auto-rejects with the
+`permission requested: <perm> (<patterns>); auto-rejecting` note; `--auto`
+answers once with no note), `TestRunExitCodes` (leg i — the exit-1 rows not
+yet pinned: unknown model → send-side 500 → exit 1 with the `yolo run: `
+prefix; busy session → 409 → exit 1), and `TestRunAttach` (leg g's `--attach`
+half: the run points at a SECOND in-process server — no in-process boot in
+the run process — and the turn completes there), plus the `waitForStatus`
+poll helper. Principle-5 resolution (the plan's leg was buggy; no DEVIATIONS
+entry until the Task 12 batch): the plan's `TestRunAutoPermission` assumed
+`bash` is a permission ask by default, but the verified builtins design
+auto-allows `bash` via the `*` catch-all (the `{*,*,allow}` rule stands in for
+upstream's no-rule default of ALLOW for known core actions — `bash` ∈
+corePermissions), so no `permission.asked` is ever emitted for bash and the
+auto-reject note never fires; the leg was re-pointed to a `read` of `foo.env`,
+which DOES reach the bus via the builtins' `{read,*.env,ask}` rule, preserving
+the spec §7.2 behavior being pinned (verified empirically: default →
+`permission requested: read (foo.env); auto-rejecting` + reject; `--auto` →
+granted, no note, turn completes with the scripted text). Gate: vet + gofmt
+clean; `go test ./cmd/... -race` clean (the plan's pre-Task-12 race check on
+the signal goroutine + loop); full suite green except the host-speed
+`TestRenderMessages100KBBudget` (measured ~214–233 ms vs the 150 ms budget on
+this host — the established deviation 163/294 timing flake; the change is
+confined to `cmd/yolo/` and never touches the `internal/tui` render path).
+ **Completion (Task 12 closeout, `yolo-rem.13`).** What landed across the
+12 tasks: the wire/storage/engine/history file-part chain (Tasks 1–5: the
+protocol `file` parts + `SendMessageRequest` DTO, the storage
+round-trip with no migration, the server send validation + 20 MiB cap, the
+engine `Send` files persist+publish, and the history `userContent` seam
+with the `--- BEGIN/END FILE` blocks + the binary placeholder); the client
+`SendMessage` request-struct migration (Task 6); the TUI `renderUser` file
+chips (Task 7); and the `yolo run` command (Tasks 8–11: the skeleton + file
+validation, the event loop + default renderer, the NDJSON byte pins, and the
+SIGINT/abort + `--auto` + exit-code + `--attach` legs). Deviations 296–307
+(spec §10) are appended to `DEVIATIONS.md`; the principle-5 plan-leg fixes
+from Tasks 10–11 (the `--auto` leg's bash→read-of-`*.env` re-point and the
+NDJSON/tool-finalization gates) are documented in the task entries above
+(not separate deviations). Six P4 follow-up beads (spec §11,
+discovered-from `yolo-rem`): `--fork` (`yolo-cqs`), `--command`
+(`yolo-j93`), `--variant` (`yolo-o1k`), binary/media file support / driver
+image blocks (`yolo-5m2`), the timeout flag / max-turn-duration bound
+(`yolo-omi`), and extracting a neutral client package out from under
+`internal/tui` (`yolo-dgk`). Gate: `go vet` + `go test` + `gofmt` clean at
+module root. The full-module `go test ./... -race` (run with a raised
+per-package `-timeout` so the 10-min default does not abort a loaded host)
+reports **no data races** — the new concurrency (the run's signal goroutine +
+event loop, `cmd/yolo`) passes `-race` in isolation (all 55 tests) and the
+goleak `VerifyTestMain` suites in `internal/session` + `internal/server`
+pass. The only `-race` failures on this host are pre-existing
+load/timing-dependent flakes that pass in isolation and live outside this
+epic's files — `TestServeDrainForceKill` (cmd/yolo),
+`TestAskCancelStoresAborted` (internal/permission), `TestAbortMidTurn`
+(internal/session, the `yolo-o1a` flaky class), plus the host-speed
+`TestRenderMessages100KBBudget` (internal/tui, deviation 163/294); none are
+data races and none are in files this epic touched, so on a capable CI
+machine (or a low-load run) the full-module `-race` gate is expected to
+pass. The branch stops at green: no
+tag/release and `yolo-26j`/the epic are NOT closed here — that is the
+user/HITL step after the PR merge (branch → commit → push → PR → merge, per
+root commit discipline).
+
 **Status (2026-09-07):** 0.8.0 start-screen parity epic (`yolo-dhf`) — all
 12 plan tasks landed on `feature/0.8.0-home-mock` (plan
 `docs/superpowers/plans/2026-09-07-0.8.0-start-screen-parity.md`; gate green

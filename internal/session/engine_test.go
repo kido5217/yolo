@@ -2,9 +2,11 @@ package session_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -84,7 +86,7 @@ func TestSingleTextTurnEndToEnd(t *testing.T) {
 	done := make(chan struct{})
 	var errMsg error
 	waitIdle(t, h, ses, func() {
-		res, err := h.eng.Send(t.Context(), ses, "say hi", func(err error) {
+		res, err := h.eng.Send(t.Context(), ses, "say hi", nil, func(err error) {
 			errMsg = err
 			close(done)
 		})
@@ -151,7 +153,7 @@ func TestHistoryReplayIncludesToolResults(t *testing.T) {
 
 	ses := h.startSession(t, d)
 	waitIdle(t, h, ses, func() {
-		if _, err := h.eng.Send(t.Context(), ses, "read f.txt", nil); err != nil {
+		if _, err := h.eng.Send(t.Context(), ses, "read f.txt", nil, nil); err != nil {
 			t.Fatalf("Send: %v", err)
 		}
 	})
@@ -250,10 +252,10 @@ func TestShutdownAbortsActiveAndWaits(t *testing.T) {
 	sesA := h.startSession(t, t.TempDir())
 	sesB := h.startSession(t, t.TempDir())
 	h.slowTurn = true
-	if _, err := h.eng.Send(context.Background(), sesA, "hi", nil); err != nil {
+	if _, err := h.eng.Send(context.Background(), sesA, "hi", nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.eng.Send(context.Background(), sesB, "hi", nil); err != nil {
+	if _, err := h.eng.Send(context.Background(), sesB, "hi", nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := h.eng.Status(sesA); got != protocol.SessionStatusBusy {
@@ -293,9 +295,23 @@ func TestTextDeltasEmitSSEAndPersistAtFinalize(t *testing.T) {
 	}}}
 	ses := h.startSession(t, t.TempDir())
 	waitIdle(t, h, ses, func() {
-		if _, err := h.eng.Send(t.Context(), ses, "hi", nil); err != nil {
+		if _, err := h.eng.Send(t.Context(), ses, "hi", nil, nil); err != nil {
 			t.Fatalf("Send: %v", err)
 		}
+	})
+	// The terminal idle is the turn's last publish and bus delivery is
+	// order-preserving, so waiting for it on the bus proves every earlier
+	// delta event is folded into the recorder (a count straight after
+	// waitIdle — a status poll, not the bus — races the collector).
+	h.waitForEvent(t, func(e protocol.Event) bool {
+		if e.Type != protocol.EventTypeSessionStatus {
+			return false
+		}
+		var p protocol.SessionStatusProps
+		if json.Unmarshal(e.Properties, &p) != nil || p.SessionID != ses {
+			return false
+		}
+		return p.Status.Type == protocol.SessionStatusIdle
 	})
 	if n := h.eventCount(func(e protocol.Event) bool { return e.Type == protocol.EventTypeMessagePartDelta }); n != 3 {
 		t.Fatalf("message.part.delta events = %d, want 3", n)
@@ -329,7 +345,7 @@ func TestHistorySnapshotAccumulatesAcrossRounds(t *testing.T) {
 		{Parts: []llm.Part{{Kind: "text", Text: "done", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}},
 	}
 	waitIdle(t, h, ses, func() {
-		if _, err := h.eng.Send(t.Context(), ses, "find x", nil); err != nil {
+		if _, err := h.eng.Send(t.Context(), ses, "find x", nil, nil); err != nil {
 			t.Fatalf("Send: %v", err)
 		}
 	})
@@ -390,7 +406,7 @@ func TestRunTurnRecoversPanic(t *testing.T) {
 	}
 	var doneErr error
 	done := make(chan struct{})
-	if _, err := h.eng.Send(t.Context(), ses, "hi", func(err error) {
+	if _, err := h.eng.Send(t.Context(), ses, "hi", nil, func(err error) {
 		doneErr = err
 		close(done)
 	}); err != nil {
@@ -442,7 +458,7 @@ func TestSendEarlyFailPublishesNoStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 	onDone := make(chan struct{})
-	if _, err := h.eng.Send(t.Context(), ses, "hi", func(error) { close(onDone) }); err == nil {
+	if _, err := h.eng.Send(t.Context(), ses, "hi", nil, func(error) { close(onDone) }); err == nil {
 		t.Fatal("Send on a deleted session succeeded")
 	}
 	select {
@@ -489,7 +505,7 @@ func TestAbortCancelsTitleGoroutine(t *testing.T) {
 	h, hd := titleProbeHarness(t)
 	ses := h.startSession(t, t.TempDir())
 	waitIdle(t, h, ses, func() {
-		if _, err := h.eng.Send(t.Context(), ses, "hi", nil); err != nil {
+		if _, err := h.eng.Send(t.Context(), ses, "hi", nil, nil); err != nil {
 			t.Fatalf("Send: %v", err)
 		}
 	})
@@ -510,7 +526,7 @@ func TestShutdownCancelsAndWaitsTitle(t *testing.T) {
 	h, hd := titleProbeHarness(t)
 	ses := h.startSession(t, t.TempDir())
 	waitIdle(t, h, ses, func() {
-		if _, err := h.eng.Send(t.Context(), ses, "hi", nil); err != nil {
+		if _, err := h.eng.Send(t.Context(), ses, "hi", nil, nil); err != nil {
 			t.Fatalf("Send: %v", err)
 		}
 	})
@@ -577,7 +593,7 @@ func TestSupersededTitleDropKeepsNewerCancel(t *testing.T) {
 
 	// Turn A schedules title T1 (held by the driver) and completes.
 	waitIdle(t, h, ses, func() {
-		if _, err := h.eng.Send(t.Context(), ses, "hi", nil); err != nil {
+		if _, err := h.eng.Send(t.Context(), ses, "hi", nil, nil); err != nil {
 			t.Fatalf("Send A: %v", err)
 		}
 	})
@@ -599,7 +615,7 @@ func TestSupersededTitleDropKeepsNewerCancel(t *testing.T) {
 	}
 
 	waitIdle(t, h, ses, func() {
-		if _, err := h.eng.Send(t.Context(), ses, "hi", nil); err != nil {
+		if _, err := h.eng.Send(t.Context(), ses, "hi", nil, nil); err != nil {
 			t.Fatalf("Send B: %v", err)
 		}
 	})
@@ -644,7 +660,7 @@ func TestCloseWhileBusyAbortsAndSuppresses(t *testing.T) {
 	h.build(t)
 	h.slowTurn = true
 	ses := h.startSession(t, t.TempDir())
-	if _, err := h.eng.Send(t.Context(), ses, "hi", func(error) {}); err != nil {
+	if _, err := h.eng.Send(t.Context(), ses, "hi", nil, func(error) {}); err != nil {
 		t.Fatalf("Send: %v", err)
 	}
 	waitBusy(t, h, ses)
@@ -705,7 +721,7 @@ func TestAbortThenNewTurnCompletes(t *testing.T) {
 	h.build(t)
 	h.slowTurn = true
 	ses := h.startSession(t, t.TempDir())
-	if _, err := h.eng.Send(t.Context(), ses, "hi", func(error) {}); err != nil {
+	if _, err := h.eng.Send(t.Context(), ses, "hi", nil, func(error) {}); err != nil {
 		t.Fatalf("Send 1: %v", err)
 	}
 	waitBusy(t, h, ses)
@@ -723,7 +739,7 @@ func TestAbortThenNewTurnCompletes(t *testing.T) {
 	var turn2Err error
 	done := make(chan struct{})
 	waitIdle(t, h, ses, func() {
-		if _, err := h.eng.Send(t.Context(), ses, "again", func(err error) {
+		if _, err := h.eng.Send(t.Context(), ses, "again", nil, func(err error) {
 			turn2Err = err
 			close(done)
 		}); err != nil {
@@ -763,7 +779,7 @@ func TestWaitIdleSettlesOnTurnEnd(t *testing.T) {
 	h.build(t)
 	h.slowTurn = true // the slow stream holds the busy window open ~500 ms
 	ses := h.startSession(t, t.TempDir())
-	if _, err := h.eng.Send(t.Context(), ses, "hi", nil); err != nil {
+	if _, err := h.eng.Send(t.Context(), ses, "hi", nil, nil); err != nil {
 		t.Fatalf("Send: %v", err)
 	}
 	waitBusy(t, h, ses)
@@ -783,7 +799,7 @@ func TestWaitIdleContextCancel(t *testing.T) {
 	h.build(t)
 	h.slowTurn = true // the slow stream holds the busy window open ~500 ms
 	ses := h.startSession(t, t.TempDir())
-	if _, err := h.eng.Send(t.Context(), ses, "hi", nil); err != nil {
+	if _, err := h.eng.Send(t.Context(), ses, "hi", nil, nil); err != nil {
 		t.Fatalf("Send: %v", err)
 	}
 	waitBusy(t, h, ses)
@@ -816,7 +832,7 @@ func TestToolRoundMintsFreshTextPart(t *testing.T) {
 	}
 	ses := h.startSession(t, d)
 	waitIdle(t, h, ses, func() {
-		if _, err := h.eng.Send(t.Context(), ses, "read f.txt", nil); err != nil {
+		if _, err := h.eng.Send(t.Context(), ses, "read f.txt", nil, nil); err != nil {
 			t.Fatalf("Send: %v", err)
 		}
 	})
@@ -882,4 +898,136 @@ func mustListMessages(t *testing.T, db *storage.DB, ses string) []storage.Messag
 		t.Fatal(err)
 	}
 	return rows
+}
+
+// TestSendPersistsAndPublishesFileParts pins leg (e)'s persistence half:
+// Send with files stores the text part + one file part per entry (in
+// order, fields recovered) and publishes one message.part.updated per
+// file part.
+func TestSendPersistsAndPublishesFileParts(t *testing.T) {
+	h := newHarness(t)
+	h.build(t)
+	d := t.TempDir()
+	h.drv.Turns = []fake.Turn{
+		{Parts: []llm.Part{{Kind: "text", Text: "ok", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}},
+	}
+	ses := h.startSession(t, d)
+	files := []protocol.FileRef{
+		{MIME: "text/plain", Filename: "a.txt", URL: "data:text/plain;base64," + base64.StdEncoding.EncodeToString([]byte("hello"))},
+		{MIME: "application/octet-stream", Filename: "bin.dat", URL: "data:application/octet-stream;base64," + base64.StdEncoding.EncodeToString([]byte{0x01})},
+	}
+	waitIdle(t, h, ses, func() {
+		if _, err := h.eng.Send(t.Context(), ses, "What do these say?", files, nil); err != nil {
+			t.Fatalf("Send: %v", err)
+		}
+	})
+	msgs, err := h.db.ListMessages(t.Context(), ses)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	var userMsg *storage.MessageRow
+	for i := range msgs {
+		if msgs[i].Role == "user" {
+			userMsg = &msgs[i]
+		}
+	}
+	if userMsg == nil {
+		t.Fatal("no user message")
+	}
+	rows, err := h.db.ListParts(t.Context(), userMsg.ID)
+	if err != nil {
+		t.Fatalf("ListParts: %v", err)
+	}
+	if len(rows) != 3 {
+		t.Fatalf("parts = %d, want 3 (text + 2 files)", len(rows))
+	}
+	got, err := storage.PartToProtocol(rows[0])
+	if err != nil || got.Type != protocol.PartTypeText || got.Text != "What do these say?" {
+		t.Fatalf("text part: %+v %v", got, err)
+	}
+	for i, want := range files {
+		back, err := storage.PartToProtocol(rows[i+1])
+		if err != nil {
+			t.Fatalf("file part %d: %v", i, err)
+		}
+		if back.Type != protocol.PartTypeFile || back.MIME != want.MIME ||
+			back.Filename != want.Filename || back.URL != want.URL {
+			t.Fatalf("file part %d = %+v, want %+v", i, back, want)
+		}
+	}
+	fileEvents := h.eventCount(func(e protocol.Event) bool {
+		if e.Type != protocol.EventTypeMessagePartUpdated {
+			return false
+		}
+		var p protocol.MessagePartUpdatedProps
+		if json.Unmarshal(e.Properties, &p) != nil || p.SessionID != ses {
+			return false
+		}
+		return p.Part.Type == protocol.PartTypeFile
+	})
+	if fileEvents != 2 {
+		t.Fatalf("file message.part.updated events = %d, want 2", fileEvents)
+	}
+}
+
+// TestSendFilesReplayFromStoredDataURL pins leg (e)'s replay half: the
+// user message's model content carries the pinned block format on turn
+// one, and turn two inlines the blocks from the STORED data URL — the
+// original file is deleted between turns, so the replay proves no
+// filesystem access at turn time.
+func TestSendFilesReplayFromStoredDataURL(t *testing.T) {
+	h := newHarness(t)
+	h.build(t)
+	d := t.TempDir()
+	fp := filepath.Join(d, "a.txt")
+	writeFile(t, fp, "hello")
+	h.drv.Turns = []fake.Turn{
+		{Parts: []llm.Part{{Kind: "text", Text: "one", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}},
+		{Parts: []llm.Part{{Kind: "text", Text: "two", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}},
+	}
+	ses := h.startSession(t, d)
+	url := "data:text/plain;base64," + base64.StdEncoding.EncodeToString([]byte("hello"))
+	waitIdle(t, h, ses, func() {
+		if _, err := h.eng.Send(t.Context(), ses, "What do these say?",
+			[]protocol.FileRef{{MIME: "text/plain", Filename: "a.txt", URL: url}}, nil); err != nil {
+			t.Fatalf("turn 1: %v", err)
+		}
+	})
+	// turn one's request carried the block
+	reqs := nonTitle(h.drv.Requests())
+	if len(reqs) != 1 {
+		t.Fatalf("rounds = %d, want 1", len(reqs))
+	}
+	block := "--- BEGIN FILE a.txt ---\nhello\n--- END FILE a.txt ---\n\nWhat do these say?"
+	found := false
+	for _, m := range reqs[0].Messages {
+		if m.Role == llm.RoleUser && m.Content == block {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("turn 1 user content missing the block:\n%q", reqs[0].Messages)
+	}
+	// the file is deleted, then turn two replays from the stored data URL
+	if err := os.Remove(fp); err != nil {
+		t.Fatal(err)
+	}
+	waitIdle(t, h, ses, func() {
+		if _, err := h.eng.Send(t.Context(), ses, "again", nil, nil); err != nil {
+			t.Fatalf("turn 2: %v", err)
+		}
+	})
+	reqs = nonTitle(h.drv.Requests())
+	if len(reqs) != 2 {
+		t.Fatalf("rounds = %d, want 2", len(reqs))
+	}
+	replayed := false
+	for _, m := range reqs[1].Messages {
+		if m.Role == llm.RoleUser && strings.Contains(m.Content, "--- BEGIN FILE a.txt ---\nhello\n--- END FILE a.txt ---") {
+			replayed = true
+		}
+	}
+	if !replayed {
+		t.Fatal("turn 2 history did not replay the inlined block from the stored data URL")
+	}
 }

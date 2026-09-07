@@ -10,6 +10,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -167,7 +168,7 @@ func newRootCmd() *cobra.Command {
 	// store; the root positional sessionID from the --dir store's sessions.
 	root.RegisterFlagCompletionFunc("profile", profileCompletionFunc)
 	root.ValidArgsFunction = sessionIDCompletionFunc
-	root.AddCommand(newServeCmd(), newAuthCmd(), newProfileCmd(), newVersionCmd())
+	root.AddCommand(newServeCmd(), newAuthCmd(), newProfileCmd(), newVersionCmd(), newRunCmd())
 	silenceAll(root)
 	return root
 }
@@ -631,6 +632,12 @@ func workDir(flagDir string) (string, error) {
 	}
 	st, err := os.Stat(abs)
 	if err != nil {
+		// A missing path is reported as "not a directory" (the --dir value
+		// must be an existing directory); other stat failures (e.g. a
+		// permission error) keep their own message.
+		if errors.Is(err, fs.ErrNotExist) {
+			return "", fmt.Errorf("not a directory: %s", abs)
+		}
 		return "", err
 	}
 	if !st.IsDir() {

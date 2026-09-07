@@ -217,9 +217,11 @@ type SendResult struct {
 	MessageID, PartID string
 }
 
-// Send persists the user message and spawns the turn goroutine. It returns
-// ErrSessionBusy when a turn is already active for the session.
-func (e *Engine) Send(ctx context.Context, sessionID, text string, onDone func(error)) (SendResult, error) {
+// Send persists the user message and spawns the turn goroutine. It
+// returns ErrSessionBusy when a turn is already active for the session.
+// files are the attached file entries (spec §5.1): one file part each,
+// persisted after the text part in flag order and published.
+func (e *Engine) Send(ctx context.Context, sessionID, text string, files []protocol.FileRef, onDone func(error)) (SendResult, error) {
 	row, err := e.db.GetSession(ctx, sessionID)
 	if err != nil {
 		return SendResult{}, err
@@ -270,6 +272,26 @@ func (e *Engine) Send(ctx context.Context, sessionID, text string, onDone func(e
 	e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
 		SessionID: sessionID, Part: userPart, Time: now,
 	})
+	for i := range files {
+		f := files[i]
+		filePart := protocol.Part{
+			ID: protocol.NewID("prt"), SessionID: sessionID, MessageID: msgID,
+			Type: protocol.PartTypeFile, MIME: f.MIME, Filename: f.Filename, URL: f.URL,
+			Time: protocol.PartTime{Start: now}, // no End — same shape as the user text part
+		}
+		fileRow, err := storage.ProtocolToPart(filePart)
+		if err != nil {
+			e.endTurn(sessionID)
+			return SendResult{}, fmt.Errorf("session: persist file part: %w", err)
+		}
+		if err := e.db.UpsertPart(ctx, fileRow); err != nil {
+			e.endTurn(sessionID)
+			return SendResult{}, err
+		}
+		e.publish(protocol.EventTypeMessagePartUpdated, protocol.MessagePartUpdatedProps{
+			SessionID: sessionID, Part: filePart, Time: now,
+		})
+	}
 
 	t := newTurn(sessionID, row, info, model)
 	e.maybeScheduleTitle(ctx, t, text)

@@ -370,3 +370,38 @@ func TestRenderMessagesWrapsLongLines(t *testing.T) {
 		}
 	}
 }
+
+// TestRenderUserFileChips pins the spec §8 chip contract: one chip per
+// file part, in part order, after the text lines; a file-only message
+// renders the "User:" line plus chips.
+func TestRenderUserFileChips(t *testing.T) {
+	tests := []struct {
+		name  string
+		parts []protocol.Part
+		want  string
+	}{
+		{"text plus file chip", []protocol.Part{
+			{ID: "p1", Type: "text", Text: "hello"},
+			{ID: "f1", Type: protocol.PartTypeFile, MIME: "text/plain", Filename: "notes.txt", URL: "data:text/plain;base64,aGVsbG8="},
+		}, "User: hello\nfile: notes.txt (text/plain)"},
+		{"two files in part order", []protocol.Part{
+			{ID: "t1", Type: "text", Text: "hi"},
+			{ID: "f1", Type: protocol.PartTypeFile, MIME: "text/plain", Filename: "a.txt", URL: "u1"},
+			{ID: "f2", Type: protocol.PartTypeFile, MIME: "application/octet-stream", Filename: "b.dat", URL: "u2"},
+		}, "User: hi\nfile: a.txt (text/plain)\nfile: b.dat (application/octet-stream)"},
+		{"file-only message", []protocol.Part{
+			{ID: "f1", Type: protocol.PartTypeFile, MIME: "text/plain", Filename: "notes.txt", URL: "u"},
+		}, "User:\nfile: notes.txt (text/plain)"},
+	}
+	for _, c := range tests {
+		t.Run(c.name, func(t *testing.T) {
+			got := renderUser(
+				protocol.MessageWithParts{Info: protocol.Message{ID: "m", Role: "user"}, Parts: c.parts},
+				120,
+			)
+			if got != c.want {
+				t.Fatalf("renderUser =\n%q\nwant\n%q", got, c.want)
+			}
+		})
+	}
+}

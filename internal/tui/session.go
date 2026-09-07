@@ -142,24 +142,42 @@ func renderMessages(st *store.State, expanded map[string]bool, w int, th theme.T
 
 func renderUser(m protocol.MessageWithParts, w int) string {
 	var texts []string
+	var files []protocol.Part
 	for _, p := range m.Parts {
-		if p.Type == "text" && p.Text != "" {
-			texts = append(texts, p.Text)
+		switch p.Type {
+		case "text":
+			if p.Text != "" {
+				texts = append(texts, p.Text)
+			}
+		case protocol.PartTypeFile:
+			files = append(files, p)
 		}
 	}
-	if len(texts) == 0 {
+	if len(texts) == 0 && len(files) == 0 {
 		return "User:"
 	}
 	var b strings.Builder
-	lines := strings.Split(strings.Join(texts, "\n"), "\n")
-	for i, l := range lines {
-		if i == 0 {
-			l = "User: " + l
+	if len(texts) > 0 {
+		lines := strings.Split(strings.Join(texts, "\n"), "\n")
+		for i, l := range lines {
+			if i == 0 {
+				l = "User: " + l
+			}
+			if i > 0 {
+				b.WriteByte('\n')
+			}
+			b.WriteString(wrapLine(l, w))
 		}
-		if i > 0 {
+	} else {
+		b.WriteString("User:")
+	}
+	// File chips render after the text lines, in part order (spec §8):
+	// resumed sessions must not silently drop attachments from view.
+	for _, p := range files {
+		if b.Len() > 0 {
 			b.WriteByte('\n')
 		}
-		b.WriteString(wrapLine(l, w))
+		b.WriteString(wrapLine(fmt.Sprintf("file: %s (%s)", p.Filename, p.MIME), w))
 	}
 	return b.String()
 }

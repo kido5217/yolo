@@ -3,6 +3,7 @@ package server_test
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/url"
@@ -428,15 +429,18 @@ func TestStartTwiceErrors(t *testing.T) {
 	}
 }
 
-// TestOversizedBodyRejected pins the request-body cap: a body over
+// TestOversizedBodyRejected pins the GLOBAL request-body cap: a body over
 // maxBodyBytes (10 MiB) is rejected with 4xx instead of being buffered
-// unbounded (the listen address is user-overridable).
+// unbounded (the listen address is user-overridable). It targets
+// PATCH /session/{id} (handleSessionPatch uses the global decode) — the send
+// endpoint carries its own higher 20 MiB cap (Task 3, deviation 9), so the
+// global-cap pin moves here.
 func TestOversizedBodyRejected(t *testing.T) {
 	t.Parallel()
 	s := testutil.Boot(t)
 	d := t.TempDir()
 	id := mkSession(t, s, d, "Big")
-	resp, b := testutil.Req(t, s, "POST", "/session/"+id+"/message", d, `{"text":"`+strings.Repeat("a", 11<<20)+`"}`)
+	resp, b := testutil.Req(t, s, "PATCH", "/session/"+id, d, `{"title":"`+strings.Repeat("a", 11<<20)+`"}`)
 	if resp.StatusCode/100 != 4 {
 		t.Fatalf("oversized body = %d %s, want 4xx", resp.StatusCode, b)
 	}
@@ -825,5 +829,75 @@ func waitForProc(t *testing.T, cmd string, wantAlive bool) {
 			t.Fatalf("process %q: want alive=%v, still %v after 5s", cmd, wantAlive, !wantAlive)
 		}
 		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// TestSendFilesValidation pins the send endpoint's file-entry 400 legs
+// (spec §4.2) and the 202 acceptance (leg d).
+func TestSendFilesValidation(t *testing.T) {
+	t.Parallel()
+	s := testutil.Boot(t)
+	d := t.TempDir()
+	cases := []struct {
+		name string
+		body string
+		want int
+	}{
+		{"empty message", `{"text":"  "}`, 400},
+		{"empty mime", `{"text":"hi","files":[{"mime":"","filename":"a","url":"data:text/plain;base64,aGk="}]}`, 400},
+		{"empty url", `{"text":"hi","files":[{"mime":"text/plain","filename":"a","url":""}]}`, 400},
+		{"bad base64", `{"text":"hi","files":[{"mime":"text/plain","filename":"a","url":"data:text/plain;base64,!!!"}]}`, 400},
+		{"non-data url accepted", `{"text":"hi","files":[{"mime":"text/plain","filename":"a","url":"https://x/y"}]}`, 202},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			id := mkSession(t, s, d, c.name)
+			resp, b := testutil.Req(t, s, "POST", "/session/"+id+"/message", d, c.body)
+			if resp.StatusCode != c.want {
+				t.Fatalf("send = %d %s, want %d", resp.StatusCode, b, c.want)
+			}
+		})
+	}
+	// the envelope messages are pinned
+	id := mkSession(t, s, d, "msgs")
+	resp, b := testutil.Req(t, s, "POST", "/session/"+id+"/message", d,
+		`{"text":"hi","files":[{"mime":"","filename":"a","url":"u"}]}`)
+	if resp.StatusCode != 400 || !strings.Contains(string(b), "invalid file entry") {
+		t.Fatalf("invalid entry = %d %s", resp.StatusCode, b)
+	}
+	resp, b = testutil.Req(t, s, "POST", "/session/"+id+"/message", d,
+		`{"text":"hi","files":[{"mime":"text/plain","filename":"a","url":"data:text/plain;base64,!!!"}]}`)
+	if resp.StatusCode != 400 || !strings.Contains(string(b), "file too large") {
+		t.Fatalf("bad base64 = %d %s", resp.StatusCode, b)
+	}
+}
+
+// TestSendFileTooLarge pins the decoded-size re-cap (spec §4.2): a
+// data URL whose decoded bytes exceed AttachFileMaxBytes is 400
+// `file too large` (leg d).
+func TestSendFileTooLarge(t *testing.T) {
+	t.Parallel()
+	s := testutil.Boot(t)
+	d := t.TempDir()
+	id := mkSession(t, s, d, "Big")
+	big := base64.StdEncoding.EncodeToString(make([]byte, 10<<20+1))
+	resp, b := testutil.Req(t, s, "POST", "/session/"+id+"/message", d,
+		`{"text":"hi","files":[{"mime":"text/plain","filename":"big","url":"data:text/plain;base64,`+big+`"}]}`)
+	if resp.StatusCode != 400 || !strings.Contains(string(b), "file too large") {
+		t.Fatalf("oversized file = %d %s, want 400 file too large", resp.StatusCode, b)
+	}
+}
+
+// TestSendOversizedBodyRejected pins the send endpoint's own 20 MiB cap
+// (deviation 9): beyond maxSendBodyBytes the body 4xx via MaxBytesReader.
+func TestSendOversizedBodyRejected(t *testing.T) {
+	t.Parallel()
+	s := testutil.Boot(t)
+	d := t.TempDir()
+	id := mkSession(t, s, d, "Huge")
+	resp, b := testutil.Req(t, s, "POST", "/session/"+id+"/message", d,
+		`{"text":"`+strings.Repeat("a", 21<<20)+`"}`)
+	if resp.StatusCode/100 != 4 {
+		t.Fatalf("oversized send body = %d %s, want 4xx", resp.StatusCode, b)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -66,7 +67,7 @@ func TestClientScopingAndErrors(t *testing.T) {
 		}
 	})
 	t.Run("409 is ErrBusy", func(t *testing.T) {
-		if _, err := c.SendMessage(ctx, "ses_x", "hi"); !errors.Is(err, client.ErrBusy) {
+		if _, err := c.SendMessage(ctx, "ses_x", protocol.SendMessageRequest{Text: "hi"}); !errors.Is(err, client.ErrBusy) {
 			t.Fatalf("SendMessage err = %v, want ErrBusy", err)
 		}
 		if gotRoute != "POST /session/ses_x/message" {
@@ -192,5 +193,38 @@ func TestShellRoundTrip(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "session not found") {
 		t.Fatalf("err = %q; want the server envelope message", err.Error())
+	}
+}
+
+// TestSendMessageBodyShape pins the send body bytes: a no-files request
+// is byte-identical to today's body (deviation 10) and a files request
+// carries the spec §3 shape.
+func TestSendMessageBodyShape(t *testing.T) {
+	t.Parallel()
+	var body []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		body = b
+		_, _ = w.Write([]byte(`{"message_id":"msg_1"}`))
+	}))
+	t.Cleanup(srv.Close)
+	c := client.New(srv.URL, "/abs/dir")
+	ctx := context.Background()
+
+	if _, err := c.SendMessage(ctx, "ses_1", protocol.SendMessageRequest{Text: "hi"}); err != nil {
+		t.Fatalf("SendMessage: %v", err)
+	}
+	if want := `{"text":"hi"}`; string(body) != want {
+		t.Fatalf("no-files body = %s, want %s", body, want)
+	}
+	if _, err := c.SendMessage(ctx, "ses_1", protocol.SendMessageRequest{
+		Text:  "What do these say?",
+		Files: []protocol.FileRef{{MIME: "text/plain", Filename: "notes.txt", URL: "data:text/plain;base64,aGVsbG8="}},
+	}); err != nil {
+		t.Fatalf("SendMessage with files: %v", err)
+	}
+	want := `{"text":"What do these say?","files":[{"mime":"text/plain","filename":"notes.txt","url":"data:text/plain;base64,aGVsbG8="}]}`
+	if string(body) != want {
+		t.Fatalf("files body =\n%s\nwant\n%s", body, want)
 	}
 }

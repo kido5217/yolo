@@ -28,7 +28,7 @@ func TestTransientRetrySucceeds(t *testing.T) {
 		{Parts: []llm.Part{{Kind: "text", Text: "ok", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}},
 	}
 	h.fastBackoff = true // harness seam: Deps.Backoff func(attempt int) time.Duration → 1ms (test only)
-	if _, err := h.eng.Send(context.Background(), ses, "hi", nil); err != nil {
+	if _, err := h.eng.Send(context.Background(), ses, "hi", nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	waitIdle(t, h, ses, func() {})
@@ -64,7 +64,7 @@ func TestTransientGivesUpAfter4(t *testing.T) {
 	h.fastBackoff = true
 	done := make(chan struct{})
 	var doneErr error
-	if _, err := h.eng.Send(context.Background(), ses, "hi", func(e error) {
+	if _, err := h.eng.Send(context.Background(), ses, "hi", nil, func(e error) {
 		doneErr = e
 		close(done)
 	}); err != nil {
@@ -103,7 +103,7 @@ func TestMidStreamErrorNoRetry(t *testing.T) {
 	}
 	done := make(chan struct{})
 	var doneErr error
-	if _, err := h.eng.Send(context.Background(), ses, "hi", func(e error) {
+	if _, err := h.eng.Send(context.Background(), ses, "hi", nil, func(e error) {
 		doneErr = e
 		close(done)
 	}); err != nil {
@@ -135,7 +135,7 @@ func TestAbortMidTurn(t *testing.T) {
 			{Kind: "tool", Name: "bash", CallID: "t1", Text: `{"command":"sleep 10"}`, Finish: "tool_calls"},
 		}},
 	}
-	if _, err := h.eng.Send(context.Background(), ses, "slow", nil); err != nil {
+	if _, err := h.eng.Send(context.Background(), ses, "slow", nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	// wait for the tool part to go running, then abort
@@ -179,7 +179,7 @@ func TestMaxToolStepsHalts(t *testing.T) {
 	parts = append(parts, llm.Part{Kind: "text", Text: "end", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}})
 	xPart := llm.Part{Kind: "text", Text: "x", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}
 	h.drv.Turns = []fake.Turn{{Parts: parts}, {Parts: []llm.Part{xPart}}}
-	if _, err := h.eng.Send(context.Background(), ses, "spin", nil); err != nil {
+	if _, err := h.eng.Send(context.Background(), ses, "spin", nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	waitIdle(t, h, ses, func() {})
@@ -240,7 +240,7 @@ func TestBudgetDropCancelsStreamContext(t *testing.T) {
 	if err := h.db.UpdateSession(t.Context(), ses, storage.SessionRow{Title: "leak"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.eng.Send(context.Background(), ses, "spin", nil); err != nil {
+	if _, err := h.eng.Send(context.Background(), ses, "spin", nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	waitIdle(t, h, ses, func() {})
@@ -260,7 +260,7 @@ func TestOverflowHardStop(t *testing.T) {
 	h.drv.Turns = []fake.Turn{
 		{Parts: []llm.Part{{Kind: "text", Text: "big", Finish: "stop", Usage: &llm.Usage{Input: 100001, Output: 5}}}},
 	}
-	if _, err := h.eng.Send(context.Background(), ses, "big", nil); err != nil {
+	if _, err := h.eng.Send(context.Background(), ses, "big", nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	waitIdle(t, h, ses, func() {})
@@ -293,17 +293,17 @@ func TestConcurrentSend409(t *testing.T) {
 	slowPart := llm.Part{Kind: "text", Text: "slow", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}
 	h.drv.Turns = []fake.Turn{{Parts: []llm.Part{slowPart}}}
 	h.slowTurn = true // harness seam: hold the turn 500ms via fake driver delay
-	_, err := h.eng.Send(context.Background(), ses, "one", nil)
+	_, err := h.eng.Send(context.Background(), ses, "one", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	waitBusy(t, h, ses)
-	_, err2 := h.eng.Send(context.Background(), ses, "two", nil)
+	_, err2 := h.eng.Send(context.Background(), ses, "two", nil, nil)
 	if !errors.Is(err2, session.ErrSessionBusy) {
 		t.Fatalf("want ErrSessionBusy, got %v", err2)
 	}
 	waitIdle(t, h, ses, func() {})
-	if _, err3 := h.eng.Send(context.Background(), ses, "three", nil); err3 != nil {
+	if _, err3 := h.eng.Send(context.Background(), ses, "three", nil, nil); err3 != nil {
 		t.Fatalf("after idle send failed: %v", err3)
 	}
 	waitIdle(t, h, ses, func() {})
@@ -323,7 +323,7 @@ func TestOverflow400FromDriverEndsIdleWithNote(t *testing.T) {
 	if err := h.db.UpdateSession(t.Context(), ses, storage.SessionRow{Title: "no-title"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.eng.Send(context.Background(), ses, "big", nil); err != nil {
+	if _, err := h.eng.Send(context.Background(), ses, "big", nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	waitIdle(t, h, ses, func() {})
@@ -359,7 +359,7 @@ func TestNonOverflowAPIErrorFailsTurn(t *testing.T) {
 	}
 	done := make(chan struct{})
 	var turnErr error
-	if _, err := h.eng.Send(context.Background(), ses, "hi", func(e error) {
+	if _, err := h.eng.Send(context.Background(), ses, "hi", nil, func(e error) {
 		turnErr = e
 		close(done)
 	}); err != nil {
