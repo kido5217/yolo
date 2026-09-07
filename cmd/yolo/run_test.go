@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/kido5217/yolo/internal/protocol"
+	"github.com/kido5217/yolo/internal/storage"
 )
 
 // captureRun runs run(args) with stdout/stderr swapped for pipes and
@@ -209,5 +210,113 @@ func TestRunPreflight(t *testing.T) {
 				t.Fatalf("stdout = %q, want empty (pre-flight legs print nothing on stdout)", out)
 			}
 		})
+	}
+}
+
+// TestRunCleanTurn pins the happy path end to end (in-process boot +
+// fake driver): exit 0, stdout the assistant text + the finalize
+// newline, stderr the header line.
+func TestRunCleanTurn(t *testing.T) {
+	dataRoot, wd := runEnv(t)
+	_ = dataRoot
+	code, out, errOut := captureRun(t, "run", "hi", "--dir", wd)
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0 (stderr: %s)", code, errOut)
+	}
+	if want := "ok\n"; out != want {
+		t.Fatalf("stdout = %q, want %q", out, want)
+	}
+	if !strings.Contains(errOut, "> build · kido/q") {
+		t.Fatalf("stderr missing the header:\n%s", errOut)
+	}
+}
+
+// TestRunAgentFallback pins the --agent warn-and-fallback (spec §2 row
+// --agent): unknown name -> the warning line, the run proceeds on the
+// server default, exit 0.
+func TestRunAgentFallback(t *testing.T) {
+	_, wd := runEnv(t)
+	code, _, errOut := captureRun(t, "run", "hi", "--dir", wd, "--agent", "nope")
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0 (stderr: %s)", code, errOut)
+	}
+	if want := `agent "nope" not found. Falling back to default agent`; !strings.Contains(errOut, want) {
+		t.Fatalf("stderr missing %q:\n%s", want, errOut)
+	}
+}
+
+// TestRunSession404 pins the --session 404 leg (spec §7.1): exit 1 +
+// the pinned line.
+func TestRunSession404(t *testing.T) {
+	_, wd := runEnv(t)
+	code, _, errOut := captureRun(t, "run", "hi", "--dir", wd, "--session", "ses_nonexistent")
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1 (stderr: %s)", code, errOut)
+	}
+	if want := "yolo run: Session not found: ses_nonexistent"; !strings.Contains(errOut, want) {
+		t.Fatalf("stderr missing %q:\n%s", want, errOut)
+	}
+}
+
+// seedSessions inserts session rows directly into the run's store (the
+// XDG data root's DB) so the --continue/--session legs have data; it
+// closes the connection before returning (the run's stack opens its own).
+func seedSessions(t *testing.T, dataRoot, wd string, rows ...storage.SessionRow) {
+	t.Helper()
+	dbPath := filepath.Join(dataRoot, "yolo", "storage", "yolo.db")
+	// The run's stack (openDB) creates this dir on boot; seedSessions runs
+	// before the boot, so create it here (mirrors cmd/yolo/deps.go openDB).
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	db, err := storage.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx := t.Context()
+	for _, r := range rows {
+		if err := db.CreateSession(ctx, r); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// TestRunContinueSelectsMostRecentlyUpdated pins the --continue rule
+// (spec §2, deviation 12): the first row of GET /session (ORDER BY
+// time_updated DESC) is selected; an empty list mints silently.
+func TestRunContinueSelectsMostRecentlyUpdated(t *testing.T) {
+	dataRoot, wd := runEnv(t)
+	a, b := protocol.NewID("ses"), protocol.NewID("ses")
+	seedSessions(t, dataRoot, wd,
+		storage.SessionRow{ID: a, ProjectDir: wd, TimeCreated: 1, TimeUpdated: 100},
+		storage.SessionRow{ID: b, ProjectDir: wd, TimeCreated: 2, TimeUpdated: 200},
+	)
+	code, out, errOut := captureRun(t, "run", "hi", "--dir", wd, "--continue")
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0 (stderr: %s)", code, errOut)
+	}
+	if out != "ok\n" {
+		t.Fatalf("stdout = %q, want %q", out, "ok\n")
+	}
+	// the turn landed in the MORE recently updated session (b)
+	db, err := storage.Open(filepath.Join(dataRoot, "yolo", "storage", "yolo.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx := t.Context()
+	msgsA, err := db.ListMessages(ctx, a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msgsB, err := db.ListMessages(ctx, b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the turn is a user + assistant message pair: b (the more recently
+	// updated session) holds both, a holds none.
+	if len(msgsA) != 0 || len(msgsB) != 2 {
+		t.Fatalf("turn landed in the wrong session: a=%d msgs, b=%d msgs", len(msgsA), len(msgsB))
 	}
 }
