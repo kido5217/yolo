@@ -377,6 +377,8 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 		return a.applyDlgPatch(m)
 	case sessionCreatedMsg:
 		return a.applySessionCreated(m)
+	case homeSubmitMsg:
+		return a.applyHomeSubmit(m)
 	case toastExpireMsg:
 		a.removeToast(m.id)
 		return nil
@@ -392,6 +394,8 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 		return nil
 	case sendMsg:
 		return a.applySend(m)
+	case shellMsg:
+		return a.applyShell(m)
 	case commandExecMsg:
 		return a.applyCommandExec(m)
 	case statusSnapshotMsg:

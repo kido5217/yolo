@@ -52,6 +52,109 @@ func (a *App) applySend(m sendMsg) tea.Cmd {
 	return nil
 }
 
+// homeSubmitMsg reports the home submit's mint+send result (decision 2):
+// ses is the minted session (zero on a mint failure), text the typed line
+// (kept for retry on error).
+type homeSubmitMsg struct {
+	ses  protocol.Session
+	text string
+	err  error
+}
+
+// configModel is the home submit's model seed: the store.Config["model"]
+// string or "" (the server applies the catalog default on blank, matching
+// newSession's blank-model branch).
+func (a *App) configModel() string {
+	if s, ok := a.store.Config["model"].(string); ok {
+		return s
+	}
+	return ""
+}
+
+// homeSubmitCmd mints the session (title "" -> "New session", the seeded
+// agent+model) and then sends the typed text as its first message —
+// two sequential wire calls under per-stage 5s timeouts (the
+// createSessionCmd/sendMessageCmd convention).
+func (a *App) homeSubmitCmd(text string) tea.Cmd {
+	agent := a.pendingAgentName()
+	model := a.configModel()
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ses, err := a.CreateSessionWith(ctx, "", agent, model)
+		cancel()
+		if err != nil {
+			return homeSubmitMsg{text: text, err: err}
+		}
+		// the send stage gets a FRESH 5s window (per-stage timeouts): the
+		// mint's deadline must not eat the send's budget.
+		ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_, err = a.SendMessage(ctx, ses.ID, text)
+		return homeSubmitMsg{ses: ses, text: text, err: err}
+	}
+}
+
+// homeShellCmd is the shell-mode twin: mint (the same seed), then POST
+// /session/{id}/shell {command: text} (Task 9's client method).
+func (a *App) homeShellCmd(text string) tea.Cmd {
+	agent := a.pendingAgentName()
+	model := a.configModel()
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ses, err := a.CreateSessionWith(ctx, "", agent, model)
+		cancel()
+		if err != nil {
+			return homeSubmitMsg{text: text, err: err}
+		}
+		ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_, _, err = a.Shell(ctx, ses.ID, text)
+		return homeSubmitMsg{ses: ses, text: text, err: err}
+	}
+}
+
+// shellMsg reports the session-route shell post result; the transcript
+// updates via SSE (the msg only drives the post-send state).
+type shellMsg struct {
+	text string
+	err  error
+}
+
+// shellCmd posts the composed line to the CURRENT session's shell (the
+// session route — the home route mints first, homeShellCmd). No busy
+// gate: the shell is serialized by the per-session shell mutex (a shell
+// submit during a turn waits for the turn's bash exec — documented
+// behavior, decision-silent). Uses the client Shell method (Task 9).
+func (a *App) shellCmd(text string) tea.Cmd {
+	id := a.curSessionID
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_, _, err := a.Shell(ctx, id, text)
+		return shellMsg{text: text, err: err}
+	}
+}
+
+// applyShell: success -> clear input + draft + appendHistory(text) + clear
+// the retry suppression (the applySend post-send state — the transcript
+// updates via SSE, isDirty on the applied event). Error -> lastErr
+// (ErrBusy -> the busy toast; the session-route convention).
+func (a *App) applyShell(m shellMsg) tea.Cmd {
+	if m.err != nil {
+		if errors.Is(m.err, client.ErrBusy) {
+			a.toast(busyToast)
+		} else {
+			a.lastErr = m.err.Error()
+		}
+		return nil
+	}
+	a.prompt.input.SetValue("")
+	a.prompt.draft.Reset()
+	a.appendHistory(m.text)
+	delete(a.retrySuppressed, a.curSessionID)
+	return nil
+}
+
 // localCommands is the TUI-local slash commands merged client-side into the
 // slash menu (the server catalog is frozen at 5 — spec §10).
 func localCommands() []protocol.Command {

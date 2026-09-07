@@ -548,12 +548,12 @@ func (a *App) homeView(menu, acMenu, perm, toasts, dlg, wk string) string {
 	return strings.Join(frame, "\n")
 }
 
-// handleHomeKey dispatches home-route keys: enter creates (Task 4 — the
-// start screen has no list to select from, so enter always creates; Task 6
-// rewrites it to the decision-2 submit), n creates, esc clears the prompt;
-// unhandled keys fall through to the prompt input (up/down now recall the
-// prompt history — the start screen has no list to navigate). (ctrl+c is
-// handled app-wide in handleKey.)
+// handleHomeKey dispatches home-route keys: enter submits the typed text
+// (decision 2: non-empty text mints the session seeded with the pending
+// agent + model and sends it as the first message; empty text is a no-op),
+// n creates, esc clears the prompt; unhandled keys fall through to the
+// prompt input (up/down recall the prompt history — the start screen has
+// no list to navigate). (ctrl+c is handled app-wide in handleKey.)
 func (a *App) handleHomeKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 	switch {
 	case key.Matches(k, homeKeyMap.Enter):
@@ -567,9 +567,23 @@ func (a *App) handleHomeKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 	return nil, false
 }
 
-// homeEnter creates a new session (Task 4 — the old cursor-0 "New session"
-// path; the start screen has no list to select from, so enter always
-// creates). Task 6 rewrites this to the decision-2 submit (the prompt text).
+// homeEnter is the home-route enter (decision 2): the trailing-backslash
+// soft-enter draft parity (the promptEnter behavior), then: empty text
+// (draft+trimmed value) -> no-op; shell mode -> homeShellCmd; normal ->
+// homeSubmitCmd.
 func (a *App) homeEnter() []tea.Cmd {
-	return a.emit(a.createSessionCmd())
+	val := a.prompt.input.Value()
+	if strings.HasSuffix(val, "\\") {
+		a.prompt.draft.WriteString(strings.TrimSuffix(val, "\\") + "\n")
+		a.prompt.input.SetValue("")
+		return nil
+	}
+	text := a.prompt.draft.String() + strings.TrimSpace(val)
+	if strings.TrimSpace(text) == "" {
+		return nil
+	}
+	if a.prompt.mode == "shell" {
+		return a.emit(a.homeShellCmd(text))
+	}
+	return a.emit(a.homeSubmitCmd(text))
 }

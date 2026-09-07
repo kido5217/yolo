@@ -265,8 +265,10 @@ func (a *App) inputUpdate(k tea.KeyPressMsg) []tea.Cmd {
 }
 
 // promptEnter implements the LOCKED send semantics: a trailing backslash
-// soft-enters a draft line; empty input is ignored; a busy store toasts;
-// otherwise draft+line is sent and the input clears only on success.
+// soft-enters a draft line; empty input is ignored; shell mode posts the
+// line to the current session's shell (no busy gate — the per-session
+// shell mutex serializes it); a busy store toasts; otherwise draft+line
+// is sent and the input clears only on success.
 func (a *App) promptEnter() []tea.Cmd {
 	val := a.prompt.input.Value()
 	if strings.HasSuffix(val, "\\") {
@@ -277,6 +279,9 @@ func (a *App) promptEnter() []tea.Cmd {
 	text := a.prompt.draft.String() + strings.TrimSpace(val)
 	if strings.TrimSpace(text) == "" {
 		return nil
+	}
+	if a.prompt.mode == "shell" {
+		return a.emit(a.shellCmd(text))
 	}
 	if sessionBusy(&a.store) {
 		a.toast(busyToast)

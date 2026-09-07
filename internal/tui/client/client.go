@@ -145,6 +145,16 @@ func (c *Service) CreateSession(ctx context.Context, title string) (protocol.Ses
 	return out, err
 }
 
+// CreateSessionWith is POST /session with the agent+model seeds (the
+// server already accepts them — handlers_session.go handleSessionCreate;
+// blank agent -> the storage default "build", blank model -> the
+// catalog default): the home submit's seed path (decision 2).
+func (c *Service) CreateSessionWith(ctx context.Context, title, agent, model string) (protocol.Session, error) {
+	var out protocol.Session
+	err := c.do(ctx, http.MethodPost, "/session", map[string]string{"title": title, "agent": agent, "model": model}, &out)
+	return out, err
+}
+
 // GetSession is GET /session/{id}.
 func (c *Service) GetSession(ctx context.Context, id string) (protocol.Session, error) {
 	var out protocol.Session
