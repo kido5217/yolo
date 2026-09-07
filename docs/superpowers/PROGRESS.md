@@ -126,9 +126,26 @@ own step_start per the "step_start on a new assistant id" rule); (d)
 storage dir before `storage.Open` (the run's `openDB` does this on boot; seeding
 runs pre-boot), and the expected message count is 2 (a turn is user +
 assistant), not 1. Gate green otherwise (host-speed / load-dependent timing
-flakes pass in isolation: TUI `TestRenderMessages100KBBudget`,
+ flakes pass in isolation: TUI `TestRenderMessages100KBBudget`,
 `TestMarkdownTextPartSGR`, and cmd/yolo `TestServeSigtermDrainsAndExitsZero`).
-Next: Task 10 (NDJSON output format byte pins, `yolo-rem.11`).
+Task 10 (NDJSON output format byte pins, `yolo-rem.11`) landed — the spec §6.2
+byte pins: `TestRunNDJSONFullTurn` (the worked example: the reasoning line, the
+tool_use line carrying the real `state.time` and the `,"time":{"start":0}}`
+part-level tail, the text line, and the step_finish with reason/tokens/cost;
+timestamps pinned via the injected `now` counter, asserted called exactly 5×),
+`TestRunNDJSONThinkingOff` (--thinking off in json mode → zero reasoning lines),
+`TestRunNDJSONNoAssistantNoFinish` (no assistant → no step_finish),
+`TestRunNDJSONFilePartIgnored` (a file part with Time.End==0 never finalizes →
+no line), and `TestRunNDJSONIntegration` (end-to-end `--format json`: first line
+step_start, last line step_finish, every line a well-formed envelope, no stderr
+on a clean turn). The pins confirmed Task 9's implementation with NO
+implementation fix needed (no drift from the spec bytes — the plan's Step-3
+conditional fix was unnecessary), verifying the two engine facts the emitter
+must not normalize away: tool parts carry real timestamps in `state.time` only
+(part-level `time` is zero → `,"time":{"start":0}}`) and `cost 0.001` renders as
+`0.001`. Gate green otherwise (the host-speed `TestRenderMessages100KBBudget` is
+the only failure). Next: Task 11 (SIGINT/abort, `--auto`, exit-code legs,
+`--attach`, `yolo-rem.12`).
 
 **Status (2026-09-07):** 0.8.0 start-screen parity epic (`yolo-dhf`) — all
 12 plan tasks landed on `feature/0.8.0-home-mock` (plan
