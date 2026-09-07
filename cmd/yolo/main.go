@@ -745,6 +745,10 @@ func tuiRunE(cmd *cobra.Command, args []string) error {
 		sessionID,
 		engine,
 	)
+	// the build version (0.8.0 Q10): the home footer renders plainSemver of
+	// the git-describe string; set post-construction (the SetKeybinds
+	// pattern) so the NewApp signature stays stable.
+	app.SetVersion(version)
 	// the keybinds config (S4.3): apply the yolo.jsonc keybinds overrides to
 	// the keymap registry (an unknown keybind is a config error — fail the
 	// start, matching the other config-load failures above).

@@ -133,7 +133,7 @@ func TestSessionChromeThemeSGR(t *testing.T) {
 		})),
 	)
 
-	teatest.WaitFor(t, tm.Output(), hasLine("New session"), teatest.WithDuration(5*time.Second))
+	teatest.WaitFor(t, tm.Output(), hasLine(homeLogoLine), teatest.WithDuration(5*time.Second))
 	tm.Send(press('n'))
 	// Merged condition for the session-route drain: the help line + the
 	// prompt cursor cell. The home->session frame re-emits the whole chrome

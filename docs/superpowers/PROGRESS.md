@@ -5,6 +5,45 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
+**Status (2026-09-07):** 0.8.0 start-screen parity epic (`yolo-dhf`) — all
+12 plan tasks landed on `feature/0.8.0-home-mock` (plan
+`docs/superpowers/plans/2026-09-07-0.8.0-start-screen-parity.md`; gate green
+incl. the full-module `-race`): the start-screen contract — the home route
+owns the full terminal frame (Task 4's frame + Task 5's prompt box, over the
+user-accepted 200×50 mock as the visual contract), plain-semver version
+right-aligned in the footer (Task 1), VCS branch via stdlib os/exec git
+shell-out with the hardened env + the decision-4 cadence — one bootstrap
+fetch + HEAD-change re-reads (start, home entry, `bash` part completion), no
+polling (Tasks 2–3), the decision-2 home submit (Tasks 6/9 — the seeded
+session + first message; the `POST /session/{id}/shell` endpoint + client),
+the shell engine with the persisted `bash` tool part (Task 8), the `!`
+shell mode (Task 10), the tab/shift+tab agent cycling (Task 7), and the
+tips pool drops + 2 adds (Task 11). The 0.8.0 deviations land as 271–279
+(per-task) + 280–294 (the Task-12 consolidated closeout: the zero-MCP
+footer segment extending 193, the `auto`-word omission, the consolidated
+tips drop citing the Task-11 audit block, the meta-line provider ID vs
+upstream's `provider?.name ?? providerID`, the git-env hardening, the
+TUI-re-read VCS referent, the shell-hint color split, the `n` retention,
+the below-24-row frame overflow, the any-route/slash-menu tab cycling, the
+shared placeholder index, and the home-box scroll window — plus the first
+full-module `-race` gate findings: 292 the whitebox harness races the
+zombie SSE pump (fixed: `testApp` closes AND joins the pump through the
+event-ch close), 293 the teatest suites read live app state from WaitFor
+conditions (fixed: drained-output assertions with standalone tokens; the
+history seed and the delete-failed dialog open move before program
+start), 294 two pre-existing timing-bound tests do not survive the
+detector — `TestRenderMessages100KBBudget` takes the race-aware bound
+(150 ms non-race / 2 s race, the established `//go:build race` pair), and
+`TestMarkdownTextPartSGR` skips under the race build (the detector's frame
+coalescing makes its literal-indent drain assertion unsatisfiable; the
+render contract stays fully pinned in the non-race CI gate)). Follow-ups:
+`yolo-5wy` (auto permission mode), `yolo-26j` (yolo run), `yolo-lj6`
+(session quick-switch) unchanged; `yolo-i84` (P4, discovered in Task 8 —
+the DELETE /session handler blocks up to shellTimeout while a user shell
+command runs) open. Release steps (branch → PR → merge → epic close + tag)
+are the user/HITL step after the PR merge; this task stops at the green
+branch (no push — no upstream).
+
 **Status (2026-09-04):** v0.6.0 map (epic `yolo-o75`) complete — the P4
 backlog ships as minor v0.6.0 on top of v0.5.1 (`9f4c340`): cobra v1.10.2
 command tree (X1, PR #37 — root TUI / `serve` / `auth` / `profile` /

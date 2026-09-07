@@ -152,6 +152,29 @@ func (a *App) applySessionCreated(m sessionCreatedMsg) tea.Cmd {
 	return a.hydrateCmd()
 }
 
+// applyHomeSubmit: success -> putSessionFirst + openSession + hydrate
+// (the applySessionCreated navigation) + the applySend post-send state
+// (clear input + draft, appendHistory(text), clear the retry suppression
+// — the S3.7 re-arm). Error -> lastErr (ErrBusy -> the busy toast; the
+// session-route convention; a mint failure keeps the text for retry).
+func (a *App) applyHomeSubmit(m homeSubmitMsg) tea.Cmd {
+	if m.err != nil {
+		if errors.Is(m.err, client.ErrBusy) {
+			a.toast(busyToast)
+		} else {
+			a.lastErr = m.err.Error()
+		}
+		return nil
+	}
+	a.putSessionFirst(m.ses)
+	a.openSession(m.ses.ID)
+	a.prompt.input.SetValue("")
+	a.prompt.draft.Reset()
+	a.appendHistory(m.text)
+	delete(a.retrySuppressed, a.curSessionID)
+	return a.hydrateCmd()
+}
+
 // putSessionFirst upserts s at the head of the home list (newest-first); a
 // later SSE session.updated replaces it in place via store.Apply.
 func (a *App) putSessionFirst(s protocol.Session) {
@@ -167,4 +190,7 @@ func (a *App) putSessionFirst(s protocol.Session) {
 func (a *App) openSession(id string) {
 	a.route = routeSession
 	a.curSessionID = id
+	// the session-route prompt chrome (Task 5): the w-3 line + the cleared
+	// placeholder (no leak from the home box).
+	a.applyPromptChrome()
 }

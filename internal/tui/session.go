@@ -582,6 +582,14 @@ func lastToolPartID(st *store.State) string {
 // session_interrupt). It reports whether the key was consumed; unhandled keys
 // fall through to the prompt input.
 func (a *App) handleSessionKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
+	// shell mode: esc EXITS the shell (decision 3) — it does NOT interrupt
+	// (abort while busy) or return home. esc is the registry's
+	// session_interrupt default, so this branch must run BEFORE the
+	// session_interrupt match.
+	if a.prompt.mode == "shell" && key.Matches(k, escBinding) {
+		a.exitShellMode()
+		return nil, true
+	}
 	switch {
 	// S4.2: the registry-backed session keys (the messages_page_up/down
 	// defaults add ctrl+alt+b/f; the V1 pgup/pgdn pins are the first seqs).
@@ -652,9 +660,8 @@ func (a *App) handleSessionKey(k tea.KeyPressMsg) ([]tea.Cmd, bool) {
 			return a.emit(a.abortCmd()), true
 		}
 		a.route = routeHome
-		a.repickTip()
 		a.curSessionID = ""
-		return a.emit(a.hydrateCmd()), true
+		return a.emit(tea.Batch(a.hydrateCmd(), a.enterHome())), true
 	}
 	return nil, false
 }

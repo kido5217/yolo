@@ -98,6 +98,7 @@ func (s *Server) build() http.Handler {
 	mux.HandleFunc("DELETE /session/{id}", s.handleSessionDelete)
 	mux.HandleFunc("GET /session/{id}/message", s.handleMessages)
 	mux.HandleFunc("POST /session/{id}/message", s.handleSend)
+	mux.HandleFunc("POST /session/{id}/shell", s.handleSessionShell)
 	mux.HandleFunc("POST /session/{id}/abort", s.handleAbort)
 	mux.HandleFunc("POST /session/{id}/command", s.handleCommand)
 	mux.HandleFunc("GET /event", s.handleEvent)

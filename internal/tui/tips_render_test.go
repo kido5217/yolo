@@ -243,28 +243,24 @@ func TestTipsHomeEntryRepick(t *testing.T) {
 	}
 }
 
-// TestHomeTipsLineRender pins the seam + the line shape (the ● Tip prefix
-// in the warning tone, the parts wrapped at w) and the hidden/first
-// gating through homeTipsLine.
-func TestHomeTipsLineRender(t *testing.T) {
+// TestHomeTipsRowsRender pins the seam + the line shape (the ● Tip prefix
+// in the warning tone, the parts wrapped at the TIP BOX width min(75, w-4))
+// and the hidden/first gating through homeTipsRows (the 0.8.0 frame's tip
+// slot; the centering is applied by the frame, not the seam).
+func TestHomeTipsRowsRender(t *testing.T) {
 	t.Parallel()
 	a := testApp() // fresh: visible (NO_MODELS), tipIdx seeded
-	line := a.homeTipsLine(80)
-	if !strings.HasPrefix(stripANSI(line), "● Tip ") {
-		t.Fatalf("tips line = %q, want the '● Tip ' prefix", line)
+	rows := a.homeTipsRows()
+	if len(rows) == 0 {
+		t.Fatal("the visible tips must render (the NO_MODELS nudge)")
 	}
-	// hidden → the line is omitted
+	if !strings.HasPrefix(stripANSI(rows[0]), "● Tip ") {
+		t.Fatalf("tips line = %q, want the '● Tip ' prefix", rows[0])
+	}
+	// hidden → the rows are omitted
 	a.tipsHidden = true
-	if a.homeTipsLine(80) != "" {
-		t.Fatal("hidden must omit the line")
-	}
-	// the renderClamped seam: a direct-construct homeModel (nil seams)
-	// must not panic (the home_theme_test.go zero-theme idiom — the
-	// point: renderClamped nil-guards the tips seam (and the future
-	// footer seam); assert no panic + the plain layout).
-	var zero homeModel
-	if got := stripANSI(zero.renderClamped(&store.State{}, 80, theme.Theme{}, -1)); !strings.Contains(got, "New session") {
-		t.Fatalf("nil-seam renderClamped = %q, want the plain layout (no panic)", got)
+	if a.homeTipsRows() != nil {
+		t.Fatal("hidden must omit the rows")
 	}
 }
 
@@ -289,13 +285,13 @@ func TestTipsTeatestPresence(t *testing.T) {
 	a := newRecApp(c, store.State{}, "")
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
-	teatest.WaitFor(t, tm.Output(), hasLine("New session"), teatest.WithDuration(5*time.Second))
+	teatest.WaitFor(t, tm.Output(), hasLine(homeLogoLine), teatest.WithDuration(5*time.Second))
 	tm.Send(press('n'))
 	teatest.WaitFor(t, tm.Output(), hasLine("esc abort/back"), teatest.WithDuration(5*time.Second))
 	tm.Send(press(tea.KeyEscape))
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
 		full := stripANSI(string(b))
-		return hasLine("New session")(b) && strings.Contains(full, "● Tip ")
+		return hasLine(homeLogoLine)(b) && strings.Contains(full, "● Tip ")
 	}, teatest.WithDuration(5*time.Second))
 	tm.Send(ctrlCKey)
 	tm.Send(press('y'))

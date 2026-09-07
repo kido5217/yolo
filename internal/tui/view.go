@@ -36,12 +36,14 @@ func (a *App) view() string {
 		acMenu = a.prompt.acView(a.mentionOptions(), w, a.theme)
 	}
 	wk := a.whichKeyView(w)
-	var b strings.Builder
-	if a.route == routeSession {
-		b.WriteString(a.viewSession(menu, acMenu, perm, toasts, dlg, wk))
-	} else {
-		b.WriteString(a.home.render(&a.store, w, a.theme))
+	// the home route owns the full frame (homeView — the overlays, the prompt
+	// box, lastErr, the loading line and the footer are INSIDE the frame);
+	// the session route keeps today's append-after-route composition exactly.
+	if a.route != routeSession {
+		return a.homeView(menu, acMenu, perm, toasts, dlg, wk)
 	}
+	var b strings.Builder
+	b.WriteString(a.viewSession(menu, acMenu, perm, toasts, dlg, wk))
 	if menu != "" {
 		b.WriteString("\n" + menu)
 	}
@@ -116,13 +118,13 @@ func (a *App) viewSession(menu, acMenu, perm, toasts, dlg, wk string) string {
 
 // modalChromeMin is the route chrome's minimum line count (the panel top
 // never climbs above it): session = title + 1 viewport + divider + help,
-// home = logo + new-session + divider + help.
+// home = the 0.8.0 start-screen chrome (logo 4 + box 5 + hint 1 = 10).
 func (a *App) modalChromeMin() int {
 	switch a.route {
 	case routeSession:
 		return 1 + 1 + 1 + len(strings.Split(wrapLine(sessionHelp, a.termWidth()), "\n"))
 	default:
-		return 4 + 1 + 1 + len(strings.Split(wrapLine(helpText, a.termWidth()), "\n"))
+		return 4 + 5 + 1 // logo + box + hint
 	}
 }
 
@@ -195,8 +197,10 @@ func (a *App) viewModal() string {
 		help := len(strings.Split(wrapLine(sessionHelp, w), "\n"))
 		chrome = a.sessionChrome(w, panelTop-1-1-help)
 	default:
-		help := len(strings.Split(wrapLine(helpText, w), "\n"))
-		chrome = a.home.renderClamped(&a.store, w, a.theme, panelTop-4-1-1-help)
+		// the 0.8.0 start-screen chrome: the top of the homeView frame
+		// (the logo + box + hint region), clamped to panelTop rows below
+		// (the frame's own footer is dropped by the clamp).
+		chrome = a.homeView("", "", "", "", "", "")
 	}
 	chromeLines := strings.Split(chrome, "\n")
 	for len(chromeLines) < panelTop {
@@ -227,6 +231,13 @@ func (a *App) viewModal() string {
 	for i := panelTop + len(panel); i < h-1; i++ {
 		write("")
 	}
-	write(a.footerView())
+	// the footer on the last line (the session route's status footer; the
+	// home route's footer is inside the frame — the modal's last line is
+	// blank).
+	if a.route == routeSession {
+		write(a.footerView())
+	} else {
+		write("")
+	}
 	return b.String()
 }

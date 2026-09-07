@@ -128,7 +128,7 @@ func TestTUICommandPalette(t *testing.T) {
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
-	teatest.WaitFor(t, tm.Output(), hasLine("New session"), teatest.WithDuration(5*time.Second))
+	teatest.WaitFor(t, tm.Output(), hasLine(homeLogoLine), teatest.WithDuration(5*time.Second))
 
 	// S4.4: ctrl+p opens the command palette (the remap).
 	tm.Send(pressCtrlP())

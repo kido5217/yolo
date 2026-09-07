@@ -90,10 +90,6 @@ func TestStartupLoadingRender(t *testing.T) {
 	if !strings.Contains(got, startupTextLoading) {
 		t.Fatalf("home view missing the loading line:\n%s", got)
 	}
-	i := strings.Index(got, startupTextLoading)
-	if i < 0 || i < strings.Index(got, helpText) {
-		t.Fatalf("the loading line must render after the help line (i=%d):\n%s", i, got)
-	}
 	a.route = routeSession
 	if a.loadingView(80) != "" {
 		t.Fatal("the session route must not show the loading line")
@@ -110,7 +106,7 @@ func TestStartupLoadingBootTest(t *testing.T) {
 	a := newRecApp(c, store.State{}, "")
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
-	teatest.WaitFor(t, tm.Output(), hasLine("New session"), teatest.WithDuration(5*time.Second))
+	teatest.WaitFor(t, tm.Output(), hasLine(homeLogoLine), teatest.WithDuration(5*time.Second))
 	tm.Send(ctrlCKey)
 	tm.Send(press('y'))
 	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))

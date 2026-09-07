@@ -145,6 +145,16 @@ func (c *Service) CreateSession(ctx context.Context, title string) (protocol.Ses
 	return out, err
 }
 
+// CreateSessionWith is POST /session with the agent+model seeds (the
+// server already accepts them — handlers_session.go handleSessionCreate;
+// blank agent -> the storage default "build", blank model -> the
+// catalog default): the home submit's seed path (decision 2).
+func (c *Service) CreateSessionWith(ctx context.Context, title, agent, model string) (protocol.Session, error) {
+	var out protocol.Session
+	err := c.do(ctx, http.MethodPost, "/session", map[string]string{"title": title, "agent": agent, "model": model}, &out)
+	return out, err
+}
+
 // GetSession is GET /session/{id}.
 func (c *Service) GetSession(ctx context.Context, id string) (protocol.Session, error) {
 	var out protocol.Session
@@ -186,6 +196,22 @@ func (c *Service) SendMessage(ctx context.Context, id, text string) (string, err
 		return "", err
 	}
 	return out.MessageID, nil
+}
+
+// Shell is POST /session/{id}/shell {command} -> {message_id, part_id}
+// (the shell-mode submit; the transcript updates over SSE).
+func (c *Service) Shell(ctx context.Context, id, command string) (string, string, error) {
+	var out struct {
+		MessageID string `json:"message_id"`
+		PartID    string `json:"part_id"`
+	}
+	if err := c.do(
+		ctx, http.MethodPost, "/session/"+PathEscapeID(id)+"/shell",
+		map[string]string{"command": command}, &out,
+	); err != nil {
+		return "", "", err
+	}
+	return out.MessageID, out.PartID, nil
 }
 
 // Abort is POST /session/{id}/abort.

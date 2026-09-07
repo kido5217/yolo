@@ -18,7 +18,77 @@ const noModelsTip = "Run {highlight}/connect{/highlight} to add an AI provider a
 // referent set. {highlight}…{/highlight} marks the bright runs; the
 // <binding> and {theme_count} tokens are substituted at render time
 // (tipText, S6.3).
+//
+// 0.8.0 Task 11 audit (decision 7 — the standing drop policy): every entry
+// of the upstream TIPS pool (tips-view.tsx:164-283, in order, + the two
+// platform tips) that is NOT in the yolo pool, and the missing feature it
+// names. Verified against the live tree before the call (the plan's known
+// missing set was the starting point): the commands catalog
+// (handlers_catalog.go) + localCommands (commands.go), protocol.Config,
+// the keymap registry + its keys.go wiring, the theme engine, the
+// permission builtins. Every KEPT entry names a feature yolo has — the
+// audit drops zero live entries (the known-missing list's features are
+// already out of the pool, the S6.2 reduction). The Task-12 consolidated
+// deviation entry cites this block; the kept/dropped list is the commit
+// diff.
+//
+// Dropped (upstream order):
+//
+//	/undo + /redo — no undo/redo commands (messages_undo/redo are dead
+//	registry entries)
+//	/share public link + "share": "auto"|"disabled" + /unshare — no
+//	session sharing (zero share surface)
+//	drag-drop images/PDFs + paste images — no image context input
+//	/editor — no /editor command (editor_open is a dead registry entry)
+//	/init — no /init command
+//	session pin toggle + quick-switch pinned sessions — no pinning (quick
+//	switch is the P4 bead yolo-lj6)
+//	/compact — no /compact command
+//	/export — no /export command
+//	messages copy/first/last/toggle-conceal — dead registry entries
+//	(messages_copy/first/last/toggle_conceal, no keys.go wiring);
+//	messages_page_up/down ARE bound + wired, its tip stays
+//	model-cycle-recent — no model.cycle_recent wiring (dead registry
+//	entry)
+//	session sidebar toggle — feature PRESENT (the session-route todo
+//	sidebar, S7.2); dropped by the S6.2 port reduction (deviation 234),
+//	not by the feature audit
+//	input-clear — no input-clear wiring (dead registry entry)
+//	@agent-name subagents — no subagent mentions
+//	parent/child sessions — no parent/child session model
+//	$schema — no $schema config support
+//	mcp config section + "mcp_*": false — no MCP (zero-MCP)
+//	.opencode/commands/ reusable prompts + $ARGUMENTS/$1/$2 — no custom
+//	commands
+//	backtick shell-output injection — no prompt injection
+//	.opencode/agents/ personas — no .md agent files
+//	formatter (true/false/custom) — no formatter surface
+//	"lsp": true — no LSP surface
+//	.opencode/tools/ .ts tools + tool scripts — no .ts tool definitions
+//	plugins (event hooks, OS notifications, sensitive-file guard) — no
+//	plugin system
+//	opencode run ×3 (non-interactive, -f file.ts, --attach) — yolo run
+//	absent (out of scope — yolo-26j, P4)
+//	--continue — no session-resume flag
+//	--format json — no machine-readable output flag
+//	opencode upgrade — no self-update
+//	opencode agent create — no guided agent creation
+//	/opencode in issues/PRs + opencode github install + "/opencode fix
+//	this" + /oc (×4) — no GitHub integration
+//	{file:path} config interpolation — only {env:VAR}
+//	agent temperature / steps / "tools": {"bash": false} / per-agent tool
+//	overrides — no per-agent tool or iteration config surface
+//	opencode debug config — no debug subcommand
+//	/timeline — no /timeline command
+//	scroll_acceleration — no scroll config
+//	username-display toggle — no username display surface
+//	docker run ghcr.io/anomalyco/opencode — no container image
+//	/review — no /review command
+//	terminal suspend + input undo (the two platform tips) — dead registry
+//	entries, no wiring
 var tips = []string{
+	"Start a message with {highlight}!{/highlight} to run shell commands (e.g., {highlight}!ls -la{/highlight})",
+	"Press {highlight}<agent_cycle>{/highlight} to cycle between Build and Plan agents",
 	"Type {highlight}@{/highlight} followed by a filename to fuzzy search and reference files",
 	"Use {highlight}/model{/highlight} or {highlight}<model_list>{/highlight} to switch between available AI models",
 	"Use {highlight}/themes{/highlight} or {highlight}<theme_list>{/highlight} to switch between {theme_count} built-in themes",
@@ -64,7 +134,7 @@ var tips = []string{
 var tipBindings = []string{
 	"model_list", "theme_list", "session_new", "session_list", "command_list",
 	"leader", "messages_page_up", "messages_page_down", "prompt_soft_newline",
-	"session_interrupt", "status_view", "session_rename",
+	"session_interrupt", "status_view", "session_rename", "agent_cycle",
 }
 
 // themeCount is the {theme_count} token value (the upstream themeCount,
@@ -235,20 +305,28 @@ func (a *App) tipText() string {
 	return strings.ReplaceAll(t, "{theme_count}", strconv.Itoa(themeCount))
 }
 
-// homeTipsLine is the home tips line (the homeModel.tips seam body):
-// "" when hidden (the upstream (!first || !connected) && !hidden gate).
-func (a *App) homeTipsLine(w int) string {
+// homeTipsRows is the 0.8.0 home tip rows (the frame's tip slot, Step 3 of
+// Task 4): nil when hidden (the upstream (!first || !connected) && !hidden
+// gate, tipsVisible unchanged), else the wrapped visual lines at the TIP BOX
+// width (min(75, w-4) — the same box the prompt occupies, home.tsx maxWidth
+// 75). The centering is applied by the frame (homeView), not here; the
+// continuation lines carry NO "●" prefix (the upstream tips view renders the
+// "● Tip" prefix once as a non-shrinking flex item; the old homeTipsLine
+// bare-●-on-continuation was a deviation, dropped for the strict-copy bar).
+func (a *App) homeTipsRows() []string {
 	if !a.tipsVisible() {
-		return ""
+		return nil
+	}
+	w := a.termWidth() - 4
+	if w > 75 {
+		w = 75
 	}
 	lines := tipLines("● Tip ", parseTip(a.tipText()), w)
-	var b strings.Builder
-	for i, l := range lines {
-		if i > 0 {
-			b.WriteByte('\n')
-			b.WriteString("●")
-		}
+	out := make([]string, 0, len(lines))
+	for _, l := range lines {
+		var b strings.Builder
 		writeTipLine(&b, l, a.theme)
+		out = append(out, b.String())
 	}
-	return b.String()
+	return out
 }

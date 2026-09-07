@@ -46,6 +46,11 @@ type leaderTimeoutMsg struct {
 	gen uint64
 }
 
+// branchMsg reports the scope dir's attached git branch ("" = none — the
+// path-only footer). dir is the scope dir AT LAUNCH (the branchCmd
+// capture): a fetch racing a scope change is dropped by the apply guard.
+type branchMsg struct{ dir, branch string }
+
 // themeRefreshDelays mirrors upstream THEME_REFRESH_DELAYS
 // (theme.tsx:82): the 250 ms leg re-generates the system theme; the
 // 1000 ms leg (the last) also re-discovers customs.
@@ -65,7 +70,6 @@ type App struct {
 	store        store.State
 	route        route
 	curSessionID string
-	home         homeModel
 	sess         sessionModel
 	prompt       promptModel
 	dlg          dialogStack
@@ -96,6 +100,7 @@ type App struct {
 	retrySuppressed map[string]bool
 	keymap          *Keymap // the keymap registry (S4.2)
 	pendingLeader   bool    // the leader pending state is armed
+	pendingAgent    string  // the home pending agent ("build" default; Task 7's cycle pins it)
 	leaderGen       uint64  // the leader timeout generation (stale ticks are ignored)
 	// S5.1 prompt history: the entries (most-recent LAST, in-memory until
 	// S5.2's KV load), the recall index (0 = present, -1 = newest, -len =
@@ -125,6 +130,17 @@ type App struct {
 	tipIdx     int
 	tipRand    func() float64
 	tipsHidden bool
+	// 0.8.0 home footer (Q10): the raw git-describe build string
+	// (main.version, set post-construction via SetVersion — the SetKeybinds
+	// pattern); the footer renders plainSemver at render time.
+	version string
+	// 0.8.0 home footer (decision 4): the scope dir's attached git branch
+	// ("" = none — the footer renders the path-only form) and the scope
+	// dir the last applied fetch was for (the stale-fetch race guard: a
+	// branchMsg carries the launch-time dir, the apply guard drops a fetch
+	// racing a scope change).
+	branch    string
+	branchDir string
 	// S7.2 todo sidebar: the visibility mode ("auto" | "hide", persisted
 	// over the theme KV under kvSidebarModeKey — the S6.3 theme-KV seam,
 	// deviation 223's class) + the forced-open flag (the toggle's visible
@@ -159,7 +175,6 @@ func NewApp(c *client.Service, s store.State, startSessionID string, engine *the
 		Service: c,
 		store:   s,
 		route:   routeHome,
-		home:    homeModel{now: nowMillis},
 		// pre-WindowSizeMsg defaults: the 80x24 size below, the session
 		// viewport = 24 - the 3 chrome lines (title, divider, help).
 		sess:            newSessionModel(80, 21),
@@ -173,11 +188,6 @@ func NewApp(c *client.Service, s store.State, startSessionID string, engine *the
 		retrySuppressed: map[string]bool{},
 		tipRand:         rand.Float64,
 	}
-	// S6.3: the home tips line seam (the footer seam is S6.4).
-	a.home.tips = func(w int) string { return a.homeTipsLine(w) }
-	// S6.4: the home footer line seam (the destination part; S6.5 joins
-	// the hint part).
-	a.home.footer = func(w int) string { return a.homeFooterLine(w) }
 	in := textinput.New()
 	// textinput's View is prompt(2) + width + cursor(1): size the value
 	// area so the whole line fits the 80-column default terminal.
@@ -192,6 +202,11 @@ func NewApp(c *client.Service, s store.State, startSessionID string, engine *the
 		a.curSessionID = startSessionID
 	}
 	a.retheme()
+	// the prompt chrome for the starting route (Task 5): the home box
+	// interior width + the placeholder; the session route keeps the w-3
+	// line and clears the placeholder (no leak onto the session line).
+	a.prompt.mode = "normal"
+	a.applyPromptChrome()
 	a.loadHistory()
 	a.loadFrecency()
 	a.loadTipsHidden()
@@ -214,8 +229,66 @@ func (a *App) SetKeybinds(overrides map[string]any) error {
 	return nil
 }
 
+// SetVersion stores the raw build string (main.version) for the home
+// footer (plainSemver at render time).
+func (a *App) SetVersion(v string) { a.version = v }
+
+// cyclePendingAgent walks store.Agents (wire order) by d (+1/-1),
+// wrapping both directions, and pins a.pendingAgent to the next agent's
+// NAME. The current index = the index of pendingAgentName() in the
+// list; when the current name is NOT in the list (a config-only agent)
+// the cycle starts at 0 (d > 0) or len-1 (d < 0). An empty list is a
+// no-op. The pin sticks (later config changes do not re-flow it) until
+// the next cycle.
+func (a *App) cyclePendingAgent(d int) {
+	agents := a.store.Agents
+	if len(agents) == 0 {
+		return
+	}
+	idx := -1
+	cur := a.pendingAgentName()
+	for i, ag := range agents {
+		if ag.Name == cur {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 && d < 0 {
+		idx = 0
+	}
+	next := (idx + d) % len(agents)
+	if next < 0 {
+		next += len(agents)
+	}
+	a.pendingAgent = agents[next].Name
+}
+
 // Close stops the SSE pump. Call it once the program exits.
 func (a *App) Close() { a.stop() }
+
+// applyPromptChrome sizes the shared prompt input for the active route and
+// sets/clears its Placeholder (the box never uses input.View() — it renders
+// its own rows — but the SESSION route does, so the placeholder must not
+// leak onto the session line):
+//
+//	home    -> SetWidth(boxInnerWidth()) + Placeholder = placeholderText()
+//	session -> SetWidth(w-3) (the WindowSizeMsg rule) + Placeholder = ""
+//
+// Callers: NewApp (after the route is known), openSession (-> session), the
+// enterHome sites (-> home), WindowSizeMsg (both routes), and the shell-mode
+// toggle (Task 10 — the placeholder switches in place).
+func (a *App) applyPromptChrome() {
+	switch a.route {
+	case routeHome:
+		a.prompt.input.SetWidth(a.boxInnerWidth())
+		a.prompt.input.Placeholder = a.prompt.placeholderText()
+	default: // routeSession
+		if w := a.termWidth(); w > 3 {
+			a.prompt.input.SetWidth(w - 3)
+		}
+		a.prompt.input.Placeholder = ""
+	}
+}
 
 // termWidth is the terminal width with the pre-WindowSizeMsg fallback (the
 // session route uses the same 80 for the viewport).
@@ -226,9 +299,11 @@ func (a *App) termWidth() int {
 	return a.size.Width
 }
 
-// Init hydrates the starting route and arms the SSE + resync pumps.
+// Init hydrates the starting route and arms the SSE + resync pumps. The
+// 0.8.0 bootstrap branch fetch (decision 4: ONE at TUI start, no polling)
+// joins the initial batch.
 func (a *App) Init() tea.Cmd {
-	cmds := []tea.Cmd{a.hydrateCmd(), a.eventPump(), a.loadArm()}
+	cmds := []tea.Cmd{a.hydrateCmd(), a.eventPump(), a.loadArm(), a.branchCmd()}
 	if c := a.resyncPump(); c != nil {
 		cmds = append(cmds, c)
 	}
@@ -254,11 +329,11 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 	switch m := msg.(type) {
 	case tea.WindowSizeMsg:
 		a.size = m
-		// textinput's View is prompt(2) + width + cursor(1): subtract all
-		// three so the prompt line never exceeds the terminal width.
-		if m.Width > 3 {
-			a.prompt.input.SetWidth(m.Width - 3)
-		}
+		// the prompt chrome for the active route (Task 5): the home box
+		// interior width + the placeholder; the session route's w-3 line
+		// (textinput's View is prompt(2) + width + cursor(1), so the line
+		// never exceeds the terminal width).
+		a.applyPromptChrome()
 		// The transcript is word-wrapped at the viewport width: re-wrap on
 		// resize instead of clipping at the stale width.
 		a.sess.isDirty = true
@@ -282,6 +357,11 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 		// applied event's cmd.
 		if b := a.onAttention(m.Event); b != nil {
 			cmd = tea.Batch(cmd, b)
+		}
+		// 0.8.0 VCS re-read (decision 4): a completed bash part on the
+		// current session is the only local actor that can move HEAD.
+		if c := a.branchReRead(m.Event); c != nil {
+			cmd = tea.Batch(cmd, c)
 		}
 		return a.afterApply(cmd)
 	case connLostMsg:
@@ -327,6 +407,8 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 		return a.applyDlgPatch(m)
 	case sessionCreatedMsg:
 		return a.applySessionCreated(m)
+	case homeSubmitMsg:
+		return a.applyHomeSubmit(m)
 	case toastExpireMsg:
 		a.removeToast(m.id)
 		return nil
@@ -342,6 +424,8 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 		return nil
 	case sendMsg:
 		return a.applySend(m)
+	case shellMsg:
+		return a.applyShell(m)
 	case commandExecMsg:
 		return a.applyCommandExec(m)
 	case statusSnapshotMsg:
@@ -352,6 +436,14 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 		return a.applyRename(m)
 	case authMsg:
 		return a.applyAuth(m)
+	case branchMsg:
+		// The stale-fetch race guard (decision 4): the msg carries the
+		// scope dir AT LAUNCH — a fetch racing a scope change is dropped.
+		if m.dir == a.Service.Dir {
+			a.branch = m.branch
+			a.branchDir = m.dir
+		}
+		return nil
 	case tea.KeyPressMsg:
 		cmds := a.handleKey(m)
 		if len(cmds) == 0 {
@@ -544,6 +636,54 @@ func (a *App) saveFrecency() {
 // repickTip re-rolls the tip index (the per-home-entry re-pick — the
 // upstream per-mount Math.random, no timer; deviation 235 note).
 func (a *App) repickTip() { a.tipIdx = int(a.tipRand() * float64(len(tips))) }
+
+// branchCmd fetches the scope dir's branch in a goroutine (5s ctx, 5s
+// exec timeout — the decision-4 2-5s band, generous end; a local
+// symbolic-ref is ~10ms). The msg carries the scope dir AT LAUNCH so a
+// fetch racing a scope change is dropped by the apply guard.
+func (a *App) branchCmd() tea.Cmd {
+	dir := a.Service.Dir
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		b, _ := gitBranch(ctx, dir, 5*time.Second, sanitizedGitEnv())
+		return branchMsg{dir: dir, branch: b}
+	}
+}
+
+// branchReRead arms the VCS branch re-read on a HEAD change that is
+// locally observable (decision-4 cadence, no polling): a COMPLETED bash
+// tool part on the current session is the only local actor that can move
+// HEAD (a shell-mode submit reuses the bash tool — covered). nil for
+// every other event (no extra cmd beyond the pump).
+func (a *App) branchReRead(ev protocol.Event) tea.Cmd {
+	if ev.Type != protocol.EventTypeMessagePartUpdated {
+		return nil
+	}
+	var p protocol.MessagePartUpdatedProps
+	if json.Unmarshal(ev.Properties, &p) != nil {
+		return nil
+	}
+	if p.Part.Tool != "bash" {
+		return nil
+	}
+	if p.Part.State == nil || p.Part.State.Status != "completed" {
+		return nil
+	}
+	if p.Part.SessionID != a.curSessionID {
+		return nil
+	}
+	return a.branchCmd()
+}
+
+// enterHome is the home-entry hook: re-roll the tip index (the upstream
+// per-mount re-roll), re-roll the placeholder index (Task 5 — the active
+// mode's pool), and arm the branch re-read. Callers batch the returned cmd.
+func (a *App) enterHome() tea.Cmd {
+	a.repickTip()
+	a.rollPlaceholder()
+	return a.branchCmd()
+}
 
 // loadTipsHidden restores the tips_hidden flag (the S5.2 KV seam).
 func (a *App) loadTipsHidden() {

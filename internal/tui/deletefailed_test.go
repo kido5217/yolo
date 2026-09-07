@@ -117,11 +117,15 @@ func TestTUIDeleteFailedDialog(t *testing.T) {
 	}
 	a := NewApp(client.New("http://127.0.0.1:9", ""), store.State{}, "", e)
 	t.Cleanup(a.Close)
+	// open the dialog BEFORE the program starts: a test-goroutine call
+	// after start raced the event loop's view() over the dialog stack
+	// (the -race gate, deviation 293). The hydrate-failure path (dead
+	// port) only sets lastErr and never touches the dialog stack.
+	a.openDeleteFailedDialog("s1", "alpha", "session not found")
 	tm := teatest.NewTestModel(t, a,
 		teatest.WithInitialTermSize(80, 24),
 		teatest.WithProgramOptions(tea.WithEnvironment([]string{"TTY_FORCE=1", "TERM=xterm-256color"})),
 	)
-	a.openDeleteFailedDialog("s1", "alpha", "session not found")
 
 	// ONE merged condition: the plain header + both option labels + the
 	// active-row primary bg SGR param.

@@ -27,6 +27,9 @@ import (
 // markdownStrong (38;5;215), and the rendered lines carry the upstream
 // 3-column indent (index.tsx:1701).
 func TestMarkdownTextPartSGR(t *testing.T) {
+	if !markdownSGRTestEnabled {
+		t.Skip("under the race detector the cell-diff renderer's frame coalescing makes the literal-indent drain assertion unsatisfiable (deviation 294)")
+	}
 	drv := fake.New(
 		fake.Turn{Parts: []llm.Part{
 			{Kind: "text", Text: "Here is **bold** text\n\nsome more\n"},
@@ -58,7 +61,7 @@ func TestMarkdownTextPartSGR(t *testing.T) {
 		})),
 	)
 
-	teatest.WaitFor(t, tm.Output(), hasLine("New session"), teatest.WithDuration(5*time.Second))
+	teatest.WaitFor(t, tm.Output(), hasLine(homeLogoLine), teatest.WithDuration(5*time.Second))
 	tm.Send(press('n'))
 	teatest.WaitFor(t, tm.Output(), hasLine("esc abort/back"), teatest.WithDuration(5*time.Second))
 	suiteType(tm, "hi")

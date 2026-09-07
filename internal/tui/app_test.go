@@ -31,38 +31,6 @@ var sgrTestRe = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 func stripANSITest(b []byte) string { return sgrTestRe.ReplaceAllString(string(b), "") }
 
-func TestHomeRendersListAndNewSession(t *testing.T) {
-	ts := testutil.Boot(t)
-	c := client.New(ts.URL, ts.Dir)
-	a := tui.NewApp(c, store.State{}, "", nil)
-	t.Cleanup(a.Close)
-	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
-
-	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return bytes.Contains(b, []byte("New session"))
-	}, teatest.WithDuration(5*time.Second))
-
-	ctx := context.Background()
-	ses, err := c.CreateSession(ctx, "Hello")
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	if ses.ID == "" {
-		t.Fatal("CreateSession returned no id")
-	}
-
-	tm.Send(tui.HydrateMsg{})
-	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		s := stripANSITest(b)
-		return strings.Contains(s, "Hello \u00B7 kido/q")
-	}, teatest.WithDuration(5*time.Second))
-
-	// The output stream is consumed by the WaitFor calls above (v2 teatest);
-	// the two WaitFors are the locked assertions for this test.
-	_ = tm.Quit()
-	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
-}
-
 func TestResumeMissingSessionExitsWithError(t *testing.T) {
 	ts := testutil.Boot(t)
 	c := client.New(ts.URL, ts.Dir)
@@ -255,8 +223,10 @@ func TestPromptSlashNewWithoutSession(t *testing.T) {
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
+	// the 0.8.0 start screen has no session list: wait for the home frame
+	// (the tip is a stable part — the NO_MODELS nudge shows on a fresh boot).
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return bytes.Contains(b, []byte("New session"))
+		return bytes.Contains(b, []byte("● Tip"))
 	}, teatest.WithDuration(5*time.Second))
 
 	typeIn(tm, "/new")

@@ -10,10 +10,11 @@ import (
 // wantTipsPinnedSHA256 pins the ported tips set (root principle 3: the
 // pin records the current intended content — the PORTED set, deviation
 // 234; an intentional change re-baselines the pin in the same commit).
-// Canonical form: noModelsTip first, then the 37 tips in order, each line
-// followed by "\n". The constant is computed at Step 3 (the test prints
-// the live hash) and re-baselined in the same commit.
-const wantTipsPinnedSHA256 = "68cbcf2600c2f9c5c94f61b2a3d3a5f38162ee5e62e84141095646924c7f71db"
+// Canonical form: noModelsTip first, then the 39 tips in order (the 0.8.0
+// Task 11 audit: the 2 head adds + the 37 kept), each line followed by
+// "\n". The constant is computed at Step 3 (the test prints the live
+// hash) and re-baselined in the same commit.
+const wantTipsPinnedSHA256 = "f06ed598f49671d26832f0a05efa5c2efce1dfa8fbcb077c3e8fb19b757cce3c"
 
 func tipsPinnedText() string {
 	var b strings.Builder
@@ -38,8 +39,8 @@ func TestTipsPinned(t *testing.T) {
 // data regression the pin catches too — the count is the cheap leg).
 func TestTipsShape(t *testing.T) {
 	t.Parallel()
-	if len(tips) != 37 {
-		t.Fatalf("tips = %d entries, want 37", len(tips))
+	if len(tips) != 39 {
+		t.Fatalf("tips = %d entries, want 39", len(tips))
 	}
 	if noModelsTip == "" {
 		t.Fatal("noModelsTip must be set")

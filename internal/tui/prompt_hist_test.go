@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -119,14 +120,21 @@ func TestTUIPromptHistoryRecall(t *testing.T) {
 	c := client.New(ts.URL, ts.Dir)
 	a := newRecApp(c, store.State{}, "")
 	t.Cleanup(a.Close)
+	// pre-seed the app's history BEFORE the program starts (the recall key
+	// reads it from the event loop — a test-goroutine write after start
+	// raced the program, the -race gate, deviation 293).
+	a.hist = []string{"alpha bravo"}
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
-	teatest.WaitFor(t, tm.Output(), hasLine("New session"), teatest.WithDuration(5*time.Second))
+	teatest.WaitFor(t, tm.Output(), hasLine(homeLogoLine), teatest.WithDuration(5*time.Second))
 	tm.Send(press('n'))
 	teatest.WaitFor(t, tm.Output(), hasLine("esc abort/back"), teatest.WithDuration(5*time.Second))
-	a.hist = []string{"alpha bravo"} // pre-seed the live app's history
 	tm.Send(press(tea.KeyUp))
+	// the recalled entry in the drained output (the cell-diff renderer
+	// re-emits only the changed cells — the "> " gutter was already
+	// drained, so the token stands alone) — asserting over the output,
+	// not the live input state (deviation 293).
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return a.prompt.input.Value() == "alpha bravo"
+		return strings.Contains(stripANSI(string(b)), "alpha bravo")
 	}, teatest.WithDuration(5*time.Second))
 	_ = tm.Quit()
 	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))

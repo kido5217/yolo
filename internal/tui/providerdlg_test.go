@@ -176,7 +176,7 @@ func TestTUIProviderDialog(t *testing.T) {
 	t.Cleanup(a.Close)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
 
-	teatest.WaitFor(t, tm.Output(), hasLines("New session"), teatest.WithDuration(5*time.Second))
+	teatest.WaitFor(t, tm.Output(), hasLines(homeLogoLine), teatest.WithDuration(5*time.Second))
 	suiteType(tm, "/connect")
 	tm.Send(press(tea.KeyEnter))
 	// ONE merged condition: the title + the custom tail (the status footers
