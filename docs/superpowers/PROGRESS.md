@@ -26,8 +26,19 @@ URL/Time.End/IsSynthetic; Text stays `""`); byte-pinned state-JSON table
 (`TestFilePartRoundTrip`). Host note: `TestRenderMessages100KBBudget` fails
 on this host at ~220 ms vs the 150 ms budget (~100 ms on the reference
 machine, deviation 163) — machine-speed, not a regression; no re-baseline.
-Gate green otherwise. Next: Task 3 (server handleSend files + validation +
-20 MiB cap, `yolo-rem.4`).
+Task 3 (server handleSend files + validation + 20 MiB cap, `yolo-rem.4`)
+landed — `decode` is now `decodeWithLimit` under the global 10 MiB cap; the
+send endpoint decodes `protocol.SendMessageRequest` under its own
+`maxSendBodyBytes = 20 MiB` (deviation 9 — a 10 MiB file base64s to ~13.3 MiB,
+so the global cap would 413 the max legal file) and `validateFileEntries`
+returns the three 400 legs (empty MIME/URL → `invalid file entry`; bad
+base64 / decoded > `AttachFileMaxBytes` → `file too large`; non-data URLs skip
+the re-check). The engine call is still text-only (`in.Files` lands in Task 4).
+The global-cap pin moved from `POST /message` to `PATCH /session/{id}`
+(`TestOversizedBodyRejected`); the send cap + validation get their own tests
+(`TestSendFilesValidation`, `TestSendFileTooLarge`,
+`TestSendOversizedBodyRejected`). Gate green otherwise. Next: Task 4 (engine
+`Send` files, `yolo-rem.5`).
 
 **Status (2026-09-07):** 0.8.0 start-screen parity epic (`yolo-dhf`) — all
 12 plan tasks landed on `feature/0.8.0-home-mock` (plan
