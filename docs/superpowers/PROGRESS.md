@@ -5,7 +5,30 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
-**Status (2026-09-07):** 0.9.0 `yolo run` epic (`yolo-rem`) — all 12 plan
+**Status (2026-09-07):** v0.9.1 wayfinder map `yolo-ql7` — home-box
+right-edge artifact (the 2-col black chip on the prompt box's two content
+rows at every width ≥ 40): root cause proven in-the-bytes by `yolo-ql7.1`
+(the research asset branch `research/home-box-artifact` @ `dd1bd2d`,
+local-only, never pushed — the raw renderer captures + the cell map live
+on that branch): `homeBox()` (internal/tui/home.go) rows 1/3 (the
+placeholder + meta content rows) emitted `border + leftPad + line` =
+boxW-2 display cols — the 2-col right pad (`homeBoxPad` = 2) was never
+emitted, so the last 2 interior cells of those rows (cols 136-137 at
+200×50, 0-based) reached the terminal with no SGR (the terminal's own bg,
+not the interior bg `backgroundElement` `48;5;234`). Fix: rows 1/3 now
+emit the right pad (all five box rows boxW cols); the standalone mock's
+placeholder row re-baselined (its trailing bg run ends at the last
+interior col — the 2 artifact cells now carry the interior bg; the mockup
+txt regenerated: the diff is exactly those 2 placeholder-row cells — the
+mock's meta row was already full-width); the new
+teatest golden `TestHomeBoxRightEdge` (200×50, TTY_FORCE=1) decodes the
+full raw renderer stream into a cell grid and pins the 4 artifact cells
+to bg `48;5;234` (+ the geometry anchors + the discriminative paint
+controls). Split off `yolo-c2w`: the w≤88 renderer cursor desync (boxL ≤
+7, the ultraviolet relative-move path) is a separate route (upstream
+report + bead) — NOT the user's wide-terminal artifact.
+
+0.9.0 `yolo run` epic (`yolo-rem`) — all 12 plan
 tasks landed on `feature/run-command` (plan
 `docs/superpowers/plans/2026-09-07-yolo-run.md`; spec
 `docs/superpowers/specs/2026-09-07-yolo-run-design.md`, bead `yolo-26j`; gate

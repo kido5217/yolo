@@ -250,7 +250,9 @@ func TestHomeMockRender(t *testing.T) {
 	frames[mockBoxTop] = mockRow(border, fill)
 	frames[mockBoxTop+1] = mockRow(border, pad,
 		mockRun{m, mockPlaceholder, muted, bgEl},
-		mockRun{m + len(mockPlaceholder), strings.Repeat(" ", mockBoxW-1-2*mockBoxPad-len(mockPlaceholder)), nil, bgEl})
+		// the trailing run ends at the last interior col (the meta
+		// row's idiom) — the content rows are width-exact at mockBoxW.
+		mockRun{m + len(mockPlaceholder), strings.Repeat(" ", mockBoxL+mockBoxW-1-m-len(mockPlaceholder)+1), nil, bgEl})
 	frames[mockBoxTop+2] = mockRow(border, fill)
 
 	// the meta line (the fixture row 14, gap 1: agent · model
