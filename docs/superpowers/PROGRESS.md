@@ -5,8 +5,11 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
-**Status (2026-09-07):** 0.9.0 `yolo run` epic (`yolo-rem`) in flight on
-`feature/run-command` (plan `docs/superpowers/plans/2026-09-07-yolo-run.md`):
+**Status (2026-09-07):** 0.9.0 `yolo run` epic (`yolo-rem`) — all 12 plan
+tasks landed on `feature/run-command` (plan
+`docs/superpowers/plans/2026-09-07-yolo-run.md`; spec
+`docs/superpowers/specs/2026-09-07-yolo-run-design.md`, bead `yolo-26j`; gate
+green — see the completion summary at the end of this entry). Task log:
 Task 1 (protocol file parts + send-request DTO, `yolo-rem.2`) landed — the
 `PartType*` constants, the `Part` omitempty file fields (after `Metadata`,
 spec §4.1), `internal/protocol/send.go` (`FileRef`, `SendMessageRequest`,
@@ -172,7 +175,42 @@ the signal goroutine + loop); full suite green except the host-speed
 `TestRenderMessages100KBBudget` (measured ~214–233 ms vs the 150 ms budget on
 this host — the established deviation 163/294 timing flake; the change is
 confined to `cmd/yolo/` and never touches the `internal/tui` render path).
-Next: Task 12 (closeout — deviations, PROGRESS, P4 beads, `yolo-rem.13`).
+ **Completion (Task 12 closeout, `yolo-rem.13`).** What landed across the
+12 tasks: the wire/storage/engine/history file-part chain (Tasks 1–5: the
+protocol `file` parts + `SendMessageRequest` DTO, the storage
+round-trip with no migration, the server send validation + 20 MiB cap, the
+engine `Send` files persist+publish, and the history `userContent` seam
+with the `--- BEGIN/END FILE` blocks + the binary placeholder); the client
+`SendMessage` request-struct migration (Task 6); the TUI `renderUser` file
+chips (Task 7); and the `yolo run` command (Tasks 8–11: the skeleton + file
+validation, the event loop + default renderer, the NDJSON byte pins, and the
+SIGINT/abort + `--auto` + exit-code + `--attach` legs). Deviations 296–307
+(spec §10) are appended to `DEVIATIONS.md`; the principle-5 plan-leg fixes
+from Tasks 10–11 (the `--auto` leg's bash→read-of-`*.env` re-point and the
+NDJSON/tool-finalization gates) are documented in the task entries above
+(not separate deviations). Six P4 follow-up beads (spec §11,
+discovered-from `yolo-rem`): `--fork` (`yolo-cqs`), `--command`
+(`yolo-j93`), `--variant` (`yolo-o1k`), binary/media file support / driver
+image blocks (`yolo-5m2`), the timeout flag / max-turn-duration bound
+(`yolo-omi`), and extracting a neutral client package out from under
+`internal/tui` (`yolo-dgk`). Gate: `go vet` + `go test` + `gofmt` clean at
+module root. The full-module `go test ./... -race` (run with a raised
+per-package `-timeout` so the 10-min default does not abort a loaded host)
+reports **no data races** — the new concurrency (the run's signal goroutine +
+event loop, `cmd/yolo`) passes `-race` in isolation (all 55 tests) and the
+goleak `VerifyTestMain` suites in `internal/session` + `internal/server`
+pass. The only `-race` failures on this host are pre-existing
+load/timing-dependent flakes that pass in isolation and live outside this
+epic's files — `TestServeDrainForceKill` (cmd/yolo),
+`TestAskCancelStoresAborted` (internal/permission), `TestAbortMidTurn`
+(internal/session, the `yolo-o1a` flaky class), plus the host-speed
+`TestRenderMessages100KBBudget` (internal/tui, deviation 163/294); none are
+data races and none are in files this epic touched, so on a capable CI
+machine (or a low-load run) the full-module `-race` gate is expected to
+pass. The branch stops at green: no
+tag/release and `yolo-26j`/the epic are NOT closed here — that is the
+user/HITL step after the PR merge (branch → commit → push → PR → merge, per
+root commit discipline).
 
 **Status (2026-09-07):** 0.8.0 start-screen parity epic (`yolo-dhf`) — all
 12 plan tasks landed on `feature/0.8.0-home-mock` (plan
