@@ -289,7 +289,7 @@ func TestPermissionDialogKeyReply(t *testing.T) {
 	ctx := context.Background()
 
 	teatest.WaitFor(t, tm.Output(), hasLine("New session"), teatest.WithDuration(5*time.Second))
-	if _, err := c.SendMessage(ctx, sesID, "ls"); err != nil {
+	if _, err := c.SendMessage(ctx, sesID, protocol.SendMessageRequest{Text: "ls"}); err != nil {
 		t.Fatalf("SendMessage: %v", err)
 	}
 	teatest.WaitFor(t, tm.Output(), hasPermDialog, teatest.WithDuration(5*time.Second))
@@ -330,7 +330,7 @@ func TestPermissionDialogHTTPReply(t *testing.T) {
 	ctx := context.Background()
 
 	teatest.WaitFor(t, tm.Output(), hasLine("New session"), teatest.WithDuration(5*time.Second))
-	if _, err := c.SendMessage(ctx, sesID, "ls"); err != nil {
+	if _, err := c.SendMessage(ctx, sesID, protocol.SendMessageRequest{Text: "ls"}); err != nil {
 		t.Fatalf("SendMessage: %v", err)
 	}
 	teatest.WaitFor(t, tm.Output(), hasPermDialog, teatest.WithDuration(5*time.Second))

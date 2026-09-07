@@ -296,7 +296,7 @@ func TestDrainCancelsBusyTurnAndClosesListener(t *testing.T) {
 	if _, err := cl.PatchSession(ctx, ses.ID, map[string]any{"agent": "build"}); err != nil {
 		t.Fatalf("patch agent: %v", err)
 	}
-	if _, err := cl.SendMessage(ctx, ses.ID, "hello"); err != nil {
+	if _, err := cl.SendMessage(ctx, ses.ID, protocol.SendMessageRequest{Text: "hello"}); err != nil {
 		t.Fatalf("send: %v", err)
 	}
 

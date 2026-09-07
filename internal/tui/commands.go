@@ -19,7 +19,7 @@ func (a *App) sendMessageCmd(text string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_, err := a.SendMessage(ctx, id, text)
+		_, err := a.SendMessage(ctx, id, protocol.SendMessageRequest{Text: text})
 		return sendMsg{text: text, err: err}
 	}
 }
@@ -89,7 +89,7 @@ func (a *App) homeSubmitCmd(text string) tea.Cmd {
 		// mint's deadline must not eat the send's budget.
 		ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_, err = a.SendMessage(ctx, ses.ID, text)
+		_, err = a.SendMessage(ctx, ses.ID, protocol.SendMessageRequest{Text: text})
 		return homeSubmitMsg{ses: ses, text: text, err: err}
 	}
 }

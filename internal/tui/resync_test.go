@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/server/testutil"
 	"github.com/kido5217/yolo/internal/tui/client"
 	"github.com/kido5217/yolo/internal/tui/store"
@@ -28,7 +29,7 @@ func TestAppResyncRehydrates(t *testing.T) {
 	}
 	// Seed a completed turn in storage: the re-hydrate has something to
 	// recover (user + assistant messages).
-	if _, err := c.SendMessage(ctx, ses.ID, "go"); err != nil {
+	if _, err := c.SendMessage(ctx, ses.ID, protocol.SendMessageRequest{Text: "go"}); err != nil {
 		t.Fatalf("SendMessage: %v", err)
 	}
 	ts.WaitIdle(t, ts.Dir, ses.ID)

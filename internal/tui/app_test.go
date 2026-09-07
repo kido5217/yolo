@@ -17,6 +17,7 @@ import (
 
 	"github.com/kido5217/yolo/internal/llm"
 	"github.com/kido5217/yolo/internal/llm/fake"
+	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/server/testutil"
 	"github.com/kido5217/yolo/internal/tui"
 	"github.com/kido5217/yolo/internal/tui/client"
@@ -86,7 +87,7 @@ func TestSessionStreamingViewport(t *testing.T) {
 		return bytes.Contains(b, []byte("New session"))
 	}, teatest.WithDuration(5*time.Second))
 
-	if _, err := c.SendMessage(ctx, ses.ID, "do it"); err != nil {
+	if _, err := c.SendMessage(ctx, ses.ID, protocol.SendMessageRequest{Text: "do it"}); err != nil {
 		t.Fatalf("SendMessage: %v", err)
 	}
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {

@@ -183,14 +183,16 @@ func (c *Service) ListMessages(ctx context.Context, id string) ([]protocol.Messa
 	return out, nil
 }
 
-// SendMessage is POST /session/{id}/message (202); ErrBusy on 409.
-func (c *Service) SendMessage(ctx context.Context, id, text string) (string, error) {
+// SendMessage is POST /session/{id}/message (202); ErrBusy on 409. The
+// body is the request struct directly (files omitted when empty —
+// byte-identical to the legacy text-only body).
+func (c *Service) SendMessage(ctx context.Context, id string, req protocol.SendMessageRequest) (string, error) {
 	var out struct {
 		MessageID string `json:"message_id"`
 	}
 	err := c.do(
 		ctx, http.MethodPost, "/session/"+PathEscapeID(id)+"/message",
-		map[string]string{"text": text}, &out,
+		req, &out,
 	)
 	if err != nil {
 		return "", err
