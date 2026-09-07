@@ -136,28 +136,33 @@ func (a *App) boxCursor(ch string) string {
 // homeBox renders the 5 prompt-box rows (mock rows mockBoxTop..+4):
 //
 //	row0 border + interior fill
-//	row1 border + 2 pad + the input line (boxInputLine)
+//	row1 border + 2 pad + the input line (boxInputLine) + the 2-col
+//	     right pad
 //	row2 border + fill
-//	row3 border + 2 pad + the meta line (boxMetaLine)
+//	row3 border + 2 pad + the meta line (boxMetaLine) + the 2-col
+//	     right pad
 //	row4 the corner (╹, the highlight color) + the bottom (▀ x boxW-1,
 //	     fg backgroundElement)
 //
 // The interior runs (fill/pad/text/meta) carry the backgroundElement bg; the
 // border/corner fg is the highlight token (boxHighlight) with no bg. Every
-// interior cell is a styled run — NO unstyled gap inside the box (the fill
-// width is width-exact: the row is boxW display cols from boxL). A zero
-// Theme degrades to plain runs.
+// interior cell is a styled run — NO unstyled gap inside the box: every row
+// is width-exact at boxW display cols from boxL (the content rows' right pad
+// is emitted, never left to the frame padding — the unpainted 2-col
+// right-edge chip; pinned by TestHomeBoxRightEdge). A zero Theme degrades
+// to plain runs.
 func (a *App) homeBox() []string {
 	boxW := a.boxWidth()
 	rowFill := a.boxInterior("", strings.Repeat(" ", boxW-1))
 	pad := a.boxInterior("", strings.Repeat(" ", homeBoxPad))
+	rightPad := a.boxInterior("", strings.Repeat(" ", homeBoxPad))
 	border := a.boxBorder("┃")
 	bottom := a.boxBorder("╹")
 	return []string{
 		border + rowFill,
-		border + pad + a.boxInputLine(),
+		border + pad + a.boxInputLine() + rightPad,
 		border + rowFill,
-		border + pad + a.boxMetaLine(),
+		border + pad + a.boxMetaLine() + rightPad,
 		bottom + a.boxFg("backgroundElement", strings.Repeat("▀", boxW-1)),
 	}
 }

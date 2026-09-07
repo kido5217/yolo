@@ -2,6 +2,9 @@
 
 ## Glossary
 
+- **home screen** — the repo term for the TUI startup route (the screen
+  the app boots into before a session; the user's "startup screen" is a
+  synonym).
 - **self-brand** — yolo's self-identity: the strings where yolo refers to
   itself. The prompt identity ("You are YOLO"), the home logo mark
   (the YOLO glyph block), the `--help` text, the keymap labels
