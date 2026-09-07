@@ -21,7 +21,11 @@ import (
 // pattern), then spawns the exec goroutine and returns the ids. Errors:
 // storage.ErrNotFound (unknown session), ErrShellClosed (deleted), a
 // persistence failure. A shell run is independent of turns — no
-// busy-map interaction; the shell mutex serializes concurrent execs.
+// busy-map interaction; the shell mutex serializes concurrent execs. The
+// exec runs on a session-scoped cancel that Close/Shutdown invoke to kill
+// a running command (the turn-Abort referent, yolo-i84): a killed run
+// finalizes as `error` with the bash tool's pinned "command aborted"
+// message (finalize-must-land, the terminal publishes suppressed).
 func (e *Engine) Shell(ctx context.Context, sessionID, command string) (ShellResult, error) {
 	row, err := e.db.GetSession(ctx, sessionID)
 	if err != nil {
@@ -116,11 +120,26 @@ func (e *Engine) Shell(ctx context.Context, sessionID, command string) (ShellRes
 		SessionID: sessionID, Part: running, Time: e.clock(),
 	})
 
+	// The user's shell command is NOT tied to a turn (no busy-map
+	// interaction) and outlives the POST that spawned it, so the exec's
+	// ctx is a session-scoped cancel rather than the request ctx:
+	// Close/Shutdown cancel it to KILL a running command (the turn-Abort
+	// referent, yolo-i84 — pre-fix this ctx was context.Background with
+	// no abort surface, and Close blocked on the shell mutex for the
+	// command's full timeout). Stored before the spawn so a fast command
+	// can never finish before the entry exists; the exec removes it on
+	// exit (the endTurn referent).
+	shellCtx, cancelShell := context.WithCancel(context.Background())
+	e.mu.Lock()
+	e.shellAbort[sessionID] = cancelShell
+	e.mu.Unlock()
+
 	go func() {
-		// The user's shell command is NOT tied to a turn: no abort
-		// surface beyond the session's Close (the shell proc group is
-		// killed then), so the exec runs on an uncancellable ctx.
-		ectx := context.Background()
+		defer func() {
+			e.mu.Lock()
+			delete(e.shellAbort, sessionID)
+			e.mu.Unlock()
+		}()
 		tl := e.tools["bash"]
 		raw, _ := json.Marshal(map[string]any{
 			"command": command,
@@ -137,7 +156,7 @@ func (e *Engine) Shell(ctx context.Context, sessionID, command string) (ShellRes
 			SessionID: sessionID,
 			Log:       e.lg,
 		}
-		out, runErr := tl.Run(ectx, raw, env)
+		out, runErr := tl.Run(shellCtx, raw, env)
 		e.finalizeShellPart(sessionID, asstMsg, partID, now, out, runErr)
 	}()
 	return ShellResult{MessageID: userMsgID, PartID: partID}, nil
@@ -178,11 +197,11 @@ func (e *Engine) finalizeShellPart(sessionID string, asst protocol.Message, part
 		e.lg.Error("persist part marshal failed", "part_id", p.ID, "session_id", sessionID, "error", perr)
 		return
 	}
-	// Finalization must land even for a deleted session: the exec's ctx
-	// is context.Background (uncancellable), so the WithoutCancel wrapper
-	// is the saveToolPart finalize-must-land pattern made explicit — the
-	// terminal write cannot be dropped by a cancelled ctx, and the
-	// publishes below are then suppressed by eventSuppressed.
+	// Finalization must land even for a deleted session: the exec's own
+	// ctx is cancelled by Close (the kill that ended this run), so the
+	// terminal write rides a fresh uncancellable ctx — the saveToolPart
+	// finalize-must-land pattern made explicit — and the publishes below
+	// are then suppressed by eventSuppressed.
 	ectx := context.Background()
 	if err := e.db.UpsertPart(context.WithoutCancel(ectx), row); err != nil {
 		e.lg.Error("persist part failed", "part_id", p.ID, "session_id", sessionID, "error", err)
