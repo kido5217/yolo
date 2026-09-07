@@ -245,3 +245,58 @@ func TestSessionStatusConstantNames(t *testing.T) {
 			protocol.SessionStatusIdle, protocol.SessionStatusBusy, protocol.SessionStatusRetry)
 	}
 }
+
+// TestSendRequestWireShape pins the send body: files omitted when empty
+// (a no-files send is byte-identical to today — deviation 10) and the
+// exact spec §3 wire shape when present.
+func TestSendRequestWireShape(t *testing.T) {
+	b, err := json.Marshal(protocol.SendMessageRequest{Text: "hi"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `{"text":"hi"}`; string(b) != want {
+		t.Fatalf("no-files body = %s, want %s", b, want)
+	}
+	bf, err := json.Marshal(protocol.SendMessageRequest{
+		Text: "What do these say?",
+		Files: []protocol.FileRef{
+			{MIME: "text/plain", Filename: "notes.txt", URL: "data:text/plain;base64,aGVsbG8="},
+			{MIME: "application/octet-stream", Filename: "bin.dat", URL: "data:application/octet-stream;base64,JQk="},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"text":"What do these say?","files":[{"mime":"text/plain","filename":"notes.txt","url":"data:text/plain;base64,aGVsbG8="},{"mime":"application/octet-stream","filename":"bin.dat","url":"data:application/octet-stream;base64,JQk="}]}`
+	if string(bf) != want {
+		t.Fatalf("files body =\n%s\nwant\n%s", bf, want)
+	}
+	if protocol.AttachFileMaxBytes != 10<<20 {
+		t.Fatalf("AttachFileMaxBytes = %d, want %d", protocol.AttachFileMaxBytes, 10<<20)
+	}
+}
+
+// TestFilePartWireShape pins the file part's marshal bytes (struct field
+// order: …, metadata, mime, filename, url) and that zero-value file fields
+// never appear on non-file parts (TestPartAndToolStateShapes' pin).
+func TestFilePartWireShape(t *testing.T) {
+	p := protocol.Part{ID: "prt_f", SessionID: "ses_1", MessageID: "msg_1",
+		Type: protocol.PartTypeFile, MIME: "text/plain", Filename: "notes.txt",
+		URL: "data:text/plain;base64,aGVsbG8=", Time: protocol.PartTime{Start: 1}}
+	b, err := json.Marshal(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"id":"prt_f","sessionID":"ses_1","messageID":"msg_1","type":"file","time":{"start":1},"mime":"text/plain","filename":"notes.txt","url":"data:text/plain;base64,aGVsbG8="}`
+	if string(b) != want {
+		t.Fatalf("file part =\n%s\nwant\n%s", b, want)
+	}
+	text := protocol.Part{ID: "prt_1", SessionID: "ses_1", MessageID: "msg_2",
+		Type: protocol.PartTypeText, Text: "hi", Time: protocol.PartTime{Start: 1}}
+	bt, _ := json.Marshal(text)
+	for _, key := range []string{`"mime"`, `"filename"`, `"url"`} {
+		if strings.Contains(string(bt), key) {
+			t.Fatalf("text part carries %s: %s", key, bt)
+		}
+	}
+}

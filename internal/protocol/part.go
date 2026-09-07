@@ -1,5 +1,12 @@
 package protocol
 
+const (
+	PartTypeText      = "text"
+	PartTypeReasoning = "reasoning"
+	PartTypeTool      = "tool"
+	PartTypeFile      = "file"
+)
+
 type PartTime struct {
 	Start     int64 `json:"start"`
 	End       int64 `json:"end,omitempty"`
@@ -20,7 +27,7 @@ type Part struct {
 	ID          string         `json:"id"`
 	SessionID   string         `json:"sessionID"`
 	MessageID   string         `json:"messageID"`
-	Type        string         `json:"type"` // "text" | "reasoning" | "tool"
+	Type        string         `json:"type"` // PartTypeText | PartTypeReasoning | PartTypeTool | PartTypeFile
 	Text        string         `json:"text,omitempty"`
 	CallID      string         `json:"callID,omitempty"`
 	Tool        string         `json:"tool,omitempty"`
@@ -29,6 +36,13 @@ type Part struct {
 	IsIgnored   *bool          `json:"isIgnored,omitempty"`
 	Time        PartTime       `json:"time"`
 	Metadata    map[string]any `json:"metadata,omitempty"`
+
+	// file parts (yolo run, 2026-09-07): the attached file's content and
+	// identity. Omitted (zero values) on every non-file part, so existing
+	// wire bytes are unchanged.
+	MIME     string `json:"mime,omitempty"`
+	Filename string `json:"filename,omitempty"`
+	URL      string `json:"url,omitempty"`
 }
 
 type MessageWithParts struct {
