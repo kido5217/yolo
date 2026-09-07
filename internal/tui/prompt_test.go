@@ -99,6 +99,88 @@ func TestPromptMenuFuzzy(t *testing.T) {
 	}
 }
 
+// TestPromptMenuOpenBox pins the S2 rewire: the open slash menu (input "/")
+// renders the shared bordered dropdown (spec §6 S2) — the box chrome (the
+// split border, the backgroundMenu fill) wrapping the items, the selection
+// row SGR'd with the primary bg + the SelectedForeground (yolo dark tokens).
+func TestPromptMenuOpenBox(t *testing.T) {
+	th := yoloDarkTheme(t)
+	a := testApp()
+	a.store.Commands = testCommands()
+	a.prompt.input.SetValue("/")
+	items := a.menuItems()
+	if len(items) != 9 {
+		t.Fatalf("items = %d, want 9 (the 4 locals + the 5 catalog)", len(items))
+	}
+	const w = 60
+	got := a.prompt.menuView(items, w, th)
+	lines := strings.Split(got, "\n")
+	if len(lines) != 9 {
+		t.Fatalf("box = %d rows, want 9:\n%s", len(lines), got)
+	}
+	for i, l := range lines {
+		plain := stripANSI(l)
+		if n := len([]rune(plain)); n != w {
+			t.Fatalf("row %d = %d cols, want %d (the width-exact box): %q", i, n, w, plain)
+		}
+		if plain[0] != '|' || plain[w-1] != '|' {
+			t.Fatalf("row %d = %q, want the split left/right border", i, plain)
+		}
+		if plain[1] != ' ' {
+			t.Fatalf("row %d = %q, want 1 padding after the left border", i, plain)
+		}
+	}
+	// The two-column layout (label + the description right-offset by "  ").
+	if !strings.Contains(stripANSI(lines[0]), "/sessions  List all sessions") {
+		t.Fatalf("row 0 lost the two-column layout: %q", stripANSI(lines[0]))
+	}
+	// The unselected row chrome (yolo dark tokens, the S1 pins): the border
+	// fg #484848, the backgroundMenu fill #1e1e1e, the label #eeeeee, the
+	// description #808080.
+	if u := lines[1]; !strings.Contains(u, "38;2;72;72;72") ||
+		!strings.Contains(u, "48;2;30;30;30") ||
+		!strings.Contains(u, "38;2;238;238;238") ||
+		!strings.Contains(u, "38;2;128;128;128") {
+		t.Fatalf("row 1 lost the border/fill/label/description SGR: %s", u)
+	}
+	// The selection row (sel = 0): the primary bg (#fab283) + the
+	// SelectedForeground (#0a0a0a) across the full row width.
+	if sel := lines[0]; !strings.Contains(sel, "48;2;250;178;131") {
+		t.Fatalf("selection row missing the primary bg SGR (#fab283): %s", sel)
+	}
+	if !strings.Contains(lines[0], "38;2;10;10;10") {
+		t.Fatalf("selection row missing the SelectedForeground SGR (#0a0a0a): %s", lines[0])
+	}
+	if strings.Contains(lines[1], "48;2;250;178;131") {
+		t.Fatalf("unselected row carries the primary bg: %s", lines[1])
+	}
+}
+
+// TestPromptMenuEmptyLine pins the S2 empty-filter case (input "/zzz"): the
+// no-match line renders with the CURRENT text (the "No matching items" text
+// lands in S7, which re-baselines this pin).
+func TestPromptMenuEmptyLine(t *testing.T) {
+	th := yoloDarkTheme(t)
+	a := testApp()
+	a.store.Commands = testCommands()
+	a.prompt.input.SetValue("/zzz")
+	items := a.menuItems()
+	if items == nil || len(items) != 0 {
+		t.Fatalf("items = %v, want an open menu with no match", items)
+	}
+	got := a.prompt.menuView(items, 60, th)
+	lines := strings.Split(got, "\n")
+	if len(lines) != 1 {
+		t.Fatalf("empty filter = %d lines, want 1 (the no-match line):\n%s", len(lines), got)
+	}
+	if !strings.Contains(stripANSI(lines[0]), "no match") {
+		t.Fatalf("no-match line lost the current text: %q", stripANSI(lines[0]))
+	}
+	if !strings.Contains(lines[0], "38;2;128;128;128") {
+		t.Fatalf("no-match line missing the textMuted fg SGR (#808080): %s", lines[0])
+	}
+}
+
 func TestPromptMenuKeys(t *testing.T) {
 	t.Run("arrows move the selection while the menu is open", func(t *testing.T) {
 		a := testApp()

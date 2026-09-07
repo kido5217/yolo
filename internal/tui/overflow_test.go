@@ -13,7 +13,8 @@ import (
 // agent dialogs, home rows, the error line) must word-wrap at the terminal
 // width instead of being clipped — the viewport only guards the transcript.
 // The footer and the locked quit dialog stay single-line by design (the help
-// dialog is modal since S3.6).
+// dialog is modal since S3.6). The slash menu since S2 keeps its width-exact
+// box rows instead: the over-wide row is truncated at the box content width.
 
 // fitsWidth reports whether every line of s is at most w display columns
 // (the fixtures here are plain ASCII, so rune count is the width).
@@ -53,9 +54,12 @@ func TestMenuViewWraps(t *testing.T) {
 	cmds := []protocol.Command{{Name: "/quit", Description: long}}
 	got := stripANSI(a.prompt.menuView(cmds, 20, a.theme))
 	fitsWidth(t, got, 20)
-	// Wrapping collapses the double-space separator into one.
-	if !strings.Contains(rejoined(got), "/quit "+strings.TrimRight(long, " ")) {
-		t.Fatalf("menu text lost in wrap:\n%q", got)
+	// The bordered chrome (S2) is width-exact and truncates (no wrap): the
+	// single row is 20 cols, the label + the description cut at the box
+	// content width (avail 16: the 5-col label + the "  " offset + 9 cols of
+	// the description).
+	if got != "| /quit  quits the |" {
+		t.Fatalf("menu row = %q, want the width-exact truncated box row", got)
 	}
 }
 

@@ -76,6 +76,11 @@ func newDropdown(rows []dropdownRow, sel, width, spaceAbove int, th theme.Theme)
 			Foreground(lipgloss.Color(s.Hex()[:7])).
 			Background(lipgloss.Color(p.Hex()[:7]))
 		d.selOK = true
+	} else {
+		// No primary token (a custom theme may omit it): the selection
+		// degrades to the cursor style (select.go's missing-primary idiom)
+		// over the box fill — bold in the text fg, never invisible.
+		d.selSty = cursorStyle(th).Inherit(d.bgMenu)
 	}
 	return d
 }
@@ -112,16 +117,24 @@ func (d dropdown) view() string {
 // is the border columns + the backgroundMenu fill (the label in the text
 // token, the description in textMuted); the selection row is the full-row
 // paint (primary bg + SelectedForeground fg across every column, the
-// borders and padding inside).
+// borders and padding inside) or, without a primary token, the chrome with
+// the whole content in the degraded selection style (select.go's
+// missing-primary idiom).
 func (d dropdown) row(i int) string {
 	r := d.rows[i]
 	label, desc := d.fit(r)
 	if i == d.sel && d.selOK {
 		return d.selSty.Render("|") + d.selSty.Width(d.innerW).Render(" "+label+desc) + d.selSty.Render("|")
 	}
-	content := " " + d.labelSty.Render(label)
+	labelSty, descSty := d.labelSty, d.descSty
+	if i == d.sel {
+		// The degraded selection (no primary token): the whole content
+		// (label + description) in the bold text-fg style, not muted.
+		labelSty, descSty = d.selSty, d.selSty
+	}
+	content := " " + labelSty.Render(label)
 	if desc != "" {
-		content += d.descSty.Render(desc)
+		content += descSty.Render(desc)
 	}
 	return d.border.Render("|") + d.bgMenu.Width(d.innerW).Render(content) + d.border.Render("|")
 }

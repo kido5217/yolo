@@ -116,6 +116,82 @@ func TestDropdownSelectionRowSGR(t *testing.T) {
 	}
 }
 
+// TestDropdownSelectionRowNoPrimary pins the missing-primary degradation:
+// a theme without a primary token (a reachable state — a custom theme JSON
+// is an arbitrary token map and ResolveTheme does not require one) degrades
+// the selection row to the cursor style (select.go's missing-primary idiom):
+// the whole content (label + description) bold in the text fg, the box
+// chrome intact (the description NOT muted).
+func TestDropdownSelectionRowNoPrimary(t *testing.T) {
+	// The yolo dark tokens minus primary (the SGR pins below reuse the S1
+	// hexes).
+	th := theme.Theme{R: theme.Resolved{Colors: map[string]theme.RGBA{
+		"background":     theme.FromHex("#0a0a0a"),
+		"backgroundMenu": theme.FromHex("#1e1e1e"),
+		"text":           theme.FromHex("#eeeeee"),
+		"textMuted":      theme.FromHex("#808080"),
+		"border":         theme.FromHex("#484848"),
+	}}}
+	rows := []dropdownRow{
+		{label: "/quit", description: "quit the app"},
+		{label: "/help", description: "show the help"},
+	}
+	d := newDropdown(rows, 1, 40, 10, th)
+	if d.selOK {
+		t.Fatal("no primary token: selOK = true, want the degraded path")
+	}
+	lines := strings.Split(d.view(), "\n")
+	sel := lines[1]
+	// The degraded selection: the whole content bold in the text fg
+	// #eeeeee, carrying the backgroundMenu fill #1e1e1e under it (the
+	// chrome matches the non-selection rows).
+	if !strings.Contains(sel, "1;38;2;238;238;238") {
+		t.Fatalf("selection row missing the bold text-fg SGR: %s", sel)
+	}
+	// The description is NOT muted on the selection row (the pre-rewire
+	// menuView behavior).
+	if strings.Contains(sel, "38;2;128;128;128") {
+		t.Fatalf("selection row mutes the description: %s", sel)
+	}
+	// No primary-background SGR anywhere in the selection row.
+	if strings.Contains(sel, "48;2;250;178;131") {
+		t.Fatalf("selection row carries the primary bg SGR: %s", sel)
+	}
+	// The box chrome (the S1 pins): the split border, the border fg
+	// #484848, the backgroundMenu fill #1e1e1e — every SGR open inside the
+	// row carries the fill, the border columns excepted (unpainted, exactly
+	// like the non-selection rows).
+	plain := stripANSI(sel)
+	if n := len([]rune(plain)); n != 40 {
+		t.Fatalf("selection row = %d cols, want 40: %q", n, plain)
+	}
+	if plain[0] != '|' || plain[39] != '|' {
+		t.Fatalf("selection row lost the split border: %q", plain)
+	}
+	if !strings.Contains(sel, "38;2;72;72;72") {
+		t.Fatalf("selection row missing the border fg SGR: %s", sel)
+	}
+	if !strings.Contains(sel, "48;2;30;30;30") {
+		t.Fatalf("selection row missing the backgroundMenu fill SGR: %s", sel)
+	}
+	for _, seg := range strings.Split(sel, "\x1b[") {
+		switch {
+		case seg == "", seg == "m", seg == "0m":
+			continue
+		}
+		if strings.HasPrefix(seg, "38;2;72;72;72") {
+			continue // the border column (no fill, like the non-selection rows)
+		}
+		if !strings.Contains(seg, "48;2;30;30;30") {
+			t.Fatalf("selection row has an unfilled SGR open %q (row: %s)", seg, sel)
+		}
+	}
+	// The content survives intact: label + the "  "-offset description.
+	if !strings.Contains(plain, "/help  show the help") {
+		t.Fatalf("selection row lost the two-column layout: %q", plain)
+	}
+}
+
 func TestDropdownHeightClamp(t *testing.T) {
 	th := yoloDarkTheme(t)
 	rows := make([]dropdownRow, 12)

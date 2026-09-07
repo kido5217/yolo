@@ -167,9 +167,11 @@ func (a *App) menuItems() []protocol.Command {
 	return out
 }
 
-// menuView renders the slash menu's items directly (S5.5: the filtering is
-// App.menuItems); each item word-wraps at the terminal width (custom command
-// descriptions can be long).
+// menuView renders the slash menu's items through the shared bordered
+// dropdown (spec §6 S2; the filtering is App.menuItems): the box chrome, the
+// selection row (primary bg + the SelectedForeground), the over-wide row
+// truncated at the box content width (no wrap). The no-match line keeps the
+// current text (the "No matching items" text lands in S7).
 func (pm *promptModel) menuView(items []protocol.Command, w int, th theme.Theme) string {
 	if items == nil {
 		return ""
@@ -177,24 +179,14 @@ func (pm *promptModel) menuView(items []protocol.Command, w int, th theme.Theme)
 	if len(items) == 0 {
 		return th.TextMuted().Render("  no match")
 	}
-	muted := th.TextMuted()
-	var b strings.Builder
+	rows := make([]dropdownRow, len(items))
 	for i, c := range items {
-		if i > 0 {
-			b.WriteByte('\n')
-		}
-		sty := muted
-		if i == pm.sel {
-			sty = cursorStyle(th)
-		}
-		for j, l := range strings.Split(wrapLine("  "+c.Name+"  "+c.Description, w), "\n") {
-			if j > 0 {
-				b.WriteByte('\n')
-			}
-			b.WriteString(sty.Render(l))
-		}
+		rows[i] = dropdownRow{label: c.Name, description: c.Description}
 	}
-	return b.String()
+	// menuItems caps the list at maxPickerOptions (= maxDropdownRows), so the
+	// space-above clamp is a no-op at the current placement (S3 owns the
+	// anchors): pass the menu's own height.
+	return newDropdown(rows, pm.sel, w, len(rows), th).view()
 }
 
 // view renders the prompt line (the textinput carries the "> " prompt).
