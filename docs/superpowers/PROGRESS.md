@@ -5,6 +5,81 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
+**Status (2026-09-07):** 0.10.0 menu parity (wayfinder map `yolo-old`,
+closed 2026-09-07 — destination reached: three full-parity specs on main,
+each user-approved: slash
+`docs/superpowers/specs/2026-09-07-slash-menu-parity-design.md` (PR #52,
+merged `ea1327d`), mention
+`2026-09-07-mention-picker-parity-design.md` (PR #53, merged `3d33958`),
+palette `2026-09-07-palette-parity-design.md` (PR #55, merged `78d518a`);
+two sibling-spec fixup PRs merged along the way (#54 `76e7e49`, #56
+`901179d`: the mouse-option prerequisite is the slash epic's S5 — NOT
+"S1" or "already enabled"; the slash spec's palette note — the palette is
+a borderless modal, not a `dropdown.go` consumer, and its Suggested bucket
+is seed-driven with no frecency; the `view.go` dim comment 0.15 → 150/255).
+Grill decisions (yolo-old.3): shared `dropdown.go` primitive for slash +
+`@` (upstream split-border chrome, the `backgroundMenu`/`primary`/
+`selectedForeground` tokens), the modal palette keeps its borderless
+`backgroundPanel` shape (w=60, centered, top h/4) but dims via the shared
+`viewModal` (flat pre-blended 150/255 backdrop, no new token, supersedes
+dev 166 — shared-modal scope, user-confirmed); hybrid `tab` (menu open =
+complete, closed = agent cycle, the home hint's first segment is
+context-aware); `esc`: slash = clear input, `@` = strip trigger+query,
+palette = close; anchors: home above the box top edge (logo overlaid),
+session above the prompt line; empty text `No matching items` (slash/`@`)
+/ `No results found` (palette). Epic structure (user decision 2026-09-07):
+each epic carries its own, map order slash → mention → palette, no shared
+foundation epic; cross-epic prerequisites encoded in the specs (mention S1
+on slash S1 `dropdown.go`; mention S4 + palette S4 on slash S5
+`tea.WithMouseCellMotion` at main.go:768; `command_frecency` NOT consumed
+by the palette). Execution epics seeded (beads): slash `yolo-2vt` (tasks
+`yolo-asg` S1, `yolo-o63` S2, `yolo-3hs` S3, `yolo-1m1` S4, `yolo-q3d`
+S5, `yolo-bui` S6, `yolo-0al` S7), mention `yolo-bie` (blocked-by
+`yolo-2vt`; tasks `yolo-06l`–`yolo-bn3` S1–S6), palette `yolo-hb0`
+(blocked-by `yolo-bie`; tasks `yolo-nsw`–`yolo-p3x` S1–S6) — linear
+`blocks` chains within each epic. All 3 plans done on branch
+`plan/menu-parity-0.10.0` (PR #57, pending merge): slash
+`2026-09-07-0.10.0-slash-menu-parity.md` (717 lines, `9ee332c`), mention
+`2026-09-07-0.10.0-mention-picker-parity.md` (738 lines, `5fa134a`),
+palette `2026-09-07-0.10.0-palette-parity.md` (796 lines, `6798ae8`) —
+all in `docs/superpowers/plans/`; tasks S1–S7 (slash) / S1–S6 (mention,
+palette) with the pinned commit messages (slash: `feat: tui — shared
+bordered-dropdown primitive`; `feat: tui — slash menu renders the bordered
+dropdown`; `feat: tui — slash dropdown anchors (home box, session)`; `feat:
+tui — command-name frecency scoring for the slash menu`; `feat: tui — mouse
+hover and click on the slash dropdown`; `feat: tui — tab completes the open
+slash menu, hint row`; `test: tui — slash menu empty text, re-baselines,
+mock`; mention: `feat: tui — @ picker chrome onto the shared dropdown`;
+`feat: tui — @ picker dir candidates, score gate, sel reset`; `feat: tui —
+@ insert @<path> semantics + dir tab-expand`; `feat: tui — @ picker mouse
+hover/click`; `feat: tui — @ tab-complete + tab-complete hint flip`; `test:
+tui — @ picker empty text, re-baselines, mock`; palette: `feat: tui — modal
+dim backdrop + palette inner chrome`; `feat: tui — palette Suggested bucket
++ categories`; `test: tui — palette filter parity legs (no frecency)`;
+`feat: tui — palette mouse hover/click`; `test: tui — palette key table
+legs, empty-text verify`; `test: tui — palette re-baselines, mock,
+DEVIATIONS 318-321`), verified-facts pin @ `78d518a` (the pre-change
+tree), DEVIATIONS tail = 307 (planned entries 308–311 slash, 312–317
+mention, 318–321 palette confirmed next-free at plan time). In-tree
+drift flagged per plan (slash, 6 items: the spec's `boxW` referent is
+stale (the width is `boxWidth()` at home.go:44-53, `homeBoxMaxWidth = 75`
+at :38); the prompt_test.go test ranges are stale (`TestPromptMenuFilter`
+:44, `TestPromptMenuFuzzy` :81, `TestPromptMenuKeys` :102); the `@`-picker
+teatest leg is `TestTUIAtPicker` (mention_test.go:94), not app_test.go:249
+(that is the slash `/new` leg); the `No matching items` empty-line
+assertion belongs to S7 (the text change is scoped there); the `tab`-close
+vs value-derived `slashActive` mechanism is S6's to own (suppress flag or
+predicate refinement); mention: the spec's `mention_test.go:109-110`
+`no match` pin does not exist (S6 creates it fresh), the ladder referent
+keys.go:41-43 is :44-46, the upstream empty text is
+autocomplete.tsx:744; palette: the `palette_test.go` line refs stale,
+the `view.go` dim comment already corrected to 150/255 (PR #56), the
+spec's §2.1 inner lines (the title-row `esc` hint + the `ctrl+p commands`
+footer) unallocated to any slice — the plan folds them into S1). Next
+(bead `yolo-04f`, claimed): merge PR #57, transcribe the pinned messages
+onto the 19 task beads, close `yolo-04f`; execution starts with slash S1
+(`yolo-asg`).
+
 **Status (2026-09-07):** v0.9.1 wayfinder map `yolo-ql7` — home-box
 right-edge artifact (the 2-col black chip on the prompt box's two content
 rows at every width ≥ 40): root cause proven in-the-bytes by `yolo-ql7.1`
