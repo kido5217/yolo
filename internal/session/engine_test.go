@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -966,5 +967,67 @@ func TestSendPersistsAndPublishesFileParts(t *testing.T) {
 	})
 	if fileEvents != 2 {
 		t.Fatalf("file message.part.updated events = %d, want 2", fileEvents)
+	}
+}
+
+// TestSendFilesReplayFromStoredDataURL pins leg (e)'s replay half: the
+// user message's model content carries the pinned block format on turn
+// one, and turn two inlines the blocks from the STORED data URL — the
+// original file is deleted between turns, so the replay proves no
+// filesystem access at turn time.
+func TestSendFilesReplayFromStoredDataURL(t *testing.T) {
+	h := newHarness(t)
+	h.build(t)
+	d := t.TempDir()
+	fp := filepath.Join(d, "a.txt")
+	writeFile(t, fp, "hello")
+	h.drv.Turns = []fake.Turn{
+		{Parts: []llm.Part{{Kind: "text", Text: "one", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}},
+		{Parts: []llm.Part{{Kind: "text", Text: "two", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}},
+	}
+	ses := h.startSession(t, d)
+	url := "data:text/plain;base64," + base64.StdEncoding.EncodeToString([]byte("hello"))
+	waitIdle(t, h, ses, func() {
+		if _, err := h.eng.Send(t.Context(), ses, "What do these say?",
+			[]protocol.FileRef{{MIME: "text/plain", Filename: "a.txt", URL: url}}, nil); err != nil {
+			t.Fatalf("turn 1: %v", err)
+		}
+	})
+	// turn one's request carried the block
+	reqs := nonTitle(h.drv.Requests())
+	if len(reqs) != 1 {
+		t.Fatalf("rounds = %d, want 1", len(reqs))
+	}
+	block := "--- BEGIN FILE a.txt ---\nhello\n--- END FILE a.txt ---\n\nWhat do these say?"
+	found := false
+	for _, m := range reqs[0].Messages {
+		if m.Role == llm.RoleUser && m.Content == block {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("turn 1 user content missing the block:\n%q", reqs[0].Messages)
+	}
+	// the file is deleted, then turn two replays from the stored data URL
+	if err := os.Remove(fp); err != nil {
+		t.Fatal(err)
+	}
+	waitIdle(t, h, ses, func() {
+		if _, err := h.eng.Send(t.Context(), ses, "again", nil, nil); err != nil {
+			t.Fatalf("turn 2: %v", err)
+		}
+	})
+	reqs = nonTitle(h.drv.Requests())
+	if len(reqs) != 2 {
+		t.Fatalf("rounds = %d, want 2", len(reqs))
+	}
+	replayed := false
+	for _, m := range reqs[1].Messages {
+		if m.Role == llm.RoleUser && strings.Contains(m.Content, "--- BEGIN FILE a.txt ---\nhello\n--- END FILE a.txt ---") {
+			replayed = true
+		}
+	}
+	if !replayed {
+		t.Fatal("turn 2 history did not replay the inlined block from the stored data URL")
 	}
 }
