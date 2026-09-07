@@ -272,8 +272,38 @@ permission suppress the cycle — the ladder precedence); deviation 278
 inaccurate against the pinned bubbles v2.2.1 textinput — tab is the
 `AcceptSuggestion` binding, a no-op with no suggestions + the named
 key carries empty Text — the override subtest pins the fallthrough as
-"input unchanged")); next is Task 10 (Shell: TUI mode (C —
-granular) — the `!` toggle, the exits, the placeholder/meta swap).
+"input unchanged")); Task 10 (Shell: TUI mode (C — granular) —
+`internal/tui/prompt.go`: `enterShellMode` (mode -> shell, re-roll the
+placeholder over the SHELL pool, the input value KEPT — a cursor-0
+non-empty value becomes the command, the upstream referent) +
+`exitShellMode` (mode -> normal, NO re-roll — the index persists; the
+decision's re-rolls are home-entry + `!` only) via `applyPromptChrome`
+(placeholder swap); `internal/tui/keys.go`: `backspaceBinding` + the
+`handlePromptKey` `!` toggle (normal mode + cursor offset 0 + "!" ->
+enterShellMode, consumed — NOT inserted; a "!" at a non-zero cursor or in
+shell mode INSERTS) + the shell-mode exits (esc -> exitShellMode; backspace
+at offset 0 -> exitShellMode, both consumed); `internal/tui/home.go`:
+`handleHomeKey` esc shell branch (esc EXITS the shell, does NOT clear the
+prompt — before clearPrompt) + `homeMeta` shell branch (returns
+("Shell", "", "") — shell mode renders "Shell" alone, the model/provider
+box is dropped); `internal/tui/session.go`: `handleSessionKey` top esc
+shell branch (esc EXITS the shell, does NOT interrupt/return home — BEFORE
+the session_interrupt match, the registry's esc default); the Task-6 submit
+wiring (`homeShellCmd`/`shellCmd`/`applyShell`) is already present (no
+change); `shell_test.go`: `TestShellModeToggle` (the `!` toggle-in with
+empty + non-empty value kept / `!` at a non-zero cursor INSERTS / `!` in
+shell mode INSERTS / esc + backspace@0 exit home + session to normal —
+placeholder restored, no re-roll, the session route unchanged / backspace@0
+in normal is a no-op), `TestHomeMetaShell` (homeMeta shell -> ("Shell", "",
+") + the boxMetaLine renders the "Shell" label alone, width-exact),
+`TestShellModeSubmit` (home shell submit via the `!` toggle mints + shells —
+the bash tool part finalizing over the wire via the waitShellPart idiom;
+session shell submit (no mint) posts to the current session); deviation
+279 (the plan's Task-5 "homeMeta returns ("Shell","","") in shell mode"
+premise is inaccurate — Task 5 landed the agent name; the shell branch
+lands HERE, pinned by TestHomeMetaShell which FAILs without it:
+("Build","Qwen","kido") vs ("Shell","",""))); next is Task 11 (Tips pool:
+drops + 2 adds (F) — `yolo-dhf.14`).
 
 **Status (2026-09-04):** v0.6.0 map (epic `yolo-o75`) complete — the P4
 backlog ships as minor v0.6.0 on top of v0.5.1 (`9f4c340`): cobra v1.10.2
