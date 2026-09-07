@@ -5,336 +5,44 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
-**Status (2026-09-07):** 0.8.0 start-screen parity epic (`yolo-dhf`) at
-execution stage — all three map tickets closed: gap inventory
-(Q1–Q10) on `yolo-dhf.1`
-(research doc on branch `research/0.8.0-start-screen-gaps` @ `7f86081`, read
-via `git show`), the user-confirmed render policy on `yolo-dhf.2` (agent
-cycling WIRED; home submit FIXED; FULL shell mode via
-`POST /session/{id}/shell` + `Engine.shellFor`; VCS branch via stdlib os/exec
-git shell-out with hardened env — NO external git dep; zero-MCP renders
-nothing; `auto` omitted; consolidated tip-drop policy), and the user-accepted
-200x50 home mock on `yolo-dhf.3` (asset
-`docs/superpowers/mockups/home-mock-200x50.txt` + teatest generator
-`internal/tui/home_mock_test.go` @ `f79041a`). Active implementation plan
-(named in the epic): `docs/superpowers/plans/2026-09-07-0.8.0-start-screen-
-parity.md` — 12 gate-green tasks with pinned conventional commits (version
-plumbing, VCS branch detection, home frame, prompt box, submit fix, agent
-cycling, shell engine/endpoint/TUI mode, tips, deviations closeout); the
-0.8.0 deviations (MCP-omission extends 193, `auto` omission, consolidated
-tip drops, git-env hardening, bubbles v2.2.1 width-exact render) land in
-Task 12. Implementation in flight on `feature/0.8.0-home-mock`: Task 1
-(plain-semver version plumbing, Q10), Task 2 (VCS branch detection, core)
-and Task 3 (VCS App wiring: bootstrap + re-reads, decision-4 cadence —
-ONE bootstrap fetch + HEAD-change re-reads, no polling) landed —
-`plainSemver` (`internal/tui/version.go`), `App.version` + `SetVersion`
-(the SetKeybinds post-construction pattern, `internal/tui/app.go`), the
-`app.SetVersion(version)` wiring (`cmd/yolo/main.go`), `internal/tui/vcs.go`
-(the `findGitRoot` upward `.git` walk — file OR directory — `gitBranch`
-with the pinned upstream `cfg` arg prefix + the decision-4 exit table (0
--> trimmed stdout, any other exit / ErrNotFound / deadline / no `.git`
--> none, no spawn without `.git`), `sanitizedGitEnv` hardening — the 5
-repo-redirecting `GIT_*` vars stripped, `GIT_TERMINAL_PROMPT=0` exactly
-once), and Task 3's App wiring (`internal/tui/app.go`: `App.branch` +
-`branchDir` (the stale-fetch race guard) + `branchMsg`, `branchCmd` (the
-scope dir AT LAUNCH capture, 5s ctx + 5s exec timeout), the `branchMsg`
-apply guard (launch-time dir must equal the current scope dir),
-`enterHome` (the repickTip + branchCmd home-entry hook, wired at the three
-plan-named sites — session esc-when-idle + the two `applySessionDelete`
-route-home legs; `NewApp` keeps `repickTip`, the `Init` bootstrap covers
-it), the `Init` bootstrap fetch, and the `branchReRead` EventMsg hook —
-a completed `bash` tool part on the current session, the `onAttention`
-batching precedent — + `vcs_wiring_test.go` (guard/enterHome/hook
-whitebox + the real-stack local-git leg; deviations 271–273), and Task 4
-(Home layout frame: the home route owns the full terminal frame —
-`App.homeView` in `internal/tui/home.go`, the 20-row centered stack
-(4 pad / 4 logo / 1 pad / 1 box pad / 5 box / 1 hint / 3 tip pad / 1 tip)
-+ 3-row footer block (dir at col 2, plain-semver version right-aligned
-ending at col w-2, the dir cut at w-2-len(ver)-5 on collision) + spacers
-ceil-first; the old session-list chrome + footer seam deleted
-(`homeModel`, `relTime`, `helpText`, `maxHomeSessions`, `homeTipsLine`
-→ `App.homeTipsRows`, `homeShortcutsHint`/`homeFooterLine`, the
-`footerView` routeHome branch); `modalChromeMin` home = 10; the
-`view()` home route composes ONLY `homeView` (the session route keeps
-today's composition exactly); `homeview_test.go` (whitebox geometry
-200x50 / 80x24 / 70x30 / 80x10 + footer subtests) + `home_golden_test.go`
-(SGR goldens: box border fg 38;5;75, interior bg 48;5;234, footer muted
-38;5;244, `:yolo-wire-branch` + `0.8.0`)), and Task 5 (Prompt box:
-placeholder, meta line, hint line — `internal/tui/prompt.go`: the
-`placeholderNormal`/`placeholderShell` pools (upstream home.tsx:17-20
-verbatim + the prefixes) + `promptModel.mode` (`"normal"` initial; the
-shell-mode STATE, the toggles land in Task 10) + `placeholderIdx` (shared
-across both pools, the upstream single `store.placeholder` counter) +
-`placeholderText()` + `App.rollPlaceholder()` (the `tipRand` seam, the
-`repickTip` idiom, called from `enterHome`); `internal/tui/home.go`:
-`boxWidth`/`boxInnerWidth` (boxW-1-2*homeBoxPad, min 1), `boxHighlight`
-(leader pending -> "border" > shell -> "primary" > "secondary"),
-`boxThemeReady`/`boxInterior` (fg token + backgroundElement bg; a zero
-Theme degrades every box run to plain — the SGR bytes would break the
-width-exact plain assertions) / `boxFg` / `boxCursor` (the Reverse block,
-same idiom as the app's static cursor) / `boxBorder` (now the highlight
-token, was hardcoded "secondary"), `homeBox` (the 5 rows: border +
-interior fill / border + 2 pad + `boxInputLine` / border + fill / border
-+ 2 pad + `boxMetaLine` / corner ╹ (highlight) + ▀×(boxW-1) fg
-backgroundElement — every interior cell a styled run, no unstyled gap),
-`boxInputLine` (the CUSTOM render — NOT `input.View()`: bubbles v2.2.1's
-View/placeholderView render Width+1 cols + the scroll offset is not
-exported; empty -> placeholder (fg textMuted) + fill, NO cursor cell;
-value -> pre (fg text) + the cursor cell (the char at `Position()`, a
-" " at the end — the end cursor occupies the window's last cell, the
-trailing char pushed out) + post + fill, width-exact innerW cols; the
-scroll window = innerW cols at `min(posCols, valueW-innerW)` — simpler
-than the session textinput's scroll, logged as a deviation in Task 12),
-`homeMeta` (agent = titlecase(pendingAgentName()); model = the config
-model ref's catalog NAME (Provider.Models[mid].Name, the modelOptions
-referent) else the ref's modelID else the raw ref (unparseable, no
-provider segment) else the first provider's first model (modelsOf order)
-else omitted (agent alone); provider = the ref's provider ID — NOT the
-catalog name, the Task-12 deviation), `pendingAgentName` (a.pendingAgent
-> store.Config["agent"] > "build" — internal/storage/migrate.go:23),
-`catalogModelName`, `boxMetaLine` (agent (highlight) + " " plain + "·"
-muted + " " plain + model (text) + " " plain + provider (muted); shell
-mode "Shell" alone — the model/provider box is inside the upstream
-normal-mode Show; width-exact, over-wide cut), `homeHintLine` (normal:
-{Format("agent_cycle")} agents  {Format("command_list")} commands —
-shortcuts fg text, words fg textMuted, 2-col gap, a "none" Format drops
-its segment, both none -> blank; shell: `esc` (text) + ` exit shell mode`
-(muted)); `internal/tui/app.go`: `App.pendingAgent` ("" = unset; Task 7's
-cycle pins it), `App.applyPromptChrome` (home -> SetWidth(boxInnerWidth)
-+ Placeholder = placeholderText(); session -> SetWidth(w-3) + Placeholder
-= "" — no leak onto the session line; callers: NewApp, openSession, the
-WindowSizeMsg case (replaces the bare SetWidth), enterHome sites),
-`enterHome` +rollPlaceholder; `internal/tui/hydrate.go`: `openSession`
-+applyPromptChrome; `home_box_test.go` (homeMeta seeded-store table /
-boxHighlight 3 states / placeholder pools + re-roll / boxInputLine
-width-exact legs / homeHintLine segments / applyPromptChrome routes) +
-`home_golden_test.go` extended (store seeded with the kido/Qwen catalog,
-SGR token 38;5;255 added — the text token for the model name + hint
-shortcuts; the merged WaitFor gains the placeholder + `Build · Qwen
-kido` + `tab agents  ctrl+p commands` content) + `homeview_test.go`
-frame test updated (the box interior placeholder + `Build` meta + the
-hint row content replace the Task-4 blank-stub assertions); deviations
-273->274 (the plan's `a.th.Color` typo -> `a.theme.Color`)), and Task 8
-(Shell engine — `internal/session/shell.go`: `Engine.Shell` (the pinned
-persist order — user message (row.Agent) + the wire
-`Message{Model: &MessageModel{info.ID, model.ID}}` publish (the
-CreateMessage row carries no model, the wire does — the Send pattern),
-the synthetic text part (the verbatim
-`The following tool was executed by the user`, `IsSynthetic`,
-`Time.Start` only), the assistant message (`ParentID` = the user
-message — wire-only, no storage column; agent + model from the row/
-resolve, the round convention), the RUNNING `bash` tool part
-(`CallID = partID`, `Input {command}`, `Time.Start`) — each persisted
-+ published (message.updated / message.part.updated) — then the exec
-goroutine: `context.Background()` (NOT tied to a turn — no abort
-surface beyond the session's Close, the pinned Step-3 call),
-`tools["bash"].Run` with the raw `{command, timeout: int(shellTimeout
-ms)}` + the tool_exec `tool.Env` pattern (Dir/Shell/Limits/OutputDir/
-Storage/SessionID/Log), `loadCfg` a load failure degrades to
-`tool.Limits{}` via `limitsFor`'s nil branch; `finalizeShellPart` —
-`completed`: `Title = out.Title` / `Output = out.Text` / `Metadata =
-out.Meta` / `Time.End = e.clock()`, `error`: `Error = runErr.Error()`
-(the bash tool's pinned messages) / `Output = ""`, persisted via
-`UpsertPart(context.WithoutCancel(…))` (the finalize-must-land pattern
-— the exec ctx is Background so the write cannot be dropped) + the
-part publish + the assistant `MessageUpdatedProps` with `Time.Completed`
-(the FULL info carried — the TUI store's `upsertMessage` REPLACES the
-whole Info, the surfaceTurnError idiom); `ErrShellClosed` +
-`ShellResult` (engine.go, near `ErrSessionBusy`), the
-`Engine.shellTimeout` field (default 120s = the
-`tool.defaultBashTimeoutMS` referent, `Deps.ShellTimeout` seam — the
-Clock/Backoff seam pattern — + the harness pre-build flag), the
-bash-tool-wired guard (a miswired Deps would nil-panic in the detached
-exec goroutine), + `shell_test.go` (happy path — the user row + the
-verbatim flagged synthetic part, the assistant row (agent from the
-row), the bash part `completed` (output containing the command output,
-`Title` = the command, NO `exit` key on exit 0), the part.updated
-sequence running -> completed + the assistant `Time.Completed`;
-`exit 3` -> `completed` + `Metadata["exit"] = 3`; `true` ->
-`(no output)`; `sleep 10` + 300ms -> `error` + the pinned prefix
-`shell tool terminated command after exceeding timeout 300 ms`;
-deleted: engine Close -> `ErrShellClosed` (the Step-4 engine
-delete-path referent, engine.go:306), row deleted ->
-`storage.ErrNotFound`; delete-during-run (Step 4 verified): Close
-returns (bounded by the command's own 500ms timeout) + the terminal
-part LANDS `error` (the timeout message) + exactly ONE part.updated
-(running) on the bus (the terminal publishes suppressed —
-`eventSuppressed`); deviations 275-276 (275: Step 4's
-`errShellAborted` -> `command aborted` expectation is
-UNREACHABLE — the exec ctx is Background and `Shell.Exec` holds the
-shell mutex for the whole command, so `Close`'s proc-group kill cannot
-preempt the running exec — the test pins the actual contract; 276: the
-finalize call carries the assistant `protocol.Message`, not the bare
-asstID — the full-info publish the finalize spec pins cannot be
-reconstructed from the DB (Model/ParentID are wire-only))), and Task 9
-(Shell: endpoint + client — `internal/server/handlers_session.go`:
-`handleSessionShell` (next to `handleSend`) — the pinned error table:
-202 `{message_id, part_id}` on accept (the engine call uses
-`r.Context()` for the persist half; the handler returns after the
-PERSIST half — the handleSend 202-after-spawn convention), 404
-unknown/cross-scope session (`scopedSession` + `storage.ErrNotFound`),
-409 session closed (`ErrShellClosed`), 400 invalid body / empty
-command (the `strings.TrimSpace` check, the `handleSend` `empty
-message` referent), 500 otherwise; the route `POST /session/{id}/shell`
-(`server.go`, next to `POST /session/{id}/message`); the client
-`Service.Shell` (`internal/tui/client/client.go`, next to `SendMessage`
-— `POST /session/{id}/shell {command}` -> `{message_id, part_id}`, the
-error envelope mapping via `c.do`, 404 -> `ErrNotFound`);
-`TestShellEndpoint` (the handleSend test shape: 202 happy path —
-`echo hi` -> ids present + the part finalizes `completed` via the
-Task-8 wait idiom over the DB (`waitShellPart`), 404 unknown session,
-404 cross-scope, 400 invalid body / empty body / blank command (pinned
-envelope messages `invalid body` / `empty command`), 409 shell closed
-(engine Close with the row still present — the shell_test
-engine-deleted referent), 404 after http delete) + `TestShellRoundTrip`
-(the wire round-trip over `testutil.Boot`: the id mapping — message_id
-= the persisted user row, part_id = the bash part (under the assistant
-message) finalizing `completed` with the output — + the error envelope
-on 404; the happy-path legs clean up the lazily-spawned persistent
-shell via `s.Eng.Close` so its readLoop does not outlive the test
-(goleak)); deviation 277 (the plan's "409 deleted-session (create +
-delete + shell)" leg is UNREACHABLE — the HTTP delete removes the row
-BEFORE the engine close, so `scopedSession` answers 404 — the 409 leg
-is pinned via the engine-close-with-row-present route and the
-create+delete+shell leg pins the actual 404)); and Task 6 (Home submit
-fix — the decision-2 submit, the Q1 behavior delta —
-`internal/tui/client/client.go`: `Service.CreateSessionWith` (POST
-/session with the `{title, agent, model}` seeds — the server already
-accepts them, `handleSessionCreate`; blank agent -> the storage default
-"build", blank model -> the catalog default — `CreateSession` stays for
-the `n`/`<leader>n`/`/new` empty-session paths); `internal/tui/commands.go`:
-`homeSubmitMsg{ses, text, err}` + `App.homeSubmitCmd` (mint the session
-seeded with `pendingAgentName()` + the new `configModel()` helper
-(`store.Config["model"]` string or `""` — the server applies the catalog
-default on blank, matching `newSession`'s blank-model branch), title
-`""` -> "New session", then send the typed text as its first message —
-two sequential wire calls under per-stage 5s timeouts (the
-createSessionCmd/sendMessageCmd convention — the mint's deadline does
-not eat the send's budget)) + `App.homeShellCmd` (the shell-mode twin:
-mint, then POST `/session/{id}/shell {command}` — Task 9's client
-`Shell` method; the same `homeSubmitMsg`) + `shellCmd`/`shellMsg`/
-`applyShell` (the session-route shell post — NO busy gate: the
-per-session shell mutex serializes a shell submit during a turn (the
-documented, decision-silent behavior); the applySend post-send state —
-clear input + draft + `appendHistory` + the S3.7 retry-suppression
-clear; the transcript updates via SSE, `isDirty` on the applied event);
-`internal/tui/hydrate.go`: `App.applyHomeSubmit` (success ->
-`putSessionFirst` + `openSession` + hydrate (the applySessionCreated
-navigation) + the applySend post-send state; error -> `lastErr` (the
-ErrBusy -> busy toast convention) — a failure keeps the text for
-retry); `internal/tui/home.go`: the `homeEnter` rewrite (the
-trailing-backslash soft-enter draft parity — the promptEnter behavior —
-then: empty text (draft+trimmed) -> no-op (input kept), shell mode ->
-`homeShellCmd`, normal -> `homeSubmitCmd`; the old create-on-enter body
-deleted); `internal/tui/keys.go`: `promptEnter` + the shell branch
-(after the soft-enter + empty checks, BEFORE the busy gate:
-`a.prompt.mode == "shell"` -> `shellCmd`); `internal/tui/app.go`:
-`updateMsg` wires `homeSubmitMsg` (the `sessionCreatedMsg` case site) +
-`shellMsg` (next to `sendMsg`); `home_test.go`: the
-`TestAppHandleKeyHome` re-baseline (the old "enter creates" subtest
-retired per the decision-2 rewrite) + the pinned legs — enter with
-empty text is a no-op (no cmd; a whitespace-only line is a no-op too,
-kept for retry), the trailing-backslash soft-enter draft parity (draft
-`line1\n` + cleared input, then the draft+line submit cmd), up/down
-recall the prompt history on home (no cursor; up with history -> the
-newest entry), `n` still mints an EMPTY session with the server
-defaults (the `sessionCreatedMsg` assert: agent `build` + model
-`kido/q`), enter with text mints the seeded session + sends (the
-`testutil.Boot` client: the `homeSubmitMsg` carries the minted session
-(agent `build`, model `kido/q` the catalog default — no config model
-ref) + the typed text; after the apply: route session + `curSessionID`
-+ the session first in `store.Sessions` + cleared input/draft + the
-hydrate leg's message list holds the typed user message), shell-mode
-enter mints + posts the shell command (the user row + the assistant's
-bash tool part finalizing over the wire — the waitShellPart idiom via
-the client `ListMessages`; the lazily-spawned persistent shell closed
-in cleanup so its readLoop does not outlive the test)); no
-deviations); Task 7 (Agent cycling (A) — decision 1 —
-`internal/tui/app.go`: `cyclePendingAgent` (walks `store.Agents` wire
-order by d (+1/-1), wraps both directions, pins `a.pendingAgent` to the
-next agent's NAME — current index = the index of `pendingAgentName()`;
-config-only current (not in the list) → the first pin lands at index 0
-(d > 0) / len-1 (d < 0); empty list a no-op; the pin sticks until the
-next cycle); `internal/tui/keymap.go`: `contextGroups[BaseMode]` +
-`"agent_cycle", "agent_cycle_reverse"` (END of the list — the tab /
-shift+tab registry entries existed but were dead, Q2);
-`internal/tui/keys.go`: the `dispatchCommand` cases (no cmds —
-bubbletea re-renders after every Update); `agent_test.go`:
-`TestCyclePendingAgent` (wrap both directions
-build→plan→yolo→build + reverse / the config-only start positions /
-the empty no-op / the pin sticks over a later config change) +
-`TestAgentCycleKeyDispatch` (tab cycles on home AND the session route —
-the BaseMode any-route consequence: tab no longer reaches the prompt /
-shift+tab reverses / a `SetKeybinds` `agent_cycle`→f5 remap — the new
-key cycles, tab falls through harmlessly / a dialog open + a pending
-permission suppress the cycle — the ladder precedence); deviation 278
-(the plan's "today tab on session inserts a tab char" premise is
-inaccurate against the pinned bubbles v2.2.1 textinput — tab is the
-`AcceptSuggestion` binding, a no-op with no suggestions + the named
-key carries empty Text — the override subtest pins the fallthrough as
-"input unchanged")); Task 10 (Shell: TUI mode (C — granular) —
-`internal/tui/prompt.go`: `enterShellMode` (mode -> shell, re-roll the
-placeholder over the SHELL pool, the input value KEPT — a cursor-0
-non-empty value becomes the command, the upstream referent) +
-`exitShellMode` (mode -> normal, NO re-roll — the index persists; the
-decision's re-rolls are home-entry + `!` only) via `applyPromptChrome`
-(placeholder swap); `internal/tui/keys.go`: `backspaceBinding` + the
-`handlePromptKey` `!` toggle (normal mode + cursor offset 0 + "!" ->
-enterShellMode, consumed — NOT inserted; a "!" at a non-zero cursor or in
-shell mode INSERTS) + the shell-mode exits (esc -> exitShellMode; backspace
-at offset 0 -> exitShellMode, both consumed); `internal/tui/home.go`:
-`handleHomeKey` esc shell branch (esc EXITS the shell, does NOT clear the
-prompt — before clearPrompt) + `homeMeta` shell branch (returns
-("Shell", "", "") — shell mode renders "Shell" alone, the model/provider
-box is dropped); `internal/tui/session.go`: `handleSessionKey` top esc
-shell branch (esc EXITS the shell, does NOT interrupt/return home — BEFORE
-the session_interrupt match, the registry's esc default); the Task-6 submit
-wiring (`homeShellCmd`/`shellCmd`/`applyShell`) is already present (no
-change); `shell_test.go`: `TestShellModeToggle` (the `!` toggle-in with
-empty + non-empty value kept / `!` at a non-zero cursor INSERTS / `!` in
-shell mode INSERTS / esc + backspace@0 exit home + session to normal —
-placeholder restored, no re-roll, the session route unchanged / backspace@0
-in normal is a no-op), `TestHomeMetaShell` (homeMeta shell -> ("Shell", "",
-") + the boxMetaLine renders the "Shell" label alone, width-exact),
-`TestShellModeSubmit` (home shell submit via the `!` toggle mints + shells —
-the bash tool part finalizing over the wire via the waitShellPart idiom;
-session shell submit (no mint) posts to the current session); deviation
-279 (the plan's Task-5 "homeMeta returns ("Shell","","") in shell mode"
-premise is inaccurate — Task 5 landed the agent name; the shell branch
-lands HERE, pinned by TestHomeMetaShell which FAILs without it:
-("Build","Qwen","kido") vs ("Shell","",""))); and Task 11 (Tips pool:
-drops + 2 adds (F) — decision 7 — `internal/tui/tips.go`: the Step-1
-audit walked every pool entry against the live feature surface (the
-commands catalog `handlers_catalog.go` + localCommands `commands.go`,
-`protocol.Config`, the keymap registry + the keys.go wiring, the theme
-engine, the permission builtins) — every KEPT entry names a feature yolo
-has, so the audit drops ZERO live entries (the plan's known-missing
-list's features are already out of the pool — the S6.2 reduction,
-deviation 234; verified against the live tree per the plan's
-verify-before-delete method: `messages_page_up`/`messages_page_down` ARE
-bound (pageup/pagedown + ctrl+alt+b/f) + wired (the session route), its
-tip stands — the known-missing list's "page" item resolves to present,
-no deviation; the sidebar tip is absent from the pool though the feature
-exists (the session-route todo sidebar, S7.2) — recorded in the audit
-block as an S6.2-reduction drop, not a feature drop; the dead-registry
-class — `messages_copy/first/last/toggle_conceal`, `model_cycle_recent`,
-`input_clear`, `terminal_suspend`, `messages_undo/redo` — is registry-only
-with no keys.go wiring, the deviation-278 class); the audit evidence
-block above the `tips` var lists the 63 dropped upstream TIPS entries
-(tips-view.tsx:164-283 + the 2 platform tips) grouped by the missing
-feature each names (the 3 yolo-run entries → `yolo-26j` P4 — the
-Task-12 consolidated deviation cites this block); the 2 adds at the pool
-HEAD (the upstream TIPS[1]/TIPS[2] relative order): `Start a message
-with {highlight}!{/highlight} to run shell commands (e.g.,
-{highlight}!ls -la{/highlight})` + `Press {highlight}<agent_cycle>{/highlight} to
-cycle between Build and Plan agents` (the upstream `press()` form with
-the yolo `<binding>` token — renders `tab` under the default keymap,
-matching the yolo-dhf.3 mock's `mockTipText`); `tipBindings` +
-`agent_cycle` (the integrity test both directions); pin re-baselined in
-the same commit (`wantTipsPinnedSHA256` f06ed598…, `TestTipsShape` 37→39
-— the pin is the content contract, no pool test added beyond it);
-`home_mock_test.go` unaffected (self-contained `mockTipText`)); next is
-Task 12 (Deviations, PROGRESS, closeout (G) — `yolo-dhf.15`).
+**Status (2026-09-07):** 0.8.0 start-screen parity epic (`yolo-dhf`) — all
+12 plan tasks landed on `feature/0.8.0-home-mock` (plan
+`docs/superpowers/plans/2026-09-07-0.8.0-start-screen-parity.md`; gate green
+incl. the full-module `-race`): the start-screen contract — the home route
+owns the full terminal frame (Task 4's frame + Task 5's prompt box, over the
+user-accepted 200×50 mock as the visual contract), plain-semver version
+right-aligned in the footer (Task 1), VCS branch via stdlib os/exec git
+shell-out with the hardened env + the decision-4 cadence — one bootstrap
+fetch + HEAD-change re-reads (start, home entry, `bash` part completion), no
+polling (Tasks 2–3), the decision-2 home submit (Tasks 6/9 — the seeded
+session + first message; the `POST /session/{id}/shell` endpoint + client),
+the shell engine with the persisted `bash` tool part (Task 8), the `!`
+shell mode (Task 10), the tab/shift+tab agent cycling (Task 7), and the
+tips pool drops + 2 adds (Task 11). The 0.8.0 deviations land as 271–279
+(per-task) + 280–294 (the Task-12 consolidated closeout: the zero-MCP
+footer segment extending 193, the `auto`-word omission, the consolidated
+tips drop citing the Task-11 audit block, the meta-line provider ID vs
+upstream's `provider?.name ?? providerID`, the git-env hardening, the
+TUI-re-read VCS referent, the shell-hint color split, the `n` retention,
+the below-24-row frame overflow, the any-route/slash-menu tab cycling, the
+shared placeholder index, and the home-box scroll window — plus the first
+full-module `-race` gate findings: 292 the whitebox harness races the
+zombie SSE pump (fixed: `testApp` closes AND joins the pump through the
+event-ch close), 293 the teatest suites read live app state from WaitFor
+conditions (fixed: drained-output assertions with standalone tokens; the
+history seed and the delete-failed dialog open move before program
+start), 294 two pre-existing timing-bound tests do not survive the
+detector — `TestRenderMessages100KBBudget` takes the race-aware bound
+(150 ms non-race / 2 s race, the established `//go:build race` pair), and
+`TestMarkdownTextPartSGR` skips under the race build (the detector's frame
+coalescing makes its literal-indent drain assertion unsatisfiable; the
+render contract stays fully pinned in the non-race CI gate)). Follow-ups:
+`yolo-5wy` (auto permission mode), `yolo-26j` (yolo run), `yolo-lj6`
+(session quick-switch) unchanged; `yolo-i84` (P4, discovered in Task 8 —
+the DELETE /session handler blocks up to shellTimeout while a user shell
+command runs) open. Release steps (branch → PR → merge → epic close + tag)
+are the user/HITL step after the PR merge; this task stops at the green
+branch (no push — no upstream).
 
 **Status (2026-09-04):** v0.6.0 map (epic `yolo-o75`) complete — the P4
 backlog ships as minor v0.6.0 on top of v0.5.1 (`9f4c340`): cobra v1.10.2

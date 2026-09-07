@@ -249,7 +249,7 @@ func TestRenderMessages100KBBudget(t *testing.T) {
 	const (
 		warmups = 3
 		samples = 5
-		budget  = 150 * time.Millisecond
+		budget  = render100KBBudget // race-aware bound (deviation 294)
 	)
 	var best time.Duration
 	for i := 0; i < warmups+samples; i++ {

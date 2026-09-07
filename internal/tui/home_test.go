@@ -28,6 +28,17 @@ func refModel(p, m string) *protocol.ModelRef {
 
 func testApp(sessions ...protocol.Session) *recApp {
 	a := newRecApp(client.New("http://127.0.0.1:9", ""), store.State{}, "")
+	// stop AND join the SSE pump the whitebox app never uses (deviation
+	// 292): NewApp starts it (the dead-port client), and its reconnect
+	// loop reads the client's Dir while test goroutines write
+	// a.Service.Dir (the -race gate). Close cancels the pump's ctx, and
+	// Events' `defer close(ch)` makes the eventCh close the join point —
+	// ranging until it is closed proves the pump is dead, so the
+	// test-side Dir writes happen-after it (cancel alone leaves a
+	// cancel→write window the detector still flags).
+	a.Close()
+	for range a.eventCh {
+	}
 	a.store.Sessions = sessions
 	return a
 }

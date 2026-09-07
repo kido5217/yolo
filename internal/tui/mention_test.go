@@ -105,8 +105,12 @@ func TestTUIAtPicker(t *testing.T) {
 	suiteType(tm, "see @a")
 	teatest.WaitFor(t, tm.Output(), hasLine("alpha.go"), teatest.WithDuration(5*time.Second))
 	tm.Send(press(tea.KeyEnter))
+	// the inserted value in the drained output (the cell-diff renderer
+	// re-emits only the changed cells — the "> " gutter was already
+	// drained, so the token stands alone) — asserting over the output,
+	// not the live input state (the -race gate, deviation 293).
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return strings.Contains(a.prompt.input.Value(), "alpha.go")
+		return strings.Contains(stripANSI(string(b)), "alpha.go")
 	}, teatest.WithDuration(5*time.Second))
 	_ = tm.Quit()
 	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
