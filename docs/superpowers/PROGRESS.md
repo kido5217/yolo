@@ -60,7 +60,16 @@ STATUS poll and race the bus collector under load on this slow host (the
 yolo-o1a race class — `TestPermissionAlwaysPersistsAndSkipsNext` and
 `TestDoomLoopThirdIdenticalAsks` each flaked once under repeated full-package
 runs, pass in isolation); pre-existing, not introduced by this epic.
-Next: Task 6 (client `SendMessage` request-struct migration, `yolo-rem.7`).
+Task 6 (client `SendMessage` request-struct migration, `yolo-rem.7`) landed —
+`SendMessage(ctx, id, protocol.SendMessageRequest)` posts the request struct
+directly as the body (was `map[string]string{"text": text}`); a no-files body
+stays byte-identical to today (`{"text":"hi"}`, deviation 10, pinned by
+`TestSendMessageBodyShape`), and all call sites (the TUI senders in
+`commands.go`, the 409 leg, `app_test`/`resync_test`/`permission_test`/
+`cmd` callers) pass text-only requests. Gate green otherwise (the `internal/tui`
+legs are load-sensitive on this host: `TestMarkdownTextPartSGR` flaked once
+under full-suite parallel load, passes in isolation). Next: Task 7 (TUI
+`renderUser` file chips, `yolo-rem.8`).
 
 **Status (2026-09-07):** 0.8.0 start-screen parity epic (`yolo-dhf`) — all
 12 plan tasks landed on `feature/0.8.0-home-mock` (plan
