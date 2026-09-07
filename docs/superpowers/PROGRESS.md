@@ -33,12 +33,20 @@ send endpoint decodes `protocol.SendMessageRequest` under its own
 so the global cap would 413 the max legal file) and `validateFileEntries`
 returns the three 400 legs (empty MIME/URL → `invalid file entry`; bad
 base64 / decoded > `AttachFileMaxBytes` → `file too large`; non-data URLs skip
-the re-check). The engine call is still text-only (`in.Files` lands in Task 4).
-The global-cap pin moved from `POST /message` to `PATCH /session/{id}`
-(`TestOversizedBodyRejected`); the send cap + validation get their own tests
-(`TestSendFilesValidation`, `TestSendFileTooLarge`,
-`TestSendOversizedBodyRejected`). Gate green otherwise. Next: Task 4 (engine
-`Send` files, `yolo-rem.5`).
+the re-check). The global-cap pin moved from `POST /message` to
+`PATCH /session/{id}` (`TestOversizedBodyRejected`); the send cap + validation
+get their own tests (`TestSendFilesValidation`, `TestSendFileTooLarge`,
+`TestSendOversizedBodyRejected`). Task 4 (engine `Send` files, `yolo-rem.5`)
+landed — `Send` gains `files []protocol.FileRef` (spec §5.1): after the user
+text part it persists one `file` part per entry in flag order and publishes it
+(type-agnostic `publish`); the server passes `in.Files`, every harness/cmd
+call site passes `nil` (the plan's file list omitted `lifecycle_test.go`,
+`turnerror_test.go`, `cmd/yolo/main_test.go` — all updated for the 5-arg
+signature). Pinned by `TestSendPersistsAndPublishesFileParts` (leg e
+persistence half: text + 2 file parts in order, 2 file part.updated events).
+Gate green otherwise (the `internal/tui` legs are load-sensitive:
+`TestTUIFullTurn` flaked once under full-suite parallel load, passes in
+isolation). Next: Task 5 (history `userContent` seam, `yolo-rem.6`).
 
 **Status (2026-09-07):** 0.8.0 start-screen parity epic (`yolo-dhf`) — all
 12 plan tasks landed on `feature/0.8.0-home-mock` (plan
