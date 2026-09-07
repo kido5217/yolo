@@ -841,3 +841,75 @@ func TestCancelledCtxReachesDriver(t *testing.T) {
 		t.Fatalf("GetSession(cancelled) err = %v, want context.Canceled", err)
 	}
 }
+
+// TestProtocolToFilePartStateJSONBytes pins the file branch's state_json
+// bytes (spec §4.3): alphabetical keys, compact separators, end/synthetic
+// conditional.
+func TestProtocolToFilePartStateJSONBytes(t *testing.T) {
+	syn := true
+	cases := []struct {
+		name string
+		p    protocol.Part
+		want string
+	}{
+		{"fresh (no end, no synthetic)", protocol.Part{
+			Type: protocol.PartTypeFile, MIME: "text/plain",
+			Filename: "notes.txt", URL: "data:text/plain;base64,aGVsbG8=",
+		}, `{"filename":"notes.txt","mime":"text/plain","url":"data:text/plain;base64,aGVsbG8="}`},
+		{"end and synthetic", protocol.Part{
+			Type: protocol.PartTypeFile, MIME: "text/plain",
+			Filename: "notes.txt", URL: "data:text/plain;base64,aGVsbG8=",
+			Time:        protocol.PartTime{End: 1725676800123},
+			IsSynthetic: &syn,
+		}, `{"end":1725676800123,"filename":"notes.txt","mime":"text/plain","synthetic":true,"url":"data:text/plain;base64,aGVsbG8="}`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			row, err := storage.ProtocolToPart(c.p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := row.StateJSON; got != c.want {
+				t.Errorf("StateJSON = %s, want %s", got, c.want)
+			}
+		})
+	}
+}
+
+// TestFilePartRoundTrip pins leg (f): a file part through
+// ProtocolToPart -> UpsertPart -> GetPart -> PartToProtocol recovers the
+// fields exactly (and p.Text stays "").
+func TestFilePartRoundTrip(t *testing.T) {
+	t.Parallel()
+	db := openDB(t)
+	if err := db.CreateSession(t.Context(), storage.SessionRow{ID: "ses_1", ProjectDir: "/w", TimeCreated: 1, TimeUpdated: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CreateMessage(t.Context(), storage.MessageRow{ID: "msg_1", SessionID: "ses_1", Role: "user", TimeCreated: 2}); err != nil {
+		t.Fatal(err)
+	}
+	p := protocol.Part{ID: "prt_f", MessageID: "msg_1", SessionID: "ses_1",
+		Type: protocol.PartTypeFile, MIME: "text/plain",
+		Filename: "notes.txt", URL: "data:text/plain;base64,aGVsbG8=",
+		Time: protocol.PartTime{Start: 5}}
+	row, err := storage.ProtocolToPart(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpsertPart(t.Context(), row); err != nil {
+		t.Fatal(err)
+	}
+	dbRow, err := db.GetPart(t.Context(), "prt_f")
+	if err != nil {
+		t.Fatal(err)
+	}
+	back, err := storage.PartToProtocol(dbRow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back.Type != protocol.PartTypeFile || back.MIME != "text/plain" ||
+		back.Filename != "notes.txt" || back.URL != p.URL ||
+		back.Time.Start != 5 || back.Time.End != 0 || back.Text != "" {
+		t.Fatalf("round trip: %+v", back)
+	}
+}
