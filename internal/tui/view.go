@@ -15,6 +15,10 @@ import (
 func (a *App) View() tea.View {
 	v := tea.NewView(a.view())
 	v.AltScreen = true
+	// S5 mouse slice: enable cell-motion mouse tracking so the slash dropdown
+	// can be hovered and clicked (bubbletea v2 sets the mode on the View, not
+	// via a program option — there is no tea.WithMouseCellMotion in v2.0.9).
+	v.MouseMode = tea.MouseModeCellMotion
 	return v
 }
 

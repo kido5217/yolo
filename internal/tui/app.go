@@ -457,6 +457,10 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 		return tea.Batch(cmds...)
+	case tea.MouseMsg:
+		// S5 mouse slice: hover/click on the open slash dropdown only (the
+		// @ picker and other routes ignore the mouse, spec §7).
+		return a.handleMouseMsg(m)
 	case tea.InterruptMsg:
 		// SIGINT during Run: the same as the ctrl+c keystroke (cli-2) —
 		// route it through the full key ladder so a pending permission
