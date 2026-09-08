@@ -123,15 +123,25 @@ func (m *selectModel) WithEscHint() *selectModel {
 }
 
 // filtered is the live list (upstream `filtered` memo): disabled options are
-// excluded entirely; an empty needle returns the rest in order, otherwise
-// the fuzzy hits sorted by the weighted score (title ×2, category ×1 — the
-// port of the fuzzysort keys/scoreFn, dialog-select.tsx:154-173).
+// excluded entirely; the "Suggested" bucket (decision A) is excluded on any
+// non-empty needle (the ported list() — it is empty-filter-only); an empty
+// needle returns the rest in order, otherwise the fuzzy hits sorted by the
+// weighted score (title ×2, category ×1 — the port of the fuzzysort
+// keys/scoreFn, dialog-select.tsx:154-173).
 func (m *selectModel) filtered() []selectOption {
 	enabled := make([]selectOption, 0, len(m.options))
 	for _, o := range m.options {
-		if !o.disabled {
-			enabled = append(enabled, o)
+		if o.disabled {
+			continue
 		}
+		// The Suggested bucket (decision A) is empty-filter-only: a
+		// non-empty filter collapses it (the ported list() — the suggested
+		// commands still match via their plain entries). skipFilter shows all
+		// options (the client filter re-anchors), so Suggested stays there.
+		if m.filter != "" && !m.skipFilter && o.category == "Suggested" {
+			continue
+		}
+		enabled = append(enabled, o)
 	}
 	if m.skipFilter || m.filter == "" {
 		return enabled

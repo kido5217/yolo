@@ -27,15 +27,25 @@ func TestPaletteOptions(t *testing.T) {
 		{Name: "/quit", Description: "Quit"},
 	}
 	opts := paletteOptions(a.App)
-	if len(opts) != 9 {
-		t.Fatalf("palette = %d options, want 9 (4 local + 5 server)", len(opts))
+	// the Suggested seed (decision A) leads: the default testApp (home route,
+	// no sessions, no providers) seeds /model (always) + /connect (a provider
+	// is not connected) → 2 suggested + 9 plain = 11.
+	if len(opts) != 11 {
+		t.Fatalf("palette = %d options, want 11 (2 suggested + 9 plain)", len(opts))
 	}
-	if opts[0].title != "sessions" {
-		t.Fatalf("first option = %q, want sessions (the local /sessions first)", opts[0].title)
+	if opts[0].category != "Suggested" || opts[1].category != "Suggested" {
+		t.Fatalf("leading options = %q/%q (categories %q/%q), want the Suggested group first",
+			opts[0].title, opts[1].title, opts[0].category, opts[1].category)
 	}
+	// the plain entries carry the client-side category buckets (decision B);
+	// the footer checks read them by title (the plain rows overwrite the
+	// Suggested twins in the map).
 	byTitle := map[string]selectOption{}
 	for _, o := range opts {
 		byTitle[o.title] = o
+	}
+	if byTitle["model"].category != "Model" {
+		t.Fatalf("/model category = %q, want Model", byTitle["model"].category)
 	}
 	if byTitle["model"].footer != "ctrl+x m" {
 		t.Fatalf("/model footer = %q, want ctrl+x m", byTitle["model"].footer)
@@ -77,7 +87,19 @@ func TestPaletteSelectPick(t *testing.T) {
 		t.Fatal("the palette must be on top")
 	}
 	sel := d.sel
-	sel.sel = 0 // the local /sessions (first)
+	// pick the plain /sessions option (the Suggested group may precede it, so
+	// its index is no longer guaranteed to be 0).
+	want := -1
+	for i, o := range sel.filtered() {
+		if o.value == "/sessions" {
+			want = i
+			break
+		}
+	}
+	if want < 0 {
+		t.Fatal("no /sessions option in the palette")
+	}
+	sel.sel = want
 	sel.submit(a.App)
 	d, ok = a.dlg.top()
 	if ok && d.kind == dlgPalette {
@@ -122,6 +144,200 @@ func TestPaletteEsc(t *testing.T) {
 	a.handleKey(press(tea.KeyEscape))
 	if d, ok := a.dlg.top(); ok {
 		t.Fatalf("after esc: top=%+v, want the palette closed", d)
+	}
+}
+
+// paletteTestApp is the palette test harness: the testApp with the frozen
+// 5-command server catalog (the TUI merges in the 4 locals → 9).
+func paletteTestApp(sessions ...protocol.Session) *recApp {
+	a := testApp(sessions...)
+	a.store.Commands = []protocol.Command{
+		{Name: "/help", Description: "Show help"},
+		{Name: "/new", Description: "New session"},
+		{Name: "/model", Description: "List models"},
+		{Name: "/agents", Description: "List agents"},
+		{Name: "/quit", Description: "Quit"},
+	}
+	return a
+}
+
+// suggestedTitles returns the set of titles in the palette's Suggested group
+// (category "Suggested").
+func suggestedTitles(opts []selectOption) map[string]bool {
+	out := map[string]bool{}
+	for _, o := range opts {
+		if o.category == "Suggested" {
+			out[o.title] = true
+		}
+	}
+	return out
+}
+
+func hasSuggested(l []selectOption) bool {
+	for _, o := range l {
+		if o.category == "Suggested" {
+			return true
+		}
+	}
+	return false
+}
+
+func hasTitle(l []selectOption, title string) bool {
+	for _, o := range l {
+		if o.title == title {
+			return true
+		}
+	}
+	return false
+}
+
+// TestPaletteSuggestedSeedConditions pins the four Suggested seeds (decision
+// A): /model always; /new only on the session route; /sessions only when a
+// session is stored; /connect only when a provider is not connected.
+func TestPaletteSuggestedSeedConditions(t *testing.T) {
+	t.Run("model always", func(t *testing.T) {
+		a := paletteTestApp()
+		a.route = routeHome
+		if got := suggestedTitles(paletteOptions(a.App)); !got["model"] {
+			t.Fatalf("/model not seeded (home route, no state): %v", got)
+		}
+	})
+	t.Run("new only on the session route", func(t *testing.T) {
+		home := paletteTestApp()
+		home.route = routeHome
+		if got := suggestedTitles(paletteOptions(home.App)); got["new"] {
+			t.Fatalf("/new seeded on the home route, want only the session route: %v", got)
+		}
+		sess := paletteTestApp()
+		sess.route = routeSession
+		if got := suggestedTitles(paletteOptions(sess.App)); !got["new"] {
+			t.Fatalf("/new not seeded on the session route: %v", got)
+		}
+	})
+	t.Run("sessions only when a session is stored", func(t *testing.T) {
+		none := paletteTestApp()
+		if got := suggestedTitles(paletteOptions(none.App)); got["sessions"] {
+			t.Fatalf("/sessions seeded with no stored session: %v", got)
+		}
+		some := paletteTestApp(protocol.Session{ID: "s1"})
+		if got := suggestedTitles(paletteOptions(some.App)); !got["sessions"] {
+			t.Fatalf("/sessions not seeded with a stored session: %v", got)
+		}
+	})
+	t.Run("connect only when a provider is not connected", func(t *testing.T) {
+		a := paletteTestApp()
+		if got := suggestedTitles(paletteOptions(a.App)); !got["connect"] {
+			t.Fatalf("/connect not seeded with no provider connected: %v", got)
+		}
+		connected := paletteTestApp()
+		connected.store.Providers = []protocol.Provider{{ID: "other"}}
+		if got := suggestedTitles(paletteOptions(connected.App)); got["connect"] {
+			t.Fatalf("/connect seeded with a provider connected: %v", got)
+		}
+	})
+}
+
+// TestPaletteSuggestedEmptyFilterRender pins the empty-filter render
+// (decisions A + B): the Suggested group at the top (the accent category
+// header) with the seeded entries, then the plain category buckets
+// (General/Session/Model/Provider/Agent).
+func TestPaletteSuggestedEmptyFilterRender(t *testing.T) {
+	a := paletteTestApp(protocol.Session{ID: "s1"})
+	a.route = routeSession // all four seeds active
+	m := selectNew("Commands", "Filter commands", paletteOptions(a.App), nil, nil, nil)
+	// (1) the Suggested header leads the rendered list (buildLines).
+	lines := m.buildLines(60, a.theme)
+	if lines[0].opt != -1 || !strings.HasSuffix(stripANSI(lines[0].text), "Suggested") {
+		t.Fatalf("first line = %+v, want the Suggested category header at the top", lines[0])
+	}
+	// (2) the seeded entries lead the live list (the Suggested rows are
+	// first in filtered()).
+	l := m.filtered()
+	if len(l) < 4 || l[0].category != "Suggested" {
+		t.Fatalf("live list = %v, want the Suggested rows first", titlesOf(l))
+	}
+	sugg := map[string]bool{}
+	for _, o := range l {
+		if o.category != "Suggested" {
+			break
+		}
+		sugg[o.title] = true
+	}
+	for _, want := range []string{"model", "new", "sessions", "connect"} {
+		if !sugg[want] {
+			t.Fatalf("Suggested group missing %q: %v", want, sugg)
+		}
+	}
+	// (3) the plain category buckets follow (all five headers present).
+	header := map[string]bool{}
+	for _, ln := range lines {
+		if ln.opt == -1 {
+			header[strings.Trim(stripANSI(ln.text), " ")] = true
+		}
+	}
+	for _, want := range []string{"General", "Session", "Model", "Provider", "Agent"} {
+		if !header[want] {
+			t.Fatalf("category header %q missing: %v", want, header)
+		}
+	}
+}
+
+// TestPaletteSuggestedCollapsedOnFilter pins the non-empty-filter collapse
+// (the ported list()): filtered() skips the Suggested rows on any needle, so
+// the Suggested group is empty-filter-only; the seeded commands still match
+// via their plain entries.
+func TestPaletteSuggestedCollapsedOnFilter(t *testing.T) {
+	a := paletteTestApp(protocol.Session{ID: "s1"})
+	a.route = routeSession
+	m := selectNew("Commands", "Filter commands", paletteOptions(a.App), nil, nil, nil)
+	// empty filter: the Suggested rows are present.
+	if !hasSuggested(m.filtered()) {
+		t.Fatal("empty filter: the Suggested rows must be present")
+	}
+	// non-empty filter: the Suggested rows collapse.
+	m.filter = "model"
+	if hasSuggested(m.filtered()) {
+		t.Fatal("non-empty filter: the Suggested rows must collapse")
+	}
+	// the seeded command still matches via its plain entry.
+	if !hasTitle(m.filtered(), "model") {
+		t.Fatal("non-empty filter: /model must still match via its plain entry")
+	}
+}
+
+// TestPaletteSuggestedPickUnchanged pins that the Suggested rows are real
+// command rows (decision B): the value is the plain command name (no
+// suggested: prefix) and picking one runs the command unchanged.
+func TestPaletteSuggestedPickUnchanged(t *testing.T) {
+	a := paletteTestApp()
+	a.route = routeHome
+	a.openPaletteDialog()
+	d, ok := a.dlg.top()
+	if !ok || d.kind != dlgPalette {
+		t.Fatal("the palette must be on top")
+	}
+	m := d.sel
+	// find the Suggested /model row (the always seed).
+	want := -1
+	for i, o := range m.filtered() {
+		if o.category == "Suggested" && o.title == "model" {
+			want = i
+			break
+		}
+	}
+	if want < 0 {
+		t.Fatal("no Suggested /model row in the palette")
+	}
+	// the value is the plain command name (no suggested: prefix).
+	if v := m.filtered()[want].value; v != "/model" {
+		t.Fatalf("Suggested /model value = %v, want /model (the plain command name)", v)
+	}
+	m.sel = want
+	m.submit(a.App)
+	// picking it runs /model unchanged → the model dialog.
+	d, ok = a.dlg.top()
+	if !ok || d.kind != dlgModel {
+		t.Fatalf("after the Suggested /model pick: top=%+v (ok=%v), want the model dialog", d, ok)
 	}
 }
 
