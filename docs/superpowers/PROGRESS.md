@@ -5,6 +5,38 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
+**Status (2026-09-08):** 0.10.0 slash menu parity — epic `yolo-2vt` DONE on
+branch `feature/slash-menu-parity-0.10.0` (plan
+`docs/superpowers/plans/2026-09-07-0.10.0-slash-menu-parity.md`, spec
+`docs/superpowers/specs/2026-09-07-slash-menu-parity-design.md`). All seven
+slices landed: S1 the shared bordered-dropdown primitive (`dropdown.go` —
+split `|` border, `backgroundMenu` fill, the primary-selected row, the
+`dropdownRow` label/description two-column layout, the `fit`/`cutWidth`
+truncate, `tea.Msg`-based selection; `dropdown_test.go`); S2 the slash menu
+rewired onto it (`menuItems` filter→fuzzy→frecency→score gate→top-10,
+`slashRows`, `menuView`, the `x-yolo-directory` header, the empty-filter
+line); S3 the anchors (home above the box top edge at the box's left
+edge/width with the logo overlaid, session above the prompt line); S4 the
+command-name frecency (the `command_frecency` wire field, the 0.3/0.7
+recency/frequency blend, the `freq` boost, the `score` gate); S5 the mouse
+(cell-motion mode, hover + click on the open dropdown); S6 `tab`/`esc` + the
+hint row (`tab` completes the selected command — superseding 289's cycle
+while open — `esc` closes keeping the `/` prefix, the context-aware hint's
+first segment reads `tab complete` while the menu is open); S7 the empty text
+(`no match` → `No matching items`, upstream verbatim, textMuted) + the
+re-baselines + the second mock. The four S7 deviations landed at DEVIATIONS
+309–312 (the plan's planned 308–311 were stale: 308 was already taken by the
+S5 mouse cell-motion deviation, also logged 2026-09-08) — the full
+0.10.0-slash deviation range is 308–312. Cross-epic notes for the epics that
+follow (mention `yolo-bie`, palette `yolo-hb0`): the `@` picker's S1 builds
+on `dropdown.go` (this epic's S1); its S4 (mouse) + the palette epic's S4
+need this epic's S5 mouse cell-motion mode — in the pinned bubbletea v2 that
+is the `View.MouseMode` mechanism (implement `Mouse() tea.MouseMode` on the
+view, per deviation 308), NOT a `tea.WithMouseCellMotion` program option
+(that option does not exist in v2 — the plan/spec wording is stale). The
+full gate is green (`go vet ./... && go test ./...` + `gofmt -l .` empty,
+uncached `-count=1` on the changed packages).
+
 **Status (2026-09-07):** 0.10.0 menu parity (wayfinder map `yolo-old`,
 closed 2026-09-07 — destination reached: three full-parity specs on main,
 each user-approved: slash

@@ -99,6 +99,88 @@ func TestPromptMenuFuzzy(t *testing.T) {
 	}
 }
 
+// TestPromptMenuOpenBox pins the S2 rewire: the open slash menu (input "/")
+// renders the shared bordered dropdown (spec §6 S2) — the box chrome (the
+// split border, the backgroundMenu fill) wrapping the items, the selection
+// row SGR'd with the primary bg + the SelectedForeground (yolo dark tokens).
+func TestPromptMenuOpenBox(t *testing.T) {
+	th := yoloDarkTheme(t)
+	a := testApp()
+	a.store.Commands = testCommands()
+	a.prompt.input.SetValue("/")
+	items := a.menuItems()
+	if len(items) != 9 {
+		t.Fatalf("items = %d, want 9 (the 4 locals + the 5 catalog)", len(items))
+	}
+	const w = 60
+	got := a.prompt.menuView(items, w, th)
+	lines := strings.Split(got, "\n")
+	if len(lines) != 9 {
+		t.Fatalf("box = %d rows, want 9:\n%s", len(lines), got)
+	}
+	for i, l := range lines {
+		plain := stripANSI(l)
+		if n := len([]rune(plain)); n != w {
+			t.Fatalf("row %d = %d cols, want %d (the width-exact box): %q", i, n, w, plain)
+		}
+		if plain[0] != '|' || plain[w-1] != '|' {
+			t.Fatalf("row %d = %q, want the split left/right border", i, plain)
+		}
+		if plain[1] != ' ' {
+			t.Fatalf("row %d = %q, want 1 padding after the left border", i, plain)
+		}
+	}
+	// The two-column layout (label + the description right-offset by "  ").
+	if !strings.Contains(stripANSI(lines[0]), "/sessions  List all sessions") {
+		t.Fatalf("row 0 lost the two-column layout: %q", stripANSI(lines[0]))
+	}
+	// The unselected row chrome (yolo dark tokens, the S1 pins): the border
+	// fg #484848, the backgroundMenu fill #1e1e1e, the label #eeeeee, the
+	// description #808080.
+	if u := lines[1]; !strings.Contains(u, "38;2;72;72;72") ||
+		!strings.Contains(u, "48;2;30;30;30") ||
+		!strings.Contains(u, "38;2;238;238;238") ||
+		!strings.Contains(u, "38;2;128;128;128") {
+		t.Fatalf("row 1 lost the border/fill/label/description SGR: %s", u)
+	}
+	// The selection row (sel = 0): the primary bg (#fab283) + the
+	// SelectedForeground (#0a0a0a) across the full row width.
+	if sel := lines[0]; !strings.Contains(sel, "48;2;250;178;131") {
+		t.Fatalf("selection row missing the primary bg SGR (#fab283): %s", sel)
+	}
+	if !strings.Contains(lines[0], "38;2;10;10;10") {
+		t.Fatalf("selection row missing the SelectedForeground SGR (#0a0a0a): %s", lines[0])
+	}
+	if strings.Contains(lines[1], "48;2;250;178;131") {
+		t.Fatalf("unselected row carries the primary bg: %s", lines[1])
+	}
+}
+
+// TestPromptMenuEmptyLine pins the S7 empty-filter case (input "/zzz"): the
+// no-match line renders the parity text "No matching items" (upstream
+// verbatim, spec §3.4) in the textMuted fg.
+func TestPromptMenuEmptyLine(t *testing.T) {
+	th := yoloDarkTheme(t)
+	a := testApp()
+	a.store.Commands = testCommands()
+	a.prompt.input.SetValue("/zzz")
+	items := a.menuItems()
+	if items == nil || len(items) != 0 {
+		t.Fatalf("items = %v, want an open menu with no match", items)
+	}
+	got := a.prompt.menuView(items, 60, th)
+	lines := strings.Split(got, "\n")
+	if len(lines) != 1 {
+		t.Fatalf("empty filter = %d lines, want 1 (the no-match line):\n%s", len(lines), got)
+	}
+	if !strings.Contains(stripANSI(lines[0]), "No matching items") {
+		t.Fatalf("no-match line lost the parity text: %q", stripANSI(lines[0]))
+	}
+	if !strings.Contains(lines[0], "38;2;128;128;128") {
+		t.Fatalf("no-match line missing the textMuted fg SGR (#808080): %s", lines[0])
+	}
+}
+
 func TestPromptMenuKeys(t *testing.T) {
 	t.Run("arrows move the selection while the menu is open", func(t *testing.T) {
 		a := testApp()
@@ -177,6 +259,125 @@ func TestPromptMenuKeys(t *testing.T) {
 					t.Fatalf("input = %q, want cleared after executing", a.prompt.input.Value())
 				}
 			})
+		}
+	})
+}
+
+// TestPromptMenuTabComplete pins the S6 key behavior (spec §6 S6, §3.2):
+// tab with the menu open completes the selected command (the whole input
+// becomes the name + a trailing space, the menu closes, the command does
+// NOT run); tab closed cycles the agent (deviation 289's closed-menu
+// behavior); shift+tab cycles the agent reverse with the menu staying open;
+// a typed query change (or backspace) resets sel to 0. The esc-open clear is
+// pinned by TestPromptMenuKeys' esc leg (kept).
+func TestPromptMenuTabComplete(t *testing.T) {
+	t.Run("tab open: the input is the name + a space, the menu closes, the command does not run", func(t *testing.T) {
+		a := testApp()
+		a.store.Commands = testCommands()
+		typeStr(a, "/new")
+		if !a.prompt.slashActive() {
+			t.Fatal("menu must be open for \"/new\"")
+		}
+		items := a.menuItems()
+		if len(items) != 1 || items[0].Name != "/new" {
+			t.Fatalf("items = %v, want [/new]", items)
+		}
+		if !strings.Contains(a.view(), "|") {
+			t.Fatal("the open menu must render the bordered dropdown (the frame pin)")
+		}
+		a.handleKey(pressTab())
+		if got := a.prompt.input.Value(); got != "/new " {
+			t.Fatalf("input = %q, want \"/new \" (the selected name + a trailing space)", got)
+		}
+		if a.prompt.slashActive() {
+			t.Fatal("the menu must close on tab (the value still starts with \"/\")")
+		}
+		if strings.Contains(a.view(), "|") {
+			t.Fatal("the dropdown must no longer render after the tab completion (the frame pin)")
+		}
+		if len(a.Cmds) != 0 {
+			t.Fatalf("recorded %d cmds, want 0 (tab completes, it does NOT run)", len(a.Cmds))
+		}
+		if a.route != routeHome {
+			t.Fatalf("route = %v, want routeHome (no session mint)", a.route)
+		}
+		// the next edit re-opens the menu (the backspace deletes the space).
+		a.handleKey(press(tea.KeyBackspace))
+		if got := a.prompt.input.Value(); got != "/new" {
+			t.Fatalf("input = %q, want \"/new\" after the backspace", got)
+		}
+		if !a.prompt.slashActive() {
+			t.Fatal("the menu must re-open on the next edit")
+		}
+		if !strings.Contains(a.view(), "|") {
+			t.Fatal("the dropdown must render again after the next edit (the frame pin)")
+		}
+	})
+
+	t.Run("tab closed: the agent cycles (unchanged)", func(t *testing.T) {
+		a := testApp()
+		a.store.Agents = agentFixture()
+		a.prompt.input.SetValue("hello")
+		a.handleKey(pressTab())
+		if got := a.pendingAgent; got != "plan" {
+			t.Fatalf("after tab = %q, want plan (the closed-menu agent cycle)", got)
+		}
+		if got := a.prompt.input.Value(); got != "hello" {
+			t.Fatalf("input = %q, want hello (the tab is consumed, not inserted)", got)
+		}
+	})
+
+	t.Run("shift+tab open: the agent cycles reverse, the menu stays open", func(t *testing.T) {
+		a := testApp()
+		a.store.Agents = agentFixture()
+		typeStr(a, "/")
+		if !a.prompt.slashActive() {
+			t.Fatal("menu must be open for \"/\"")
+		}
+		a.handleKey(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
+		if got := a.pendingAgent; got != "yolo" {
+			t.Fatalf("after shift+tab = %q, want yolo (the reverse wrap from build)", got)
+		}
+		if got := a.prompt.input.Value(); got != "/" {
+			t.Fatalf("input = %q, want \"/\" (the menu stays open)", got)
+		}
+		if !a.prompt.slashActive() {
+			t.Fatal("the menu must stay open on shift+tab")
+		}
+		if !strings.Contains(a.view(), "|") {
+			t.Fatal("the dropdown must still render after shift+tab (the frame pin)")
+		}
+	})
+
+	t.Run("a typed query change resets sel to 0 (backspace too)", func(t *testing.T) {
+		a := testApp()
+		a.store.Commands = testCommands()
+		typeStr(a, "/")
+		a.handleKey(press(tea.KeyDown))
+		a.handleKey(press(tea.KeyDown))
+		if a.prompt.sel != 2 {
+			t.Fatalf("sel = %d after two downs, want 2", a.prompt.sel)
+		}
+		typeStr(a, "o") // the query change: value "/o"
+		if got := a.prompt.input.Value(); got != "/o" {
+			t.Fatalf("input = %q, want \"/o\"", got)
+		}
+		if a.prompt.sel != 0 {
+			t.Fatalf("sel = %d after the query change, want 0 (the upstream reset)", a.prompt.sel)
+		}
+		if len(a.menuItems()) < 2 {
+			t.Fatalf("items for /o = %v, want >= 2 for the backspace leg", a.menuItems())
+		}
+		a.handleKey(press(tea.KeyDown))
+		if a.prompt.sel != 1 {
+			t.Fatalf("sel = %d after down, want 1", a.prompt.sel)
+		}
+		a.handleKey(press(tea.KeyBackspace)) // the value change: "/o" -> "/"
+		if got := a.prompt.input.Value(); got != "/" {
+			t.Fatalf("input = %q, want \"/\" after the backspace", got)
+		}
+		if a.prompt.sel != 0 {
+			t.Fatalf("sel = %d after the backspace, want 0", a.prompt.sel)
 		}
 	})
 }

@@ -20,6 +20,12 @@ type promptModel struct {
 	input textinput.Model
 	sel   int
 	draft strings.Builder
+	// slashDone suppresses the slash menu after a tab completion (the S6
+	// close mechanism, spec §3.2): the completed input keeps the "/" prefix,
+	// so the value-derived slashActive alone would leave the menu open; the
+	// next input change re-arms it (the upstream onInput re-derivation,
+	// autocomplete.tsx:676-695).
+	slashDone bool
 	// mode is the prompt input mode ("normal" | "shell" — the 0.8.0 box
 	// state; the toggles that change it land in Task 10).
 	mode string
@@ -93,8 +99,13 @@ const busyToast = "abort or wait (esc aborts)"
 
 var promptEnter = key.NewBinding(key.WithKeys("enter"))
 
-// slashActive reports whether the slash menu is open.
+// slashActive reports whether the slash menu is open: the value starts with
+// "/" and the menu is not tab-completed (slashDone suppresses it until the
+// next input change re-arms it — the S6 close mechanism, spec §3.2).
 func (pm *promptModel) slashActive() bool {
+	if pm.slashDone {
+		return false
+	}
 	v := pm.input.Value()
 	return v != "" && strings.HasPrefix(v, "/")
 }
@@ -104,11 +115,13 @@ func (pm *promptModel) slashActive() bool {
 var commandAliases = map[string][]string{"/quit": {"/exit"}}
 
 // menuItems is the /-picker (S5.5 — the ported upstream /-autocomplete): the
-// fuzzy-ranked merged commands. Nil when the menu is closed; an empty query
-// (input == "/") returns the merged list in order (deviation 226); otherwise
-// fuzzy.Find over the canonical + alias names, each score x2 for a prefix
-// match, sorted desc, capped at maxPickerOptions, deduped by the canonical
-// name (an alias match maps to the canonical command).
+// command-name-frecency-ranked merged commands. Nil when the menu is closed;
+// an empty query (input == "/") returns the merged list frecency-ranked
+// (deviation 226, extended per spec §3.3 — the order becomes the frecency
+// rank); otherwise fuzzy.Find over the canonical + alias names, each score
+// x2 for a prefix match and x (1 + command-name frecency) (the S4 fold,
+// spec §3.3), sorted desc, capped at maxPickerOptions, deduped by the
+// canonical name (an alias match maps to the canonical command).
 func (a *App) menuItems() []protocol.Command {
 	if !a.prompt.slashActive() {
 		return nil
@@ -124,37 +137,50 @@ func (a *App) menuItems() []protocol.Command {
 	if len(cmds) == 0 {
 		return []protocol.Command{}
 	}
-	q := a.prompt.input.Value()[1:]
-	if q == "" {
-		return cmds // deviation 226: the empty query lists all merged, in order
-	}
-	names := make([]string, 0, len(cmds))
-	byName := make(map[string]protocol.Command, len(cmds))
-	for _, c := range cmds {
-		byName[c.Name] = c
-		names = append(names, c.Name)
-		for _, alias := range commandAliases[c.Name] {
-			byName[alias] = c
-			names = append(names, alias)
-		}
+	now := nowMillis()
+	// Per-call command-name frecency index: O(1) lookup per command (mirrors
+	// mentionOptions' per-call frecency index over the @-picker paths).
+	fidx := make(map[string]*frecencyEntry, len(a.cmdFreq))
+	for i := range a.cmdFreq {
+		fidx[a.cmdFreq[i].Path] = &a.cmdFreq[i]
 	}
 	type scored struct {
 		cmd   protocol.Command
-		score int
+		score float64
 	}
-	seen := make(map[string]bool, len(cmds))
 	var ranked []scored
-	for _, m := range fuzzy.Find(q, names) {
-		c := byName[m.Str]
-		if seen[c.Name] {
-			continue
+	if q := a.prompt.input.Value()[1:]; q == "" {
+		// deviation 226 (extended per spec §3.3): the empty query lists all
+		// merged, frecency-ranked.
+		ranked = make([]scored, len(cmds))
+		for i, c := range cmds {
+			ranked[i] = scored{cmd: c, score: frecencyScore(fidx[c.Name], now)}
 		}
-		seen[c.Name] = true
-		s := m.Score
-		if strings.HasPrefix(m.Str[1:], q) {
-			s *= 2
+	} else {
+		names := make([]string, 0, len(cmds))
+		byName := make(map[string]protocol.Command, len(cmds))
+		for _, c := range cmds {
+			byName[c.Name] = c
+			names = append(names, c.Name)
+			for _, alias := range commandAliases[c.Name] {
+				byName[alias] = c
+				names = append(names, alias)
+			}
 		}
-		ranked = append(ranked, scored{cmd: c, score: s})
+		seen := make(map[string]bool, len(cmds))
+		for _, m := range fuzzy.Find(q, names) {
+			c := byName[m.Str]
+			if seen[c.Name] {
+				continue
+			}
+			seen[c.Name] = true
+			s := float64(m.Score) // positive-score gate (threshold 0)
+			if strings.HasPrefix(m.Str[1:], q) {
+				s *= 2
+			}
+			s *= 1 + frecencyScore(fidx[c.Name], now)
+			ranked = append(ranked, scored{cmd: c, score: s})
+		}
 	}
 	sort.SliceStable(ranked, func(i, j int) bool { return ranked[i].score > ranked[j].score })
 	if len(ranked) > maxPickerOptions {
@@ -167,34 +193,40 @@ func (a *App) menuItems() []protocol.Command {
 	return out
 }
 
-// menuView renders the slash menu's items directly (S5.5: the filtering is
-// App.menuItems); each item word-wraps at the terminal width (custom command
-// descriptions can be long).
-func (pm *promptModel) menuView(items []protocol.Command, w int, th theme.Theme) string {
+// slashRows renders the slash menu's surface for a placement (width w, the
+// space-above clamp): the bordered dropdown's rows (the matches case) or the
+// single no-match line (the empty case). Nil (the menu is closed) returns no
+// rows. The rows are the dropdown's view, split; the caller owns the vertical
+// placement (bottom-aligned to the anchor's top edge). S3 owns the anchors —
+// the placement supplies the real width + spaceAbove (home: the box's left
+// edge / width and the pre-box rows; session: the terminal width and the
+// viewport rows), so the space-above clamp is real, not a no-op.
+func (pm *promptModel) slashRows(items []protocol.Command, w, spaceAbove int, th theme.Theme) []string {
 	if items == nil {
-		return ""
+		return nil
 	}
 	if len(items) == 0 {
-		return th.TextMuted().Render("  no match")
+		return []string{th.TextMuted().Render("  No matching items")}
 	}
-	muted := th.TextMuted()
-	var b strings.Builder
+	rows := make([]dropdownRow, len(items))
 	for i, c := range items {
-		if i > 0 {
-			b.WriteByte('\n')
-		}
-		sty := muted
-		if i == pm.sel {
-			sty = cursorStyle(th)
-		}
-		for j, l := range strings.Split(wrapLine("  "+c.Name+"  "+c.Description, w), "\n") {
-			if j > 0 {
-				b.WriteByte('\n')
-			}
-			b.WriteString(sty.Render(l))
-		}
+		rows[i] = dropdownRow{label: c.Name, description: c.Description}
 	}
-	return b.String()
+	d := newDropdown(rows, pm.sel, w, spaceAbove, th)
+	if d.vis == 0 {
+		return nil
+	}
+	return strings.Split(d.view(), "\n")
+}
+
+// menuView renders the slash menu's box (the standalone render the unit pins
+// use): the box chrome, the selection row (primary bg + the SelectedForeground),
+// the over-wide row truncated at the box content width (no wrap). The no-match
+// line keeps the current text (the "No matching items" text lands in S7). The
+// space-above clamp is the menu's own height (a no-op at this standalone
+// placement — S3's placement supplies the real spaceAbove via slashRows).
+func (pm *promptModel) menuView(items []protocol.Command, w int, th theme.Theme) string {
+	return strings.Join(pm.slashRows(items, w, len(items), th), "\n")
 }
 
 // view renders the prompt line (the textinput carries the "> " prompt).
@@ -287,11 +319,15 @@ func (a *App) recallHistory(dir int) {
 	a.histIdx = next
 	if next == 0 {
 		a.prompt.input.SetValue(a.histOrig)
+		// the recall is an input change: re-arm a tab-completed menu (S6).
+		a.prompt.slashDone = false
 		a.histText = ""
 		return
 	}
 	text := a.hist[len(a.hist)+next]
 	a.prompt.input.SetValue(text)
+	// the recall is an input change: re-arm a tab-completed menu (S6).
+	a.prompt.slashDone = false
 	a.histText = text
 }
 

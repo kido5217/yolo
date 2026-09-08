@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/tui/store"
 )
 
@@ -345,10 +346,13 @@ func (a *App) boxMetaLine() string {
 // homeHintLine renders the hint row (mock row mockHintRow, origin at the box
 // LEFT border col, upstream prompt/index.tsx:1655-1690):
 //
-//	normal mode: {Format("agent_cycle")} agents  {Format("command_list")}
-//	commands — shortcuts fg text, the words (" agents"/" commands") fg
-//	textMuted, the 2-col gap (box gap 2). A "none" Format (a user-disabled
-//	binding) drops its segment; both none -> blank row.
+//	normal mode: {Format("agent_cycle")} {word}  {Format("command_list")}
+//	commands — the first segment is context-aware (S6, spec §3.2): the
+//	word is " complete" while the slash menu is open, " agents" when
+//	closed (the shortcut stays Format("agent_cycle") = tab); the words' fg
+//	is textMuted, the shortcuts' fg text, the 2-col gap (box gap 2). A
+//	"none" Format (a user-disabled binding) drops its segment; both none ->
+//	blank row.
 //	shell mode: `esc` (fg text) + ` exit shell mode` (fg textMuted) — the
 //	upstream color split (the yolo-dhf.2 note's "(esc muted)" is a
 //	shorthand; the strict-copy bar pins the upstream source).
@@ -368,7 +372,13 @@ func (a *App) homeHintLine() string {
 		b.WriteString(a.boxFg("text", f))
 		b.WriteString(a.boxFg("textMuted", word))
 	}
-	seg("agent_cycle", " agents")
+	// S6: the first segment's word is context-aware — "tab complete" while
+	// the slash menu is open, "tab agents" when closed.
+	agentWord := " agents"
+	if a.prompt.slashActive() {
+		agentWord = " complete"
+	}
+	seg("agent_cycle", agentWord)
 	seg("command_list", " commands")
 	return b.String()
 }
@@ -469,7 +479,7 @@ func placeRow(left int, content string, w int) string {
 // convention). When fixed content exceeds the terminal the spacers clamp to
 // 0 and the frame drops the TOP rows (the alt-screen anchor is the bottom —
 // the Q9 note); the full stack fits from 24 rows up.
-func (a *App) homeView(menu, acMenu, perm, toasts, dlg, wk string) string {
+func (a *App) homeView(items []protocol.Command, acMenu, perm, toasts, dlg, wk string) string {
 	w := a.termWidth()
 	h := a.size.Height
 	if h < 1 {
@@ -496,7 +506,10 @@ func (a *App) homeView(menu, acMenu, perm, toasts, dlg, wk string) string {
 	}
 	stack = append(stack, blankRow(w)) // 1 pad
 	stack = append(stack, blankRow(w)) // 1 box pad
-	for _, r := range a.homeBox() {    // 5 box
+	// the first box row's stack index (= the pre-box region height — the slash
+	// dropdown's real space-above; the box itself sits at stack[boxTop]).
+	boxTop := len(stack)
+	for _, r := range a.homeBox() { // 5 box
 		stack = append(stack, placeRow(boxL, r, w))
 	}
 	stack = append(stack, placeRow(boxL, a.homeHintLine(), w))   // 1 hint
@@ -510,9 +523,20 @@ func (a *App) homeView(menu, acMenu, perm, toasts, dlg, wk string) string {
 			stack = append(stack, placeRow(tipL, r, w))
 		}
 	}
+	// the slash dropdown anchors above the box top edge at the box's left edge /
+	// width (spec §6 S3), overlaying the logo rows while open (the bottom-
+	// aligned pre-box rows it occupies are painted over; the box + hint stay
+	// intact below). acMenu stays on the overlay rows until the @-epic re-
+	// anchors it (out of scope here).
+	if rows := a.prompt.slashRows(items, boxW, boxTop, a.theme); len(rows) > 0 {
+		n := len(rows)
+		for i, r := range rows {
+			stack[boxTop-n+i] = placeRow(boxL, r, w)
+		}
+	}
 	// the overlay rows (left-aligned, in the session-route order).
 	var overlays []string
-	for _, o := range []string{menu, acMenu, perm, toasts, dlg, wk} {
+	for _, o := range []string{acMenu, perm, toasts, dlg, wk} {
 		if o != "" {
 			overlays = append(overlays, strings.Split(o, "\n")...)
 		}

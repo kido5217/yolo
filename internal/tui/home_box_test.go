@@ -285,6 +285,21 @@ func TestHomeHintLine(t *testing.T) {
 			t.Fatalf("homeHintLine = %q, want blank", got)
 		}
 	})
+	t.Run("the first segment is context-aware while the slash menu is open", func(t *testing.T) {
+		t.Parallel()
+		a := testApp()
+		a.prompt.input.SetValue("/")
+		if !a.prompt.slashActive() {
+			t.Fatal("menu must be open for \"/\"")
+		}
+		if got := a.homeHintLine(); got != "tab complete  ctrl+p commands" {
+			t.Fatalf("homeHintLine (menu open) = %q, want %q", got, "tab complete  ctrl+p commands")
+		}
+		a.prompt.input.SetValue("hello")
+		if got := a.homeHintLine(); got != "tab agents  ctrl+p commands" {
+			t.Fatalf("homeHintLine (menu closed) = %q, want %q", got, "tab agents  ctrl+p commands")
+		}
+	})
 	t.Run("shell mode", func(t *testing.T) {
 		t.Parallel()
 		a := testApp()

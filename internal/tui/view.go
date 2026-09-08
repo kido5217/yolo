@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/kido5217/yolo/internal/protocol"
 )
 
 // View renders the active route, the dialog overlay and the last error line
@@ -14,14 +15,20 @@ import (
 func (a *App) View() tea.View {
 	v := tea.NewView(a.view())
 	v.AltScreen = true
+	// S5 mouse slice: enable cell-motion mouse tracking so the slash dropdown
+	// can be hovered and clicked (bubbletea v2 sets the mode on the View, not
+	// via a program option — there is no tea.WithMouseCellMotion in v2.0.9).
+	v.MouseMode = tea.MouseModeCellMotion
 	return v
 }
 
-// view composes the on-screen string: the active route, the slash menu, the
-// permission overlay above the prompt, the prompt line, toasts, the dialog
-// overlay, the last error line and the status footer (both routes). Each
-// overlay is rendered once per frame and passed pre-built to the route
-// (the session route needs it both for line counting and composition).
+// view composes the on-screen string: the active route, the slash menu (passed
+// as its items — each route anchors it per spec §6 S3: home above the box,
+// session above the prompt), the permission overlay above the prompt, the
+// prompt line, toasts, the dialog overlay, the last error line and the status
+// footer (both routes). Each overlay is rendered once per frame and passed
+// pre-built to the route (the session route counts its lines for the viewport
+// height).
 func (a *App) view() string {
 	if d, ok := a.dlg.top(); ok && d.modal {
 		return a.viewModal()
@@ -30,7 +37,7 @@ func (a *App) view() string {
 	perm := a.permissionView(w)
 	toasts := a.toastsView(w)
 	dlg := a.dlgView(w)
-	menu := a.prompt.menuView(a.menuItems(), w, a.theme)
+	items := a.menuItems()
 	acMenu := ""
 	if a.prompt.mentionActive() {
 		acMenu = a.prompt.acView(a.mentionOptions(), w, a.theme)
@@ -40,13 +47,10 @@ func (a *App) view() string {
 	// box, lastErr, the loading line and the footer are INSIDE the frame);
 	// the session route keeps today's append-after-route composition exactly.
 	if a.route != routeSession {
-		return a.homeView(menu, acMenu, perm, toasts, dlg, wk)
+		return a.homeView(items, acMenu, perm, toasts, dlg, wk)
 	}
 	var b strings.Builder
-	b.WriteString(a.viewSession(menu, acMenu, perm, toasts, dlg, wk))
-	if menu != "" {
-		b.WriteString("\n" + menu)
-	}
+	b.WriteString(a.viewSession(items, acMenu, perm, toasts, dlg, wk))
 	if acMenu != "" {
 		b.WriteString("\n" + acMenu)
 	}
@@ -81,13 +85,15 @@ func (a *App) view() string {
 
 // viewSession renders the session route: title, the transcript viewport and
 // the locked help line. The viewport reserves a line for the prompt, one for
-// the footer, the open slash menu + @-picker and every below-viewport
-// overlay (perm, toasts, dlg, lastErr), so the frame fits the terminal
-// height — mandatory under the alt screen, whose frame (unlike the
-// normal-screen frame, which grows with content) is the fixed terminal size.
-// menu/acMenu/perm/toasts/dlg are the pre-built overlay strings from view()
-// (rendered once per frame).
-func (a *App) viewSession(menu, acMenu, perm, toasts, dlg, wk string) string {
+// the footer, the open @-picker and every below-viewport overlay (perm,
+// toasts, dlg, lastErr), so the frame fits the terminal height — mandatory
+// under the alt screen, whose frame (unlike the normal-screen frame, which
+// grows with content) is the fixed terminal size. The slash menu anchors above
+// the prompt line (spec §6 S3): the viewport keeps its full height and the
+// dropdown overlays the bottom transcript rows (painted over in
+// sessionChrome), so it adds no frame rows. acMenu/perm/toasts/dlg/wk are the
+// pre-built overlay strings from view() (rendered once per frame).
+func (a *App) viewSession(items []protocol.Command, acMenu, perm, toasts, dlg, wk string) string {
 	w := a.size.Width
 	if w < 1 {
 		w = 80
@@ -101,10 +107,6 @@ func (a *App) viewSession(menu, acMenu, perm, toasts, dlg, wk string) string {
 	if a.lastErr != "" {
 		overlays++
 	}
-	menuLines := 0
-	if menu != "" {
-		menuLines = 1 + strings.Count(menu, "\n")
-	}
 	acMenuLines := 0
 	if acMenu != "" {
 		acMenuLines = 1 + strings.Count(acMenu, "\n")
@@ -112,8 +114,11 @@ func (a *App) viewSession(menu, acMenu, perm, toasts, dlg, wk string) string {
 	// The help line may wrap on narrow terminals; the viewport height must
 	// count its real line count so the frame stays within the terminal.
 	help := len(strings.Split(wrapLine(sessionHelp, w), "\n"))
-	vh := a.size.Height - 1 - 1 - help - 1 - 1 - menuLines - acMenuLines - overlays
-	return a.sessionChrome(w, vh)
+	vh := a.size.Height - 1 - 1 - help - 1 - 1 - acMenuLines - overlays
+	// the slash dropdown overlays the viewport tail (space-above = the
+	// viewport's row count — the tail it may paint over).
+	overlay := a.prompt.slashRows(items, w, vh, a.theme)
+	return a.sessionChrome(w, vh, overlay...)
 }
 
 // modalChromeMin is the route chrome's minimum line count (the panel top
@@ -130,9 +135,11 @@ func (a *App) modalChromeMin() int {
 
 // sessionChrome renders the session route's chrome for a viewport of vh
 // lines: title, the transcript viewport (the todo sidebar — S7.2 — as the
-// right sidebarWidth columns of the viewport lines, deviation 246),
-// divider, the (possibly wrapped) help.
-func (a *App) sessionChrome(w, vh int) string {
+// right sidebarWidth columns of the viewport lines, deviation 246), divider,
+// the (possibly wrapped) help. overlay, when non-empty, is the slash dropdown
+// (spec §6 S3): its rows paint over the bottom transcript rows (the viewport
+// keeps its full height; the overlay rows are full-width and skip the sidebar).
+func (a *App) sessionChrome(w, vh int, overlay ...string) string {
 	if vh < 1 {
 		vh = 1
 	}
@@ -149,14 +156,26 @@ func (a *App) sessionChrome(w, vh int) string {
 	}
 	var b strings.Builder
 	b.WriteString(title.Render(t) + "\n")
-	for i, row := range strings.Split(a.sess.vm.View(), "\n") {
+	vmRows := strings.Split(a.sess.vm.View(), "\n")
+	overlayN := len(overlay)
+	if overlayN > len(vmRows) {
+		overlayN = len(vmRows)
+	}
+	overlaidFrom := len(vmRows) - overlayN
+	for i, row := range vmRows {
 		if i > 0 {
 			b.WriteString("\n")
 		}
-		if side != nil && i < len(side) {
-			row += side[i]
+		if i >= overlaidFrom {
+			// the slash dropdown overlay row (full width, no sidebar): the
+			// dropdown paints over the bottom transcript rows.
+			b.WriteString(overlay[i-overlaidFrom])
+		} else {
+			if side != nil && i < len(side) {
+				row += side[i]
+			}
+			b.WriteString(row)
 		}
-		b.WriteString(row)
 	}
 	b.WriteString("\n" + dividerLineRendered)
 	for _, l := range strings.Split(wrapLine(sessionHelp, w), "\n") {
@@ -200,7 +219,7 @@ func (a *App) viewModal() string {
 		// the 0.8.0 start-screen chrome: the top of the homeView frame
 		// (the logo + box + hint region), clamped to panelTop rows below
 		// (the frame's own footer is dropped by the clamp).
-		chrome = a.homeView("", "", "", "", "", "")
+		chrome = a.homeView(nil, "", "", "", "", "")
 	}
 	chromeLines := strings.Split(chrome, "\n")
 	for len(chromeLines) < panelTop {

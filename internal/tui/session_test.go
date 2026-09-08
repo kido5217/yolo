@@ -405,3 +405,88 @@ func TestRenderUserFileChips(t *testing.T) {
 		})
 	}
 }
+
+// TestSessionViewSlashMenuAnchors pins the S3 session anchor (spec §6 S3):
+// with the slash menu open (input "/"), the dropdown overlays the bottom
+// viewport rows at the terminal's full width (the left border at col 0), the
+// viewport keeps its full height (no slash-menu term in the viewport height —
+// the divider sits right below the full-height viewport), and the prompt line
+// renders below the dropdown (the divider + help rows in between).
+func TestSessionViewSlashMenuAnchors(t *testing.T) {
+	t.Parallel()
+	a := testSessionApp(store.State{
+		Current: &protocol.Session{ID: "ses_1", Title: "my session"},
+		Messages: []protocol.MessageWithParts{
+			{Info: protocol.Message{ID: "m1", Role: "user"}, Parts: []protocol.Part{{Type: "text", Text: "plan it"}}},
+			{Info: protocol.Message{ID: "m2", Role: "assistant"}, Parts: []protocol.Part{{Type: "text", Text: "ok-text"}}},
+		},
+		Commands: testCommands(),
+	})
+	a.size = tea.WindowSizeMsg{Width: 80, Height: 24}
+	a.prompt.input.SetValue("/")
+	a.prompt.sel = 0
+	items := a.menuItems()
+	if items == nil {
+		t.Fatal("slash menu should be open for input \"/\"")
+	}
+	n := len(items)
+	if n > maxDropdownRows {
+		n = maxDropdownRows
+	}
+	// the viewport height carries no slash-menu term (S3 — the overlay
+	// replaces the tail rows, it adds no frame rows): vh = h - 1 (title) -
+	// 1 (divider) - the help rows - 1 (prompt) - 1 (footer).
+	help := len(strings.Split(wrapLine(sessionHelp, 80), "\n"))
+	vh := 24 - 4 - help
+	rows := strings.Split(a.view(), "\n")
+	if len(rows) != 24 {
+		t.Fatalf("frame rows = %d, want 24 (the fixed session frame)", len(rows))
+	}
+	if got := stripANSI(rows[0]); got != "my session" {
+		t.Fatalf("title row = %q, want %q", got, "my session")
+	}
+	// the viewport keeps full height: every viewport row exactly 80 wide
+	// (the padded transcript rows) with the transcript content at the top
+	// (the user line, the message divider, the assistant line).
+	for i := 0; i < vh; i++ {
+		if w := runeWidth(stripANSI(rows[1+i])); w != 80 {
+			t.Fatalf("viewport row %d width = %d, want 80", i, w)
+		}
+	}
+	if !strings.Contains(stripANSI(rows[1]), "plan it") {
+		t.Fatalf("viewport row 0 = %q, want the user line", rows[1])
+	}
+	if !strings.HasPrefix(stripANSI(rows[2]), dividerLine()) {
+		t.Fatalf("viewport row 1 = %q, want the message divider", rows[2])
+	}
+	if !strings.Contains(stripANSI(rows[3]), "ok-text") {
+		t.Fatalf("viewport row 2 = %q, want the assistant line", rows[3])
+	}
+	// the dropdown overlays the bottom viewport rows (n rows, bottom-aligned
+	// above the prompt block): the full-width box (the left border at col 0,
+	// the right border at col 79), the selected row (sel=0) on top.
+	top := 1 + vh - n
+	bottom := vh
+	for i := top; i <= bottom; i++ {
+		atFrame(t, rows, i, 0, "|")
+		atFrame(t, rows, i, 79, "|")
+	}
+	if !strings.Contains(stripANSI(rows[top]), "/sessions") {
+		t.Fatalf("selected dropdown row = %q, want the first merged command (/sessions)", rows[top])
+	}
+	// the divider + the help pin the full-height viewport (no menuLines
+	// reduction — the divider is right below the last dropdown row).
+	if got := stripANSI(rows[bottom+1]); got != dividerLine() {
+		t.Fatalf("divider row = %q, want the divider", got)
+	}
+	if !strings.Contains(stripANSI(rows[bottom+2]), "pgup/pgdn scroll") {
+		t.Fatalf("help row = %q, want the session help line", rows[bottom+2])
+	}
+	// the prompt line renders below the dropdown; the footer on the last row.
+	if got := stripANSI(rows[bottom+3]); got != stripANSI(a.prompt.view()) {
+		t.Fatalf("prompt row = %q, want the prompt line", got)
+	}
+	if !strings.Contains(stripANSI(rows[23]), "no model") {
+		t.Fatalf("footer row = %q, want the session footer", rows[23])
+	}
+}

@@ -114,6 +114,12 @@ type App struct {
 	// keys, deviation 224), persisted under kvFrecencyKey (deviation 223);
 	// the @-picker consumes the ranking (S5.4).
 	freq []frecencyEntry
+	// S4 command-name frecency: the slash-menu command ranking entries
+	// (the command name as the key, mirroring freq/frecencyEntry),
+	// persisted under kvCommandFrecencyKey; menuItems consumes the ranking
+	// (spec §3.3). The touch is the slash-menu execution seam only (the
+	// which-key palette path does not touch it).
+	cmdFreq []frecencyEntry
 	// S5.4 @-picker: the cached walk of the scope dir (deviation 225) —
 	// walkRoot is the scope dir the cached walk was taken of ("" = never
 	// walked or the server work dir), walked its slash-relative paths.
@@ -209,6 +215,7 @@ func NewApp(c *client.Service, s store.State, startSessionID string, engine *the
 	a.applyPromptChrome()
 	a.loadHistory()
 	a.loadFrecency()
+	a.loadCommandFrecency()
 	a.loadTipsHidden()
 	a.loadSidebarMode()
 	a.repickTip()
@@ -450,6 +457,10 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 		return tea.Batch(cmds...)
+	case tea.MouseMsg:
+		// S5 mouse slice: hover/click on the open slash dropdown only (the
+		// @ picker and other routes ignore the mouse, spec §7).
+		return a.handleMouseMsg(m)
 	case tea.InterruptMsg:
 		// SIGINT during Run: the same as the ctrl+c keystroke (cli-2) —
 		// route it through the full key ladder so a pending permission
@@ -579,6 +590,11 @@ func (a *App) saveHistory() {
 // S5.3 KV persistence surface, deviation 223).
 const kvFrecencyKey = "prompt_frecency"
 
+// kvCommandFrecencyKey is the KV key the command-name frecency persists
+// under (the S4 command-name frecency surface, spec §3.3) — the same theme
+// KV as kvFrecencyKey.
+const kvCommandFrecencyKey = "command_frecency"
+
 // coerceFrecency coerces a reloaded KV value to []frecencyEntry — the
 // in-run []frecencyEntry or the JSON []any of map[string]any a
 // process-restart reload yields (deviation 223). Anything else
@@ -631,6 +647,37 @@ func (a *App) saveFrecency() {
 		return
 	}
 	a.engine.KV().Set(kvFrecencyKey, a.freq)
+}
+
+// loadCommandFrecency restores the persisted command-name frecency from the
+// KV (the S4 boot load, run in NewApp after loadFrecency; a nil engine
+// skips — the frecency stays empty in-memory).
+func (a *App) loadCommandFrecency() {
+	if a.engine == nil {
+		return
+	}
+	a.cmdFreq = parseFrecency(coerceFrecency(a.engine.KV().Get(kvCommandFrecencyKey, nil)))
+}
+
+// saveCommandFrecency persists the current command-name frecency to the KV
+// (the S4 write path, called from the slash-menu execution touch seam; a
+// nil engine skips).
+func (a *App) saveCommandFrecency() {
+	if a.engine == nil {
+		return
+	}
+	a.engine.KV().Set(kvCommandFrecencyKey, a.cmdFreq)
+}
+
+// touchCommandFrecency records a slash-menu command execution in the
+// command-name frecency (frequency+1, lastOpen=now) and persists it (the S4
+// touch seam — the port of the @-picker's acInsert touch, mention.go; a nil
+// engine skips via saveCommandFrecency). The seam is the slash-menu
+// execution only: the which-key palette path (commands.go) runs the same
+// command without touching the store (spec §3.3).
+func (a *App) touchCommandFrecency(name string) {
+	a.cmdFreq = updateFrecency(a.cmdFreq, name, nowMillis())
+	a.saveCommandFrecency()
 }
 
 // repickTip re-rolls the tip index (the per-home-entry re-pick — the
