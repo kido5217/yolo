@@ -206,7 +206,7 @@ func (pm *promptModel) slashRows(items []protocol.Command, w, spaceAbove int, th
 		return nil
 	}
 	if len(items) == 0 {
-		return []string{th.TextMuted().Render("  no match")}
+		return []string{th.TextMuted().Render("  No matching items")}
 	}
 	rows := make([]dropdownRow, len(items))
 	for i, c := range items {

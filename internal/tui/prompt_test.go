@@ -156,9 +156,9 @@ func TestPromptMenuOpenBox(t *testing.T) {
 	}
 }
 
-// TestPromptMenuEmptyLine pins the S2 empty-filter case (input "/zzz"): the
-// no-match line renders with the CURRENT text (the "No matching items" text
-// lands in S7, which re-baselines this pin).
+// TestPromptMenuEmptyLine pins the S7 empty-filter case (input "/zzz"): the
+// no-match line renders the parity text "No matching items" (upstream
+// verbatim, spec §3.4) in the textMuted fg.
 func TestPromptMenuEmptyLine(t *testing.T) {
 	th := yoloDarkTheme(t)
 	a := testApp()
@@ -173,8 +173,8 @@ func TestPromptMenuEmptyLine(t *testing.T) {
 	if len(lines) != 1 {
 		t.Fatalf("empty filter = %d lines, want 1 (the no-match line):\n%s", len(lines), got)
 	}
-	if !strings.Contains(stripANSI(lines[0]), "no match") {
-		t.Fatalf("no-match line lost the current text: %q", stripANSI(lines[0]))
+	if !strings.Contains(stripANSI(lines[0]), "No matching items") {
+		t.Fatalf("no-match line lost the parity text: %q", stripANSI(lines[0]))
 	}
 	if !strings.Contains(lines[0], "38;2;128;128;128") {
 		t.Fatalf("no-match line missing the textMuted fg SGR (#808080): %s", lines[0])
