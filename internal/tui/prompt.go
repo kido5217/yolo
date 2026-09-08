@@ -104,11 +104,13 @@ func (pm *promptModel) slashActive() bool {
 var commandAliases = map[string][]string{"/quit": {"/exit"}}
 
 // menuItems is the /-picker (S5.5 — the ported upstream /-autocomplete): the
-// fuzzy-ranked merged commands. Nil when the menu is closed; an empty query
-// (input == "/") returns the merged list in order (deviation 226); otherwise
-// fuzzy.Find over the canonical + alias names, each score x2 for a prefix
-// match, sorted desc, capped at maxPickerOptions, deduped by the canonical
-// name (an alias match maps to the canonical command).
+// command-name-frecency-ranked merged commands. Nil when the menu is closed;
+// an empty query (input == "/") returns the merged list frecency-ranked
+// (deviation 226, extended per spec §3.3 — the order becomes the frecency
+// rank); otherwise fuzzy.Find over the canonical + alias names, each score
+// x2 for a prefix match and x (1 + command-name frecency) (the S4 fold,
+// spec §3.3), sorted desc, capped at maxPickerOptions, deduped by the
+// canonical name (an alias match maps to the canonical command).
 func (a *App) menuItems() []protocol.Command {
 	if !a.prompt.slashActive() {
 		return nil
@@ -124,37 +126,50 @@ func (a *App) menuItems() []protocol.Command {
 	if len(cmds) == 0 {
 		return []protocol.Command{}
 	}
-	q := a.prompt.input.Value()[1:]
-	if q == "" {
-		return cmds // deviation 226: the empty query lists all merged, in order
-	}
-	names := make([]string, 0, len(cmds))
-	byName := make(map[string]protocol.Command, len(cmds))
-	for _, c := range cmds {
-		byName[c.Name] = c
-		names = append(names, c.Name)
-		for _, alias := range commandAliases[c.Name] {
-			byName[alias] = c
-			names = append(names, alias)
-		}
+	now := nowMillis()
+	// Per-call command-name frecency index: O(1) lookup per command (mirrors
+	// mentionOptions' per-call frecency index over the @-picker paths).
+	fidx := make(map[string]*frecencyEntry, len(a.cmdFreq))
+	for i := range a.cmdFreq {
+		fidx[a.cmdFreq[i].Path] = &a.cmdFreq[i]
 	}
 	type scored struct {
 		cmd   protocol.Command
-		score int
+		score float64
 	}
-	seen := make(map[string]bool, len(cmds))
 	var ranked []scored
-	for _, m := range fuzzy.Find(q, names) {
-		c := byName[m.Str]
-		if seen[c.Name] {
-			continue
+	if q := a.prompt.input.Value()[1:]; q == "" {
+		// deviation 226 (extended per spec §3.3): the empty query lists all
+		// merged, frecency-ranked.
+		ranked = make([]scored, len(cmds))
+		for i, c := range cmds {
+			ranked[i] = scored{cmd: c, score: frecencyScore(fidx[c.Name], now)}
 		}
-		seen[c.Name] = true
-		s := m.Score
-		if strings.HasPrefix(m.Str[1:], q) {
-			s *= 2
+	} else {
+		names := make([]string, 0, len(cmds))
+		byName := make(map[string]protocol.Command, len(cmds))
+		for _, c := range cmds {
+			byName[c.Name] = c
+			names = append(names, c.Name)
+			for _, alias := range commandAliases[c.Name] {
+				byName[alias] = c
+				names = append(names, alias)
+			}
 		}
-		ranked = append(ranked, scored{cmd: c, score: s})
+		seen := make(map[string]bool, len(cmds))
+		for _, m := range fuzzy.Find(q, names) {
+			c := byName[m.Str]
+			if seen[c.Name] {
+				continue
+			}
+			seen[c.Name] = true
+			s := float64(m.Score) // positive-score gate (threshold 0)
+			if strings.HasPrefix(m.Str[1:], q) {
+				s *= 2
+			}
+			s *= 1 + frecencyScore(fidx[c.Name], now)
+			ranked = append(ranked, scored{cmd: c, score: s})
+		}
 	}
 	sort.SliceStable(ranked, func(i, j int) bool { return ranked[i].score > ranked[j].score })
 	if len(ranked) > maxPickerOptions {

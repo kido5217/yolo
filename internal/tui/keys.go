@@ -201,7 +201,12 @@ func (a *App) handleMenuKey(k tea.KeyPressMsg) []tea.Cmd {
 		return nil
 	case key.Matches(k, promptEnter):
 		if len(items) > 0 && a.prompt.sel < len(items) {
-			return a.runCommand(items[a.prompt.sel].Name)
+			name := items[a.prompt.sel].Name
+			// the S4 command-name frecency touch seam (the S5 mouse-click leg
+			// will call the same touch): the which-key palette path does NOT
+			// touch (spec §3.3).
+			a.touchCommandFrecency(name)
+			return a.runCommand(name)
 		}
 		a.clearPrompt()
 		return nil
