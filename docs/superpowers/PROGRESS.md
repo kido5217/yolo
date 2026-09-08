@@ -5,6 +5,8 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
+**Status (2026-09-08):** 0.10.0 quit confirmation removed — on explicit user instruction, the quit confirm dialog (dlgQuit yes/no, upstream "quit? [Y/n]") is removed; every quit path exits immediately via tea.Quit: the /quit + /exit slash commands (commands.go runCommand) and the app_exit keybinding ctrl+c/<leader>q (keys.go dispatchCommand), which also serves SIGINT via the ctrl+c key-ladder routing in app.go (cli-2). The dlgQuit kind + dlgYes/dlgNo + quitDialogRendered are deleted (dlgCtrlC retained for the generic modal esc/ctrl+c handler). The affected tests re-baseline to assert immediate quit. DEVIATIONS 324 (upstream deviation on explicit user instruction). No wire change.
+
 **Status (2026-09-08):** 0.10.0 command palette parity — epic `yolo-hb0`
 (all six slices landed) on branch `feature/palette-parity-0.10.0`
 (plan `docs/superpowers/plans/2026-09-07-0.10.0-palette-parity.md`, spec

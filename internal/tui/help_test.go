@@ -132,51 +132,21 @@ func TestTUIHelpDialog(t *testing.T) {
 	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 }
 
-// T28 locks the quit-confirm text to `quit? [Y/n]`; y/enter exit, n/esc go
-// back (enter is the pinned default-confirm key).
-func TestQuitConfirmTextAndKeys(t *testing.T) {
-	a := testApp()
-	a.dlg.push(dialog{kind: dlgQuit})
-	if got := stripANSI(a.dlgView(80)); got != "quit? [Y/n]" {
-		t.Fatalf("quit dialog = %q, want %q", got, "quit? [Y/n]")
-	}
-	cmds := a.handleKey(press('y'))
-	if len(cmds) != 1 {
-		t.Fatalf("y returned %d cmds, want 1 (quit)", len(cmds))
-	}
-	m := cmds[0]()
-	if _, ok := m.(tea.QuitMsg); !ok {
-		t.Fatalf("quit cmd yields %T, want tea.QuitMsg", m)
-	}
-	a.dlg.items = nil // y exits; clear the stack for the enter path
-	a.dlg.push(dialog{kind: dlgQuit})
-	cmds = a.handleKey(press(tea.KeyEnter))
-	if len(cmds) != 1 {
-		t.Fatalf("enter returned %d cmds, want 1 (quit)", len(cmds))
-	}
-	m = cmds[0]()
-	if _, ok := m.(tea.QuitMsg); !ok {
-		t.Fatalf("enter cmd yields %T, want tea.QuitMsg", m)
-	}
-	a.dlg.items = nil // enter exits; clear the stack for the n path
-	a.dlg.push(dialog{kind: dlgQuit})
-	if cmds := a.handleKey(press('n')); len(cmds) != 0 {
-		t.Fatalf("n returned %d cmds, want 0", len(cmds))
-	}
-	if _, ok := a.dlg.top(); ok {
-		t.Fatal("quit dialog still open after n")
-	}
-}
-
-// ctrl+c must open the quit-confirm from the session route too (the plan's
-// TestTUIFullTurn quits from an open session; home alone was not enough).
-func TestQuitConfirmFromSessionRoute(t *testing.T) {
+// ctrl+c must quit from the session route too (the plan's TestTUIFullTurn
+// quits from an open session; home alone was not enough). Immediate quit: it
+// emits tea.Quit with no confirmation dialog.
+func TestQuitFromSessionRoute(t *testing.T) {
 	a := testApp(protocol.Session{ID: "ses_1"})
 	a.route = routeSession
 	a.curSessionID = "ses_1"
-	a.handleKey(ctrlCKey)
-	d, ok := a.dlg.top()
-	if !ok || d.kind != dlgQuit {
-		t.Fatalf("session-route ctrl+c opened %v (ok=%v), want dlgQuit", d.kind, ok)
+	cmds := a.handleKey(ctrlCKey)
+	if len(cmds) != 1 {
+		t.Fatalf("session-route ctrl+c emitted %d cmds, want 1 (quit)", len(cmds))
+	}
+	if _, ok := cmds[0]().(tea.QuitMsg); !ok {
+		t.Fatalf("session-route ctrl+c cmd yields %T, want tea.QuitMsg", cmds[0]())
+	}
+	if _, ok := a.dlg.top(); ok {
+		t.Fatal("session-route ctrl+c pushed a dialog, want none (immediate quit)")
 	}
 }

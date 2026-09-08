@@ -267,13 +267,13 @@ func TestAgentDialogOpen(t *testing.T) {
 
 	t.Run("leader is ignored while a dialog is on top", func(t *testing.T) {
 		a := agentApp()
-		a.dlg.push(dialog{kind: dlgQuit})
+		a.dlg.push(dialog{kind: dlgHelp})
 		a.handleKey(pressLeader())
 		if a.pendingLeader {
 			t.Fatal("the leader must not arm while a dialog is open")
 		}
 		d, _ := a.dlg.top()
-		if d.kind != dlgQuit || a.dlg.agent() != nil {
+		if d.kind != dlgHelp || a.dlg.agent() != nil {
 			t.Fatalf("leader must not stack dialogs: top=%+v agentDlg=%v", d, a.dlg.agent())
 		}
 	})
@@ -479,7 +479,7 @@ func TestAgentCycleKeyDispatch(t *testing.T) {
 	t.Run("a dialog open does not fire the cycle (the ladder precedence)", func(t *testing.T) {
 		a := testApp()
 		a.store.Agents = agents
-		a.dlg.push(dialog{kind: dlgQuit})
+		a.dlg.push(dialog{kind: dlgHelp})
 		a.handleKey(pressTab())
 		if a.pendingAgent != "" {
 			t.Fatalf("after tab with the dialog open = %q, want the cycle suppressed", a.pendingAgent)

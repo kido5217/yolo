@@ -33,7 +33,7 @@ func suiteType(tm *teatest.TestModel, s string) {
 }
 
 // TestTUIFullTurn: home → n → type → streamed reasoning+text+tool rendered →
-// alt+t reveals reasoning → alt+e expands the tool I/O → ctrl+c/y quit; the
+// alt+t reveals reasoning → alt+e expands the tool I/O → ctrl+c quits (immediately, no confirm); the
 // full sequence is asserted from the captured output stream (v2 teatest
 // drains per WaitFor, deviation 50).
 func TestTUIFullTurn(t *testing.T) {
@@ -99,8 +99,7 @@ func TestTUIFullTurn(t *testing.T) {
 
 	tm.Send(pressAlt('t')) // reveal reasoning
 	tm.Send(pressAlt('e')) // expand the last tool part's I/O
-	tm.Send(ctrlCKey)      // quit confirm
-	tm.Send(press('y'))    // exit
+	tm.Send(ctrlCKey)      // immediate quit (no confirm)
 	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 
 	tail, err := io.ReadAll(tm.Output())
@@ -125,7 +124,7 @@ func TestTUIFullTurn(t *testing.T) {
 	if expandedReasoning == 0 {
 		t.Error("alt+t did not expand the reasoning part")
 	}
-	for _, w := range []string{"world", "quit?", "[Y/n]"} {
+	for _, w := range []string{"world"} {
 		if !strings.Contains(tsTail, w) {
 			t.Errorf("final output missing %q:\n%s", w, tsTail)
 		}
@@ -261,8 +260,9 @@ func TestTUIPermissionFlow(t *testing.T) {
 	})
 }
 
-// TestTUIDialogs: model, agent, help and quit-confirm each scripted in one
-// run; the sequence order is asserted over the accumulated drains.
+// TestTUIDialogs: model, agent and help each scripted in one run (the
+// quit-confirm leg is removed; ctrl+c now quits immediately); the sequence
+// order is asserted over the accumulated drains.
 func TestTUIDialogs(t *testing.T) {
 	ts := testutil.Boot(t)
 	c := client.New(ts.URL, ts.Dir)
@@ -301,11 +301,9 @@ func TestTUIDialogs(t *testing.T) {
 	tm.Send(press(tea.KeyEnter))
 	capture("Help", "Press ctrl+p to see all available actions", "pgup/pgdn scroll \u00B7 \\+enter newline")
 	tm.Send(press(tea.KeyEscape))
-	tm.Send(ctrlCKey)
-	capture("quit? [Y/n]")
 
 	last := -1
-	for _, w := range []string{"Model", "Agents", "Help", "quit? [Y/n]"} {
+	for _, w := range []string{"Model", "Agents", "Help"} {
 		i := strings.Index(seq.String(), w)
 		if i < 0 || i <= last {
 			t.Fatalf("dialog sequence out of order at %q (idx=%d, last=%d)\n%s", w, i, last, seq.String())
@@ -313,7 +311,7 @@ func TestTUIDialogs(t *testing.T) {
 		last = i
 	}
 
-	tm.Send(press('y'))
+	tm.Send(ctrlCKey) // immediate quit (no confirm)
 	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 }
 

@@ -16,16 +16,10 @@ import (
 	"github.com/kido5217/yolo/internal/tui/theme"
 )
 
-var (
-	dlgYes = key.NewBinding(key.WithKeys("y", "enter", "ctrl+c"))
-	dlgNo  = key.NewBinding(key.WithKeys("n", "esc"))
-)
-
 type dialogKind int
 
 const (
 	dlgNone dialogKind = iota // zero value: not a real dialog
-	dlgQuit
 	dlgHelp
 	dlgModel
 	dlgAgents
@@ -302,7 +296,6 @@ func (a *App) syncPermDialog() {
 // viewSession is the only dynamic render left.
 var (
 	dividerLineRendered = divider.Render(dividerLine())
-	quitDialogRendered  = title.Render("quit? [Y/n]")
 )
 
 // helpHeaderRow is the help dialog header: the bold "Help" left, the muted
@@ -354,18 +347,6 @@ func (a *App) helpDialogView(w, h int, th theme.Theme) string {
 // is "ctrl+p", so the /help + teatest goldens are byte-identical.
 func (a *App) paletteShortcut() string { return a.keymap.Format("command_list") }
 
-func (d dialogStack) view(th theme.Theme) string {
-	top, ok := d.top()
-	if !ok {
-		return ""
-	}
-	switch top.kind {
-	case dlgQuit:
-		return quitDialogRendered
-	}
-	return ""
-}
-
 // dlgView renders the top dialog: the model/agent pickers carry their state
 // on the stack item, the rest render from the stack alone. The pickers
 // word-wrap their rows at the terminal width; the locked quit/help blocks
@@ -379,7 +360,7 @@ func (a *App) dlgView(w int) string {
 	case d.kind == dlgAgents && d.agent != nil:
 		return d.agent.view(&a.store, w, a.size.Height, a.theme)
 	}
-	return a.dlg.view(a.theme)
+	return ""
 }
 
 // modalInner renders the top modal's payload content at the panel width
@@ -450,15 +431,6 @@ func (a *App) handleDialogKey(d dialog, k tea.KeyPressMsg) []tea.Cmd {
 			return nil
 		}
 		a.closeTopModal()
-		return nil
-	}
-	if d.kind == dlgQuit {
-		if key.Matches(k, dlgYes) {
-			return a.emit(quitCmd())
-		}
-		if key.Matches(k, dlgNo) {
-			a.dlg.pop()
-		}
 		return nil
 	}
 	if d.kind == dlgNone {

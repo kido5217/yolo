@@ -50,13 +50,13 @@ func TestModalStackOps(t *testing.T) {
 		t.Fatalf("clearModals: depth=%d closed=%v", len(a.dlg.items), closed)
 	}
 	// non-modal items are untouched by the modal ops
-	a.dlg.push(dialog{kind: dlgQuit})
+	a.dlg.push(dialog{kind: dlgHelp})
 	a.clearModals()
 	if len(a.dlg.items) != 1 {
 		t.Fatalf("clearModals must keep non-modal items: %+v", a.dlg.items)
 	}
-	if d, _ := a.dlg.top(); d.kind != dlgQuit || d.modal {
-		t.Fatalf("survivor = %+v, want non-modal dlgQuit", d)
+	if d, _ := a.dlg.top(); d.kind != dlgHelp || d.modal {
+		t.Fatalf("survivor = %+v, want non-modal dlgHelp", d)
 	}
 }
 

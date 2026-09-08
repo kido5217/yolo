@@ -279,13 +279,13 @@ func TestModelDialogOpen(t *testing.T) {
 
 	t.Run("leader is ignored while a dialog is on top", func(t *testing.T) {
 		a := modelFixture()
-		a.dlg.push(dialog{kind: dlgQuit})
+		a.dlg.push(dialog{kind: dlgHelp})
 		a.handleKey(pressLeader())
 		if a.pendingLeader {
 			t.Fatal("the leader must not arm while a dialog is open")
 		}
 		d, _ := a.dlg.top()
-		if d.kind != dlgQuit || a.dlg.model() != nil {
+		if d.kind != dlgHelp || a.dlg.model() != nil {
 			t.Fatalf("leader must not stack dialogs: top=%+v modelDlg=%v", d, a.dlg.model())
 		}
 	})

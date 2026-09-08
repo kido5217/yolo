@@ -299,7 +299,7 @@ func (a *App) runCommand(name string) []tea.Cmd {
 	case "/help":
 		a.pushModal(dialog{kind: dlgHelp}, dlgMedium, nil)
 	case "/quit", "/exit": // /exit is the alias of /quit
-		a.dlg.push(dialog{kind: dlgQuit})
+		return a.emit(quitCmd())
 	case "/model":
 		return a.openModelDialog()
 	case "/agents":
