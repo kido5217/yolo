@@ -86,10 +86,15 @@ func ignoredByGitignore(patterns []string, rel string) bool {
 
 // walkFiles walks root (the scope dir) depth- and file-capped, skipping the
 // static ignore set and .gitignore-matched dirs and files, and returns the
-// slash-relative paths (deviation 225).
+// slash-relative paths (deviation 225). Files are recorded as walked;
+// directories are recorded preorder (at visit, before descending) with a
+// trailing "/" (the display marker — the fuzzy target and the insert value
+// are the path WITHOUT it). The maxWalkFiles cap counts FILE entries only:
+// dir rows do not consume the cap.
 func walkFiles(root string) []string {
 	patterns := gitignorePatterns(root)
 	out := []string{}
+	fileCount := 0
 	// the walk callback swallows every per-path error (returns nil), so the
 	// outer WalkDir error is structurally always nil.
 	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
@@ -112,13 +117,15 @@ func walkFiles(root string) []string {
 			if walkIgnore[d.Name()] || ignoredByGitignore(patterns, rel) {
 				return filepath.SkipDir
 			}
+			out = append(out, rel+"/")
 			return nil
 		}
 		if walkIgnore[d.Name()] || ignoredByGitignore(patterns, rel) {
 			return nil
 		}
 		out = append(out, rel)
-		if len(out) >= maxWalkFiles {
+		fileCount++
+		if fileCount >= maxWalkFiles {
 			return filepath.SkipDir
 		}
 		return nil
@@ -127,7 +134,9 @@ func walkFiles(root string) []string {
 }
 
 // walkedFiles is the cached @-picker walk of the scope dir (deviation 225);
-// it re-walks only when the scope dir changes.
+// it re-walks only when the scope dir changes. The rows are the slash-
+// relative paths — files, and directories with the trailing-"/" display
+// marker (the walkFiles preorder).
 func (a *App) walkedFiles() []string {
 	if a.walkRoot != a.Dir {
 		a.walkRoot = a.Dir
@@ -136,44 +145,72 @@ func (a *App) walkedFiles() []string {
 	return a.walked
 }
 
-// mentionOptions builds the @-picker rows: fuzzy.Find over the walked files
-// by the @-query, each score x2 for a prefix match x (1 + frecencyScore)
-// (the ported upstream scoreFn), sorted desc, capped at maxPickerOptions.
-// An empty query lists all walked files, frecency-ranked. Each option's
-// value is the path string (plain-text insert — deviation-222 class).
+// mentionOption is the @-picker's option value (spec §3.1): the path (the
+// insert value — the slash-relative path, no trailing "/") + the directory
+// flag (the trailing-"/" row marker + the tab-expand branch, S3).
+type mentionOption struct {
+	path  string
+	isDir bool
+}
+
+// mentionOptions builds the @-picker rows: fuzzy.Find over the merged
+// file+directory pool (the walked entries — the dir rows' trailing-"/" marker
+// stripped for the fuzzy target, the frecency key and the insert value) by
+// the @-query, each POSITIVE-score match (the threshold-0.5 port, spec §3.4)
+// x2 for a prefix match x (1 + frecencyScore) (the ported upstream scoreFn),
+// sorted desc, capped at maxPickerOptions. An empty query lists all walked
+// files + directories, frecency-ranked (walk order where frecency is zero).
+// Each option's value is the mentionOption carrier (deviation-222 class —
+// the plain-text insert is reworked to the @-prefixed form in S3).
 func (a *App) mentionOptions() []selectOption {
 	if !a.prompt.mentionActive() {
 		return nil
 	}
-	files := a.walkedFiles()
-	if len(files) == 0 {
+	entries := a.walkedFiles()
+	if len(entries) == 0 {
 		return nil
 	}
 	now := nowMillis()
 	// Per-call frecency index: O(1) lookup instead of a linear scan per
-	// file (mentionOptions was O(files x frecency)).
+	// entry (mentionOptions was O(entries x frecency)).
 	idx := make(map[string]*frecencyEntry, len(a.freq))
 	for i := range a.freq {
 		idx[a.freq[i].Path] = &a.freq[i]
 	}
+	// The pool: the merged file+directory entries (the dir rows carry the
+	// trailing-"/" display marker; the path is WITHOUT it).
+	pool := make([]mentionOption, len(entries))
+	for i, e := range entries {
+		isDir := strings.HasSuffix(e, "/")
+		pool[i] = mentionOption{path: strings.TrimSuffix(e, "/"), isDir: isDir}
+	}
 	type scored struct {
-		path  string
+		opt   mentionOption
 		score float64
 	}
 	var ranked []scored
 	if q := a.prompt.acQuery(); q == "" {
-		ranked = make([]scored, len(files))
-		for i, f := range files {
-			ranked[i] = scored{path: f, score: frecencyScore(idx[f], now)}
+		ranked = make([]scored, len(pool))
+		for i, e := range pool {
+			ranked[i] = scored{opt: e, score: frecencyScore(idx[e.path], now)}
 		}
 	} else {
-		for _, m := range fuzzy.Find(q, files) {
+		targets := make([]string, len(pool))
+		isDir := make(map[string]bool, len(pool))
+		for i, e := range pool {
+			targets[i] = e.path
+			isDir[e.path] = e.isDir
+		}
+		for _, m := range fuzzy.Find(q, targets) {
+			if m.Score <= 0 {
+				continue // the positive-score gate (the threshold-0.5 port)
+			}
 			s := float64(m.Score)
 			if strings.HasPrefix(m.Str, q) {
 				s *= 2
 			}
 			s *= 1 + frecencyScore(idx[m.Str], now)
-			ranked = append(ranked, scored{path: m.Str, score: s})
+			ranked = append(ranked, scored{opt: mentionOption{path: m.Str, isDir: isDir[m.Str]}, score: s})
 		}
 	}
 	sort.SliceStable(ranked, func(i, j int) bool { return ranked[i].score > ranked[j].score })
@@ -182,7 +219,7 @@ func (a *App) mentionOptions() []selectOption {
 	}
 	opts := make([]selectOption, 0, len(ranked))
 	for _, r := range ranked {
-		opts = append(opts, selectOption{value: r.path})
+		opts = append(opts, selectOption{value: r.opt})
 	}
 	return opts
 }

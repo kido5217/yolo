@@ -33,6 +33,12 @@ type promptModel struct {
 	// placeholderIdx is shared across both placeholder pools (the upstream
 	// single store.placeholder counter — each pool wraps by its own length).
 	placeholderIdx int
+	// lastAcQuery is the @-query last seen by the input fallback (spec §3.4,
+	// the ported upstream filter-rerun reset, autocomplete.tsx:527-530): a
+	// changed @-query resets sel to 0 (the stale-sel edge — the render's
+	// i == pm.sel and the enter guard sel < len(opts) miss when the list
+	// shrinks below sel).
+	lastAcQuery string
 }
 
 // placeholder pools (upstream home.tsx:17-20 verbatim + the prefixes from
@@ -255,6 +261,19 @@ func (pm *promptModel) acQuery() string {
 	return pm.input.Value()[idx+1:]
 }
 
+// noteAcQuery is the @-picker's filter-rerun selection reset (spec §3.4, the
+// ported upstream createEffect-on-filter-rerun, autocomplete.tsx:527-530):
+// a changed @-query resets sel to 0. It runs after the input fallback (the
+// handleAcKey inputUpdate site) — mentionActive is re-checked there so a key
+// that closes the trigger (the last backspace) does not reset.
+func (pm *promptModel) noteAcQuery() {
+	q := pm.acQuery()
+	if pm.mentionActive() && q != pm.lastAcQuery {
+		pm.sel = 0
+	}
+	pm.lastAcQuery = q
+}
+
 // acRows renders the @-picker's rows through the shared dropdown primitive
 // (the @-epic S1, spec §3.1) — the box chrome (the split border, the
 // backgroundMenu fill, the 1-col padding) wrapping the path rows, the
@@ -262,9 +281,11 @@ func (pm *promptModel) acQuery() string {
 // options = the menu closed. Empty options (the filter found no match) = the
 // muted "no match" line (the S6 empty-state rework). The width w is the box's
 // width: the session passes the content width, the home passes the prompt box
-// width. S1's rows carry the plain-path value (the label = the middle-,
-// truncated path, the description = the slash-relative parent dir for files,
-// empty for root-level/dirs — the S2 isDir carrier re-derives this).
+// width. The rows carry the mentionOption value (the S2 carrier): the label
+// = the middle-truncated path — directory rows with the trailing-"/" kind
+// marker (spec §3.1), the description = the slash-relative parent dir for
+// files (empty for root-level files and for dirs). The legacy plain-path
+// string value renders as a file row (the S1 unit pins).
 func (pm *promptModel) acRows(opts []selectOption, w, spaceAbove int, th theme.Theme) []string {
 	if opts == nil {
 		return nil
@@ -278,12 +299,21 @@ func (pm *promptModel) acRows(opts []selectOption, w, spaceAbove int, th theme.T
 	}
 	rows := make([]dropdownRow, len(opts))
 	for i, o := range opts {
-		p, _ := o.value.(string)
-		parent := path.Dir(p)
-		if parent == "." {
-			parent = ""
+		var mo mentionOption
+		switch v := o.value.(type) {
+		case mentionOption:
+			mo = v
+		case string:
+			mo = mentionOption{path: v} // the legacy plain-path value (the S1 pins)
 		}
-		rows[i] = dropdownRow{label: truncateMiddle(p, avail), description: parent}
+		label := mo.path
+		description := ""
+		if mo.isDir {
+			label += "/" // the dir kind marker (spec §3.1)
+		} else if parent := path.Dir(mo.path); parent != "." {
+			description = parent
+		}
+		rows[i] = dropdownRow{label: truncateMiddle(label, avail), description: description}
 	}
 	d := newDropdown(rows, pm.sel, w, spaceAbove, th)
 	if d.vis == 0 {

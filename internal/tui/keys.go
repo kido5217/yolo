@@ -248,7 +248,8 @@ func (a *App) slashTabComplete() []tea.Cmd {
 // selection with wraparound, enter inserts the selected path (a no-op on no
 // selection — the upstream if (!selected) return), esc removes the @-trigger
 // keeping the prefix; everything else keeps filtering through the live input
-// (re-filtering the options).
+// (re-filtering the options) and resets the selection on a query change
+// (the ported filter-rerun reset, spec §3.4).
 func (a *App) handleAcKey(k tea.KeyPressMsg) []tea.Cmd {
 	opts := a.mentionOptions()
 	switch {
@@ -260,8 +261,8 @@ func (a *App) handleAcKey(k tea.KeyPressMsg) []tea.Cmd {
 		return nil
 	case key.Matches(k, promptEnter):
 		if len(opts) > 0 && a.prompt.sel < len(opts) {
-			if p, ok := opts[a.prompt.sel].value.(string); ok {
-				a.acInsert(p)
+			if mo, ok := opts[a.prompt.sel].value.(mentionOption); ok {
+				a.acInsert(mo.path) // the S2 adapter: the insert semantics land in S3
 			}
 		}
 		return nil
@@ -274,7 +275,9 @@ func (a *App) handleAcKey(k tea.KeyPressMsg) []tea.Cmd {
 		a.prompt.sel = 0
 		return nil
 	}
-	return a.inputUpdate(k)
+	cmds := a.inputUpdate(k)
+	a.prompt.noteAcQuery()
+	return cmds
 }
 
 // handlePromptKey is the prompt fallback: up/down recall the prompt history

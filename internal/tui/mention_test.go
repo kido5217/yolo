@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,42 +39,203 @@ func TestMentionTriggerIndex(t *testing.T) {
 }
 
 func TestWalkFiles(t *testing.T) {
-	dir := t.TempDir()
-	mk := func(rel string) {
+	mk := func(dir, rel string) {
 		p := filepath.Join(dir, filepath.FromSlash(rel))
 		os.MkdirAll(filepath.Dir(p), 0o755)
 		os.WriteFile(p, []byte("x"), 0o644)
 	}
-	mk("alpha.go")
-	mk("src/gamma.go")
-	mk("node_modules/dep.js")
-	mk(".git/config")
-	got := walkFiles(dir)
-	joined := strings.Join(got, "\n")
-	if !strings.Contains(joined, "alpha.go") || !strings.Contains(joined, "src/gamma.go") {
-		t.Fatalf("walk missed fixture files:\n%s", joined)
-	}
-	if strings.Contains(joined, "node_modules") || strings.Contains(joined, ".git") {
-		t.Fatalf("walk must skip the static ignore set:\n%s", joined)
-	}
+	t.Run("files + directories in preorder (the dir rows trailing-/ marked)", func(t *testing.T) {
+		dir := t.TempDir()
+		mk(dir, "alpha.go")
+		mk(dir, "src/gamma.go")
+		mk(dir, "node_modules/dep.js")
+		mk(dir, ".git/config")
+		got := walkFiles(dir)
+		// the directory is recorded at visit time (preorder — before
+		// descending), with the trailing-/ display marker.
+		want := strings.Join([]string{"alpha.go", "src/", "src/gamma.go"}, "\n")
+		if joined := strings.Join(got, "\n"); joined != want {
+			t.Fatalf("walk = %q, want files + directories in preorder (the static ignore set pruned):\n%s", joined, want)
+		}
+	})
+	t.Run("the gitignore prune applies to files and directories", func(t *testing.T) {
+		dir := t.TempDir()
+		os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("ignored/\nsecret.txt\n"), 0o644)
+		mk(dir, "keep.go")
+		mk(dir, "ignored/inner.go")
+		mk(dir, "secret.txt")
+		got := walkFiles(dir)
+		// the .gitignore file itself is walked (not in the ignore set); the
+		// pruned dir (ignored/) + file (secret.txt) are absent.
+		want := strings.Join([]string{".gitignore", "keep.go"}, "\n")
+		if joined := strings.Join(got, "\n"); joined != want {
+			t.Fatalf("walk = %q, want the gitignore prune applied to files + directories:\n%s", joined, want)
+		}
+	})
+	t.Run("the file cap counts file entries only (dir rows do not consume it)", func(t *testing.T) {
+		dir := t.TempDir()
+		for i := 0; i < maxWalkFiles+1; i++ {
+			os.WriteFile(filepath.Join(dir, fmt.Sprintf("f%04d.go", i)), []byte("x"), 0o644)
+		}
+		os.MkdirAll(filepath.Join(dir, "ddir1"), 0o755)
+		os.MkdirAll(filepath.Join(dir, "ddir2"), 0o755)
+		files, dirs := 0, 0
+		for _, p := range walkFiles(dir) {
+			if strings.HasSuffix(p, "/") {
+				dirs++
+			} else {
+				files++
+			}
+		}
+		if files != maxWalkFiles {
+			t.Fatalf("file entries = %d, want the file cap %d", files, maxWalkFiles)
+		}
+		if dirs != 2 {
+			t.Fatalf("dir entries = %d, want 2 (dir rows do not consume the file cap)", dirs)
+		}
+	})
 }
 
 func TestMentionOptions(t *testing.T) {
-	dir := t.TempDir()
-	for _, f := range []string{"alpha.go", "beta.go", "alpha_beta.go"} {
-		os.WriteFile(filepath.Join(dir, f), []byte("x"), 0o644)
+	mkTree := func(t *testing.T, dir string, files ...string) {
+		for _, f := range files {
+			p := filepath.Join(dir, filepath.FromSlash(f))
+			os.MkdirAll(filepath.Dir(p), 0o755)
+			os.WriteFile(p, []byte("x"), 0o644)
+		}
 	}
-	a := testApp()
-	a.Service.Dir = dir
-	a.prompt.input.SetValue("@al")
-	opts := a.mentionOptions()
-	if len(opts) == 0 {
-		t.Fatal("no options for @al")
-	}
-	// the prefix match (alpha.go) ranks first (the x2 prefix boost)
-	if opts[0].value.(string) != "alpha.go" {
-		t.Fatalf("top option = %v, want alpha.go (the prefix match)", opts[0].value)
-	}
+	t.Run("the prefix match ranks first", func(t *testing.T) {
+		dir := t.TempDir()
+		for _, f := range []string{"alpha.go", "beta.go", "alpha_beta.go"} {
+			os.WriteFile(filepath.Join(dir, f), []byte("x"), 0o644)
+		}
+		a := testApp()
+		a.Service.Dir = dir
+		a.prompt.input.SetValue("@al")
+		opts := a.mentionOptions()
+		if len(opts) == 0 {
+			t.Fatal("no options for @al")
+		}
+		// the prefix match (alpha.go) ranks first (the x2 prefix boost)
+		mo, ok := opts[0].value.(mentionOption)
+		if !ok || mo.path != "alpha.go" || mo.isDir {
+			t.Fatalf("top option = %v, want alpha.go (the prefix match)", opts[0].value)
+		}
+	})
+	t.Run("the positive-score gate filters the weak scattered subsequence", func(t *testing.T) {
+		dir := t.TempDir()
+		for _, f := range []string{"abacus.go", "xaby.go"} {
+			os.WriteFile(filepath.Join(dir, f), []byte("x"), 0o644)
+		}
+		a := testApp()
+		a.Service.Dir = dir
+		a.prompt.input.SetValue("@ab")
+		opts := a.mentionOptions()
+		// abacus.go is the prefix match (the x2 boost, a positive score);
+		// xaby.go is only a weak scattered subsequence (the fuzzy score <= 0)
+		// — the positive-score gate filters it (the threshold-0.5 port).
+		if len(opts) != 1 {
+			t.Fatalf("options = %d, want 1 (the weak scattered match filtered): %v", len(opts), opts)
+		}
+		mo, _ := opts[0].value.(mentionOption)
+		if mo.path != "abacus.go" {
+			t.Fatalf("top option = %q, want abacus.go (the prefix match)", mo.path)
+		}
+	})
+	t.Run("the empty query lists all files + directories (frecency order; walk order where zero)", func(t *testing.T) {
+		dir := t.TempDir()
+		mkTree(t, dir, "alpha.go", "beta.go", "tools/inner.go")
+		a := testApp()
+		a.Service.Dir = dir
+		a.freq = []frecencyEntry{{Path: "beta.go", Frequency: 5, LastOpen: testNow}}
+		a.prompt.input.SetValue("@")
+		opts := a.mentionOptions()
+		// beta.go ranks first (the frecency order); the rest keep walk order
+		// (the files + the dir row, the fuzzy/insert target WITHOUT the
+		// trailing-/ display marker).
+		want := []string{"beta.go", "alpha.go", "tools", "tools/inner.go"}
+		if len(opts) != len(want) {
+			t.Fatalf("options = %d, want %d: %v", len(opts), len(want), opts)
+		}
+		for i, w := range want {
+			mo, ok := opts[i].value.(mentionOption)
+			if !ok || mo.path != w {
+				t.Fatalf("option %d = %v, want %s", i, opts[i].value, w)
+			}
+			if i == 2 && !mo.isDir {
+				t.Fatalf("option 2 = %v, want the tools dir row (isDir)", opts[i].value)
+			}
+		}
+	})
+	t.Run("the empty query caps at maxPickerOptions rows", func(t *testing.T) {
+		dir := t.TempDir()
+		for i := 0; i < 12; i++ {
+			os.WriteFile(filepath.Join(dir, fmt.Sprintf("a%02d.go", i)), []byte("x"), 0o644)
+		}
+		a := testApp()
+		a.Service.Dir = dir
+		a.prompt.input.SetValue("@")
+		opts := a.mentionOptions()
+		if len(opts) != maxPickerOptions {
+			t.Fatalf("options = %d, want the cap %d", len(opts), maxPickerOptions)
+		}
+		mo, _ := opts[len(opts)-1].value.(mentionOption)
+		if mo.path != "a09.go" {
+			t.Fatalf("last option = %q, want a09.go (walk order, capped)", mo.path)
+		}
+	})
+	t.Run("the non-empty query runs over the merged file+dir pool", func(t *testing.T) {
+		dir := t.TempDir()
+		mkTree(t, dir, "alpha.go", "beta.go", "tools/inner.go")
+		a := testApp()
+		a.Service.Dir = dir
+		a.prompt.input.SetValue("@tool")
+		opts := a.mentionOptions()
+		// the tools dir (the fuzzy target is the slash-relative path WITHOUT
+		// the trailing / — the insert value) + its file; alpha/beta carry no
+		// "tool" subsequence.
+		if len(opts) != 2 {
+			t.Fatalf("options = %d, want 2 (the merged file+dir pool): %v", len(opts), opts)
+		}
+		var sawDir, sawFile bool
+		for _, o := range opts {
+			mo, ok := o.value.(mentionOption)
+			if !ok {
+				t.Fatalf("option value = %v, want mentionOption", o.value)
+			}
+			if strings.HasSuffix(mo.path, "/") {
+				t.Fatalf("the insert value = %q, want no trailing /", mo.path)
+			}
+			if mo.path == "tools" && mo.isDir {
+				sawDir = true
+			}
+			if mo.path == "tools/inner.go" && !mo.isDir {
+				sawFile = true
+			}
+		}
+		if !sawDir || !sawFile {
+			t.Fatalf("options = %v, want the tools dir row + tools/inner.go", opts)
+		}
+	})
+	t.Run("the selection resets to 0 on a query change", func(t *testing.T) {
+		a := testApp()
+		dir := t.TempDir()
+		mkTree(t, dir, "alpha.go", "alpha_beta.go")
+		a.Service.Dir = dir
+		// type the @-query through the key path (the input fallback): "@"
+		// opens the menu, "a" filters — then move the selection and type a
+		// new character: the ported filter-rerun reset.
+		a.handleKey(press('@'))
+		a.handleKey(press('a'))
+		a.prompt.sel = 1
+		a.handleKey(press('l'))
+		if got := a.prompt.input.Value(); got != "@al" {
+			t.Fatalf("input = %q, want @al", got)
+		}
+		if a.prompt.sel != 0 {
+			t.Fatalf("sel = %d, want 0 (the @-query changed a -> al)", a.prompt.sel)
+		}
+	})
 }
 
 func TestAcInsert(t *testing.T) {
