@@ -44,6 +44,16 @@ func (a *App) handleKey(k tea.KeyPressMsg) []tea.Cmd {
 	if keyMatchesSeq(k, "tab") && a.prompt.slashActive() {
 		return a.slashTabComplete()
 	}
+	// S5: while the @-picker is open, tab completes the selected option in
+	// the @ handler path BEFORE the keymap registry's agent_cycle (tab) sees
+	// it — the slash S6 idiom is the structural referent (the base group's
+	// agent_cycle, keymap.go:135, would otherwise consume the tab). File →
+	// insert + close (acInsert), dir → expand (acExpand). shift+tab
+	// (agent_cycle_reverse, keymap.go:136) is NOT owned here — it still
+	// cycles the agent.
+	if a.prompt.mentionActive() && a.keymap.Match("agent_cycle", k) {
+		return a.acTabComplete()
+	}
 	// S4.2: the keymap registry owns the app-level bindings (any route, no
 	// dialog). The leader mechanism first, then the base context group.
 	if cmds, done := a.handleAppKeys(k); done {
@@ -241,6 +251,29 @@ func (a *App) slashTabComplete() []tea.Cmd {
 	a.prompt.input.SetValue(v)
 	a.prompt.input.SetCursor(len(v))
 	a.prompt.slashDone = true
+	return nil
+}
+
+// acTabComplete is the @-picker's tab completion (S5, spec §3.5): the
+// selected file → the enter action (acInsert — insert + close), the selected
+// dir → the expand branch (acExpand — the shared S3 dir tab-expand, the menu
+// stays open re-filtered to the subtree). A no-match picker is a no-op (the
+// upstream select's if (!selected) return). shift+tab is NOT owned here
+// (agent_cycle_reverse, keymap.go:136 — it still cycles the agent).
+func (a *App) acTabComplete() []tea.Cmd {
+	opts := a.mentionOptions()
+	if len(opts) == 0 || a.prompt.sel >= len(opts) {
+		return nil
+	}
+	mo, ok := opts[a.prompt.sel].value.(mentionOption)
+	if !ok {
+		return nil
+	}
+	if mo.isDir {
+		a.acExpand(mo)
+	} else {
+		a.acInsert(mo)
+	}
 	return nil
 }
 

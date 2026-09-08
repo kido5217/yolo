@@ -601,3 +601,137 @@ func TestTUIAtPickerMouseClick(t *testing.T) {
 		t.Fatal("the @ menu should be closed after the click (the insert's trailing space kills the trigger)")
 	}
 }
+
+// TestAcTabComplete pins the S5 tab-complete semantics (spec §3.5, the §3.10
+// table): the tab key, matched against the agent_cycle binding (keymap.go:135),
+// dispatches on the selected @-picker row — a file → the enter action
+// (acInsert, insert + close), a directory → the expand branch (acExpand, the
+// shared S3 dir tab-expand, the menu stays open re-filtered to the subtree).
+// The closed-tab leg pins that, with the @ menu closed, tab still cycles the
+// agent (the agent_cycle path — the intercept is scoped to mentionActive, so
+// a closed-tab tab and shift+tab both keep the base group's agent_cycle).
+func TestAcTabComplete(t *testing.T) {
+	t.Run("tab on a file row: the enter action (insert + close)", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "alpha.go"), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		a := testApp()
+		a.Service.Dir = dir
+		a.prompt.input.SetValue("fix @")
+		if !a.prompt.mentionActive() {
+			t.Fatal("the @ menu should be open for input \"fix @\"")
+		}
+		a.handleKey(pressTab())
+		if got := a.prompt.input.Value(); got != "fix @alpha.go " {
+			t.Fatalf("insert = %q, want the @-prefixed path + a trailing space (fix @alpha.go )", got)
+		}
+		if a.prompt.mentionActive() {
+			t.Fatal("the @ menu should be closed after the tab (the trailing space kills the trigger)")
+		}
+		if len(a.freq) != 1 || a.freq[0].Path != "alpha.go" {
+			t.Fatalf("frecency not recorded (the insert touch): %v", a.freq)
+		}
+	})
+	t.Run("tab on a directory row: the expand (shared S3 code)", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(dir, "cmd"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "cmd", "main.go"), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		a := testApp()
+		a.Service.Dir = dir
+		a.prompt.input.SetValue("fix @")
+		// sel 0 is the cmd/ dir row (the walk's preorder: the dir is recorded
+		// before its files). tab on it expands, not inserts.
+		a.handleKey(pressTab())
+		if got := a.prompt.input.Value(); got != "fix @cmd/" {
+			t.Fatalf("expand = %q, want @cmd/ (no trailing space)", got)
+		}
+		if a.prompt.sel != 0 {
+			t.Fatalf("sel = %d, want 0 (the expand resets sel)", a.prompt.sel)
+		}
+		if !a.prompt.mentionActive() {
+			t.Fatal("the @ menu should stay open after the dir expand (a valid @-trigger remains)")
+		}
+		var sawSubtree bool
+		for _, o := range a.mentionOptions() {
+			mo, _ := o.value.(mentionOption)
+			if mo.path == "cmd/main.go" {
+				sawSubtree = true
+			}
+		}
+		if !sawSubtree {
+			t.Fatal("the re-filter should keep the cmd/ subtree (cmd/main.go)")
+		}
+		if len(a.freq) != 0 {
+			t.Fatalf("the dir-expand branch must not touch the frecency: %v", a.freq)
+		}
+	})
+	t.Run("closed-tab: the agent-cycle path (agent_cycle)", func(t *testing.T) {
+		a := testApp()
+		a.store.Agents = agentFixture()  // build, plan, yolo (the GET /agent wire order)
+		a.prompt.input.SetValue("hello") // no @ trigger: the @ menu is closed
+		if a.prompt.mentionActive() {
+			t.Fatal("the @ menu should be closed for input \"hello\"")
+		}
+		a.handleKey(pressTab())
+		if got := a.pendingAgent; got != "plan" {
+			t.Fatalf("pendingAgent = %q, want plan (the closed-tab agent-cycle, the @ handler does not own it)", got)
+		}
+		if got := a.prompt.input.Value(); got != "hello" {
+			t.Fatalf("input = %q, want hello (tab is not inserted)", got)
+		}
+	})
+	t.Run("the hint flip: 'tab complete' while the @ menu is open, 'tab agents' when closed", func(t *testing.T) {
+		a := testApp()
+		if got := a.homeHintLine(); got != "tab agents  ctrl+p commands" {
+			t.Fatalf("closed hint = %q, want \"tab agents  ctrl+p commands\"", got)
+		}
+		a.prompt.input.SetValue("@")
+		if !a.prompt.mentionActive() {
+			t.Fatal("the @ menu should be open for input \"@\"")
+		}
+		if got := a.homeHintLine(); !strings.HasPrefix(got, "tab complete") {
+			t.Fatalf("open (@) hint = %q, want the first segment \"tab complete\"", got)
+		}
+		// the slash menu open: still "tab complete" (the S6 flip, unchanged).
+		a.prompt.input.SetValue("/new")
+		if got := a.homeHintLine(); !strings.HasPrefix(got, "tab complete") {
+			t.Fatalf("open (slash) hint = %q, want the first segment \"tab complete\"", got)
+		}
+	})
+}
+
+// TestTUIAtPickerTabComplete is the teatest leg for S5 (spec §3.5, the §3.10
+// table): tab on a file row of the open @-picker is the ENTER action — the
+// selected file inserts (the @-prefixed path + a trailing space) and the menu
+// closes. It mirrors TestTUIAtPicker (the enter leg) but drives the key through
+// pressTab (the real handleKey intercept, the S6 slash idiom). A directory row
+// expands instead — TestAcTabComplete pins that branch (whitebox).
+func TestTUIAtPickerTabComplete(t *testing.T) {
+	ts := testutil.Boot(t)
+	if err := os.WriteFile(filepath.Join(ts.Dir, "alpha.go"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := client.New(ts.URL, ts.Dir) // scope (and the walk) to the server work dir
+	a := newRecApp(c, store.State{}, "")
+	t.Cleanup(a.Close)
+	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
+	teatest.WaitFor(t, tm.Output(), hasLine(homeLogoLine), teatest.WithDuration(5*time.Second))
+	tm.Send(press('n'))
+	teatest.WaitFor(t, tm.Output(), hasLine("esc abort/back"), teatest.WithDuration(5*time.Second))
+	suiteType(tm, "see @")
+	teatest.WaitFor(t, tm.Output(), hasLine("alpha.go"), teatest.WithDuration(5*time.Second))
+	tm.Send(pressTab())
+	_ = tm.Quit()
+	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
+	if got := a.prompt.input.Value(); got != "see @alpha.go " {
+		t.Fatalf("insert = %q, want the tab-completed @-prefixed insert (see @alpha.go )", got)
+	}
+	if a.prompt.mentionActive() {
+		t.Fatal("the @ menu should be closed after the tab (the trailing space kills the trigger)")
+	}
+}

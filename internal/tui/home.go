@@ -372,10 +372,11 @@ func (a *App) homeHintLine() string {
 		b.WriteString(a.boxFg("text", f))
 		b.WriteString(a.boxFg("textMuted", word))
 	}
-	// S6: the first segment's word is context-aware — "tab complete" while
-	// the slash menu is open, "tab agents" when closed.
+	// S6 (the @-epic S5 extends it): the first segment's word is
+	// context-aware — "tab complete" while either menu is open (slashActive
+	// or mentionActive), "tab agents" when closed.
 	agentWord := " agents"
-	if a.prompt.slashActive() {
+	if a.prompt.slashActive() || a.prompt.mentionActive() {
 		agentWord = " complete"
 	}
 	seg("agent_cycle", agentWord)
