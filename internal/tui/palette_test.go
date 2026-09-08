@@ -637,3 +637,257 @@ func TestTUICommandPalette(t *testing.T) {
 	_ = tm.Quit()
 	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
 }
+
+// TestPaletteKeyTable pins the 0.10.0 palette key table (spec §2.8 — decision
+// E, S5): one leg per row. The table is already ported (the select's keys are
+// matched directly by selectModel.handleKey, off the registry — deviation
+// 211): the legs are verification; a failing leg is the gap to fix.
+func TestPaletteKeyTable(t *testing.T) {
+	t.Run("ctrl+p opens the palette (both routes)", func(t *testing.T) {
+		home := paletteTestApp()
+		home.handleKey(pressCtrlP()) // command_list → the palette (the live key ladder)
+		if d, ok := home.dlg.top(); !ok || d.kind != dlgPalette {
+			t.Fatalf("home route: after ctrl+p top=%+v (ok=%v), want the palette", d, ok)
+		}
+		sess := paletteTestApp()
+		sess.route = routeSession
+		sess.handleKey(pressCtrlP())
+		if d, ok := sess.dlg.top(); !ok || d.kind != dlgPalette {
+			t.Fatalf("session route: after ctrl+p top=%+v (ok=%v), want the palette", d, ok)
+		}
+	})
+
+	// The registry's prompt.autocomplete.prev/next entries (up,ctrl+p /
+	// down,ctrl+n, keymap.go) are ported-but-inert names: with the palette
+	// open the dialog owns every key (the registry is not consulted) and the
+	// select's prev/next is the arrow (deviation 211 — the select's keys stay
+	// off the registry). ctrl+p/ctrl+n fall to the filter input: the query
+	// gains the literal character and the selection never takes the nav step
+	// (up would wrap 0 → last; down would give 1) — the sel=0 is the
+	// syncFilter reset, not a nav move.
+	t.Run("ctrl+p/ctrl+n type the filter (not the nav)", func(t *testing.T) {
+		for _, tc := range []struct {
+			name string
+			k    tea.KeyPressMsg
+		}{{
+			name: "ctrl+p",
+			k:    tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl, Text: "p"},
+		}, {
+			name: "ctrl+n",
+			k:    tea.KeyPressMsg{Code: 'n', Mod: tea.ModCtrl, Text: "n"},
+		}} {
+			t.Run(tc.name, func(t *testing.T) {
+				a := paletteTestApp()
+				a.openPaletteDialog()
+				d, ok := a.dlg.top()
+				if !ok || d.kind != dlgPalette {
+					t.Fatal("the palette must be on top")
+				}
+				m := d.sel
+				a.handleKey(tc.k)
+				if v := m.input.Value(); v != string(tc.k.Text) {
+					t.Fatalf("filter = %q, want the literal %q (the key goes to the filter input)", v, tc.k.Text)
+				}
+				if m.sel != 0 {
+					t.Fatalf("sel = %d, want 0 (not the nav step — the arrows are the prev/next)", m.sel)
+				}
+				if d2, ok := a.dlg.top(); !ok || d2.kind != dlgPalette {
+					t.Fatalf("after %s: top=%+v (ok=%v), want the palette still open (no re-open)", tc.name, d2, ok)
+				}
+			})
+		}
+	})
+
+	t.Run("up/down wrap", func(t *testing.T) {
+		a := paletteTestApp()
+		a.openPaletteDialog()
+		d, ok := a.dlg.top()
+		if !ok {
+			t.Fatal("the palette must be on top")
+		}
+		m := d.sel
+		n := len(m.filtered())
+		m.sel = n - 1
+		m.handleKey(a.App, downKey)
+		if m.sel != 0 {
+			t.Fatalf("down on the last row = %d, want 0 (wrap)", m.sel)
+		}
+		m.handleKey(a.App, upKey)
+		if m.sel != n-1 {
+			t.Fatalf("up on the first row = %d, want the last (%d) (wrap)", m.sel, n-1)
+		}
+	})
+
+	t.Run("enter runs the selected command", func(t *testing.T) {
+		a := paletteTestApp()
+		a.openPaletteDialog()
+		d, ok := a.dlg.top()
+		if !ok {
+			t.Fatal("the palette must be on top")
+		}
+		m := d.sel
+		// pick the plain /sessions option (the Suggested group may precede
+		// it, so its index is found, not assumed).
+		want := -1
+		for i, o := range m.filtered() {
+			if o.value == "/sessions" {
+				want = i
+				break
+			}
+		}
+		if want < 0 {
+			t.Fatal("no /sessions option in the palette")
+		}
+		m.sel = want
+		a.handleKey(enterKey) // submit → paletteSelectPick (the run-on-enter)
+		d2, ok := a.dlg.top()
+		if !ok || d2.kind != dlgSessions {
+			t.Fatalf("after enter: top=%+v (ok=%v), want the session-list dialog (the palette ran /sessions and closed)", d2, ok)
+		}
+	})
+
+	t.Run("esc/ctrl+c close without running", func(t *testing.T) {
+		for _, tc := range []struct {
+			name string
+			k    tea.KeyPressMsg
+		}{{
+			name: "esc",
+			k:    press(tea.KeyEscape),
+		}, {
+			name: "ctrl+c",
+			k:    ctrlCKey,
+		}} {
+			t.Run(tc.name, func(t *testing.T) {
+				a := paletteTestApp()
+				a.openPaletteDialog()
+				d, ok := a.dlg.top()
+				if !ok {
+					t.Fatal("the palette must be on top")
+				}
+				d.sel.sel = 3 // a real option: a run would push its dialog
+				a.handleKey(tc.k)
+				if !a.dlg.empty() {
+					if d2, ok := a.dlg.top(); ok {
+						t.Fatalf("after %s: top=%+v, want the palette closed with nothing run (ctrl+c must not arm the quit)", tc.name, d2)
+					}
+					t.Fatalf("after %s: the dialog stack is not empty", tc.name)
+				}
+				if v := a.prompt.input.Value(); v != "" {
+					t.Fatalf("after %s: the prompt input = %q, want it untouched", tc.name, v)
+				}
+			})
+		}
+	})
+
+	t.Run("pgup/pgdown ±10 (flat, deviation 176)", func(t *testing.T) {
+		// The env-machined acceleration is not ported: the window shifts a
+		// flat ±10 rows (the selection stays). The palette pool (11 options
+		// — more built rows with the category headers) is larger than 10, so
+		// the shift is visible.
+		a := paletteTestApp()
+		a.openPaletteDialog()
+		d, ok := a.dlg.top()
+		if !ok {
+			t.Fatal("the palette must be on top")
+		}
+		m := d.sel
+		m.view(60, 24, a.theme) // the first render anchors the window at the top
+		if m.top != 0 {
+			t.Fatalf("initial top = %d, want 0", m.top)
+		}
+		a.handleKey(selPgDnMsg)
+		m.view(60, 24, a.theme)
+		if m.top != 10 {
+			t.Fatalf("pgdown: top = %d, want 10 (the flat ±10)", m.top)
+		}
+		a.handleKey(selPgUpMsg)
+		m.view(60, 24, a.theme)
+		if m.top != 0 {
+			t.Fatalf("pgup: top = %d, want 0 (the flat ±10 back)", m.top)
+		}
+	})
+
+	t.Run("home/end jump", func(t *testing.T) {
+		a := paletteTestApp()
+		a.openPaletteDialog()
+		d, ok := a.dlg.top()
+		if !ok {
+			t.Fatal("the palette must be on top")
+		}
+		m := d.sel
+		n := len(m.filtered())
+		m.sel = n / 2
+		m.handleKey(a.App, homeKeyTest)
+		if m.sel != 0 {
+			t.Fatalf("home: sel = %d, want 0 (jump to the top)", m.sel)
+		}
+		m.handleKey(a.App, endKey)
+		if m.sel != n-1 {
+			t.Fatalf("end: sel = %d, want the last (%d) (jump to the bottom)", m.sel, n-1)
+		}
+	})
+
+	t.Run("tab/shift+tab no-op", func(t *testing.T) {
+		// The palette select has no footer actions: focusAction is a no-op
+		// (the selection is unchanged); the slash-menu tab-complete is
+		// dialog-gated (the dialog owns the keys while the palette is open).
+		a := paletteTestApp()
+		a.openPaletteDialog()
+		d, ok := a.dlg.top()
+		if !ok {
+			t.Fatal("the palette must be on top")
+		}
+		m := d.sel
+		m.sel = 3
+		a.handleKey(selTabMsg)
+		if m.sel != 3 || m.focAct != -1 {
+			t.Fatalf("tab: sel=%d focAct=%d, want 3/-1 (no footer actions)", m.sel, m.focAct)
+		}
+		a.handleKey(selShiftTabMsg)
+		if m.sel != 3 || m.focAct != -1 {
+			t.Fatalf("shift+tab: sel=%d focAct=%d, want 3/-1 (no footer actions)", m.sel, m.focAct)
+		}
+		if d2, ok := a.dlg.top(); !ok || d2.kind != dlgPalette {
+			t.Fatalf("after tab: top=%+v (ok=%v), want the palette still open", d2, ok)
+		}
+	})
+
+	t.Run("sel resets on query change", func(t *testing.T) {
+		// syncFilter: a non-empty needle resets the selection to 0 (the
+		// ported filter-rerun reset, select.go).
+		a := paletteTestApp()
+		a.openPaletteDialog()
+		d, ok := a.dlg.top()
+		if !ok {
+			t.Fatal("the palette must be on top")
+		}
+		m := d.sel
+		m.sel = 3
+		a.handleKey(press('m'))
+		if m.filter != "m" {
+			t.Fatalf("filter = %q, want m (the typed char feeds the filter)", m.filter)
+		}
+		if m.sel != 0 {
+			t.Fatalf("sel after the query change = %d, want 0 (the reset)", m.sel)
+		}
+	})
+
+	t.Run("empty text (No results found)", func(t *testing.T) {
+		// The empty state is already parity (select.go renders
+		// "  No results found" in TextMuted — locked decision 3): this leg
+		// verifies it with an impossible query on the real palette select
+		// (no change).
+		a := paletteTestApp()
+		a.openPaletteDialog()
+		d, ok := a.dlg.top()
+		if !ok {
+			t.Fatal("the palette must be on top")
+		}
+		m := d.sel
+		m.input.SetValue("zzzzqq") // nothing matches by title or category
+		lines := strings.Split(m.view(60, 24, a.theme), "\n")
+		if got := stripANSI(lines[len(lines)-1]); got != "  No results found" {
+			t.Fatalf("empty-state line = %q, want the exact pinned text %q", got, "  No results found")
+		}
+	})
+}
