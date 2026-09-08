@@ -272,12 +272,17 @@ func TestKeymapFormat(t *testing.T) {
 }
 
 func TestKeymapDispatch(t *testing.T) {
-	t.Run("ctrl+c opens the quit dialog (app_exit)", func(t *testing.T) {
+	t.Run("ctrl+c quits immediately (app_exit)", func(t *testing.T) {
 		a := testApp()
-		a.handleKey(ctrlCKey)
-		d, ok := a.dlg.top()
-		if !ok || d.kind != dlgQuit {
-			t.Fatalf("after ctrl+c: top=%+v (ok=%v), want the quit dialog", d, ok)
+		cmds := a.handleKey(ctrlCKey)
+		if len(cmds) != 1 {
+			t.Fatalf("after ctrl+c: %d cmds, want 1 (quit)", len(cmds))
+		}
+		if _, ok := cmds[0]().(tea.QuitMsg); !ok {
+			t.Fatalf("ctrl+c cmd yields %T, want tea.QuitMsg", cmds[0]())
+		}
+		if _, ok := a.dlg.top(); ok {
+			t.Fatalf("after ctrl+c: a dialog is open, want none (immediate quit)")
 		}
 	})
 
@@ -327,7 +332,7 @@ func TestKeymapDispatch(t *testing.T) {
 
 	t.Run("leader is ignored while a dialog is on top", func(t *testing.T) {
 		a := modelFixture()
-		a.dlg.push(dialog{kind: dlgQuit})
+		a.dlg.push(dialog{kind: dlgHelp})
 		a.handleKey(pressLeader())
 		if a.pendingLeader {
 			t.Fatal("the leader must not arm while a dialog is open")

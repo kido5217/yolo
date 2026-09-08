@@ -240,8 +240,6 @@ func TestPromptMenuKeys(t *testing.T) {
 			want dialogKind
 		}{
 			{"/help", dlgHelp},
-			{"/quit", dlgQuit},
-			{"/exit", dlgQuit}, // alias of /quit
 			{"/model", dlgModel},
 			{"/agents", dlgAgents},
 		}
@@ -257,6 +255,26 @@ func TestPromptMenuKeys(t *testing.T) {
 				}
 				if a.prompt.input.Value() != "" {
 					t.Fatalf("input = %q, want cleared after executing", a.prompt.input.Value())
+				}
+			})
+		}
+		for _, in := range []string{"/quit", "/exit"} { // /exit is the alias of /quit
+			t.Run(in, func(t *testing.T) {
+				a := testApp()
+				a.store.Commands = testCommands()
+				typeStr(a, in)
+				a.handleKey(press(tea.KeyEnter))
+				if a.prompt.input.Value() != "" {
+					t.Fatalf("input = %q, want cleared after executing", a.prompt.input.Value())
+				}
+				if _, ok := a.dlg.top(); ok {
+					t.Fatalf("%s pushed a dialog, want none (immediate quit)", in)
+				}
+				if len(a.Cmds) != 1 {
+					t.Fatalf("%s emitted %d cmds, want 1 (quit)", in, len(a.Cmds))
+				}
+				if _, ok := a.Cmds[0]().(tea.QuitMsg); !ok {
+					t.Fatalf("%s cmd yields %T, want tea.QuitMsg (immediate quit)", in, a.Cmds[0]())
 				}
 			})
 		}
@@ -386,10 +404,15 @@ func TestPromptQuitAlias(t *testing.T) {
 	for _, in := range []string{"/quit", "/exit"} {
 		t.Run(in, func(t *testing.T) {
 			a := testApp()
-			a.runCommand(in)
-			d, ok := a.dlg.top()
-			if !ok || d.kind != dlgQuit {
-				t.Fatalf("dialog = %v (ok=%v), want dlgQuit", d.kind, ok)
+			cmds := a.runCommand(in)
+			if len(cmds) != 1 {
+				t.Fatalf("runCommand(%q) returned %d cmds, want 1 (quit)", in, len(cmds))
+			}
+			if _, ok := cmds[0]().(tea.QuitMsg); !ok {
+				t.Fatalf("runCommand(%q) cmd yields %T, want tea.QuitMsg (immediate quit)", in, cmds[0]())
+			}
+			if _, ok := a.dlg.top(); ok {
+				t.Fatalf("runCommand(%q) pushed a dialog, want none (immediate quit)", in)
 			}
 		})
 	}

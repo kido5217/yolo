@@ -156,7 +156,7 @@ func (a *App) dispatchCommand(name string) []tea.Cmd {
 	case "command_list":
 		return a.openPaletteDialog()
 	case "app_exit":
-		a.dlg.push(dialog{kind: dlgQuit})
+		return a.emit(quitCmd())
 	case "model_list":
 		return a.openModelDialog()
 	case "agent_list":

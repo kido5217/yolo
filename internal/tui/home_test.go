@@ -296,23 +296,18 @@ func TestAppHandleKeyHome(t *testing.T) {
 		}
 	})
 
-	t.Run("ctrl+c opens quit dialog, y confirms, esc cancels", func(t *testing.T) {
+	t.Run("ctrl+c quits immediately (app_exit)", func(t *testing.T) {
 		t.Parallel()
 		a := testApp()
-		a.handleKey(ctrlCKey)
-		if a.dlg.empty() {
-			t.Fatal("quit dialog not opened")
+		cmds := a.handleKey(ctrlCKey)
+		if len(cmds) != 1 {
+			t.Fatalf("ctrl+c emitted %d cmds, want 1 (quit)", len(cmds))
 		}
-		a.handleKey(press('y'))
-		if len(a.Cmds) != 1 {
-			t.Fatalf("recorded %d cmds, want 1 quit cmd", len(a.Cmds))
+		if _, ok := cmds[0]().(tea.QuitMsg); !ok {
+			t.Fatalf("ctrl+c cmd yields %T, want tea.QuitMsg", cmds[0]())
 		}
-
-		b := testApp()
-		b.handleKey(ctrlCKey)
-		b.handleKey(press(tea.KeyEscape))
-		if !b.dlg.empty() {
-			t.Fatal("dialog should be closed after esc")
+		if !a.dlg.empty() {
+			t.Fatal("ctrl+c must not open a dialog (immediate quit)")
 		}
 	})
 
@@ -333,17 +328,22 @@ func TestAppHandleKeyHome(t *testing.T) {
 	})
 }
 
-// TestInterruptMsgOpensQuitDialog pins SIGINT handling (cli-2): a
-// tea.InterruptMsg delivered during Run is treated exactly like the ctrl+c
-// keystroke — it opens the quit-confirm dialog.
-func TestInterruptMsgOpensQuitDialog(t *testing.T) {
+// TestInterruptMsgQuits pins SIGINT handling (cli-2): a tea.InterruptMsg
+// delivered during Run is treated exactly like the ctrl+c keystroke — it
+// quits immediately (emits tea.Quit) with no confirmation dialog.
+func TestInterruptMsgQuits(t *testing.T) {
 	ts := testutil.Boot(t)
 	c := client.New(ts.URL, ts.Dir)
 	a := newRecApp(c, store.State{}, "")
 	t.Cleanup(a.Close)
 	a.Update(tea.InterruptMsg{})
-	d, ok := a.dlg.top()
-	if !ok || d.kind != dlgQuit {
-		t.Fatalf("after InterruptMsg dialog = %+v (ok=%v), want dlgQuit on top", d, ok)
+	if len(a.Cmds) != 1 {
+		t.Fatalf("after InterruptMsg: %d cmds, want 1 (quit)", len(a.Cmds))
+	}
+	if _, ok := a.Cmds[0]().(tea.QuitMsg); !ok {
+		t.Fatalf("InterruptMsg cmd yields %T, want tea.QuitMsg", a.Cmds[0]())
+	}
+	if _, ok := a.dlg.top(); ok {
+		t.Fatalf("after InterruptMsg: a dialog is open, want none (immediate quit)")
 	}
 }
