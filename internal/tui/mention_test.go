@@ -512,3 +512,92 @@ func TestMentionPrecedenceGate(t *testing.T) {
 		}
 	})
 }
+
+// TestTUIAtPickerMouseHover drives a mouse motion over a row of the open
+// @-picker (the S4 mouse, spec §3.8) and asserts the full acceptance chain:
+// the motion moves the selection to the hovered row, and the next enter
+// inserts THAT row (not the original sel). The teatest leg sends a
+// tea.MouseMsg at the S1 anchor for row 1 (mentionDropdownRows — the
+// slash-epic tm.Send tea.Msg idiom, cell coordinates, not pixels). The
+// model is asserted after the program has quit (not a race with the running
+// program, deviation 293's class — the cell-diff renderer re-emits only the
+// changed cells, so the insert's gutter and "@" trigger were already
+// drained and the model state is the sharp pin, TestTUIAtPicker's idiom).
+func TestTUIAtPickerMouseHover(t *testing.T) {
+	ts := testutil.Boot(t)
+	os.WriteFile(filepath.Join(ts.Dir, "alpha.go"), []byte("x"), 0o644)
+	os.WriteFile(filepath.Join(ts.Dir, "beta.go"), []byte("x"), 0o644)
+	c := client.New(ts.URL, ts.Dir) // scope (and the walk) to the server work dir
+	a := newRecApp(c, store.State{}, "")
+	t.Cleanup(a.Close)
+	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
+	teatest.WaitFor(t, tm.Output(), hasLine(homeLogoLine), teatest.WithDuration(5*time.Second))
+	tm.Send(press('n'))
+	teatest.WaitFor(t, tm.Output(), hasLine("esc abort/back"), teatest.WithDuration(5*time.Second))
+	suiteType(tm, "see @")
+	teatest.WaitFor(t, tm.Output(), hasLine("beta.go"), teatest.WithDuration(5*time.Second))
+
+	// the S1 anchor for the open @-picker: the first row's cell + the
+	// visible count (two rows for the two walked files, at sel 0).
+	firstRow, vis := a.mentionDropdownRows()
+	if firstRow < 0 || vis != 2 {
+		t.Fatalf("@-picker not open (firstRow=%d vis=%d)", firstRow, vis)
+	}
+
+	// a motion over row 1 (a non-top row) moves the selection there; the
+	// next enter inserts row 1 (beta.go), not the original sel 0 (alpha.go).
+	tm.Send(tea.MouseMotionMsg{X: 10, Y: firstRow + 1, Button: tea.MouseNone})
+	tm.Send(press(tea.KeyEnter))
+	_ = tm.Quit()
+	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
+
+	if got := a.prompt.input.Value(); got != "see @beta.go " {
+		t.Fatalf("insert = %q, want the hovered row's @-prefixed insert (see @beta.go )", got)
+	}
+	if a.prompt.mentionActive() {
+		t.Fatal("the @ menu should be closed after the insert (the trailing space kills the trigger)")
+	}
+}
+
+// TestTUIAtPickerMouseClick drives a mouse click on the first row of the
+// open @-picker (the S4 mouse, spec §3.8) and asserts the click is the
+// ENTER action — the selected option inserts (the @-prefixed path + a
+// trailing space) and the menu closes. NO expand on click (spec §3.8:
+// only tab expands — a directory row clicked inserts and closes). The
+// teatest leg sends a tea.MouseMsg at the S1 anchor for row 0
+// (mentionDropdownRows); the model is asserted after the program has quit
+// (the cell-diff note — see TestTUIAtPickerMouseHover).
+func TestTUIAtPickerMouseClick(t *testing.T) {
+	ts := testutil.Boot(t)
+	os.WriteFile(filepath.Join(ts.Dir, "alpha.go"), []byte("x"), 0o644)
+	os.WriteFile(filepath.Join(ts.Dir, "beta.go"), []byte("x"), 0o644)
+	c := client.New(ts.URL, ts.Dir) // scope (and the walk) to the server work dir
+	a := newRecApp(c, store.State{}, "")
+	t.Cleanup(a.Close)
+	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
+	teatest.WaitFor(t, tm.Output(), hasLine(homeLogoLine), teatest.WithDuration(5*time.Second))
+	tm.Send(press('n'))
+	teatest.WaitFor(t, tm.Output(), hasLine("esc abort/back"), teatest.WithDuration(5*time.Second))
+	suiteType(tm, "see @")
+	teatest.WaitFor(t, tm.Output(), hasLine("alpha.go"), teatest.WithDuration(5*time.Second))
+
+	// the S1 anchor for the open @-picker: two rows for the two walked
+	// files, at sel 0.
+	firstRow, vis := a.mentionDropdownRows()
+	if firstRow < 0 || vis != 2 {
+		t.Fatalf("@-picker not open (firstRow=%d vis=%d)", firstRow, vis)
+	}
+
+	// a click on row 0 (alpha.go) is the enter action: the insert lands in
+	// the prompt and the menu closes (the click is NOT the tab expand).
+	tm.Send(tea.MouseClickMsg{X: 10, Y: firstRow, Button: tea.MouseLeft})
+	_ = tm.Quit()
+	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
+
+	if got := a.prompt.input.Value(); got != "see @alpha.go " {
+		t.Fatalf("insert = %q, want the clicked row's @-prefixed insert (see @alpha.go )", got)
+	}
+	if a.prompt.mentionActive() {
+		t.Fatal("the @ menu should be closed after the click (the insert's trailing space kills the trigger)")
+	}
+}

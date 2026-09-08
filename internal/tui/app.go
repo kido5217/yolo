@@ -458,8 +458,9 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 		}
 		return tea.Batch(cmds...)
 	case tea.MouseMsg:
-		// S5 mouse slice: hover/click on the open slash dropdown only (the
-		// @ picker and other routes ignore the mouse, spec §7).
+		// the S5 (slash) + S4 (@ picker) mouse slices: hover/click on the
+		// open picker (the @-precedence gate keeps the two menus mutually
+		// exclusive). Other routes ignore the mouse (spec §7).
 		return a.handleMouseMsg(m)
 	case tea.InterruptMsg:
 		// SIGINT during Run: the same as the ctrl+c keystroke (cli-2) —
