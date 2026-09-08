@@ -279,7 +279,8 @@ func (pm *promptModel) noteAcQuery() {
 // backgroundMenu fill, the 1-col padding) wrapping the path rows, the
 // selection row SGR'd with the primary bg + the SelectedForeground. Nil
 // options = the menu closed. Empty options (the filter found no match) = the
-// muted "no match" line (the S6 empty-state rework). The width w is the box's
+// muted "No matching items" line (the S6 empty-state text, upstream verbatim —
+// the slash S7 referent, prompt.go slashRows). The width w is the box's
 // width: the session passes the content width, the home passes the prompt box
 // width. The rows carry the mentionOption value (the S2 carrier): the label
 // = the middle-truncated path — directory rows with the trailing-"/" kind
@@ -291,7 +292,7 @@ func (pm *promptModel) acRows(opts []selectOption, w, spaceAbove int, th theme.T
 		return nil
 	}
 	if len(opts) == 0 {
-		return []string{th.TextMuted().Render("  no match")}
+		return []string{th.TextMuted().Render("  No matching items")}
 	}
 	avail := w - 4 // the dropdown's content columns (the label's max width)
 	if avail < 0 {

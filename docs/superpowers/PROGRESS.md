@@ -5,6 +5,35 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
+**Status (2026-09-08):** 0.10.0 @-mention picker parity — epic `yolo-bie`
+(all six slices landed) on branch `feature/mention-picker-parity-0.10.0`
+(plan `docs/superpowers/plans/2026-09-07-0.10.0-mention-picker-parity.md`, spec
+`docs/superpowers/specs/2026-09-07-mention-picker-parity-design.md`). All six
+slices landed: S1 the @-picker chrome onto `dropdown.go` (the slash epic's S1
+shared bordered-dropdown primitive — the box chrome, the two-column path rows,
+the home anchor above the box top edge at boxL/boxW with the logo overlaid, the
+session placement, the @-precedence gate: the @ menu is the only menu open while
+`mentionActive`); S2 the merged file+dir candidate source (the walk collects
+directories alongside files, preorder, the `mentionOption{path,isDir}` carrier)
++ the positive-fuzzy-score gate (the threshold-0.5 port) + the sel→0 reset on
+query change; S3 the insert semantics (the `@<path> ` + trailing-space rule, the
+dir tab-expand, the frecency touch on insert only); S4 the mouse (hover = move
+the selection, click = the enter action — insert `@<path> ` + close, no expand on
+click); S5 the `tab`-complete intercept (file → insert / dir → expand, landed in
+`handleKey` before `handleAppKeys` — the plan's `handleAcKey` placement was
+unreachable; the `tab complete` hint flip); S6 the empty text (`no match` →
+`No matching items`, upstream verbatim, textMuted) + the re-baselines (none
+needed — the sweep found no leg asserting the old @ text and the chrome legs
+already align to the post-S1-S5 chrome) + the third mock
+(`home-mock-200x50-mention-open.txt`). The seven deviations landed at DEVIATIONS
+313–319 (the plan's planned 312–317 were stale: the slash epic landed 308–312,
+so this epic starts at 313; the seventh entry — the S5 `tab`-intercept placement
+— is not in the plan's §4.1 list). Cross-epic notes for the epics that follow
+(palette `yolo-hb0`): the palette epic's S4 needs the @/slash mouse routing + the
+`View.MouseMode` already in place from the slash epic's S5. The full gate is
+green (`go vet ./... && go test ./...` + `gofmt -l .` empty, uncached `-count=1`
+on the changed packages).
+
 **Status (2026-09-08):** 0.10.0 slash menu parity — epic `yolo-2vt` DONE on
 branch `feature/slash-menu-parity-0.10.0` (plan
 `docs/superpowers/plans/2026-09-07-0.10.0-slash-menu-parity.md`, spec

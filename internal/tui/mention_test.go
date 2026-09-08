@@ -416,6 +416,28 @@ func TestMentionViewTruncatesPath(t *testing.T) {
 	}
 }
 
+// TestMentionViewEmptyLine pins the S6 empty-state case (spec §3.7): the
+// no-candidate render (an @-query matching nothing) renders the parity text
+// "No matching items" (upstream verbatim) in the textMuted fg — the fresh pin
+// (this slice introduces the text; the old "no match" pin did not exist, the
+// plan's spec §2 referent is stale). Mirrors TestPromptMenuEmptyLine (the
+// slash S7 idiom).
+func TestMentionViewEmptyLine(t *testing.T) {
+	th := yoloDarkTheme(t)
+	a := testApp()
+	got := a.prompt.acView([]selectOption{}, 60, th)
+	lines := strings.Split(got, "\n")
+	if len(lines) != 1 {
+		t.Fatalf("empty render = %d lines, want 1 (the no-match line):\n%s", len(lines), got)
+	}
+	if !strings.Contains(stripANSI(lines[0]), "No matching items") {
+		t.Fatalf("no-match line lost the parity text: %q", stripANSI(lines[0]))
+	}
+	if !strings.Contains(lines[0], "38;2;128;128;128") {
+		t.Fatalf("no-match line missing the textMuted fg SGR (#808080): %s", lines[0])
+	}
+}
+
 // TestHomeViewMentionMenuAnchors pins the S1 home anchor (spec §3.2): with the
 // @ menu open on the home route, the dropdown frame is anchored above the box
 // top edge at boxL/boxW — the same geometry as the slash S3 anchor, the @ menu's
