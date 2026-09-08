@@ -36,6 +36,14 @@ func (a *App) handleKey(k tea.KeyPressMsg) []tea.Cmd {
 	if d, ok := a.dlg.top(); ok {
 		return a.handleDialogKey(d, k)
 	}
+	// S6: while the slash menu is open, tab completes the selected command
+	// in the menu path BEFORE the keymap registry sees it (tab only —
+	// shift+tab keeps the base group's agent_cycle_reverse, keymap.go:135-136;
+	// the prompt.autocomplete.complete binding, keymap.go:223, stays the
+	// referent — no rebind). No dialog: while one is open it owns the keys.
+	if keyMatchesSeq(k, "tab") && a.prompt.slashActive() {
+		return a.slashTabComplete()
+	}
 	// S4.2: the keymap registry owns the app-level bindings (any route, no
 	// dialog). The leader mechanism first, then the base context group.
 	if cmds, done := a.handleAppKeys(k); done {
@@ -217,6 +225,25 @@ func (a *App) handleMenuKey(k tea.KeyPressMsg) []tea.Cmd {
 	return a.inputUpdate(k)
 }
 
+// slashTabComplete is the tab completion while the slash menu is open (S6,
+// spec §3.2): the whole input is replaced with the selected command name +
+// a trailing space (the cursor lands at the end, the upstream select's
+// cursorOffset referent) and the menu closes (the slashDone suppress — the
+// completed input keeps the "/" prefix, so slashActive alone would stay
+// open); the command does NOT run (contrast enter's run-on-enter, KEPT).
+// A no-match menu is a no-op (the upstream select's if (!selected) return).
+func (a *App) slashTabComplete() []tea.Cmd {
+	items := a.menuItems()
+	if len(items) == 0 || a.prompt.sel >= len(items) {
+		return nil
+	}
+	v := items[a.prompt.sel].Name + " "
+	a.prompt.input.SetValue(v)
+	a.prompt.input.SetCursor(len(v))
+	a.prompt.slashDone = true
+	return nil
+}
+
 // handleAcKey dispatches keys while the @-picker is open: arrows move the
 // selection with wraparound, enter inserts the selected path (a no-op on no
 // selection — the upstream if (!selected) return), esc removes the @-trigger
@@ -296,12 +323,22 @@ func (a *App) handlePromptKey(k tea.KeyPressMsg) []tea.Cmd {
 }
 
 // inputUpdate feeds a key to the prompt input and collects any emitted cmds.
+// A value change re-arms a tab-completed menu (the slashDone clear, S6) and,
+// while the menu is open, resets the selection to 0 (the upstream
+// createEffect-on-filter-rerun reset, autocomplete.tsx:527-530).
 func (a *App) inputUpdate(k tea.KeyPressMsg) []tea.Cmd {
+	prev := a.prompt.input.Value()
 	cmds := []tea.Cmd{}
 	var c tea.Cmd
 	a.prompt.input, c = a.prompt.input.Update(k)
 	if c != nil {
 		cmds = append(cmds, c)
+	}
+	if a.prompt.input.Value() != prev {
+		a.prompt.slashDone = false
+		if a.prompt.slashActive() {
+			a.prompt.sel = 0
+		}
 	}
 	return cmds
 }

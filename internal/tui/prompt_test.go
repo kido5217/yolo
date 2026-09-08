@@ -263,6 +263,125 @@ func TestPromptMenuKeys(t *testing.T) {
 	})
 }
 
+// TestPromptMenuTabComplete pins the S6 key behavior (spec §6 S6, §3.2):
+// tab with the menu open completes the selected command (the whole input
+// becomes the name + a trailing space, the menu closes, the command does
+// NOT run); tab closed cycles the agent (deviation 289's closed-menu
+// behavior); shift+tab cycles the agent reverse with the menu staying open;
+// a typed query change (or backspace) resets sel to 0. The esc-open clear is
+// pinned by TestPromptMenuKeys' esc leg (kept).
+func TestPromptMenuTabComplete(t *testing.T) {
+	t.Run("tab open: the input is the name + a space, the menu closes, the command does not run", func(t *testing.T) {
+		a := testApp()
+		a.store.Commands = testCommands()
+		typeStr(a, "/new")
+		if !a.prompt.slashActive() {
+			t.Fatal("menu must be open for \"/new\"")
+		}
+		items := a.menuItems()
+		if len(items) != 1 || items[0].Name != "/new" {
+			t.Fatalf("items = %v, want [/new]", items)
+		}
+		if !strings.Contains(a.view(), "|") {
+			t.Fatal("the open menu must render the bordered dropdown (the frame pin)")
+		}
+		a.handleKey(pressTab())
+		if got := a.prompt.input.Value(); got != "/new " {
+			t.Fatalf("input = %q, want \"/new \" (the selected name + a trailing space)", got)
+		}
+		if a.prompt.slashActive() {
+			t.Fatal("the menu must close on tab (the value still starts with \"/\")")
+		}
+		if strings.Contains(a.view(), "|") {
+			t.Fatal("the dropdown must no longer render after the tab completion (the frame pin)")
+		}
+		if len(a.Cmds) != 0 {
+			t.Fatalf("recorded %d cmds, want 0 (tab completes, it does NOT run)", len(a.Cmds))
+		}
+		if a.route != routeHome {
+			t.Fatalf("route = %v, want routeHome (no session mint)", a.route)
+		}
+		// the next edit re-opens the menu (the backspace deletes the space).
+		a.handleKey(press(tea.KeyBackspace))
+		if got := a.prompt.input.Value(); got != "/new" {
+			t.Fatalf("input = %q, want \"/new\" after the backspace", got)
+		}
+		if !a.prompt.slashActive() {
+			t.Fatal("the menu must re-open on the next edit")
+		}
+		if !strings.Contains(a.view(), "|") {
+			t.Fatal("the dropdown must render again after the next edit (the frame pin)")
+		}
+	})
+
+	t.Run("tab closed: the agent cycles (unchanged)", func(t *testing.T) {
+		a := testApp()
+		a.store.Agents = agentFixture()
+		a.prompt.input.SetValue("hello")
+		a.handleKey(pressTab())
+		if got := a.pendingAgent; got != "plan" {
+			t.Fatalf("after tab = %q, want plan (the closed-menu agent cycle)", got)
+		}
+		if got := a.prompt.input.Value(); got != "hello" {
+			t.Fatalf("input = %q, want hello (the tab is consumed, not inserted)", got)
+		}
+	})
+
+	t.Run("shift+tab open: the agent cycles reverse, the menu stays open", func(t *testing.T) {
+		a := testApp()
+		a.store.Agents = agentFixture()
+		typeStr(a, "/")
+		if !a.prompt.slashActive() {
+			t.Fatal("menu must be open for \"/\"")
+		}
+		a.handleKey(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
+		if got := a.pendingAgent; got != "yolo" {
+			t.Fatalf("after shift+tab = %q, want yolo (the reverse wrap from build)", got)
+		}
+		if got := a.prompt.input.Value(); got != "/" {
+			t.Fatalf("input = %q, want \"/\" (the menu stays open)", got)
+		}
+		if !a.prompt.slashActive() {
+			t.Fatal("the menu must stay open on shift+tab")
+		}
+		if !strings.Contains(a.view(), "|") {
+			t.Fatal("the dropdown must still render after shift+tab (the frame pin)")
+		}
+	})
+
+	t.Run("a typed query change resets sel to 0 (backspace too)", func(t *testing.T) {
+		a := testApp()
+		a.store.Commands = testCommands()
+		typeStr(a, "/")
+		a.handleKey(press(tea.KeyDown))
+		a.handleKey(press(tea.KeyDown))
+		if a.prompt.sel != 2 {
+			t.Fatalf("sel = %d after two downs, want 2", a.prompt.sel)
+		}
+		typeStr(a, "o") // the query change: value "/o"
+		if got := a.prompt.input.Value(); got != "/o" {
+			t.Fatalf("input = %q, want \"/o\"", got)
+		}
+		if a.prompt.sel != 0 {
+			t.Fatalf("sel = %d after the query change, want 0 (the upstream reset)", a.prompt.sel)
+		}
+		if len(a.menuItems()) < 2 {
+			t.Fatalf("items for /o = %v, want >= 2 for the backspace leg", a.menuItems())
+		}
+		a.handleKey(press(tea.KeyDown))
+		if a.prompt.sel != 1 {
+			t.Fatalf("sel = %d after down, want 1", a.prompt.sel)
+		}
+		a.handleKey(press(tea.KeyBackspace)) // the value change: "/o" -> "/"
+		if got := a.prompt.input.Value(); got != "/" {
+			t.Fatalf("input = %q, want \"/\" after the backspace", got)
+		}
+		if a.prompt.sel != 0 {
+			t.Fatalf("sel = %d after the backspace, want 0", a.prompt.sel)
+		}
+	})
+}
+
 func TestPromptQuitAlias(t *testing.T) {
 	for _, in := range []string{"/quit", "/exit"} {
 		t.Run(in, func(t *testing.T) {

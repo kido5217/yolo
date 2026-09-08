@@ -20,6 +20,12 @@ type promptModel struct {
 	input textinput.Model
 	sel   int
 	draft strings.Builder
+	// slashDone suppresses the slash menu after a tab completion (the S6
+	// close mechanism, spec §3.2): the completed input keeps the "/" prefix,
+	// so the value-derived slashActive alone would leave the menu open; the
+	// next input change re-arms it (the upstream onInput re-derivation,
+	// autocomplete.tsx:676-695).
+	slashDone bool
 	// mode is the prompt input mode ("normal" | "shell" — the 0.8.0 box
 	// state; the toggles that change it land in Task 10).
 	mode string
@@ -93,8 +99,13 @@ const busyToast = "abort or wait (esc aborts)"
 
 var promptEnter = key.NewBinding(key.WithKeys("enter"))
 
-// slashActive reports whether the slash menu is open.
+// slashActive reports whether the slash menu is open: the value starts with
+// "/" and the menu is not tab-completed (slashDone suppresses it until the
+// next input change re-arms it — the S6 close mechanism, spec §3.2).
 func (pm *promptModel) slashActive() bool {
+	if pm.slashDone {
+		return false
+	}
 	v := pm.input.Value()
 	return v != "" && strings.HasPrefix(v, "/")
 }
@@ -308,11 +319,15 @@ func (a *App) recallHistory(dir int) {
 	a.histIdx = next
 	if next == 0 {
 		a.prompt.input.SetValue(a.histOrig)
+		// the recall is an input change: re-arm a tab-completed menu (S6).
+		a.prompt.slashDone = false
 		a.histText = ""
 		return
 	}
 	text := a.hist[len(a.hist)+next]
 	a.prompt.input.SetValue(text)
+	// the recall is an input change: re-arm a tab-completed menu (S6).
+	a.prompt.slashDone = false
 	a.histText = text
 }
 

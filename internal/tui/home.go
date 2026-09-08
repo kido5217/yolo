@@ -346,10 +346,13 @@ func (a *App) boxMetaLine() string {
 // homeHintLine renders the hint row (mock row mockHintRow, origin at the box
 // LEFT border col, upstream prompt/index.tsx:1655-1690):
 //
-//	normal mode: {Format("agent_cycle")} agents  {Format("command_list")}
-//	commands — shortcuts fg text, the words (" agents"/" commands") fg
-//	textMuted, the 2-col gap (box gap 2). A "none" Format (a user-disabled
-//	binding) drops its segment; both none -> blank row.
+//	normal mode: {Format("agent_cycle")} {word}  {Format("command_list")}
+//	commands — the first segment is context-aware (S6, spec §3.2): the
+//	word is " complete" while the slash menu is open, " agents" when
+//	closed (the shortcut stays Format("agent_cycle") = tab); the words' fg
+//	is textMuted, the shortcuts' fg text, the 2-col gap (box gap 2). A
+//	"none" Format (a user-disabled binding) drops its segment; both none ->
+//	blank row.
 //	shell mode: `esc` (fg text) + ` exit shell mode` (fg textMuted) — the
 //	upstream color split (the yolo-dhf.2 note's "(esc muted)" is a
 //	shorthand; the strict-copy bar pins the upstream source).
@@ -369,7 +372,13 @@ func (a *App) homeHintLine() string {
 		b.WriteString(a.boxFg("text", f))
 		b.WriteString(a.boxFg("textMuted", word))
 	}
-	seg("agent_cycle", " agents")
+	// S6: the first segment's word is context-aware — "tab complete" while
+	// the slash menu is open, "tab agents" when closed.
+	agentWord := " agents"
+	if a.prompt.slashActive() {
+		agentWord = " complete"
+	}
+	seg("agent_cycle", agentWord)
 	seg("command_list", " commands")
 	return b.String()
 }

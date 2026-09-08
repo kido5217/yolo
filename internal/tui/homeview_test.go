@@ -271,7 +271,10 @@ func TestHomeViewSlashMenuAnchors(t *testing.T) {
 	if !strings.Contains(stripANSI(rows[top]), "/sessions") {
 		t.Fatalf("selected dropdown row = %q, want the first merged command (/sessions)", rows[top])
 	}
-	// the box + hint stay intact below the dropdown.
+	// the box + hint stay intact below the dropdown; the hint's first segment
+	// is context-aware (S6, spec §3.2): "tab complete" while the menu is open
+	// (re-baseline of the S3 pin's "tab agents" — the behavior change is
+	// S6's).
 	atFrame(t, rows, mockBoxTop, mockBoxL, "┃")
-	atFrame(t, rows, mockHintRow, mockBoxL, "tab agents")
+	atFrame(t, rows, mockHintRow, mockBoxL, "tab complete")
 }
