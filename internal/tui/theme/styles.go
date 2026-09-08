@@ -70,6 +70,32 @@ func (t Theme) blended(token string) lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(lipgloss.Color(hex6(out)))
 }
 
+// DimBackdrop is the modal backdrop dim (decision D, 0.10.0 S1): black at
+// alpha 150/255 (upstream dialog.tsx RGBA.fromInts(0,0,0,150)) pre-blended
+// over the background token as a solid background style — the blended()
+// idiom at a fixed 150/255 (NOT ThinkingOpacity foreground). A computed
+// accessor, not a theme token (the "no new tokens" grill call holds); an
+// absent token falls back to black. The see-through property is the
+// documented approximation (the flat dim field — the content behind is
+// replaced by the dim color, spec §2.2); supersedes deviation 166's "no SGR
+// equivalent" (a pre-blended solid bg is SGR-representable).
+func (t Theme) DimBackdrop() lipgloss.Style {
+	bg := RGBA{0, 0, 0, 255}
+	if c, ok := t.R.Color("background"); ok {
+		bg = c
+	}
+	// black over bg at 150/255 (source-over): out = bg × (1 − 150/255) =
+	// bg × 105/255 per channel.
+	const factor = 105.0 / 255.0
+	out := RGBA{
+		R: uint8(math.Round(float64(bg.R) * factor)),
+		G: uint8(math.Round(float64(bg.G) * factor)),
+		B: uint8(math.Round(float64(bg.B) * factor)),
+		A: 255,
+	}
+	return lipgloss.NewStyle().Background(lipgloss.Color(hex6(out)))
+}
+
 // SelectedForeground is the port of upstream selectedForeground
 // (theme/index.ts:95-111): explicit selectedListItemText wins; transparent
 // background → contrast against bg (or primary) via the luminance rule

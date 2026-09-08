@@ -187,15 +187,38 @@ var commandBindings = map[string]string{
 	"/themes":   "theme_list",
 }
 
+// commandCategories maps the yolo command names to the palette's client-side
+// category buckets (decision B — the wire protocol.Command has no category
+// field; the bucket set is yolo-chosen, not upstream's wire-derived
+// categories). The "Suggested" bucket (decision A) overlays these: paletteOptions
+// re-categorises the seeded commands "Suggested".
+var commandCategories = map[string]string{
+	"/help":     "General",
+	"/status":   "General",
+	"/themes":   "General",
+	"/quit":     "General",
+	"/new":      "Session",
+	"/sessions": "Session",
+	"/model":    "Model",
+	"/connect":  "Provider",
+	"/agents":   "Agent",
+}
+
 // openPaletteDialog pushes the command palette select modal (S4.4): the
 // options = the merged command list (the 4 local commands first, then the
 // GET /command catalog — the slash-menu convention; an empty pre-hydrate
 // catalog degrades to the locals). Each option's footer = the registry
 // binding's Format (the commandBindings referent subset; blank when "none").
 // The onSelect (S4.5) runs the selected command (the run-on-enter contract).
+// The 0.10.0 palette S1 inner-line parity: the title row's esc hint
+// (palette-scoped — the model/agent dialogs keep the plain title row) and
+// the command_list keymap footer hint (right-aligned, replacing the
+// generic nav hint for the palette select only).
 func (a *App) openPaletteDialog() []tea.Cmd {
 	m := selectNew("Commands", "Filter commands", paletteOptions(a), nil,
-		func(app *App, o selectOption) { app.paletteSelectPick(o) }, nil)
+		func(app *App, o selectOption) { app.paletteSelectPick(o) }, nil).
+		WithEscHint().
+		WithHints([]footerHint{{key: a.keymap.Format("command_list"), desc: "commands"}})
 	a.pushModal(dialog{kind: dlgPalette, sel: m}, dlgMedium, nil)
 	return nil
 }
@@ -210,23 +233,59 @@ func (a *App) paletteSelectPick(o selectOption) {
 	}
 }
 
+// isSuggested reports whether the command belongs in the palette's
+// empty-filter-only "Suggested" bucket (decision A — the yolo seed, mapped
+// from upstream's per-command seeds onto yolo's 9-command catalog): /model
+// always, /new on the session route, /sessions when a session is stored,
+// /connect when a provider is not connected.
+func (a *App) isSuggested(name string) bool {
+	switch name {
+	case "/model":
+		return true
+	case "/new":
+		return a.route == routeSession
+	case "/sessions":
+		return len(a.store.Sessions) > 0
+	case "/connect":
+		return !a.tipsConnected()
+	}
+	return false
+}
+
 // paletteOptions builds the palette select options from the merged command
-// list (the 4 local commands first, then the GET /command catalog).
+// list (the 4 local commands first, then the GET /command catalog). The
+// Suggested bucket (decision A) leads: the seeded commands, each
+// re-categorised "Suggested" but keeping the plain command name as the value
+// (decision B — run-on-enter-ready, no suggested: prefix), so the selection /
+// mouse / pick paths are unchanged. Every plain option carries its
+// client-side category (decision B).
 func paletteOptions(a *App) []selectOption {
-	var opts []selectOption
-	for _, c := range a.mergedCommands() {
+	cmds := a.mergedCommands()
+	build := func(c protocol.Command) selectOption {
 		footer := ""
 		if bn, ok := commandBindings[c.Name]; ok {
 			if f := a.keymap.Format(bn); f != "none" {
 				footer = f
 			}
 		}
-		opts = append(opts, selectOption{
+		return selectOption{
 			title:       strings.TrimPrefix(c.Name, "/"),
 			description: c.Description,
 			footer:      footer,
+			category:    commandCategories[c.Name],
 			value:       c.Name,
-		})
+		}
+	}
+	var opts []selectOption
+	for _, c := range cmds {
+		if a.isSuggested(c.Name) {
+			o := build(c)
+			o.category = "Suggested"
+			opts = append(opts, o)
+		}
+	}
+	for _, c := range cmds {
+		opts = append(opts, build(c))
 	}
 	return opts
 }

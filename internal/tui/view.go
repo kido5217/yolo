@@ -184,12 +184,16 @@ func (a *App) sessionChrome(w, vh int, overlay ...string) string {
 	return b.String()
 }
 
-// viewModal renders the modal frame (port of dialog.tsx): the route chrome
-// clamped to the panel top, plain blank backdrop lines (deviation 166 —
-// the upstream rgba(0,0,0,150/255) dim has no SGR equivalent), the centered
-// panel (backgroundPanel fill, width min(size, w-2), top padding 1, top at
-// max(h/4, chromeMin)) and the footer on the last line. Prompt, menu,
-// toasts and lastErr are suppressed while a modal is open.
+// viewModal renders the modal frame (port of dialog.tsx): the flat dim
+// backdrop (decision D — the upstream rgba(0,0,0,150/255) dim, the
+// pre-blended solid DimBackdrop; deviation 166's "no SGR equivalent"
+// rationale is retired, and the see-through property is the documented
+// approximation — the content behind the panel is replaced by the dim
+// color, not darkened-through), the centered panel (backgroundPanel fill,
+// width min(size, w-2), top padding 1, top at max(h/4, chromeMin)) and the
+// dim footer line on the last line (the session footer and the home frame
+// footer are suppressed under the modal). Prompt, menu, toasts and lastErr
+// are suppressed while a modal is open.
 func (a *App) viewModal() string {
 	w, h := a.size.Width, a.size.Height
 	if w < 1 {
@@ -210,24 +214,11 @@ func (a *App) viewModal() string {
 		avail = 1
 	}
 	n := min(len(innerLines)+1, avail) // +1: the panel top-padding line
-	var chrome string
-	switch a.route {
-	case routeSession:
-		help := len(strings.Split(wrapLine(sessionHelp, w), "\n"))
-		chrome = a.sessionChrome(w, panelTop-1-1-help)
-	default:
-		// the 0.8.0 start-screen chrome: the top of the homeView frame
-		// (the logo + box + hint region), clamped to panelTop rows below
-		// (the frame's own footer is dropped by the clamp).
-		chrome = a.homeView(nil, "", "", "", "", "")
-	}
-	chromeLines := strings.Split(chrome, "\n")
-	for len(chromeLines) < panelTop {
-		chromeLines = append(chromeLines, "")
-	}
-	if len(chromeLines) > panelTop {
-		chromeLines = chromeLines[:panelTop]
-	}
+	// the flat dim field (spec §2.2): every non-panel line — the chrome
+	// region above (the route chrome is replaced, not darkened-through),
+	// the tail lines and the footer line — is the dim, full width, no
+	// content. Width + Background paints the whole line.
+	dimLine := a.theme.DimBackdrop().Width(w).Render("")
 	bg := a.theme.BackgroundPanel().Width(panelW)
 	panel := []string{bg.Render("")}
 	for i := 0; i < n-1 && i < len(innerLines); i++ {
@@ -241,22 +232,15 @@ func (a *App) viewModal() string {
 		}
 		b.WriteString(l)
 	}
-	for _, l := range chromeLines {
-		write(l)
+	for i := 0; i < panelTop; i++ {
+		write(dimLine)
 	}
 	for _, l := range panel {
 		write(lead + l)
 	}
 	for i := panelTop + len(panel); i < h-1; i++ {
-		write("")
+		write(dimLine)
 	}
-	// the footer on the last line (the session route's status footer; the
-	// home route's footer is inside the frame — the modal's last line is
-	// blank).
-	if a.route == routeSession {
-		write(a.footerView())
-	} else {
-		write("")
-	}
+	write(dimLine)
 	return b.String()
 }

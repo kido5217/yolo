@@ -52,6 +52,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/tui/theme"
 )
 
@@ -104,6 +105,14 @@ const (
 	// the fixture row 22 version ends at col 77 = 79-2).
 	mockVersion  = "0.8.0"
 	mockVersionL = mockContentL + mockContentW - len(mockVersion) // 193
+)
+
+// the palette-open mock's geometry (the 0.10.0 palette parity S6): the
+// panel top at h/4 (12 > the home route's modalChromeMin 10), the centered
+// lead (200-60)/2.
+const (
+	mockPalettePanelTop = 12
+	mockPaletteLead     = 70
 )
 
 // mock content strings (the yolo-dhf.2 decisions + the yolo defaults —
@@ -843,4 +852,200 @@ func TestHomeMockMentionOpenRender(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	t.Log("mention-open mock written to", out)
+}
+
+// TestHomeMockPaletteOpenRender is the 0.10.0 palette parity S6 mock (the
+// plan's S6 Steps 1-2): the command palette open FROM THE HOME ROUTE — the
+// fullscreen dim backdrop (the flat dim field over the home chrome + the
+// tail + the footer line — the see-through approximation, the content
+// behind is replaced by the dim color, deviation 322) with the centered
+// w=60 panel at h/4 (the backgroundPanel fill), the inner lines (the
+// title row's esc hint, the filter input, the Suggested bucket + the
+// category groups, the ctrl+p commands footer hint) and the selected row
+// (the primary full-row paint). Rendered deterministically (the real
+// palette select + the resolved yolo theme tokens) and pinned at
+// docs/superpowers/mockups/home-mock-200x50-palette-open.txt.
+func TestHomeMockPaletteOpenRender(t *testing.T) {
+	dir := t.TempDir()
+	e, err := theme.New(theme.EngineOptions{
+		KVPath:        filepath.Join(dir, "kv.json"),
+		GlobalYoloDir: dir,
+		CWD:           dir,
+		Palette:       func(context.Context) (theme.TerminalColors, bool) { return theme.TerminalColors{}, false },
+	})
+	if err != nil {
+		t.Fatalf("theme.New: %v", err)
+	}
+	t.Cleanup(func() { _ = e.Close() })
+	if err := e.Resolve(context.Background()); err != nil {
+		t.Fatalf("theme.Resolve: %v", err)
+	}
+	th, err := e.ActiveTheme()
+	if err != nil {
+		t.Fatalf("ActiveTheme: %v", err)
+	}
+	if th.Name != "yolo" || th.Mode != "dark" {
+		t.Fatalf("active theme = %s %s, want yolo dark (no config, no KV, no palette)", th.Name, th.Mode)
+	}
+	// the frozen 5-command catalog (the TUI merges in the 4 locals → 9):
+	// the home route + no stored session + no connected provider seeds
+	// the Suggested bucket with connect + model (the seed order).
+	a := testApp()
+	a.store.Commands = []protocol.Command{
+		{Name: "/help", Description: "Show help"},
+		{Name: "/new", Description: "New session"},
+		{Name: "/model", Description: "List models"},
+		{Name: "/agents", Description: "List agents"},
+		{Name: "/quit", Description: "Quit"},
+	}
+	a.route = routeHome
+	a.openPaletteDialog()
+	d, ok := a.dlg.top()
+	if !ok || d.kind != dlgPalette || d.sel == nil {
+		t.Fatalf("palette top = %+v (ok=%v)", d, ok)
+	}
+	panelW := int(d.size.width())
+	if panelW > mockW-2 {
+		panelW = mockW - 2
+	}
+	if panelW != 60 {
+		t.Fatalf("panel width = %d, want 60", panelW)
+	}
+	// the viewModal geometry (view.go): the inner lines at the panel
+	// width, the top at max(h/4, modalChromeMin), the panel = the
+	// top-padding line + the inner lines (the select's title + filter +
+	// 19 window rows + footer = 22 inner lines → the panel's 23).
+	innerLines := strings.Split(d.sel.view(panelW, mockH, th), "\n")
+	panelTop := max(mockH/4, a.modalChromeMin())
+	if panelTop != mockPalettePanelTop {
+		t.Fatalf("panel top = %d, want %d", panelTop, mockPalettePanelTop)
+	}
+	avail := mockH - panelTop - 1 // the footer line
+	if avail < 1 {
+		avail = 1
+	}
+	n := min(len(innerLines)+1, avail) // +1: the panel's top-padding line
+	dimLine := th.DimBackdrop().Width(mockW).Render("")
+	bg := th.BackgroundPanel().Width(panelW)
+	panel := []string{bg.Render("")}
+	for i := 0; i < n-1 && i < len(innerLines); i++ {
+		panel = append(panel, bg.Render(innerLines[i]))
+	}
+	lead := strings.Repeat(" ", (mockW-panelW)/2)
+	if len(lead) != mockPaletteLead {
+		t.Fatalf("lead = %d, want %d", len(lead), mockPaletteLead)
+	}
+	var rows []string
+	for i := 0; i < panelTop; i++ {
+		rows = append(rows, dimLine)
+	}
+	// the panel rows (the real render's JoinVertical pads them to the
+	// frame width — the trailing margin is plain space).
+	trail := strings.Repeat(" ", mockW-len(lead)-panelW)
+	for _, l := range panel {
+		rows = append(rows, lead+l+trail)
+	}
+	for i := panelTop + len(panel); i < mockH-1; i++ {
+		rows = append(rows, dimLine)
+	}
+	rows = append(rows, dimLine)
+	render := strings.Join(rows, "\n")
+	if len(rows) != mockH {
+		t.Fatalf("frame = %d lines, want %d", len(rows), mockH)
+	}
+	out := filepath.Join("..", "..", "docs", "superpowers", "mockups", "home-mock-200x50-palette-open.txt")
+	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(out, []byte(render+"\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	t.Log("mock written to", out)
+
+	// geometry contract: mockH rows, every row mockW display cols.
+	plainRows := strings.Split(stripANSI(render), "\n")
+	rawRows := strings.Split(render, "\n")
+	for i, r := range plainRows {
+		if w := runeWidth(r); w != mockW {
+			t.Fatalf("row %d width = %d, want %d", i, w, mockW)
+		}
+	}
+	at := func(row, coln int, want string) {
+		t.Helper()
+		if got := rowSegment(plainRows[row], coln, runeWidth(want)); got != want {
+			t.Fatalf("row %d col %d = %q, want %q", row, coln, got, want)
+		}
+	}
+	sgr := func(name string) string {
+		c, ok := th.Color(name)
+		if !ok {
+			t.Fatalf("theme %q lacks token %s", th.Name, name)
+		}
+		return fmt.Sprintf("%d;%d;%d", int(c.R), int(c.G), int(c.B))
+	}
+	selFg := th.SelectedForeground()
+	selSGR := fmt.Sprintf("%d;%d;%d", int(selFg.R), int(selFg.G), int(selFg.B))
+	primSGR := sgr("primary")
+	panelSGR := sgr("backgroundPanel")
+	// (1) the flat dim field: the chrome region + the tail + the footer
+	// line — the dim SGR, no content (the see-through approximation —
+	// the content behind is replaced by the dim color, deviation 322).
+	for _, i := range []int{0, panelTop - 1, panelTop + len(panel), mockH - 1} {
+		if !strings.Contains(rawRows[i], dimSGROf(th)) {
+			t.Fatalf("dim line %d lacks the dim SGR %s:\n%s", i, dimSGROf(th), rawRows[i])
+		}
+		if s := strings.TrimSpace(plainRows[i]); s != "" {
+			t.Fatalf("dim line %d carries content %q, want the flat dim field", i, s)
+		}
+	}
+	// (2) the panel: the backgroundPanel fill (no dim SGR on the panel
+	// cells), the centered lead, the top-padding line.
+	for i := panelTop; i < panelTop+len(panel); i++ {
+		if strings.Contains(rawRows[i], dimSGROf(th)) {
+			t.Fatalf("panel line %d carries the dim SGR:\n%s", i, rawRows[i])
+		}
+		if !strings.Contains(rawRows[i], "48;2;"+panelSGR) {
+			t.Fatalf("panel line %d lacks the backgroundPanel fill:\n%s", i, rawRows[i])
+		}
+	}
+	// (3) the inner lines: the title row (Commands + the muted esc hint,
+	// space-between the panel width), the filter row (the placeholder),
+	// the Suggested bucket + the category groups (the accent headers),
+	// the selected row (the primary full-row paint), the footer hint
+	// (the right-aligned keymap).
+	titleRow := panelTop + 1
+	filterRow := panelTop + 2
+	at(titleRow, mockPaletteLead, "Commands")
+	at(titleRow, mockPaletteLead+panelW-3, "esc")
+	if !strings.Contains(rawRows[titleRow], "38;2;"+sgr("textMuted")) {
+		t.Fatalf("esc hint not textMuted:\n%s", rawRows[titleRow])
+	}
+	at(filterRow, mockPaletteLead+2, "Filter commands")
+	// the Suggested bucket (the home seed: connect + model) + the
+	// category groups the 19-row window shows (Session, Provider,
+	// General, Model — the accent headers).
+	at(panelTop+3, mockPaletteLead+3, "Suggested")
+	selRow := panelTop + 4 // the first window line is the Suggested header
+	at(selRow, mockPaletteLead, "  connect")
+	if !strings.Contains(rawRows[selRow], "48;2;"+primSGR) {
+		t.Fatalf("selected row lacks the primary bg SGR:\n%s", rawRows[selRow])
+	}
+	if !strings.Contains(rawRows[selRow], "38;2;"+selSGR) {
+		t.Fatalf("selected row lacks the SelectedForeground SGR:\n%s", rawRows[selRow])
+	}
+	at(panelTop+7, mockPaletteLead+3, "Session")
+	at(panelTop+10, mockPaletteLead+3, "Provider")
+	at(panelTop+13, mockPaletteLead+3, "General")
+	at(panelTop+21, mockPaletteLead+3, "Model")
+	// the footer hint (the right-aligned ctrl+p commands keymap).
+	km, err := NewKeymap(nil)
+	if err != nil {
+		t.Fatalf("NewKeymap: %v", err)
+	}
+	paletteK := km.Format("command_list")
+	if paletteK != "ctrl+p" {
+		t.Fatalf("command_list binding = %q, want ctrl+p", paletteK)
+	}
+	footerRow := panelTop + len(panel) - 1
+	at(footerRow, mockPaletteLead+panelW-2-len(paletteK+" commands"), paletteK+" commands")
 }

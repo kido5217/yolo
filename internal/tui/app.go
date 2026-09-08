@@ -458,6 +458,14 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 		}
 		return tea.Batch(cmds...)
 	case tea.MouseMsg:
+		// the 0.10.0 palette S4 mouse slice (spec §2.7 — decision 4):
+		// the palette modal owns the frame over the prompt pickers — hover
+		// moves the selection, a click runs the enter action. Checked first:
+		// while the modal is open the prompt is suppressed (viewModal), so
+		// the pickers cannot own the frame even if their state is active.
+		if d, ok := a.dlg.top(); ok && d.kind == dlgPalette {
+			return a.handlePaletteMouse(m)
+		}
 		// the S5 (slash) + S4 (@ picker) mouse slices: hover/click on the
 		// open picker (the @-precedence gate keeps the two menus mutually
 		// exclusive). Other routes ignore the mouse (spec §7).
@@ -502,6 +510,72 @@ func (a *App) updateMsg(msg tea.Msg) tea.Cmd {
 			}
 			return nil
 		}
+	}
+	return nil
+}
+
+// paletteWindowRows returns the 0.10.0 S4 mouse anchor for the open palette
+// (spec §2.7 — decision 4): the 0-based cell row of the first visible window
+// row and the window's visible row count. The palette is a fullscreen modal
+// (viewModal): the window rows sit below the panel's top-padding line (row
+// panelTop), the title row (panelTop+1) and the filter row (panelTop+2) —
+// the first window row is at panelTop+3 — and the window renders `visible`
+// rows (selectModel.view: h/2−6, min 1).
+func (a *App) paletteWindowRows() (int, int) {
+	h := a.size.Height
+	if h < 1 {
+		h = 24
+	}
+	panelTop := max(h/4, a.modalChromeMin())
+	visible := h/2 - 6
+	if visible < 1 {
+		visible = 1
+	}
+	return panelTop + 3, visible
+}
+
+// handlePaletteMouse handles a mouse event on the open command palette (the
+// 0.10.0 S4 mouse slice, spec §2.7 — decision 4): a motion over a visible
+// row moves the selection to the hovered row; a click on a row runs the SAME
+// enter path as the key handler (submit → paletteSelectPick — the run-on-
+// enter contract). The cell row is mapped through paletteWindowRows to the
+// window's built lines: the window is re-anchored on the selection, so the
+// row offset is added to the CURRENT window top (selectModel.top — set by
+// the last render), and selLine.opt (the option index) selects the row —
+// the category headers and blank rows (opt -1) are not hoverable.
+func (a *App) handlePaletteMouse(m tea.MouseMsg) tea.Cmd {
+	d, ok := a.dlg.top()
+	if !ok || d.kind != dlgPalette || d.sel == nil {
+		return nil
+	}
+	firstRow, vis := a.paletteWindowRows()
+	winRow := m.Mouse().Y - firstRow
+	if winRow < 0 || winRow >= vis {
+		return nil
+	}
+	w := a.size.Width
+	if w < 1 {
+		w = 80
+	}
+	panelW := int(d.size.width())
+	if panelW > w-2 {
+		panelW = w - 2
+	}
+	lines := d.sel.buildLines(panelW, a.theme)
+	lineIdx := d.sel.top + winRow
+	if lineIdx >= len(lines) {
+		return nil
+	}
+	opt := lines[lineIdx].opt
+	if opt < 0 {
+		return nil
+	}
+	switch m.(type) {
+	case tea.MouseMotionMsg:
+		d.sel.sel = opt
+	case tea.MouseClickMsg:
+		d.sel.sel = opt
+		d.sel.submit(a)
 	}
 	return nil
 }

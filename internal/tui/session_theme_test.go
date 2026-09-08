@@ -51,11 +51,14 @@ import (
 // Substring assertions (no escape/terminator boundaries): the renderer's
 // pen-diff merges the changed params into ONE CSI whose inner param order
 // is not pinned (the redSGR / logoBoldRe precedent).
-// The tokens split across the two post-boot merged WaitFors (deviation 141):
-// the cell-diff renderer emits a styled run only in the frame its cells
-// change, and each WaitFor drains the shared stream — the completed read row
-// + live conn dot + running rows + cursor settle before the reject, the
-// error row settles after it.
+// All the chrome tokens settle in the POST-dialog (reject) merged WaitFor
+// (deviation 141): the cell-diff renderer emits a styled run only in the
+// frame its cells change, and each WaitFor drains the shared stream —
+// under the perm modal the route chrome is the flat dim field (decision
+// D, 0.10.0 S1), so the clamped-chrome contributions (the completed read
+// row, the live conn dot, the running rows' pen) are no longer emitted by
+// the modal frame; they settle when the full session frame re-renders
+// over the dim after the dialog closes.
 var (
 	chromeTokensSettled = []string{
 		"38;5;244", // completed tool row (textMuted)
@@ -145,45 +148,33 @@ func TestSessionChromeThemeSGR(t *testing.T) {
 	}, teatest.WithDuration(5*time.Second))
 	suiteType(tm, "read then bash")
 	tm.Send(press(tea.KeyEnter))
-	// Merged condition for the dialog drain (consecutive WaitFors drain each
-	// other): the perm echo + the chrome already settled by this frame —
-	// the completed read row (textMuted), the live conn dot (success), the
-	// running rows' text pen — each contribution in one merged condition
-	// (deviation 141). The prompt cursor is pinned in the session-route
-	// drain above (deviation 142).
-	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		if !hasPermDialogEcho(b) {
-			return false
-		}
-		s := stripANSI(string(b))
-		if !strings.Contains(s, "→ hello.txt") || !strings.Contains(s, "\u25CF live") {
-			return false
-		}
-		for _, tok := range chromeTokensSettled {
-			if !bytes.Contains(b, []byte(tok)) {
-				return false
-			}
-		}
-		return completedRowRe.Match(b) && liveDotRe.Match(b)
-	}, teatest.WithDuration(10*time.Second))
+	// Merged condition for the dialog drain: the perm echo alone. The
+	// chrome tokens are NOT pinned here (decision D): under the modal the
+	// route chrome is the flat dim field — the clamped-chrome contributions
+	// settle in the reject drain below (deviation 141). The prompt cursor is
+	// pinned in the session-route drain above (deviation 142).
+	teatest.WaitFor(t, tm.Output(), hasPermDialogEcho, teatest.WithDuration(10*time.Second))
 	// The park lands on the engine's goroutine after the render; sync on it
 	// before replying (same guard as TestPermissionDialogKeyReply).
 	waitPending(t, ts, 1)
 	tm.Send(press('3')) // reject the bash ask -> the tool error part
 
 	// Merged condition for the reject drain: the rejected bash row (error
-	// token) + the final text (deviation 141).
+	// token) + the final text + the settled chrome (the completed read row,
+	// the live conn dot, the text pen) — the modal closed, so the full
+	// session frame re-renders and re-emits the styled runs over the dim
+	// (deviations 141, D).
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
 		s := stripANSI(string(b))
 		if !strings.Contains(s, "$ call_2") || !strings.Contains(s, "all done") {
 			return false
 		}
-		for _, tok := range chromeTokensRejected {
+		for _, tok := range append(append([]string{}, chromeTokensSettled...), chromeTokensRejected...) {
 			if !bytes.Contains(b, []byte(tok)) {
 				return false
 			}
 		}
-		return errorRowRe.Match(b)
+		return errorRowRe.Match(b) && completedRowRe.Match(b) && liveDotRe.Match(b)
 	}, teatest.WithDuration(10*time.Second))
 
 	_ = tm.Quit()

@@ -5,6 +5,43 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
+**Status (2026-09-08):** 0.10.0 command palette parity — epic `yolo-hb0`
+(all six slices landed) on branch `feature/palette-parity-0.10.0`
+(plan `docs/superpowers/plans/2026-09-07-0.10.0-palette-parity.md`, spec
+`docs/superpowers/specs/2026-09-07-palette-parity-design.md`). All six
+slices landed: S1 the dim backdrop (the `DimBackdrop` pre-blended solid —
+decision D — the flat dim field over the chrome + tail + footer lines, the
+see-through approximation: the content behind is replaced by the dim color,
+not darkened through) + the inner chrome (the palette-scoped `esc` hint on
+the title row via `WithEscHint`, the `ctrl+p commands` footer hint via
+`WithHints` — the shared select's other consumers keep the generic nav
+hint); S2 the `Suggested` bucket (seed-driven — decision A: `/model`
+always, `/new` on the session route, `/sessions` while a session is stored,
+`/connect` while no provider is connected; the rows are the real command
+rows with plain values — decision B) + the client-side category set
+(General/Session/Model/Provider/Agent — decision B) + the weighted-fuzzy
+filter (title ×2, category ×1); S3 the filter parity (verification slice —
+the plain + fuzzy parity confirmed against the ported list()/filtered memo,
+no gaps; the `command_frecency` marker is deviation 323 — no yolo frecency
+surface yet); S4 the mouse (hover + click on the open palette — the
+cell-motion mode is the shared `View.MouseMode`, deviation 308); S5 the key
+table + the empty-text verify (verification slice — the key table + the
+empty-text legs confirmed, no gaps); S6 the re-baselines + the fourth mock
+(the named legs were all already current — the sweep found no stale leg; S2
+had re-baselined `TestPaletteOptions` + `TestPaletteSelectPick` during its
+own slice; the new `home-mock-200x50-palette-open.txt` — the palette open
+from home: the dim backdrop + the centered w=60 panel at h/4, the
+`Suggested` bucket + the category groups, the selected row, the filter
+input, the `ctrl+p commands` footer; the existing three mocks unchanged).
+The four deviations landed at DEVIATIONS 320–323 (the plan's planned
+318–321 were stale: the mention epic landed 313–319, so this epic starts at
+320). Cross-epic note: the palette's S4 mouse reuses the shared cell-motion
+mode — in the pinned bubbletea v2 that is the `View.MouseMode` mechanism
+(per deviation 308), NOT a `tea.WithMouseCellMotion` program option (the
+plan's wording is the stale v1 API — corrected here as the mention epic's
+entry did). The full gate is green (`go vet ./... && go test ./...` +
+`gofmt -l .` empty, uncached `-count=1`).
+
 **Status (2026-09-08):** 0.10.0 @-mention picker parity — epic `yolo-bie`
 (all six slices landed) on branch `feature/mention-picker-parity-0.10.0`
 (plan `docs/superpowers/plans/2026-09-07-0.10.0-mention-picker-parity.md`, spec

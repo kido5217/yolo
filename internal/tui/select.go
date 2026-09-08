@@ -73,6 +73,11 @@ type selectModel struct {
 	// today's behavior.
 	skipFilter bool
 	onFilter   func(string)
+	// escHint (0.10.0 palette S1, the inner-line parity): the title row
+	// renders the title left + the muted "esc" right, space-between the
+	// panel width. Set only from openPaletteDialog — the model/agent
+	// dialogs keep the single-token title row (their pins are unaffected).
+	escHint bool
 }
 
 // selectNew builds a select (isCurrent/onMove/onSelect may be nil).
@@ -109,16 +114,34 @@ func (m *selectModel) WithHints(hints []footerHint) *selectModel {
 	return m
 }
 
+// WithEscHint marks the title row's right-aligned muted esc hint (the
+// palette's inner-line parity — the model/agent dialogs keep the plain
+// title row).
+func (m *selectModel) WithEscHint() *selectModel {
+	m.escHint = true
+	return m
+}
+
 // filtered is the live list (upstream `filtered` memo): disabled options are
-// excluded entirely; an empty needle returns the rest in order, otherwise
-// the fuzzy hits sorted by the weighted score (title ×2, category ×1 — the
-// port of the fuzzysort keys/scoreFn, dialog-select.tsx:154-173).
+// excluded entirely; the "Suggested" bucket (decision A) is excluded on any
+// non-empty needle (the ported list() — it is empty-filter-only); an empty
+// needle returns the rest in order, otherwise the fuzzy hits sorted by the
+// weighted score (title ×2, category ×1 — the port of the fuzzysort
+// keys/scoreFn, dialog-select.tsx:154-173).
 func (m *selectModel) filtered() []selectOption {
 	enabled := make([]selectOption, 0, len(m.options))
 	for _, o := range m.options {
-		if !o.disabled {
-			enabled = append(enabled, o)
+		if o.disabled {
+			continue
 		}
+		// The Suggested bucket (decision A) is empty-filter-only: a
+		// non-empty filter collapses it (the ported list() — the suggested
+		// commands still match via their plain entries). skipFilter shows all
+		// options (the client filter re-anchors), so Suggested stays there.
+		if m.filter != "" && !m.skipFilter && o.category == "Suggested" {
+			continue
+		}
+		enabled = append(enabled, o)
 	}
 	if m.skipFilter || m.filter == "" {
 		return enabled
@@ -312,7 +335,7 @@ func (m *selectModel) view(w, h int, th theme.Theme) string {
 	}
 	if len(lines) == 0 {
 		var b strings.Builder
-		b.WriteString(title.Render(m.title) + "\n  " + m.input.View() + "\n")
+		b.WriteString(m.titleRow(w, th) + "\n  " + m.input.View() + "\n")
 		b.WriteString(th.TextMuted().Render("  No results found"))
 		return b.String()
 	}
@@ -347,7 +370,7 @@ func (m *selectModel) view(w, h int, th theme.Theme) string {
 	}
 	m.input.SetWidth(max(1, w-4))
 	var b strings.Builder
-	b.WriteString(title.Render(m.title))
+	b.WriteString(m.titleRow(w, th))
 	b.WriteByte('\n')
 	b.WriteString("  " + m.input.View())
 	b.WriteByte('\n')
@@ -387,6 +410,21 @@ func (m *selectModel) view(w, h int, th theme.Theme) string {
 		b.WriteString(dimWrapped(th, "  \u2191/\u2193 move \u00B7 enter select \u00B7 esc close", w))
 	}
 	return b.String()
+}
+
+// titleRow renders the select's title line: the plain title (the model/
+// agent dialogs) or the esc-hint layout (the title left, the muted "esc"
+// right, space-between the panel width — the palette's inner-line parity;
+// esc/ctrl+c close the modal via the stack, S2.2).
+func (m *selectModel) titleRow(w int, th theme.Theme) string {
+	if !m.escHint {
+		return title.Render(m.title)
+	}
+	pad := w - runeWidth(m.title) - runeWidth("esc")
+	if pad < 0 {
+		pad = 0
+	}
+	return title.Render(m.title) + strings.Repeat(" ", pad) + th.TextMuted().Render("esc")
 }
 
 // hintTexts is the right-tail text of the hints (key + desc pairs).
