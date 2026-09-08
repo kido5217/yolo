@@ -193,9 +193,15 @@ var commandBindings = map[string]string{
 // catalog degrades to the locals). Each option's footer = the registry
 // binding's Format (the commandBindings referent subset; blank when "none").
 // The onSelect (S4.5) runs the selected command (the run-on-enter contract).
+// The 0.10.0 palette S1 inner-line parity: the title row's esc hint
+// (palette-scoped — the model/agent dialogs keep the plain title row) and
+// the command_list keymap footer hint (right-aligned, replacing the
+// generic nav hint for the palette select only).
 func (a *App) openPaletteDialog() []tea.Cmd {
 	m := selectNew("Commands", "Filter commands", paletteOptions(a), nil,
-		func(app *App, o selectOption) { app.paletteSelectPick(o) }, nil)
+		func(app *App, o selectOption) { app.paletteSelectPick(o) }, nil).
+		WithEscHint().
+		WithHints([]footerHint{{key: a.keymap.Format("command_list"), desc: "commands"}})
 	a.pushModal(dialog{kind: dlgPalette, sel: m}, dlgMedium, nil)
 	return nil
 }

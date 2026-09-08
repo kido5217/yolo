@@ -115,10 +115,14 @@ func TestModalFrameLayout(t *testing.T) {
 	if strings.Contains(a.view(), "> ") {
 		t.Fatalf("prompt must be hidden under the modal:\n%s", a.view())
 	}
-	// the home route's footer is inside the frame (homeView) — the modal's
-	// last line is blank (no session footer on the home route).
-	if stripANSI(lines[23]) != "" {
-		t.Fatalf("last line = %q, want blank (home footer is inside the frame)", stripANSI(lines[23]))
+	// the modal's last line is the flat dim field (decision D — the home
+	// footer is suppressed under the modal; the zero-theme dim is black,
+	// 48;2;0;0;0).
+	if s := strings.TrimSpace(stripANSI(lines[23])); s != "" {
+		t.Fatalf("last line = %q, want the flat dim field (no content)", s)
+	}
+	if !strings.Contains(lines[23], "48;2;0;0;0") {
+		t.Fatalf("last line lacks the dim SGR: %q", lines[23])
 	}
 }
 
@@ -136,7 +140,13 @@ func TestModalFrameSessionClamp(t *testing.T) {
 	if want := strings.Repeat(" ", 10) + "Model"; !strings.HasPrefix(stripANSI(lines[5]), want) {
 		t.Fatalf("line 5 = %q, want prefix %q", stripANSI(lines[5]), want)
 	}
-	if !strings.Contains(lines[0], "session") {
-		t.Fatalf("title line = %q, want the session title", stripANSI(lines[0]))
+	// the chrome region is the flat dim field (decision D — the session
+	// chrome is no longer rendered under the modal; the zero-theme dim is
+	// black, 48;2;0;0;0).
+	if s := strings.TrimSpace(stripANSI(lines[0])); s != "" {
+		t.Fatalf("chrome line = %q, want the flat dim field (no content)", s)
+	}
+	if !strings.Contains(lines[0], "48;2;0;0;0") {
+		t.Fatalf("chrome line lacks the dim SGR: %q", lines[0])
 	}
 }

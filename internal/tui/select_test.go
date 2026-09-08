@@ -268,6 +268,45 @@ func TestSelectFooterHints(t *testing.T) {
 	}
 }
 
+// TestSelectFooterHintReplacesNavHint pins the 0.10.0 palette S1 footer:
+// the keymap hint (right-aligned, textMuted) replaces the generic nav hint
+// (the palette select only — the nav hint stays when no hint is attached).
+func TestSelectFooterHintReplacesNavHint(t *testing.T) {
+	a := testApp()
+	m := selectNew("Test", "Search", selTestOptions(), nil, nil, nil).
+		WithHints([]footerHint{{key: "ctrl+p", desc: "commands"}})
+	lines := strings.Split(m.view(60, 24, a.theme), "\n")
+	last := stripANSI(lines[len(lines)-1])
+	if !strings.HasSuffix(strings.TrimRight(last, " "), "ctrl+p commands") {
+		t.Fatalf("hint row not right-aligned: %q", last)
+	}
+	if strings.Contains(last, "\u2191/\u2193 move") {
+		t.Fatalf("the generic nav hint must be replaced by the hint: %q", last)
+	}
+}
+
+// TestSelectEscHintTitleRow pins the 0.10.0 palette S1 title row: the
+// esc-hint layout (the title left, the muted esc right, space-between the
+// panel width) and the plain single-token title row the model/agent
+// dialogs keep (their pins are unaffected).
+func TestSelectEscHintTitleRow(t *testing.T) {
+	a := testApp()
+	m := selectNew("Test", "Search", selTestOptions(), nil, nil, nil).WithEscHint()
+	lines := strings.Split(m.view(60, 24, a.theme), "\n")
+	plain := strings.Trim(stripANSI(lines[0]), " ")
+	if !strings.HasPrefix(plain, "Test") || !strings.HasSuffix(plain, "esc") {
+		t.Fatalf("esc-hint title row = %q, want Test...esc space-between", plain)
+	}
+	if n := runeWidth(plain); n != 60 {
+		t.Fatalf("esc-hint title row = %d cols, want 60 (space-between the panel width): %q", n, plain)
+	}
+	m2 := selectNew("Test", "Search", selTestOptions(), nil, nil, nil)
+	lines2 := strings.Split(m2.view(60, 24, a.theme), "\n")
+	if got := strings.Trim(stripANSI(lines2[0]), " "); got != "Test" {
+		t.Fatalf("plain title row = %q, want the single token (no esc hint)", got)
+	}
+}
+
 func TestSelectScrollAcceleration(t *testing.T) {
 	a := testApp()
 	opts := make([]selectOption, 40)
