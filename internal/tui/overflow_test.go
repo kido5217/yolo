@@ -132,3 +132,30 @@ func TestSessionFrameFitsTerminal(t *testing.T) {
 	a.sess.isDirty = true
 	fitsWidth(t, stripANSI(a.view()), 50)
 }
+
+// TestMentionViewWraps pins the S1 @-dropdown wrap (the TestMenuViewWraps
+// idiom): on a narrow terminal the @ box row is width-exact at w — the
+// middle-truncated path is cut at the box content width (no wrap past the box).
+func TestMentionViewWraps(t *testing.T) {
+	a := testApp()
+	a.prompt.sel = 0
+	long := strings.Repeat("a", 30) + "file.go"
+	opts := []selectOption{{value: long}}
+	got := stripANSI(a.prompt.acView(opts, 20, a.theme))
+	fitsWidth(t, got, 20)
+	lines := strings.Split(got, "\n")
+	if len(lines) != 1 {
+		t.Fatalf("rows = %d, want 1 (the box is width-exact, no wrap): %q", len(lines), got)
+	}
+	row := lines[0]
+	r := []rune(row)
+	if n := len(r); n != 20 {
+		t.Fatalf("row = %d cols, want 20: %q", n, row)
+	}
+	if r[0] != '|' || r[19] != '|' {
+		t.Fatalf("row lost the split border: %q", row)
+	}
+	if !strings.Contains(row, "…") || !strings.Contains(row, "file.go") {
+		t.Fatalf("middle-truncated path lost the ellipsis/tail: %q", row)
+	}
+}
