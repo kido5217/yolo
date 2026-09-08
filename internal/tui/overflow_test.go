@@ -58,7 +58,7 @@ func TestMenuViewWraps(t *testing.T) {
 	// single row is 20 cols, the label + the description cut at the box
 	// content width (avail 16: the 5-col label + the "  " offset + 9 cols of
 	// the description).
-	if got != "| /quit  quits the |" {
+	if got != "┃ /quit  quits the ┃" {
 		t.Fatalf("menu row = %q, want the width-exact truncated box row", got)
 	}
 }
@@ -152,7 +152,7 @@ func TestMentionViewWraps(t *testing.T) {
 	if n := len(r); n != 20 {
 		t.Fatalf("row = %d cols, want 20: %q", n, row)
 	}
-	if r[0] != '|' || r[19] != '|' {
+	if r[0] != '┃' || r[19] != '┃' {
 		t.Fatalf("row lost the split border: %q", row)
 	}
 	if !strings.Contains(row, "…") || !strings.Contains(row, "file.go") {

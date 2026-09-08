@@ -3,6 +3,7 @@ package tui
 import (
 	"bytes"
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +14,18 @@ import (
 	"github.com/kido5217/yolo/internal/tui/client"
 	"github.com/kido5217/yolo/internal/tui/store"
 )
+
+// dropdownRowOpen reports whether the frame carries a dropdown row — a line
+// with the split ┃ border on both edges (≥2 ┃). The home box is left-border-
+// only (one ┃ per row), so a ≥2-┃ line is exactly a dropdown row.
+func dropdownRowOpen(s string) bool {
+	for _, line := range strings.Split(s, "\n") {
+		if strings.Count(line, borderChar) >= 2 {
+			return true
+		}
+	}
+	return false
+}
 
 // TestPromptSlashMouseHover drives a mouse motion over a row of the open slash
 // dropdown (S5 mouse, spec §3.1) and asserts the selection moves to the hovered
@@ -33,7 +46,7 @@ func TestPromptSlashMouseHover(t *testing.T) {
 		tm.Send(press(r))
 	}
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return bytes.Contains(b, []byte("|"))
+		return dropdownRowOpen(string(b))
 	}, teatest.WithDuration(3*time.Second))
 
 	// the S3 anchor for the open dropdown: the first row's cell + the visible
@@ -74,7 +87,7 @@ func TestPromptSlashMouseClick(t *testing.T) {
 		tm.Send(press(r))
 	}
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return bytes.Contains(b, []byte("|"))
+		return dropdownRowOpen(string(b))
 	}, teatest.WithDuration(3*time.Second))
 
 	// /new is the only dropdown row; the S3 anchor is its cell.

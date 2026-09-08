@@ -42,13 +42,14 @@ func TestDropdownBoxShape(t *testing.T) {
 	}
 	for i, l := range lines {
 		plain := stripANSI(l)
-		if n := len([]rune(plain)); n != 40 {
+		cols := []rune(plain)
+		if n := len(cols); n != 40 {
 			t.Fatalf("row %d = %d cols, want 40: %q", i, n, plain)
 		}
-		if plain[0] != '|' || plain[39] != '|' {
+		if cols[0] != '┃' || cols[len(cols)-1] != '┃' {
 			t.Fatalf("row %d = %q, want the split left/right border (no top/bottom edges)", i, plain)
 		}
-		if plain[1] != ' ' {
+		if cols[1] != ' ' {
 			t.Fatalf("row %d = %q, want 1 padding after the left border", i, plain)
 		}
 	}
@@ -162,10 +163,11 @@ func TestDropdownSelectionRowNoPrimary(t *testing.T) {
 	// row carries the fill, the border columns excepted (unpainted, exactly
 	// like the non-selection rows).
 	plain := stripANSI(sel)
-	if n := len([]rune(plain)); n != 40 {
+	cols := []rune(plain)
+	if n := len(cols); n != 40 {
 		t.Fatalf("selection row = %d cols, want 40: %q", n, plain)
 	}
-	if plain[0] != '|' || plain[39] != '|' {
+	if cols[0] != '┃' || cols[len(cols)-1] != '┃' {
 		t.Fatalf("selection row lost the split border: %q", plain)
 	}
 	if !strings.Contains(sel, "38;2;72;72;72") {
