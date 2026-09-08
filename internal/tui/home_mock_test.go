@@ -600,3 +600,247 @@ func TestHomeMockSlashOpenRender(t *testing.T) {
 	}
 	t.Log("slash-open mock written to", out)
 }
+
+// mentionOpenItems is the @ picker's candidate list the mention-open mock
+// shows (a few deterministic file rows + one directory row with the trailing-
+// "/" kind marker; the mock is hand-assembled, not driven by the walk).
+// mentionSel marks the highlighted row (the directory row).
+var mentionOpenItems = []dropdownRow{
+	{label: "alpha.go", description: ""},
+	{label: "cmd/", description: ""},
+	{label: "cmd/main.go", description: "cmd"},
+	{label: "beta.go", description: ""},
+}
+
+// mentionSel is the selected (highlighted) row in the mention-open mock.
+const mentionSel = 1
+
+// TestHomeMockMentionOpenRender is the THIRD mock (spec §6 S6, §5): the home
+// frame with the @ picker OPEN above the box (the S1 anchor — the same left
+// edge and width as the box, the logo overlaid while open) and the S5
+// context-aware hint (the first segment reads "tab complete" while the @ menu
+// is open). The dropdown box is the REAL shared primitive (newDropdown,
+// dropdown.go) rendered at the box width; the rest of the frame is
+// hand-assembled exactly as TestHomeMockRender (the clean home mock) and
+// TestHomeMockSlashOpenRender (the slash-open mock). It writes the
+// deterministic ANSI frame to
+// docs/superpowers/mockups/home-mock-200x50-mention-open.txt; the existing
+// clean-home and slash-open mocks are untouched.
+func TestHomeMockMentionOpenRender(t *testing.T) {
+	dir := t.TempDir()
+	e, err := theme.New(theme.EngineOptions{
+		KVPath:        filepath.Join(dir, "kv.json"),
+		GlobalYoloDir: dir,
+		CWD:           dir,
+		Palette:       func(context.Context) (theme.TerminalColors, bool) { return theme.TerminalColors{}, false },
+	})
+	if err != nil {
+		t.Fatalf("theme.New: %v", err)
+	}
+	t.Cleanup(func() { _ = e.Close() })
+	if err := e.Resolve(context.Background()); err != nil {
+		t.Fatalf("theme.Resolve: %v", err)
+	}
+	th, err := e.ActiveTheme()
+	if err != nil {
+		t.Fatalf("ActiveTheme: %v", err)
+	}
+	if th.Name != "yolo" || th.Mode != "dark" {
+		t.Fatalf("active theme = %s %s, want yolo dark", th.Name, th.Mode)
+	}
+	col := func(name string) color.Color {
+		c, ok := th.Color(name)
+		if !ok {
+			t.Fatalf("theme %q lacks token %s", th.Name, name)
+		}
+		return lipgloss.Color(c.Hex()[:7])
+	}
+	sgr := func(name string) string {
+		c, ok := th.Color(name)
+		if !ok {
+			t.Fatalf("theme %q lacks token %s", th.Name, name)
+		}
+		return fmt.Sprintf("%d;%d;%d", int(c.R), int(c.G), int(c.B))
+	}
+	selFg := th.SelectedForeground()
+	selSGR := fmt.Sprintf("%d;%d;%d", int(selFg.R), int(selFg.G), int(selFg.B))
+	primSGR := sgr("primary")
+	menuSGR := sgr("backgroundMenu")
+
+	text := col("text")
+	muted := col("textMuted")
+	warning := col("warning")
+	agentColor := col("secondary")
+	bgEl := col("backgroundElement")
+
+	km, err := NewKeymap(nil)
+	if err != nil {
+		t.Fatalf("NewKeymap: %v", err)
+	}
+	agentK := km.Format("agent_cycle")
+	paletteK := km.Format("command_list")
+	if agentK != "tab" || paletteK != "ctrl+p" {
+		t.Fatalf("keymap defaults drifted: agent_cycle=%q command_list=%q", agentK, paletteK)
+	}
+
+	blank := strings.Repeat(" ", mockW)
+	frames := make([]string, mockH)
+	for i := range frames {
+		frames[i] = blank
+	}
+
+	// the logo (renderLogo), centered at mockLogoL. The dropdown (below)
+	// overlays its lower rows (the logo is overlaid while open, spec §3.1);
+	// the top row stays visible above the dropdown.
+	logoLines := strings.Split(renderLogo(th), "\n")
+	if len(logoLines) != 4 {
+		t.Fatalf("logo lines = %d, want 4", len(logoLines))
+	}
+	for i, l := range logoLines {
+		frames[mockLogoTop+i] = strings.Repeat(" ", mockLogoL) + l + strings.Repeat(" ", mockW-mockLogoL-logoWidth)
+	}
+
+	// the prompt box (rows mockBoxTop..+4): the ┃ border (fg agentColor) +
+	// the backgroundElement interior fill.
+	border := mockRun{mockBoxL, "┃", agentColor, nil}
+	fill := mockRun{mockBoxL + 1, strings.Repeat(" ", mockBoxW-1), nil, bgEl}
+	pad := mockRun{mockBoxL + 1, strings.Repeat(" ", mockBoxPad), nil, bgEl}
+	m := mockBoxL + 1 + mockBoxPad
+	frames[mockBoxTop] = mockRow(border, fill)
+	frames[mockBoxTop+1] = mockRow(border, pad,
+		mockRun{m, mockPlaceholder, muted, bgEl},
+		mockRun{m + len(mockPlaceholder), strings.Repeat(" ", mockBoxL+mockBoxW-1-m-len(mockPlaceholder)+1), nil, bgEl})
+	frames[mockBoxTop+2] = mockRow(border, fill)
+
+	// the meta line (agent · model provider — the auto word omitted).
+	metaRuns := []mockRun{border, pad}
+	mc := m
+	addMeta := func(s string, fg color.Color) {
+		metaRuns = append(metaRuns, mockRun{mc, s, fg, bgEl})
+		mc += runeWidth(s)
+	}
+	addMeta(mockAgent, agentColor)
+	addMeta(" ", nil)
+	addMeta("·", muted)
+	addMeta(" ", nil)
+	addMeta(mockModel, text)
+	addMeta(" ", nil)
+	addMeta(mockProvider, muted)
+	metaRuns = append(metaRuns, mockRun{mc, strings.Repeat(" ", mockBoxL+mockBoxW-1-mc+1), nil, bgEl})
+	frames[mockBoxTop+3] = mockRow(metaRuns...)
+	frames[mockBoxTop+4] = mockRow(
+		mockRun{mockBoxL, "╹", agentColor, nil},
+		mockRun{mockBoxL + 1, strings.Repeat("▀", mockBoxW-1), bgEl, nil},
+	)
+
+	// the hint row (S5 context-aware): the first segment is "tab complete"
+	// while the @ menu is open (vs "tab agents" in the clean mock); the
+	// ctrl+p commands segment is unchanged.
+	seg1 := agentK + " complete"
+	frames[mockHintRow] = mockRow(
+		mockRun{mockBoxL, agentK, text, nil},
+		mockRun{mockBoxL + len(agentK), " complete", muted, nil},
+		mockRun{mockBoxL + len(seg1), "  ", nil, nil},
+		mockRun{mockBoxL + len(seg1) + 2, paletteK, text, nil},
+		mockRun{mockBoxL + len(seg1) + 2 + len(paletteK), " commands", muted, nil},
+	)
+
+	// the tip row + footer row: identical to the clean mock.
+	tipRuns := []mockRun{{mockTipL, "● Tip ", warning, nil}}
+	c := mockTipL + runeWidth("● Tip ")
+	for _, p := range parseTip(mockTipText) {
+		fg := muted
+		if p.hi {
+			fg = text
+		}
+		tipRuns = append(tipRuns, mockRun{c, p.text, fg, nil})
+		c += len(p.text)
+	}
+	frames[mockTipRow] = mockRow(tipRuns...)
+	frames[mockFooterRow] = mockRow(
+		mockRun{mockContentL, mockDir, muted, nil},
+		mockRun{mockVersionL, mockVersion, muted, nil},
+	)
+
+	// the @ dropdown (the S1 anchor): the REAL shared primitive rendered at
+	// the box width, bottom-aligned above the box's top edge. Each box row is
+	// mockBoxW cols; pad the leading margin to the box's left edge so the box
+	// spans cols mockBoxL..mockBoxL+mockBoxW-1.
+	box := newDropdown(mentionOpenItems, mentionSel, mockBoxW, len(mentionOpenItems), th)
+	dd := strings.Split(box.view(), "\n")
+	if len(dd) != len(mentionOpenItems) {
+		t.Fatalf("dropdown = %d rows, want %d", len(dd), len(mentionOpenItems))
+	}
+	ddTop := mockBoxTop - len(dd) // bottom-aligned above the box top edge
+	for i, r := range dd {
+		if w := runeWidth(stripANSI(r)); w != mockBoxW {
+			t.Fatalf("dropdown row %d width = %d, want %d (the box width)", i, w, mockBoxW)
+		}
+		frames[ddTop+i] = strings.Repeat(" ", mockBoxL) + r + strings.Repeat(" ", mockW-mockBoxL-mockBoxW)
+	}
+
+	render := strings.Join(frames, "\n")
+
+	// geometry contract: mockH rows, every row mockW display cols.
+	rows := strings.Split(stripANSI(render), "\n")
+	rawRows := strings.Split(render, "\n")
+	if len(rows) != mockH {
+		t.Fatalf("frame rows = %d, want %d", len(rows), mockH)
+	}
+	for i, r := range rows {
+		if w := runeWidth(r); w != mockW {
+			t.Fatalf("row %d width = %d, want %d", i, w, mockW)
+		}
+	}
+	at := func(row, coln int, want string) {
+		t.Helper()
+		if got := rowSegment(rows[row], coln, runeWidth(want)); got != want {
+			t.Fatalf("row %d col %d = %q, want %q", row, coln, got, want)
+		}
+	}
+	// the S1 anchor: a bordered box at the box's left edge, its last row just
+	// above the box's top edge.
+	at(ddTop, mockBoxL, "|")
+	at(ddTop+len(dd)-1, mockBoxL, "|")
+	at(ddTop+len(dd)-1, mockBoxL+mockBoxW-1, "|")
+	// the selected row (mentionSel = the cmd/ dir row) carries the primary bg
+	// + the SelectedForeground fg across its full width.
+	selRow := rawRows[ddTop+mentionSel]
+	if !strings.Contains(selRow, "48;2;"+primSGR) {
+		t.Fatalf("selected row missing the primary bg SGR (%s): %s", primSGR, selRow)
+	}
+	if !strings.Contains(selRow, "38;2;"+selSGR) {
+		t.Fatalf("selected row missing the SelectedForeground SGR (%s): %s", selSGR, selRow)
+	}
+	// the logo is overlaid while open: the non-selected dropdown rows carry the
+	// backgroundMenu fill (the dropdown paints over the logo rows); the
+	// selected row carries the primary bg (pinned above).
+	for i := 0; i < len(mentionOpenItems); i++ {
+		if i == mentionSel {
+			continue
+		}
+		if !strings.Contains(rawRows[ddTop+i], "48;2;"+menuSGR) {
+			t.Fatalf("row %d missing the dropdown backgroundMenu fill (logo overlay): %s", ddTop+i, rawRows[ddTop+i])
+		}
+	}
+	// the S5 context-aware hint + the unchanged box/tip/footer.
+	at(mockHintRow, mockBoxL, agentK+" complete  "+paletteK+" commands")
+	at(mockBoxTop+4, mockBoxL, "╹")
+	at(mockTipRow, mockTipL, "● Tip Press tab")
+	at(mockFooterRow, mockContentL, mockDir)
+	at(mockFooterRow, mockVersionL, mockVersion)
+
+	// the ANSI is preserved (truecolor fg + the dropdown/box interior bg).
+	if !strings.Contains(render, "38;2;") || !strings.Contains(render, "48;2;") {
+		t.Fatal("mock render lost its ANSI (lipgloss stripped the styles)")
+	}
+
+	out := filepath.Join("..", "..", "docs", "superpowers", "mockups", "home-mock-200x50-mention-open.txt")
+	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(out, []byte(render+"\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	t.Log("mention-open mock written to", out)
+}

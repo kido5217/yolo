@@ -372,10 +372,11 @@ func (a *App) homeHintLine() string {
 		b.WriteString(a.boxFg("text", f))
 		b.WriteString(a.boxFg("textMuted", word))
 	}
-	// S6: the first segment's word is context-aware — "tab complete" while
-	// the slash menu is open, "tab agents" when closed.
+	// S6 (the @-epic S5 extends it): the first segment's word is
+	// context-aware — "tab complete" while either menu is open (slashActive
+	// or mentionActive), "tab agents" when closed.
 	agentWord := " agents"
-	if a.prompt.slashActive() {
+	if a.prompt.slashActive() || a.prompt.mentionActive() {
 		agentWord = " complete"
 	}
 	seg("agent_cycle", agentWord)
@@ -471,9 +472,10 @@ func placeRow(left int, content string, w int) string {
 
 // homeView renders the 0.8.0 start-screen frame: exactly size.Height rows of
 // width w — top spacer, the fixed stack (4 pad, 4 logo, 1 pad, 1 box pad,
-// 5 box, 1 hint, 3 tip pad, the tip rows), the overlay rows (menu, acMenu,
-// perm, toasts, dlg, wk, lastErr — in that order, left-aligned per the
-// existing overlay rendering), the bottom spacer, the loading line
+// 5 box, 1 hint, 3 tip pad, the tip rows), the overlay rows (perm, toasts,
+// dlg, wk, lastErr — in that order, left-aligned per the existing overlay
+// rendering; the slash + @ dropdowns anchor above the box top edge), the
+// bottom spacer, the loading line
 // (deviation 237 slot), and the 3-row footer block (pad / content / pad).
 // Spacers split the free rows ceil-first (top gets the odd row — the fixture
 // convention). When fixed content exceeds the terminal the spacers clamp to
@@ -523,12 +525,21 @@ func (a *App) homeView(items []protocol.Command, acMenu, perm, toasts, dlg, wk s
 			stack = append(stack, placeRow(tipL, r, w))
 		}
 	}
-	// the slash dropdown anchors above the box top edge at the box's left edge /
-	// width (spec §6 S3), overlaying the logo rows while open (the bottom-
-	// aligned pre-box rows it occupies are painted over; the box + hint stay
-	// intact below). acMenu stays on the overlay rows until the @-epic re-
-	// anchors it (out of scope here).
+	// the slash + @ dropdowns anchor above the box top edge at the box's left
+	// edge / width (the slash spec §6 S3; the @-epic S1, spec §3.2), overlaying
+	// the logo rows while open (the bottom-aligned pre-box rows they occupy are
+	// painted over; the box + hint stay intact below). The @ menu's line count
+	// is the only delta from the slash anchor — the @-precedence gate means
+	// only one menu is open at a time. The @ menu is re-rendered from the
+	// walked files at the box's width (the pre-built acMenu string is the
+	// session placement's width, not reused on the home route).
 	if rows := a.prompt.slashRows(items, boxW, boxTop, a.theme); len(rows) > 0 {
+		n := len(rows)
+		for i, r := range rows {
+			stack[boxTop-n+i] = placeRow(boxL, r, w)
+		}
+	}
+	if rows := a.prompt.acRows(a.mentionOptions(), boxW, boxTop, a.theme); len(rows) > 0 {
 		n := len(rows)
 		for i, r := range rows {
 			stack[boxTop-n+i] = placeRow(boxL, r, w)
@@ -536,7 +547,7 @@ func (a *App) homeView(items []protocol.Command, acMenu, perm, toasts, dlg, wk s
 	}
 	// the overlay rows (left-aligned, in the session-route order).
 	var overlays []string
-	for _, o := range []string{acMenu, perm, toasts, dlg, wk} {
+	for _, o := range []string{perm, toasts, dlg, wk} {
 		if o != "" {
 			overlays = append(overlays, strings.Split(o, "\n")...)
 		}

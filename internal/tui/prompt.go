@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"path"
 	"sort"
 	"strings"
 
@@ -32,6 +33,12 @@ type promptModel struct {
 	// placeholderIdx is shared across both placeholder pools (the upstream
 	// single store.placeholder counter — each pool wraps by its own length).
 	placeholderIdx int
+	// lastAcQuery is the @-query last seen by the input fallback (spec §3.4,
+	// the ported upstream filter-rerun reset, autocomplete.tsx:527-530): a
+	// changed @-query resets sel to 0 (the stale-sel edge — the render's
+	// i == pm.sel and the enter guard sel < len(opts) miss when the list
+	// shrinks below sel).
+	lastAcQuery string
 }
 
 // placeholder pools (upstream home.tsx:17-20 verbatim + the prefixes from
@@ -107,7 +114,13 @@ func (pm *promptModel) slashActive() bool {
 		return false
 	}
 	v := pm.input.Value()
-	return v != "" && strings.HasPrefix(v, "/")
+	if v == "" || !strings.HasPrefix(v, "/") {
+		return false
+	}
+	// the @-precedence rule (spec §3.9): a valid @-trigger suppresses the
+	// slash menu — the @ menu is the only one open (the upstream checks the
+	// @-trigger before the / check; menuItems returns nil while mentionActive).
+	return !pm.mentionActive()
 }
 
 // commandAliases maps canonical command names to accepted aliases. Aliases
@@ -248,35 +261,73 @@ func (pm *promptModel) acQuery() string {
 	return pm.input.Value()[idx+1:]
 }
 
-// acView renders the @-picker option rows, reusing the slash-menu rendering
-// (muted + cursorStyle on the selected row, each row word-wrapped). Nil opts
-// hide the picker; an empty list renders the "no match" line.
-func (pm *promptModel) acView(opts []selectOption, w int, th theme.Theme) string {
+// noteAcQuery is the @-picker's filter-rerun selection reset (spec §3.4, the
+// ported upstream createEffect-on-filter-rerun, autocomplete.tsx:527-530):
+// a changed @-query resets sel to 0. It runs after the input fallback (the
+// handleAcKey inputUpdate site) — mentionActive is re-checked there so a key
+// that closes the trigger (the last backspace) does not reset.
+func (pm *promptModel) noteAcQuery() {
+	q := pm.acQuery()
+	if pm.mentionActive() && q != pm.lastAcQuery {
+		pm.sel = 0
+	}
+	pm.lastAcQuery = q
+}
+
+// acRows renders the @-picker's rows through the shared dropdown primitive
+// (the @-epic S1, spec §3.1) — the box chrome (the split border, the
+// backgroundMenu fill, the 1-col padding) wrapping the path rows, the
+// selection row SGR'd with the primary bg + the SelectedForeground. Nil
+// options = the menu closed. Empty options (the filter found no match) = the
+// muted "No matching items" line (the S6 empty-state text, upstream verbatim —
+// the slash S7 referent, prompt.go slashRows). The width w is the box's
+// width: the session passes the content width, the home passes the prompt box
+// width. The rows carry the mentionOption value (the S2 carrier): the label
+// = the middle-truncated path — directory rows with the trailing-"/" kind
+// marker (spec §3.1), the description = the slash-relative parent dir for
+// files (empty for root-level files and for dirs). The legacy plain-path
+// string value renders as a file row (the S1 unit pins).
+func (pm *promptModel) acRows(opts []selectOption, w, spaceAbove int, th theme.Theme) []string {
 	if opts == nil {
-		return ""
+		return nil
 	}
 	if len(opts) == 0 {
-		return th.TextMuted().Render("  no match")
+		return []string{th.TextMuted().Render("  No matching items")}
 	}
-	muted := th.TextMuted()
-	var b strings.Builder
+	avail := w - 4 // the dropdown's content columns (the label's max width)
+	if avail < 0 {
+		avail = 0
+	}
+	rows := make([]dropdownRow, len(opts))
 	for i, o := range opts {
-		if i > 0 {
-			b.WriteByte('\n')
+		var mo mentionOption
+		switch v := o.value.(type) {
+		case mentionOption:
+			mo = v
+		case string:
+			mo = mentionOption{path: v} // the legacy plain-path value (the S1 pins)
 		}
-		sty := muted
-		if i == pm.sel {
-			sty = cursorStyle(th)
+		label := mo.path
+		description := ""
+		if mo.isDir {
+			label += "/" // the dir kind marker (spec §3.1)
+		} else if parent := path.Dir(mo.path); parent != "." {
+			description = parent
 		}
-		p, _ := o.value.(string)
-		for j, l := range strings.Split(wrapLine("  "+p, w), "\n") {
-			if j > 0 {
-				b.WriteByte('\n')
-			}
-			b.WriteString(sty.Render(l))
-		}
+		rows[i] = dropdownRow{label: truncateMiddle(label, avail), description: description}
 	}
-	return b.String()
+	d := newDropdown(rows, pm.sel, w, spaceAbove, th)
+	if d.vis == 0 {
+		return nil
+	}
+	return strings.Split(d.view(), "\n")
+}
+
+// acView renders the @-picker (deviation 222's @-menu, the S1 chrome) as the
+// joined box string — the session placement appends it after the transcript
+// and viewSession's subtraction counts the box line count automatically.
+func (pm *promptModel) acView(opts []selectOption, w int, th theme.Theme) string {
+	return strings.Join(pm.acRows(opts, w, len(opts), th), "\n")
 }
 
 // moveMenuSel moves the selection by d with wraparound (n items).

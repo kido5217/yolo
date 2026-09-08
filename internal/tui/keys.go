@@ -44,6 +44,16 @@ func (a *App) handleKey(k tea.KeyPressMsg) []tea.Cmd {
 	if keyMatchesSeq(k, "tab") && a.prompt.slashActive() {
 		return a.slashTabComplete()
 	}
+	// S5: while the @-picker is open, tab completes the selected option in
+	// the @ handler path BEFORE the keymap registry's agent_cycle (tab) sees
+	// it — the slash S6 idiom is the structural referent (the base group's
+	// agent_cycle, keymap.go:135, would otherwise consume the tab). File →
+	// insert + close (acInsert), dir → expand (acExpand). shift+tab
+	// (agent_cycle_reverse, keymap.go:136) is NOT owned here — it still
+	// cycles the agent.
+	if a.prompt.mentionActive() && a.keymap.Match("agent_cycle", k) {
+		return a.acTabComplete()
+	}
 	// S4.2: the keymap registry owns the app-level bindings (any route, no
 	// dialog). The leader mechanism first, then the base context group.
 	if cmds, done := a.handleAppKeys(k); done {
@@ -244,11 +254,35 @@ func (a *App) slashTabComplete() []tea.Cmd {
 	return nil
 }
 
+// acTabComplete is the @-picker's tab completion (S5, spec §3.5): the
+// selected file → the enter action (acInsert — insert + close), the selected
+// dir → the expand branch (acExpand — the shared S3 dir tab-expand, the menu
+// stays open re-filtered to the subtree). A no-match picker is a no-op (the
+// upstream select's if (!selected) return). shift+tab is NOT owned here
+// (agent_cycle_reverse, keymap.go:136 — it still cycles the agent).
+func (a *App) acTabComplete() []tea.Cmd {
+	opts := a.mentionOptions()
+	if len(opts) == 0 || a.prompt.sel >= len(opts) {
+		return nil
+	}
+	mo, ok := opts[a.prompt.sel].value.(mentionOption)
+	if !ok {
+		return nil
+	}
+	if mo.isDir {
+		a.acExpand(mo)
+	} else {
+		a.acInsert(mo)
+	}
+	return nil
+}
+
 // handleAcKey dispatches keys while the @-picker is open: arrows move the
 // selection with wraparound, enter inserts the selected path (a no-op on no
 // selection — the upstream if (!selected) return), esc removes the @-trigger
 // keeping the prefix; everything else keeps filtering through the live input
-// (re-filtering the options).
+// (re-filtering the options) and resets the selection on a query change
+// (the ported filter-rerun reset, spec §3.4).
 func (a *App) handleAcKey(k tea.KeyPressMsg) []tea.Cmd {
 	opts := a.mentionOptions()
 	switch {
@@ -260,8 +294,8 @@ func (a *App) handleAcKey(k tea.KeyPressMsg) []tea.Cmd {
 		return nil
 	case key.Matches(k, promptEnter):
 		if len(opts) > 0 && a.prompt.sel < len(opts) {
-			if p, ok := opts[a.prompt.sel].value.(string); ok {
-				a.acInsert(p)
+			if mo, ok := opts[a.prompt.sel].value.(mentionOption); ok {
+				a.acInsert(mo) // the S3 insert semantics (@-prefixed path + trailing space)
 			}
 		}
 		return nil
@@ -274,7 +308,9 @@ func (a *App) handleAcKey(k tea.KeyPressMsg) []tea.Cmd {
 		a.prompt.sel = 0
 		return nil
 	}
-	return a.inputUpdate(k)
+	cmds := a.inputUpdate(k)
+	a.prompt.noteAcQuery()
+	return cmds
 }
 
 // handlePromptKey is the prompt fallback: up/down recall the prompt history
