@@ -126,16 +126,18 @@ func (d dropdown) view() string {
 // row renders one box row (the two-column layout mirroring menuView: the
 // name left, the description right-offset by "  "). The non-selection row
 // is the border columns + the backgroundMenu fill (the label in the text
-// token, the description in textMuted); the selection row is the full-row
-// paint (primary bg + SelectedForeground fg across every column, the
-// borders and padding inside) or, without a primary token, the chrome with
-// the whole content in the degraded selection style (select.go's
+// token, the description in textMuted); the selection row paints its content
+// in the full-row highlight (primary bg + SelectedForeground fg) while the
+// border columns stay in the border token, or, without a primary token, the
+// whole content degrades to the bold text-fg selection style (select.go's
 // missing-primary idiom).
 func (d dropdown) row(i int) string {
 	r := d.rows[i]
 	label, desc := d.fit(r)
 	if i == d.sel && d.selOK {
-		return d.selSty.Render(borderChar) + d.selSty.Width(d.innerW).Render(" "+label+desc) + d.selSty.Render(borderChar)
+		// The highlight covers the content only; the border columns stay in
+		// the border token (opencode keeps the active highlight off the border).
+		return d.border.Render(borderChar) + d.selSty.Width(d.innerW).Render(" "+label+desc) + d.border.Render(borderChar)
 	}
 	labelSty, descSty := d.labelSty, d.descSty
 	if i == d.sel {

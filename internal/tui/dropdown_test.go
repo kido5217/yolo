@@ -88,25 +88,21 @@ func TestDropdownSelectionRowSGR(t *testing.T) {
 	d := newDropdown(rows, 1, 40, 10, th)
 	lines := strings.Split(d.view(), "\n")
 	sel := lines[1]
-	// yolo dark: primary #fab283 (the row bg), SelectedForeground = the
-	// background token #0a0a0a (the row fg) — the full row (borders +
-	// padding + content) paints across all 40 columns.
+	// yolo dark: primary #fab283 (the content bg), SelectedForeground = the
+	// background token #0a0a0a (the content fg). The highlight covers the
+	// content only (opencode keeps it off the border); the two ┃ border
+	// columns stay in the border token #484848.
 	if !strings.Contains(sel, "48;2;250;178;131") {
 		t.Fatalf("selection row missing the primary bg SGR (#fab283): %s", sel)
 	}
 	if !strings.Contains(sel, "38;2;10;10;10") {
 		t.Fatalf("selection row missing the SelectedForeground SGR (#0a0a0a): %s", sel)
 	}
-	// The full-row-width pin: every SGR open inside the row carries the
-	// primary bg (the padding run included — no unpainted column).
-	for _, seg := range strings.Split(sel, "\x1b[") {
-		switch {
-		case seg == "", seg == "m", seg == "0m":
-			continue
-		}
-		if !strings.Contains(seg, "48;2;250;178;131") {
-			t.Fatalf("selection row has an unpainted run %q (row: %s)", seg, sel)
-		}
+	// The border columns carry the border token, not the highlight (opencode
+	// keeps the active highlight off the border): the two ┃ border chars are
+	// painted in the border color, never the primary bg.
+	if !strings.Contains(sel, "38;2;72;72;72") {
+		t.Fatalf("selection row borders missing the border SGR (#484848): %s", sel)
 	}
 	if n := len([]rune(stripANSI(sel))); n != 40 {
 		t.Fatalf("selection row = %d cols, want 40: %q", n, stripANSI(sel))
