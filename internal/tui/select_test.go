@@ -336,3 +336,121 @@ func TestSelectScrollAcceleration(t *testing.T) {
 func fmtOption(i int) string {
 	return "Option " + string(rune('a'+i/26)) + string(rune('a'+i%26))
 }
+
+// TestSelectFilterCategoryAxis pins the 0.10.0 palette S3 category axis
+// (decision C): a category-only match surfaces (the title misses the needle,
+// the category hits) and the /model row matches through the Model category
+// as well as its title, ranking above the category-only row.
+func TestSelectFilterCategoryAxis(t *testing.T) {
+	opts := []selectOption{
+		{title: "model", category: "Model"}, // title + category
+		{title: "alpha", category: "Model"}, // category only (the title misses)
+		{title: "omega", category: ""},      // no match on either axis
+	}
+	m := selectNew("T", "S", opts, nil, nil, nil)
+	m.filter = "model"
+	l := m.filtered()
+	if len(l) != 2 || l[0].title != "model" || l[1].title != "alpha" {
+		t.Fatalf("category axis = %v, want [model alpha]", titlesOf(l))
+	}
+}
+
+// TestSelectFilterTitleWeighting pins the 0.10.0 palette S3 weighting
+// (decision C): a prefix title hit (×2) beats a category-only match (×1) of
+// equal raw length (the ported title.score*2 + category.score).
+func TestSelectFilterTitleWeighting(t *testing.T) {
+	opts := []selectOption{
+		{title: "model", category: ""},      // prefix title hit (×2)
+		{title: "alpha", category: "Model"}, // category-only hit (×1), equal raw length (5)
+	}
+	m := selectNew("T", "S", opts, nil, nil, nil)
+	m.filter = "mod"
+	l := m.filtered()
+	if len(l) != 2 || l[0].title != "model" || l[1].title != "alpha" {
+		t.Fatalf("weighting = %v, want [model alpha] (the title ×2 beats the category ×1)", titlesOf(l))
+	}
+}
+
+// TestSelectFilterScoreGate pins the 0.10.0 palette S3 score > 0 gate
+// (select.go filtered): a zero-score option (no title/category hit) and a
+// negative-score option (a subsequence hit the fuzzy scorer penalizes below
+// zero) are both filtered out — the gate keeps the positive hits only.
+func TestSelectFilterScoreGate(t *testing.T) {
+	opts := []selectOption{
+		{title: "ab", category: ""},           // a positive hit (kept)
+		{title: "zzzzzzzzabzz", category: ""}, // a hit the scorer penalizes below zero
+		{title: "qq", category: ""},           // no hit at all (zero score)
+	}
+	m := selectNew("T", "S", opts, nil, nil, nil)
+	m.filter = "ab"
+	l := m.filtered()
+	if len(l) != 1 || l[0].title != "ab" {
+		t.Fatalf("gate = %v, want [ab] (the zero/negative-score options filtered)", titlesOf(l))
+	}
+}
+
+// TestSelectScrollWindowVisible pins the 0.10.0 palette S3 scroll window
+// (decision C): visible = h/2 − 6 on a large pool (the no-cap port — the
+// window clamps the rendered rows, the list does not).
+func TestSelectScrollWindowVisible(t *testing.T) {
+	a := testApp()
+	opts := make([]selectOption, 40)
+	for i := range opts {
+		opts[i] = selectOption{title: fmtOption(i)}
+	}
+	m := selectNew("Test", "Search", opts, nil, nil, nil)
+	// h=30 → visible = 30/2 − 6 = 9 rows; 40 options (one row each) → the
+	// window clamps to exactly 9: title + filter + 9 rows + footer = 12.
+	lines := strings.Split(m.view(60, 30, a.theme), "\n")
+	if len(lines) != 12 {
+		t.Fatalf("view = %d lines, want 12 (title + filter + 9 visible + footer): %v", len(lines), lines)
+	}
+	if !strings.Contains(stripANSI(lines[2]), "Option aa") || !strings.Contains(stripANSI(lines[10]), "Option ai") {
+		t.Fatalf("window = %q…%q, want the first 9 rows (top 0, visible 9)", stripANSI(lines[2]), stripANSI(lines[10]))
+	}
+}
+
+// TestSelectSelResetOnQueryChange pins the 0.10.0 palette S3 sel-reset
+// (decision C): a query change to a non-empty value resets the selection to
+// the top (the ported filter>0 → moveTo(0)); clearing the needle does not
+// reset.
+func TestSelectSelResetOnQueryChange(t *testing.T) {
+	m := selectNew("Test", "Search", selTestOptions(), nil, nil, nil)
+	m.sel = 2
+	m.input.SetValue("g")
+	m.syncFilter()
+	if m.sel != 0 {
+		t.Fatalf("sel = %d, want 0 (the reset on the query change)", m.sel)
+	}
+	m.sel = 1
+	m.input.SetValue("")
+	m.syncFilter()
+	if m.sel != 1 {
+		t.Fatalf("sel = %d, want 1 (no reset on clearing the needle)", m.sel)
+	}
+}
+
+// TestSelectFilterNoFrecency pins the 0.10.0 palette S3 no-frecency fact
+// (decision C, marker 321): the palette filter does NOT consult the
+// command_frecency store — two otherwise-identical commands with different
+// frecency histories rank equally (the stable fuzzy order), unlike the slash
+// menu's frecency fold (TestCommandFrecencyRanking).
+func TestSelectFilterNoFrecency(t *testing.T) {
+	ra, e := newCommandFrecencyApp(t)
+	ra.store.Commands = commandFrecencyCommands()
+	seedCommandFrecency(t, ra, e, []frecencyEntry{
+		{Path: "/zebra1", Frequency: 10},
+		{Path: "/zebra2", Frequency: 1},
+	})
+	if len(ra.cmdFreq) != 2 {
+		t.Fatalf("cmdFreq = %v, want the two seeded entries (the store is populated)", ra.cmdFreq)
+	}
+	m := selectNew("Commands", "Filter commands", paletteOptions(ra.App), nil, nil, nil)
+	m.filter = "ze"
+	l := m.filtered()
+	// the natural stable fuzzy order (zebra2 first in the merged list) — the
+	// frequent zebra1 is NOT lifted (the slash menu would rank it first).
+	if len(l) != 2 || l[0].title != "zebra2" || l[1].title != "zebra1" {
+		t.Fatalf("rank = %v, want [zebra2 zebra1] (no frecency fold)", titlesOf(l))
+	}
+}
