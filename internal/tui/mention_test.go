@@ -239,16 +239,62 @@ func TestMentionOptions(t *testing.T) {
 }
 
 func TestAcInsert(t *testing.T) {
-	a := testApp()
-	a.Service.Dir = t.TempDir()
-	a.prompt.input.SetValue("see @fil")
-	a.acInsert("alpha.go")
-	if got := a.prompt.input.Value(); got != "see alpha.go" {
-		t.Fatalf("insert = %q, want the path replacing the @-query", got)
-	}
-	if len(a.freq) != 1 || a.freq[0].Path != "alpha.go" || a.freq[0].Frequency != 1 {
-		t.Fatalf("frecency not recorded: %v", a.freq)
-	}
+	t.Run("the file insert is @-prefixed + a trailing space (the insert touch)", func(t *testing.T) {
+		a := testApp()
+		a.Service.Dir = t.TempDir()
+		a.prompt.input.SetValue("fix @")
+		a.acInsert(mentionOption{path: "alpha.go"})
+		if got := a.prompt.input.Value(); got != "fix @alpha.go " {
+			t.Fatalf("insert = %q, want the @-prefixed path + a trailing space", got)
+		}
+		if len(a.freq) != 1 || a.freq[0].Path != "alpha.go" || a.freq[0].Frequency != 1 {
+			t.Fatalf("frecency not recorded (the insert touch): %v", a.freq)
+		}
+	})
+	t.Run("the directory tab-expand keeps the menu open, no touch", func(t *testing.T) {
+		dir := t.TempDir()
+		os.WriteFile(filepath.Join(dir, "alpha.go"), []byte("x"), 0o644)
+		os.MkdirAll(filepath.Join(dir, "cmd"), 0o755)
+		os.WriteFile(filepath.Join(dir, "cmd", "main.go"), []byte("x"), 0o644)
+		a := testApp()
+		a.Service.Dir = dir
+		a.prompt.input.SetValue("fix @")
+		a.acExpand(mentionOption{path: "cmd", isDir: true})
+		// the @<path>/ insert: NO trailing space (the value ends at "/").
+		if got := a.prompt.input.Value(); got != "fix @cmd/" {
+			t.Fatalf("expand = %q, want @cmd/ (no trailing space)", got)
+		}
+		if a.prompt.sel != 0 {
+			t.Fatalf("sel = %d, want 0 (the expand resets sel)", a.prompt.sel)
+		}
+		// the value still carries a valid @-trigger: the menu stays open and
+		// the query re-filters the candidates to the cmd/ subtree.
+		if !a.prompt.mentionActive() {
+			t.Fatal("the menu should stay open after the expand (a valid @-trigger remains)")
+		}
+		if got := a.prompt.acQuery(); got != "cmd/" {
+			t.Fatalf("query = %q, want cmd/ (the re-filter target)", got)
+		}
+		var sawSubtree, sawOutside bool
+		for _, o := range a.mentionOptions() {
+			mo, _ := o.value.(mentionOption)
+			switch mo.path {
+			case "cmd/main.go":
+				sawSubtree = true
+			case "alpha.go":
+				sawOutside = true
+			}
+		}
+		if !sawSubtree {
+			t.Fatal("the re-filter should keep the cmd/ subtree (cmd/main.go)")
+		}
+		if sawOutside {
+			t.Fatal("the re-filter should drop the non-subtree file (alpha.go)")
+		}
+		if len(a.freq) != 0 {
+			t.Fatalf("the dir-expand branch must not touch the frecency: %v", a.freq)
+		}
+	})
 }
 
 // TestTUIAtPicker is the teatest leg: a real stack, the @-picker filters the
@@ -264,15 +310,16 @@ func TestTUIAtPicker(t *testing.T) {
 	teatest.WaitFor(t, tm.Output(), hasLine(homeLogoLine), teatest.WithDuration(5*time.Second))
 	tm.Send(press('n'))
 	teatest.WaitFor(t, tm.Output(), hasLine("esc abort/back"), teatest.WithDuration(5*time.Second))
-	suiteType(tm, "see @a")
+	suiteType(tm, "see @")
 	teatest.WaitFor(t, tm.Output(), hasLine("alpha.go"), teatest.WithDuration(5*time.Second))
 	tm.Send(press(tea.KeyEnter))
 	// the inserted value in the drained output (the cell-diff renderer
-	// re-emits only the changed cells — the "> " gutter was already
-	// drained, so the token stands alone) — asserting over the output,
-	// not the live input state (the -race gate, deviation 293).
+	// re-emits only the changed cells — the "> " gutter and the "@" trigger
+	// were already drained, so the inserted path + trailing space stand
+	// alone) — the S3 @-prefixed insert ("see @alpha.go "); asserting over
+	// the output, not the live input state (the -race gate, deviation 293).
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return strings.Contains(stripANSI(string(b)), "alpha.go")
+		return strings.Contains(stripANSI(string(b)), "alpha.go ")
 	}, teatest.WithDuration(5*time.Second))
 	_ = tm.Quit()
 	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))

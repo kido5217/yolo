@@ -262,7 +262,7 @@ func (a *App) handleAcKey(k tea.KeyPressMsg) []tea.Cmd {
 	case key.Matches(k, promptEnter):
 		if len(opts) > 0 && a.prompt.sel < len(opts) {
 			if mo, ok := opts[a.prompt.sel].value.(mentionOption); ok {
-				a.acInsert(mo.path) // the S2 adapter: the insert semantics land in S3
+				a.acInsert(mo) // the S3 insert semantics (@-prefixed path + trailing space)
 			}
 		}
 		return nil

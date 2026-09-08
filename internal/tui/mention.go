@@ -224,21 +224,49 @@ func (a *App) mentionOptions() []selectOption {
 	return opts
 }
 
-// acInsert replaces the @-query with the path text (plain text, no
-// parts/chips — deviation-222 class), moves the cursor to the end, resets
-// the recall + picker selection, and records the selection in the frecency.
-func (a *App) acInsert(rel string) {
+// acApply swaps the @-query range (the value-derived model's v[idx:] — the
+// trigger + query, which carries no whitespace and reaches the end of the
+// input) with the @-prefixed insert text, moves the cursor to the end, and
+// resets the recall + picker selection. It reports whether an @-trigger was
+// active (the no-op case reports false). The frecency touch stays with the
+// insert branch (spec §3.6 decision D) — the caller owns it.
+func (a *App) acApply(insert string) bool {
 	v := a.prompt.input.Value()
 	idx, ok := mentionTriggerIndex(v)
 	if !ok {
-		return
+		return false
 	}
-	next := v[:idx] + rel
+	next := v[:idx] + "@" + insert
 	a.prompt.input.SetValue(next)
 	a.prompt.input.SetCursor(len([]rune(next)))
 	a.histIdx = 0
 	a.histText = ""
 	a.prompt.sel = 0
-	a.freq = updateFrecency(a.freq, rel, nowMillis())
+	return true
+}
+
+// acInsert replaces the @-query range with the @-prefixed path + a trailing
+// space (spec §3.6 — the insert semantics, enter / mouse-click / tab-on-file)
+// and records the selection in the frecency (the insert-only touch, decision
+// D). The trailing-space rule (upstream insertPart's needsSpace) appends a
+// space unless the char after the replaced range is already a space; in the
+// value-derived trigger model the query reaches the end of the input, so the
+// space is always appended.
+func (a *App) acInsert(o mentionOption) {
+	if !a.acApply(o.path + " ") {
+		return
+	}
+	a.freq = updateFrecency(a.freq, o.path, nowMillis())
 	a.saveFrecency()
+}
+
+// acExpand expands the selected directory to @<path>/ (spec §3.6 — the
+// directory + tab branch; S5's tab case calls this). It appends the path + a
+// trailing "/" (NO trailing space) and keeps the menu open: the value still
+// carries a valid @-trigger (the query becomes "<path>/"), so the options
+// re-filter to the directory's subtree (the walk cache is kept — a fresh
+// mentionOptions call on the new query). It does NOT touch the frecency (the
+// insert-only touch, decision D).
+func (a *App) acExpand(o mentionOption) {
+	a.acApply(o.path + "/")
 }
