@@ -567,9 +567,9 @@ func TestHomeMockSlashOpenRender(t *testing.T) {
 	}
 	// the S3 anchor: a bordered box at the box's left edge, its last row just
 	// above the box's top edge.
-	at(ddTop, mockBoxL, "|")
-	at(ddTop+len(dd)-1, mockBoxL, "|")
-	at(ddTop+len(dd)-1, mockBoxL+mockBoxW-1, "|")
+	at(ddTop, mockBoxL, "┃")
+	at(ddTop+len(dd)-1, mockBoxL, "┃")
+	at(ddTop+len(dd)-1, mockBoxL+mockBoxW-1, "┃")
 	// the selected row (slashSel = /model) carries the primary bg + the
 	// SelectedForeground fg across its full width.
 	selRow := rawRows[ddTop+slashSel]
@@ -809,9 +809,9 @@ func TestHomeMockMentionOpenRender(t *testing.T) {
 	}
 	// the S1 anchor: a bordered box at the box's left edge, its last row just
 	// above the box's top edge.
-	at(ddTop, mockBoxL, "|")
-	at(ddTop+len(dd)-1, mockBoxL, "|")
-	at(ddTop+len(dd)-1, mockBoxL+mockBoxW-1, "|")
+	at(ddTop, mockBoxL, "┃")
+	at(ddTop+len(dd)-1, mockBoxL, "┃")
+	at(ddTop+len(dd)-1, mockBoxL+mockBoxW-1, "┃")
 	// the selected row (mentionSel = the cmd/ dir row) carries the primary bg
 	// + the SelectedForeground fg across its full width.
 	selRow := rawRows[ddTop+mentionSel]

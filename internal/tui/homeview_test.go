@@ -260,12 +260,12 @@ func TestHomeViewSlashMenuAnchors(t *testing.T) {
 	// the top row (n rows above) is the selected row (sel=0).
 	top := mockBoxTop - n
 	bottom := mockBoxTop - 1
-	atFrame(t, rows, top, mockBoxL, "|")
-	atFrame(t, rows, bottom, mockBoxL, "|")
+	atFrame(t, rows, top, mockBoxL, "┃")
+	atFrame(t, rows, bottom, mockBoxL, "┃")
 	// the logo is overlaid while open: the mock logo row (mockLogoTop+1) now
 	// carries the dropdown border at the box's left edge (not the logo art at
 	// mockLogoL).
-	atFrame(t, rows, mockLogoTop+1, mockBoxL, "|")
+	atFrame(t, rows, mockLogoTop+1, mockBoxL, "┃")
 	// the selected row (sel=0) is the first merged command at the box's left
 	// edge (the dropdown's top row).
 	if !strings.Contains(stripANSI(rows[top]), "/sessions") {

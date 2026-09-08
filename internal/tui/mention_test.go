@@ -352,7 +352,7 @@ func TestMentionViewOpenBox(t *testing.T) {
 		if n := len(r); n != w {
 			t.Fatalf("row %d = %d cols, want %d (the width-exact box): %q", i, n, w, plain)
 		}
-		if r[0] != '|' || r[w-1] != '|' {
+		if r[0] != '┃' || r[w-1] != '┃' {
 			t.Fatalf("row %d = %q, want the split left/right border (no top/bottom edges)", i, plain)
 		}
 		if r[1] != ' ' {
@@ -469,13 +469,13 @@ func TestHomeViewMentionMenuAnchors(t *testing.T) {
 	// the top row (n rows above) is the selected row (sel=0).
 	top := mockBoxTop - n
 	bottom := mockBoxTop - 1
-	atFrame(t, rows, top, mockBoxL, "|")
-	atFrame(t, rows, bottom, mockBoxL, "|")
+	atFrame(t, rows, top, mockBoxL, "┃")
+	atFrame(t, rows, bottom, mockBoxL, "┃")
 	// the box width (the right border at the box's right edge).
-	atFrame(t, rows, bottom, mockBoxL+mockBoxW-1, "|")
+	atFrame(t, rows, bottom, mockBoxL+mockBoxW-1, "┃")
 	// the logo is overlaid while open: the mock logo row (mockLogoTop+1) now
 	// carries the dropdown border at the box's left edge.
-	atFrame(t, rows, mockLogoTop+1, mockBoxL, "|")
+	atFrame(t, rows, mockLogoTop+1, mockBoxL, "┃")
 	// the selected row (sel=0) carries the path column (the first walked file).
 	if !strings.Contains(stripANSI(rows[top]), "alpha.go") {
 		t.Fatalf("selected @ row = %q, want the first walked file (alpha.go)", stripANSI(rows[top]))

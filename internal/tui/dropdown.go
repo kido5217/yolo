@@ -21,6 +21,11 @@ import (
 // maxDropdownRows caps the box height (spec §3.1's top N).
 const maxDropdownRows = 10
 
+// borderChar is the double-line box-drawing vertical (opencode's SplitBorder
+// vertical, ui/border.ts): the dropdown's left/right border renders this
+// instead of the ASCII '|'.
+const borderChar = "\u2503"
+
 // dropdownRow is one dropdown row: the label (left column) + an optional
 // description (right column, rendered muted).
 type dropdownRow struct {
@@ -32,11 +37,12 @@ type dropdownRow struct {
 // row count, maxDropdownRows, and the space above) and the derived layout
 // widths, with the row styles built from the theme.
 type dropdown struct {
-	rows   []dropdownRow
-	sel    int
-	vis    int
-	innerW int // the fill columns between the border columns
-	avail  int // the content columns inside the padding columns
+	rows      []dropdownRow
+	sel       int
+	vis       int
+	innerW    int // the fill columns between the border columns
+	avail     int // the content columns inside the padding columns
+	maxLabelW int // the widest label over all rows (the fixed description column)
 
 	border   lipgloss.Style
 	bgMenu   lipgloss.Style
@@ -58,6 +64,11 @@ func newDropdown(rows []dropdownRow, sel, width, spaceAbove int, th theme.Theme)
 		avail:  width - 4,
 		border: th.Border(),
 		bgMenu: th.BackgroundMenu(),
+	}
+	for _, r := range rows {
+		if w := runeWidth(r.label); w > d.maxLabelW {
+			d.maxLabelW = w
+		}
 	}
 	if d.vis < 0 {
 		d.vis = 0
@@ -124,7 +135,7 @@ func (d dropdown) row(i int) string {
 	r := d.rows[i]
 	label, desc := d.fit(r)
 	if i == d.sel && d.selOK {
-		return d.selSty.Render("|") + d.selSty.Width(d.innerW).Render(" "+label+desc) + d.selSty.Render("|")
+		return d.selSty.Render(borderChar) + d.selSty.Width(d.innerW).Render(" "+label+desc) + d.selSty.Render(borderChar)
 	}
 	labelSty, descSty := d.labelSty, d.descSty
 	if i == d.sel {
@@ -136,12 +147,16 @@ func (d dropdown) row(i int) string {
 	if desc != "" {
 		content += descSty.Render(desc)
 	}
-	return d.border.Render("|") + d.bgMenu.Width(d.innerW).Render(content) + d.border.Render("|")
+	return d.border.Render(borderChar) + d.bgMenu.Width(d.innerW).Render(content) + d.border.Render(borderChar)
 }
 
-// fit truncates the row's columns to the content area (avail): an over-wide
-// label eats the description and is cut at avail; otherwise the description
-// (with its "  " right offset) is cut at the remaining width.
+// fit truncates the row's columns to the content area (avail) on a FIXED
+// description column: an over-wide label is cut at avail (no description);
+// otherwise the label is padded to maxLabelW (the widest label over all rows,
+// the opencode padEnd(max+2) idiom) and the description (with its "  " right
+// offset) is cut to the shared width avail-maxLabelW, so every description
+// starts at the same column. When maxLabelW alone exceeds avail the
+// description column is pushed off the edge and dropped.
 func (d dropdown) fit(r dropdownRow) (label, desc string) {
 	lw := runeWidth(r.label)
 	if lw > d.avail {
@@ -151,6 +166,14 @@ func (d dropdown) fit(r dropdownRow) (label, desc string) {
 	if r.description == "" {
 		return r.label, ""
 	}
-	desc, _ = cutWidth("  "+r.description, d.avail-lw)
-	return r.label, desc
+	if d.maxLabelW > d.avail {
+		label, _ = cutWidth(r.label, d.avail)
+		return label, ""
+	}
+	label = r.label
+	if d.maxLabelW > lw {
+		label = r.label + strings.Repeat(" ", d.maxLabelW-lw)
+	}
+	desc, _ = cutWidth("  "+r.description, d.avail-d.maxLabelW)
+	return label, desc
 }

@@ -468,8 +468,8 @@ func TestSessionViewSlashMenuAnchors(t *testing.T) {
 	top := 1 + vh - n
 	bottom := vh
 	for i := top; i <= bottom; i++ {
-		atFrame(t, rows, i, 0, "|")
-		atFrame(t, rows, i, 79, "|")
+		atFrame(t, rows, i, 0, "┃")
+		atFrame(t, rows, i, 79, "┃")
 	}
 	if !strings.Contains(stripANSI(rows[top]), "/sessions") {
 		t.Fatalf("selected dropdown row = %q, want the first merged command (/sessions)", rows[top])

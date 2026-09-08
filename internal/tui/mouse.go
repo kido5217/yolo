@@ -115,15 +115,16 @@ func (a *App) mentionDropdownRows() (int, int) {
 // 0-based cell row of its first rendered row and its visible row count. The
 // open dropdown — the slash menu or the @-picker (the @-precedence gate,
 // spec §3.9, keeps them mutually exclusive, so at most one is open) — is
-// the only element that draws the S1 border rune ('|'), so the '|' rows are
-// exactly its rows (the no-match line carries no border and is skipped). The
-// frame's line index is the cell row (the frame renders from the top of the
-// terminal). (-1, 0) when no dropdown is in the current frame (menus closed,
-// or a modal took over the frame).
+// the only element that draws the split ┃ border on both edges (the home box
+// is left-border-only — one ┃ per row), so a row carrying ≥2 border chars is
+// exactly a dropdown row (the no-match line carries no border and is
+// skipped). The frame's line index is the cell row (the frame renders from
+// the top of the terminal). (-1, 0) when no dropdown is in the current frame
+// (menus closed, or a modal took over the frame).
 func (a *App) dropdownRows() (int, int) {
 	first, count := -1, 0
 	for i, line := range strings.Split(a.view(), "\n") {
-		if strings.Contains(line, "|") {
+		if strings.Count(line, borderChar) >= 2 {
 			if first < 0 {
 				first = i
 			}

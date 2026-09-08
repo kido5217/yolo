@@ -120,13 +120,14 @@ func TestPromptMenuOpenBox(t *testing.T) {
 	}
 	for i, l := range lines {
 		plain := stripANSI(l)
-		if n := len([]rune(plain)); n != w {
+		cols := []rune(plain)
+		if n := len(cols); n != w {
 			t.Fatalf("row %d = %d cols, want %d (the width-exact box): %q", i, n, w, plain)
 		}
-		if plain[0] != '|' || plain[w-1] != '|' {
+		if cols[0] != '┃' || cols[w-1] != '┃' {
 			t.Fatalf("row %d = %q, want the split left/right border", i, plain)
 		}
-		if plain[1] != ' ' {
+		if cols[1] != ' ' {
 			t.Fatalf("row %d = %q, want 1 padding after the left border", i, plain)
 		}
 	}
@@ -300,7 +301,7 @@ func TestPromptMenuTabComplete(t *testing.T) {
 		if len(items) != 1 || items[0].Name != "/new" {
 			t.Fatalf("items = %v, want [/new]", items)
 		}
-		if !strings.Contains(a.view(), "|") {
+		if _, n := a.dropdownRows(); n == 0 {
 			t.Fatal("the open menu must render the bordered dropdown (the frame pin)")
 		}
 		a.handleKey(pressTab())
@@ -310,7 +311,7 @@ func TestPromptMenuTabComplete(t *testing.T) {
 		if a.prompt.slashActive() {
 			t.Fatal("the menu must close on tab (the value still starts with \"/\")")
 		}
-		if strings.Contains(a.view(), "|") {
+		if _, n := a.dropdownRows(); n != 0 {
 			t.Fatal("the dropdown must no longer render after the tab completion (the frame pin)")
 		}
 		if len(a.Cmds) != 0 {
@@ -327,7 +328,7 @@ func TestPromptMenuTabComplete(t *testing.T) {
 		if !a.prompt.slashActive() {
 			t.Fatal("the menu must re-open on the next edit")
 		}
-		if !strings.Contains(a.view(), "|") {
+		if _, n := a.dropdownRows(); n == 0 {
 			t.Fatal("the dropdown must render again after the next edit (the frame pin)")
 		}
 	})
@@ -362,7 +363,7 @@ func TestPromptMenuTabComplete(t *testing.T) {
 		if !a.prompt.slashActive() {
 			t.Fatal("the menu must stay open on shift+tab")
 		}
-		if !strings.Contains(a.view(), "|") {
+		if _, n := a.dropdownRows(); n == 0 {
 			t.Fatal("the dropdown must still render after shift+tab (the frame pin)")
 		}
 	})
