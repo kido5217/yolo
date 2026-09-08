@@ -464,6 +464,156 @@ func testPaletteModalDim(t *testing.T, route route) {
 	}
 }
 
+// TestPaletteMouseHover drives a mouse motion over a visible row of the open
+// palette (S4 mouse, spec §2.7 — decision 4) and asserts the selection moves
+// to the hovered row. The teatest leg sends a tea.MouseMsg at the S4 anchor
+// (the first window row is panelTop+3 — below the panel's top-padding line,
+// the title row and the filter row — spec §2.7) for a non-selected row; the
+// selection is asserted on the model after the program has quit (not a race
+// with the running program — the TestPromptSlashMouseHover idiom).
+func TestPaletteMouseHover(t *testing.T) {
+	ts := testutil.Boot(t)
+	c := client.New(ts.URL, ts.Dir)
+	a := newRecApp(c, store.State{}, "")
+	t.Cleanup(a.Close)
+	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
+
+	teatest.WaitFor(t, tm.Output(), hasLine(homeLogoLine), teatest.WithDuration(5*time.Second))
+
+	// ctrl+p opens the palette (the S4.2 remap).
+	tm.Send(pressCtrlP())
+	teatest.WaitFor(t, tm.Output(), hasLine("Commands"), teatest.WithDuration(5*time.Second))
+
+	// the S4 anchor (spec §2.7): the palette is a fullscreen modal
+	// (viewModal) — the window rows sit below the panel's top-padding line
+	// (row panelTop), the title row (panelTop+1) and the filter row
+	// (panelTop+2); the first window row is panelTop+3 and the window
+	// renders h/2−6 rows (selectModel.view).
+	d, ok := a.dlg.top()
+	if !ok || d.kind != dlgPalette || d.sel == nil {
+		t.Fatal("the palette must be on top")
+	}
+	h := a.size.Height
+	if h < 1 {
+		h = 24
+	}
+	panelTop := max(h/4, a.modalChromeMin())
+	visible := h/2 - 6
+	if visible < 1 {
+		visible = 1
+	}
+	// the hover target: the first window row over a selectable option (the
+	// category headers/blank rows carry opt -1 and are not hoverable) that
+	// is not the current selection. The window is re-anchored on the
+	// selection, so the row offset is added to the CURRENT window top
+	// (d.sel.top — set by the last render).
+	w := a.size.Width
+	if w < 1 {
+		w = 80
+	}
+	panelW := int(d.size.width())
+	if panelW > w-2 {
+		panelW = w - 2
+	}
+	lines := d.sel.buildLines(panelW, a.theme)
+	target, want := -1, -1
+	for winRow := 0; winRow < visible && target < 0; winRow++ {
+		lineIdx := d.sel.top + winRow
+		if lineIdx < len(lines) && lines[lineIdx].opt >= 0 && lines[lineIdx].opt != d.sel.sel {
+			target = winRow
+			want = lines[lineIdx].opt
+		}
+	}
+	if target < 0 {
+		t.Fatalf("no non-selected selectable row in the palette window (visible=%d)", visible)
+	}
+
+	// a motion over the row moves the selection there.
+	tm.Send(tea.MouseMotionMsg{X: 30, Y: panelTop + 3 + target, Button: tea.MouseNone})
+
+	_ = tm.Quit()
+	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
+
+	d, ok = a.dlg.top()
+	if !ok || d.kind != dlgPalette {
+		t.Fatalf("after the hover: top=%+v (ok=%v), want the palette still open", d, ok)
+	}
+	if d.sel.sel != want {
+		t.Fatalf("sel after hovering window row %d = %d, want %d", target, d.sel.sel, want)
+	}
+}
+
+// TestPaletteMouseClick drives a mouse click on the /model row of the open
+// palette (the always-seeded Suggested entry — the TestPaletteSelectPick
+// idiom with the enter key replaced by the mouse click) and asserts the
+// command runs (the run-on-enter effect — the model dialog opens) and the
+// palette closes. The click runs the SAME enter path as the key handler
+// (submit → paletteSelectPick).
+func TestPaletteMouseClick(t *testing.T) {
+	ts := testutil.Boot(t)
+	c := client.New(ts.URL, ts.Dir)
+	a := newRecApp(c, store.State{}, "")
+	t.Cleanup(a.Close)
+	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(80, 24))
+
+	teatest.WaitFor(t, tm.Output(), hasLine(homeLogoLine), teatest.WithDuration(5*time.Second))
+	tm.Send(pressCtrlP())
+	teatest.WaitFor(t, tm.Output(), hasLine("Commands"), teatest.WithDuration(5*time.Second))
+
+	// the S4 anchor (spec §2.7): the same derivation as TestPaletteMouseHover
+	// — the first window row is panelTop+3, the window renders h/2−6 rows.
+	d, ok := a.dlg.top()
+	if !ok || d.kind != dlgPalette || d.sel == nil {
+		t.Fatal("the palette must be on top")
+	}
+	h := a.size.Height
+	if h < 1 {
+		h = 24
+	}
+	panelTop := max(h/4, a.modalChromeMin())
+	visible := h/2 - 6
+	if visible < 1 {
+		visible = 1
+	}
+	w := a.size.Width
+	if w < 1 {
+		w = 80
+	}
+	panelW := int(d.size.width())
+	if panelW > w-2 {
+		panelW = w - 2
+	}
+	lines := d.sel.buildLines(panelW, a.theme)
+	// the click target: the window row over the /model option (the always
+	// Suggested seed — deterministic across fixtures).
+	target := -1
+	for winRow := 0; winRow < visible; winRow++ {
+		lineIdx := d.sel.top + winRow
+		if lineIdx >= len(lines) || lines[lineIdx].opt < 0 {
+			continue
+		}
+		if d.sel.filtered()[lines[lineIdx].opt].value == "/model" {
+			target = winRow
+			break
+		}
+	}
+	if target < 0 {
+		t.Fatalf("no /model row in the palette window (visible=%d)", visible)
+	}
+
+	// a click on the row runs the command (the enter action) and closes the
+	// palette.
+	tm.Send(tea.MouseClickMsg{X: 30, Y: panelTop + 3 + target, Button: tea.MouseLeft})
+
+	_ = tm.Quit()
+	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
+
+	d, ok = a.dlg.top()
+	if !ok || d.kind != dlgModel {
+		t.Fatalf("after the click: top=%+v (ok=%v), want the model dialog (the palette closed)", d, ok)
+	}
+}
+
 func TestTUICommandPalette(t *testing.T) {
 	ts := testutil.Boot(t)
 	c := client.New(ts.URL, ts.Dir)
