@@ -70,14 +70,14 @@ const (
 	mockContentL = 2
 	mockContentW = 196
 
-	// the vertical stack (rows): 14 free-top + 4 (h4, home.tsx:74) +
-	// 4 (logo) + 1 (h1, home.tsx:80) + 1 (wrapper paddingTop,
+	// the vertical stack (rows): 12 free-top + 4 (h4, home.tsx:74) +
+	// 8 (logo) + 1 (h1, home.tsx:80) + 1 (wrapper paddingTop,
 	// home.tsx:81) + 5 (box) + 1 (hint) + 3 (tip paddingTop,
-	// tips.tsx:27) + 1 (tip) + 13 free-bottom = 47. The free 27
-	// (47 - the 20 fixed) splits 14/13 — ceil-first (the fixture
+	// tips.tsx:27) + 1 (tip) + 11 free-bottom = 47. The free 23
+	// (47 - the 24 fixed) splits 12/11 — ceil-first (the fixture
 	// convention).
-	mockLogoTop = 18
-	mockBoxTop  = mockLogoTop + 4 + 1 + 1
+	mockLogoTop = 16
+	mockBoxTop  = mockLogoTop + 8 + 1 + 1
 	mockHintRow = mockBoxTop + 5
 	mockTipRow  = mockHintRow + 1 + 3
 
@@ -85,15 +85,15 @@ const (
 	// content row is mockH-2.
 	mockFooterRow = mockH - 2
 
-	// the horizontal positions (cols): the 19-wide logo and the 75-wide
+	// the horizontal positions (cols): the 37-wide logo and the 75-wide
 	// prompt box centered over the 196-wide content area — the odd
-	// margin goes LEFT (ceil-first). The logo spans 91..109, the box
+	// margin goes LEFT (ceil-first). The logo spans 82..118, the box
 	// 63..137; the box left border col is the hint line origin (the
 	// fixture row 16 starts at the border col).
 	mockBoxW   = 75 // the prompt maxWidth (home.tsx:36 default)
 	mockBoxPad = 2  // the box interior paddingLeft/Right (prompt/index.tsx:1361-1362)
 
-	mockLogoL = mockContentL + (mockContentW-logoWidth+1)/2 // 91
+	mockLogoL = mockContentL + (mockContentW-logoWidth+1)/2 // 82
 	mockBoxL  = mockContentL + (mockContentW-mockBoxW+1)/2  // 63
 
 	// the 75-wide tip box (tips.tsx:27) is centered like the prompt
@@ -108,10 +108,10 @@ const (
 )
 
 // the palette-open mock's geometry (the 0.10.0 palette parity S6): the
-// panel top at h/4 (12 > the home route's modalChromeMin 10), the centered
+// panel top at the home route's modalChromeMin 14 (> h/4 = 12), the centered
 // lead (200-60)/2.
 const (
-	mockPalettePanelTop = 12
+	mockPalettePanelTop = 14
 	mockPaletteLead     = 70
 )
 
@@ -243,8 +243,8 @@ func TestHomeMockRender(t *testing.T) {
 
 	// the logo (renderLogo — the real YOLO art), centered at mockLogoL.
 	logoLines := strings.Split(renderLogo(th), "\n")
-	if len(logoLines) != 4 {
-		t.Fatalf("logo lines = %d, want 4", len(logoLines))
+	if len(logoLines) != 8 {
+		t.Fatalf("logo lines = %d, want 8", len(logoLines))
 	}
 	for i, l := range logoLines {
 		frames[mockLogoTop+i] = strings.Repeat(" ", mockLogoL) + l + strings.Repeat(" ", mockW-mockLogoL-logoWidth)
@@ -458,8 +458,8 @@ func TestHomeMockSlashOpenRender(t *testing.T) {
 	// overlays its lower rows (the logo is overlaid while open, spec §3.1);
 	// the top row stays visible above the dropdown.
 	logoLines := strings.Split(renderLogo(th), "\n")
-	if len(logoLines) != 4 {
-		t.Fatalf("logo lines = %d, want 4", len(logoLines))
+	if len(logoLines) != 8 {
+		t.Fatalf("logo lines = %d, want 8", len(logoLines))
 	}
 	for i, l := range logoLines {
 		frames[mockLogoTop+i] = strings.Repeat(" ", mockLogoL) + l + strings.Repeat(" ", mockW-mockLogoL-logoWidth)
@@ -702,8 +702,8 @@ func TestHomeMockMentionOpenRender(t *testing.T) {
 	// overlays its lower rows (the logo is overlaid while open, spec §3.1);
 	// the top row stays visible above the dropdown.
 	logoLines := strings.Split(renderLogo(th), "\n")
-	if len(logoLines) != 4 {
-		t.Fatalf("logo lines = %d, want 4", len(logoLines))
+	if len(logoLines) != 8 {
+		t.Fatalf("logo lines = %d, want 8", len(logoLines))
 	}
 	for i, l := range logoLines {
 		frames[mockLogoTop+i] = strings.Repeat(" ", mockLogoL) + l + strings.Repeat(" ", mockW-mockLogoL-logoWidth)

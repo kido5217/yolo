@@ -473,9 +473,13 @@ func TestHomeViewMentionMenuAnchors(t *testing.T) {
 	atFrame(t, rows, bottom, mockBoxL, "┃")
 	// the box width (the right border at the box's right edge).
 	atFrame(t, rows, bottom, mockBoxL+mockBoxW-1, "┃")
-	// the logo is overlaid while open: the mock logo row (mockLogoTop+1) now
-	// carries the dropdown border at the box's left edge.
-	atFrame(t, rows, mockLogoTop+1, mockBoxL, "┃")
+	// the logo is overlaid while open: the dropdown's top row (a cell check
+	// above) falls within the 8-row logo's row range (mockLogoTop..
+	// mockLogoTop+7) — the bottom-aligned pre-box rows it occupies paint over
+	// the logo.
+	if top < mockLogoTop || top > mockLogoTop+7 {
+		t.Fatalf("dropdown top row %d is outside the logo's row range %d..%d (the logo is not overlaid)", top, mockLogoTop, mockLogoTop+7)
+	}
 	// the selected row (sel=0) carries the path column (the first walked file).
 	if !strings.Contains(stripANSI(rows[top]), "alpha.go") {
 		t.Fatalf("selected @ row = %q, want the first walked file (alpha.go)", stripANSI(rows[top]))

@@ -983,6 +983,14 @@ default, same palette); the home logo spells YOLO (19-column block,
 is "You are YOLO"; the OpenCode Zen provider identity (`opencode` id,
 `OPENCODE_API_KEY`, the opencode.ai URLs, the catalog's `"opencode"`
 key) is intentionally untouched.
+- Logo reshape (2026-09-10, deviation 325): the home-route logo is the 37×8
+pixel-font YOLO mark (`logoWidth = 37`; left Y+O 19 cols muted / right L+O
+17 cols bold, the two O counters hollow, zero shadow cells) — `logo_test.go`
+pin `58a2c7c1c21ba8fe4b01076431bba324f969dc726932d6fa9b6dbb80444d6d42`;
+supersedes deviation 265's 19-column width fact. Layout: the homeView stack
+is 24 rows (the logo 8), the 80x24 frame drops the top 3 rows (logo 1..8, box
+11..15), `modalChromeMin` home = 8+5+1 = 14, the narrow-terminal clip at
+37 cols.
 - Permission engine = port of `packages/opencode/src/permission/index.ts` + matrices in
 `agent/agent.ts` (build/plan/yolo verbatim, Task 10).
 - Doom loop = sliding 3-identical window; wildcard-deny hides tool iff last matching rule
