@@ -5,6 +5,8 @@ Task status lives in beads (the release epic; `bd ready`) and in `git log
 re-litigate. The append-only deviation audit log lives in `DEVIATIONS.md`
 (items 1–66 frozen in `deviations-archive-v0.1.0.md`).
 
+**Status (2026-09-10):** 0.11.0 home-route logo ship — the home-route logo is reshaped to the 38×8 pixel-font YOLO mark (epic `yolo-1tq`, shipped via PR #65, merge 166f470): `logoWidth` = 38 with the two-tone split at col 20 (left Y+O muted, right L+O bold), the hollow O counters, the Y's stem centered at cols 4-5 (the Y widened 9→10 cols for true centering); the `logo_test.go` pin re-baselined to `a3b0c26dc9d727d7e22a7cf353afb80234260cb9867653c7c65abec93b12fa43`. Deviation 326 (the 38×8 width) supersedes 325's 37×8 width and 265's 19-column width fact. The full home stack + footer now fits from 27 terminal rows up (was 24). No wire change.
+
 **Status (2026-09-08):** 0.10.0 quit confirmation removed — on explicit user instruction, the quit confirm dialog (dlgQuit yes/no, upstream "quit? [Y/n]") is removed; every quit path exits immediately via tea.Quit: the /quit + /exit slash commands (commands.go runCommand) and the app_exit keybinding ctrl+c/<leader>q (keys.go dispatchCommand), which also serves SIGINT via the ctrl+c key-ladder routing in app.go (cli-2). The dlgQuit kind + dlgYes/dlgNo + quitDialogRendered are deleted (dlgCtrlC retained for the generic modal esc/ctrl+c handler). The affected tests re-baseline to assert immediate quit. DEVIATIONS 324 (upstream deviation on explicit user instruction). No wire change.
 
 **Status (2026-09-08):** 0.10.0 command palette parity — epic `yolo-hb0`
