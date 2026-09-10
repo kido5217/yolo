@@ -8,23 +8,23 @@ import (
 	"github.com/kido5217/yolo/internal/tui/theme"
 )
 
-// The 8 logo lines — the 37×8 pixel-font YOLO mark: the left half
-// (Y+O, cols 0-18, 19 cols) renders muted (non-bold), the right half
-// (L+O, cols 20-36, 17 cols) bold, one gap column (col 19) between them.
+// The 8 logo lines — the 38×8 pixel-font YOLO mark: the left half
+// (Y+O, cols 0-19, 20 cols) renders muted (non-bold), the right half
+// (L+O, cols 21-37, 17 cols) bold, one gap column (col 20) between them.
 // Every non-space cell is plain except the two O counters (rows 2-5, the
-// center 5 cols of each O — left cols 12-16, right cols 30-34), which are
+// center 5 cols of each O — left cols 13-17, right cols 31-35), which are
 // hollow ('_' → " " + the shadow bg tint); the background is plain space.
 // sha256-pinned in logo_test.go (root principle 3).
 var (
 	logoLeft = []string{
-		"██     ██ █████████",
-		"██     ██ █████████",
-		"██     ██ ██_____██",
-		"██     ██ ██_____██",
-		"█████████ ██_____██",
-		"█████████ ██_____██",
-		"    ██    █████████",
-		"    ██    █████████",
+		"██      ██ █████████",
+		"██      ██ █████████",
+		"██      ██ ██_____██",
+		"██      ██ ██_____██",
+		"██████████ ██_____██",
+		"██████████ ██_____██",
+		"    ██     █████████",
+		"    ██     █████████",
 	}
 	logoRight = []string{
 		"██      █████████",
@@ -38,10 +38,10 @@ var (
 	}
 )
 
-// logoWidth is the fixed block width (left 19 + gap 1 + right 17). The
+// logoWidth is the fixed block width (left 20 + gap 1 + right 17). The
 // logo never wraps or shrinks — on a narrow terminal the alt-screen
-// frame clips it (deviation 265 contract, now at 37 cols).
-const logoWidth = 37
+// frame clips it (deviation 265 contract, now at 38 cols).
+const logoWidth = 38
 
 // Mark classes (upstream marks "_^~,"). The glyph is always translated;
 // the paint follows the class.

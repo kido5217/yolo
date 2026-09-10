@@ -54,11 +54,12 @@ and the teatest suites.
   per visual line, S0.9); the selected row's background paints every
   rendered line's content only — no background on the plain indent or the
    empty tail beyond the content. The home logo
-   (S0.8) is the one exception: a fixed 37×8 pixel-font YOLO mark (left
-   half Y+O 19 cols muted, gap col 19, right half L+O 17 cols bold;
-   deviation 325 supersedes 265's width fact) that never wraps or shrinks
-   — placeRow right-clips it when logoPad+37 > the terminal width (the
-   deviation 265 narrow-terminal clip contract, now at 37 cols). The session
+    (S0.8) is the one exception: a fixed 38×8 pixel-font YOLO mark (left
+    half Y+O 20 cols muted, gap col 20, right half L+O 17 cols bold;
+    deviation 326 supersedes 325's width fact, which supersedes 265's) that
+    never wraps or shrinks — placeRow right-clips it when logoPad+38 > the
+    terminal width (the deviation 265 narrow-terminal clip contract, now at
+    38 cols). The session
   route counts the wrapped help line's real line count in the viewport
   height budget. The model dialog cell hangs at the left-pane column
   (`modelRow`); when the left pane alone ≥ width, cell lines go full width.

@@ -85,15 +85,15 @@ const (
 	// content row is mockH-2.
 	mockFooterRow = mockH - 2
 
-	// the horizontal positions (cols): the 37-wide logo and the 75-wide
+	// the horizontal positions (cols): the 38-wide logo and the 75-wide
 	// prompt box centered over the 196-wide content area — the odd
-	// margin goes LEFT (ceil-first). The logo spans 82..118, the box
+	// margin goes LEFT (ceil-first). The logo spans 81..118, the box
 	// 63..137; the box left border col is the hint line origin (the
 	// fixture row 16 starts at the border col).
 	mockBoxW   = 75 // the prompt maxWidth (home.tsx:36 default)
 	mockBoxPad = 2  // the box interior paddingLeft/Right (prompt/index.tsx:1361-1362)
 
-	mockLogoL = mockContentL + (mockContentW-logoWidth+1)/2 // 82
+	mockLogoL = mockContentL + (mockContentW-logoWidth+1)/2 // 81
 	mockBoxL  = mockContentL + (mockContentW-mockBoxW+1)/2  // 63
 
 	// the 75-wide tip box (tips.tsx:27) is centered like the prompt

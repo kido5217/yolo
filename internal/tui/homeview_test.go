@@ -8,7 +8,7 @@ import (
 )
 
 // homeLogoLine is the home route's stable settle marker (the logo's second
-// line, combined left + gap + right, 37 display cols). The 0.8.0 frame always
+// line, combined left + gap + right, 38 display cols). The 0.8.0 frame always
 // renders the logo on home, so it replaces the retired "New session" list-row
 // marker for the home-settle teatest WaitFors (package tui only — app_test.go,
 // the external tui_test package, uses the literal).
@@ -117,7 +117,7 @@ func TestHomeViewFits80x24(t *testing.T) {
 	atFrame(t, rows, 15, boxL, "╹")
 	// the logo (free = -3 → the top 3 rows are dropped: logo 1..8; the box
 	// stays at 11..15).
-	logoPad := 2 + (76-logoWidth+1)/2 // 2 + 20 = 22
+	logoPad := 2 + (76-logoWidth+1)/2 // 2 + 19 = 21
 	for i, l := range logoPlainLines() {
 		atFrame(t, rows, 1+i, logoPad, l)
 	}
@@ -138,8 +138,8 @@ func TestHomeViewClamps70x30(t *testing.T) {
 		atFrame(t, rows, 16+i, boxL, "┃")
 	}
 	atFrame(t, rows, 20, boxL, "╹")
-	// the logo centered in the 66-wide content area: logoPad = 2 + (66-37+1)/2
-	// = 17 (free = 3 → top = 2: pad 2..5, logo 6..13).
+	// the logo centered in the 66-wide content area: logoPad = 2 + (66-38+1)/2
+	// = 16 (free = 3 → top = 2: pad 2..5, logo 6..13).
 	logoPad := 2 + (contentW-logoWidth+1)/2
 	for i, l := range logoPlainLines() {
 		atFrame(t, rows, 6+i, logoPad, l)
