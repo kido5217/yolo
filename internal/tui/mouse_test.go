@@ -3,9 +3,11 @@ package tui
 import (
 	"bytes"
 	"context"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/exp/teatest/v2"
@@ -25,6 +27,168 @@ func dropdownRowOpen(s string) bool {
 		}
 	}
 	return false
+}
+
+// screenDropdownRows reconstructs the rendered screen from the cumulative
+// teatest output and counts its dropdown rows (the same ≥2-┃ rule as
+// dropdownRowOpen, applied to the rebuilt screen instead of the raw bytes).
+//
+// It exists because teatest.WaitFor evaluates its predicate against every
+// byte drained since the call — not the latest frame — while the bubbletea
+// v2 renderer emits incremental diffs (each key press rewrites only the
+// changed cells). A raw count over the raw bytes would sum the dropdown
+// lines of every intermediate frame (9+4+2+1) and never observe the settled
+// 1-row frame on its own. Rebuilding the screen recovers the per-frame row
+// count, which is strictly decreasing as the queued keys are processed
+// (9→4→2→1) and only reaches 1 once the program has processed the last key
+// and rendered the settled frame.
+//
+// Screen model: the renderer's cursor contract for a non-TTY output (the
+// teatest harness) — LF lands at column 0 of the next row (the map-newline
+// contract) and ECH(n) clears n cells forward from the cursor; explicit
+// CUP/CHA/move sequences reposition before every write either way. termW and
+// termH match WithInitialTermSize(80, 24) in these tests. Only the
+// operations the renderer emits for these screens are interpreted; unknown
+// escapes and stray control bytes are skipped.
+func screenDropdownRows(s string) int {
+	const (
+		termW = 80
+		termH = 24
+	)
+	var grid [termH][termW]rune
+	r, c := 0, 0
+	regTop, regBot := 0, termH-1
+	for i := 0; i < len(s); {
+		switch ch := s[i]; {
+		case ch == '\n':
+			if r == regBot {
+				for y := regTop; y < regBot; y++ {
+					grid[y] = grid[y+1]
+				}
+				for x := range grid[regBot] {
+					grid[regBot][x] = ' '
+				}
+			} else if r < termH-1 {
+				r++
+			}
+			c = 0
+			i++
+		case ch == '\r':
+			c = 0
+			i++
+		case ch == 0x1b:
+			if i+1 >= len(s) || s[i+1] != '[' {
+				i++
+				continue
+			}
+			j := i + 2
+			for j < len(s) && s[j] >= 0x30 && s[j] <= 0x3f {
+				j++
+			}
+			if j < len(s) {
+				switch s[j] {
+				case 'H', 'f':
+					if parts := strings.Split(s[i+2:j], ";"); len(parts) == 2 {
+						if rr, err := strconv.Atoi(parts[0]); err == nil {
+							r = clampRow(rr-1, termH)
+						}
+						if cc, err := strconv.Atoi(parts[1]); err == nil {
+							c = clampCol(cc-1, termW)
+						}
+					}
+				case 'G':
+					if cc, err := strconv.Atoi(s[i+2 : j]); err == nil {
+						c = clampCol(cc-1, termW)
+					}
+				case 'A':
+					if n, err := strconv.Atoi(s[i+2 : j]); err == nil {
+						r = max(0, r-n)
+					}
+				case 'B':
+					if n, err := strconv.Atoi(s[i+2 : j]); err == nil {
+						r = min(termH-1, r+n)
+					}
+				case 'M':
+					if r > 0 {
+						r--
+					}
+				case 'r':
+					if parts := strings.Split(s[i+2:j], ";"); len(parts) == 2 {
+						if t, err := strconv.Atoi(parts[0]); err == nil {
+							regTop = clampRow(t-1, termH)
+						}
+						if b, err := strconv.Atoi(parts[1]); err == nil {
+							regBot = clampRow(b-1, termH)
+						}
+					}
+				case 'X':
+					if n, err := strconv.Atoi(s[i+2 : j]); err == nil && c < termW {
+						for x := c; x < c+n && x < termW; x++ {
+							grid[r][x] = ' '
+						}
+					}
+				case 'K':
+					mode := 0
+					if s[i+2:j] != "" {
+						mode, _ = strconv.Atoi(s[i+2 : j])
+					}
+					switch mode {
+					case 0:
+						for x := c; x < termW; x++ {
+							grid[r][x] = ' '
+						}
+					case 1:
+						for x := 0; x <= c && x < termW; x++ {
+							grid[r][x] = ' '
+						}
+					default:
+						for x := range grid[r] {
+							grid[r][x] = ' '
+						}
+					}
+				}
+			}
+			i = j + 1
+		default:
+			if ch < 0x20 {
+				i++
+				continue
+			}
+			rn, sz := utf8.DecodeRuneInString(s[i:])
+			if c < termW {
+				grid[r][c] = rn
+			}
+			c++
+			i += sz
+		}
+	}
+	n := 0
+	for y := range grid {
+		if strings.Count(string(grid[y][:]), borderChar) >= 2 {
+			n++
+		}
+	}
+	return n
+}
+
+func clampRow(v, termH int) int {
+	if v < 0 {
+		return 0
+	}
+	if v > termH-1 {
+		return termH - 1
+	}
+	return v
+}
+
+func clampCol(v, termW int) int {
+	if v < 0 {
+		return 0
+	}
+	if v > termW-1 {
+		return termW - 1
+	}
+	return v
 }
 
 // TestPromptSlashMouseHover drives a mouse motion over a row of the open slash
@@ -86,8 +250,13 @@ func TestPromptSlashMouseClick(t *testing.T) {
 	for _, r := range "/new" {
 		tm.Send(press(r))
 	}
+	// The settled-state barrier: wait until the rendered frame shows exactly
+	// one dropdown row. The row count is strictly decreasing as the queued
+	// keys are processed (9→4→2→1), so this can only hold after the program
+	// has processed all four keys and rendered the final frame — after which
+	// no input is queued and the model is quiescent.
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return dropdownRowOpen(string(b))
+		return screenDropdownRows(string(b)) == 1
 	}, teatest.WithDuration(3*time.Second))
 
 	// /new is the only dropdown row; the S3 anchor is its cell.
