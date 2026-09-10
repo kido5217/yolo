@@ -53,10 +53,12 @@ and the teatest suites.
   wrap as tagged segments (`rowLines` re-derives the title/` · meta` split
   per visual line, S0.9); the selected row's background paints every
   rendered line's content only — no background on the plain indent or the
-  empty tail beyond the content. The home logo
-  (S0.8) is the one exception: a fixed 19-column glyph block (the
-  re-lettered YOLO mark, deviation 265) that never wraps or shrinks —
-  terminals under 19 columns clip it in the alt-screen frame. The session
+   empty tail beyond the content. The home logo
+   (S0.8) is the one exception: a fixed 37×8 pixel-font YOLO mark (left
+   half Y+O 19 cols muted, gap col 19, right half L+O 17 cols bold;
+   deviation 325 supersedes 265's width fact) that never wraps or shrinks
+   — placeRow right-clips it when logoPad+37 > the terminal width (the
+   deviation 265 narrow-terminal clip contract, now at 37 cols). The session
   route counts the wrapped help line's real line count in the viewport
   height budget. The model dialog cell hangs at the left-pane column
   (`modelRow`); when the left pane alone ≥ width, cell lines go full width.
