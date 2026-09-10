@@ -123,13 +123,13 @@ func (a *App) viewSession(items []protocol.Command, acMenu, perm, toasts, dlg, w
 
 // modalChromeMin is the route chrome's minimum line count (the panel top
 // never climbs above it): session = title + 1 viewport + divider + help,
-// home = the 0.8.0 start-screen chrome (logo 4 + box 5 + hint 1 = 10).
+// home = the 0.8.0 start-screen chrome (logo 8 + box 5 + hint 1 = 14).
 func (a *App) modalChromeMin() int {
 	switch a.route {
 	case routeSession:
 		return 1 + 1 + 1 + len(strings.Split(wrapLine(sessionHelp, a.termWidth()), "\n"))
 	default:
-		return 4 + 5 + 1 // logo + box + hint
+		return 8 + 5 + 1 // logo + box + hint
 	}
 }
 

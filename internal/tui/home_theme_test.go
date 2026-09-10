@@ -81,8 +81,8 @@ func TestHomeLogoThemeSGR(t *testing.T) {
 	)
 
 	// ONE merged condition (consecutive WaitFors drain each other): the
-	// logo plain text (left line 2, the stable box-drawing marker),
-	// every logo/divider SGR token, and the right block's bold flag.
+	// logo plain text (left line 2 — a stable logo line with no hollow
+	// cells), every logo/divider SGR token, and the right block's bold flag.
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
 		if !strings.Contains(stripANSI(string(b)), logoLeft[1]) {
 			return false

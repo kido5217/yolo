@@ -38,12 +38,12 @@ import (
 // the 200x50 box contract (the research cell map + the mock geometry): the
 // box is homeBoxMaxWidth 75 at cols edgeBoxL..edgeBoxL+homeBoxMaxWidth-1
 // (63..137, 0-based), the interior cols 64..137, the five box rows at
-// edgeBoxTop..+4 (24..28: topSpacer 14 + the homeView stack prefix 4 pad +
-// 4 logo + 2 spacers). The 4 artifact cells: the last 2 interior cols
-// (136/137) of the two content rows 25 (placeholder) and 27 (meta).
+// edgeBoxTop..+4 (26..30: topSpacer 12 + the homeView stack prefix 4 pad +
+// 8 logo + 2 spacers). The 4 artifact cells: the last 2 interior cols
+// (136/137) of the two content rows 27 (placeholder) and 29 (meta).
 const (
 	edgeBoxL   = 63
-	edgeBoxTop = 24
+	edgeBoxTop = 26
 )
 
 // TestHomeBoxRightEdge boots the real app at 200x50 (the home route, the

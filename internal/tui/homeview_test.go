@@ -8,7 +8,7 @@ import (
 )
 
 // homeLogoLine is the home route's stable settle marker (the logo's second
-// line, combined left + gap + right, 19 display cols). The 0.8.0 frame always
+// line, combined left + gap + right, 38 display cols). The 0.8.0 frame always
 // renders the logo on home, so it replaces the retired "New session" list-row
 // marker for the home-settle teatest WaitFors (package tui only — app_test.go,
 // the external tui_test package, uses the literal).
@@ -86,15 +86,15 @@ func TestHomeViewFrame(t *testing.T) {
 	// the plain-semver version at mockVersionL.
 	atFrame(t, rows, mockFooterRow, mockContentL, "~/network/projects/yolo:main")
 	atFrame(t, rows, mockFooterRow, mockVersionL, "0.8.0")
-	// the spacers: 14 top (rows 0..13) + 13 bottom (rows 34..46) are blank
+	// the spacers: 12 top (rows 0..11) + 11 bottom (rows 36..46) are blank
 	// (w-wide space rows — the alt-screen fixed-frame contract).
 	blank := strings.Repeat(" ", mockW)
-	for i := 0; i < 14; i++ {
+	for i := 0; i < 12; i++ {
 		if rows[i] != blank {
 			t.Fatalf("top spacer row %d = %q, want blank", i, rows[i])
 		}
 	}
-	for i := 34; i < 47; i++ {
+	for i := 36; i < 47; i++ {
 		if rows[i] != blank {
 			t.Fatalf("bottom spacer row %d = %q, want blank", i, rows[i])
 		}
@@ -115,10 +115,11 @@ func TestHomeViewFits80x24(t *testing.T) {
 		atFrame(t, rows, 11+i, boxL, "┃")
 	}
 	atFrame(t, rows, 15, boxL, "╹")
-	// the logo (free = 1 → top = 1: pad 1..4, logo 5..8).
-	logoPad := 2 + (76-logoWidth+1)/2 // 2 + 29 = 31
+	// the logo (free = -3 → the top 3 rows are dropped: logo 1..8; the box
+	// stays at 11..15).
+	logoPad := 2 + (76-logoWidth+1)/2 // 2 + 19 = 21
 	for i, l := range logoPlainLines() {
-		atFrame(t, rows, 5+i, logoPad, l)
+		atFrame(t, rows, 1+i, logoPad, l)
 	}
 }
 
@@ -134,20 +135,20 @@ func TestHomeViewClamps70x30(t *testing.T) {
 	// boxW = min(75, 66) = 66 (innerW = 66-1-4 = 61); boxL = 2 + (66-66+1)/2 = 2.
 	const boxL = 2
 	for i := 0; i < 4; i++ {
-		atFrame(t, rows, 14+i, boxL, "┃")
+		atFrame(t, rows, 16+i, boxL, "┃")
 	}
-	atFrame(t, rows, 18, boxL, "╹")
-	// the logo centered in the 66-wide content area: logoPad = 2 + (66-19+1)/2
-	// = 26 (free = 7 → top = 4: pad 4..7, logo 8..11).
+	atFrame(t, rows, 20, boxL, "╹")
+	// the logo centered in the 66-wide content area: logoPad = 2 + (66-38+1)/2
+	// = 16 (free = 3 → top = 2: pad 2..5, logo 6..13).
 	logoPad := 2 + (contentW-logoWidth+1)/2
 	for i, l := range logoPlainLines() {
-		atFrame(t, rows, 8+i, logoPad, l)
+		atFrame(t, rows, 6+i, logoPad, l)
 	}
 }
 
-// TestHomeViewOverflow80x10 pins the overflow clamp: the fixed stack (20) +
-// footer (3) = 23 rows exceeds the 10-row terminal, so the spacers clamp to 0
-// and the frame drops the TOP 13 rows (the alt-screen anchor is the bottom —
+// TestHomeViewOverflow80x10 pins the overflow clamp: the fixed stack (24) +
+// footer (3) = 27 rows exceeds the 10-row terminal, so the spacers clamp to 0
+// and the frame drops the TOP 17 rows (the alt-screen anchor is the bottom —
 // the footer + box bottom stay visible, the logo + box top are dropped).
 func TestHomeViewOverflow80x10(t *testing.T) {
 	t.Parallel()
@@ -155,8 +156,8 @@ func TestHomeViewOverflow80x10(t *testing.T) {
 	a.size = tea.WindowSizeMsg{Width: 80, Height: 10}
 	rows := fitsFrame(t, a.homeView(nil, "", "", "", "", ""), 80, 10)
 	// the footer content is the last-but-one row (h-2 = 8).
-	// the box bottom (╹) is near the top: the content rows 0..22, the visible
-	// frame is rows 13..22 (10 rows); content row 14 (the ╹ bottom border) is
+	// the box bottom (╹) is near the top: the content rows 0..26, the visible
+	// frame is rows 17..26 (10 rows); content row 18 (the ╹ bottom border) is
 	// visible row 1.
 	boxL := 2 + (76-75+1)/2 // 3
 	atFrame(t, rows, 1, boxL, "╹")

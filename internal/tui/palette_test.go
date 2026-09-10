@@ -400,13 +400,23 @@ func testPaletteModalDim(t *testing.T, route route) {
 		// < 24/4 = 6 → panelTop = h/4 (6)
 		panelTop = 6
 	} else {
-		// home chrome min = logo 4 + box 5 + hint 1 = 10 > 24/4 = 6 →
-		// panelTop = the chromeMin clamp (10)
-		panelTop = 10
+		// home chrome min = logo 8 + box 5 + hint 1 = 14 > 24/4 = 6 →
+		// panelTop = the chromeMin clamp (14)
+		panelTop = 14
 	}
-	// inner lines = title + filter + 6 visible rows (24/2−6) + footer = 9;
-	// the panel = the top-padding line + 9 = 10 lines (well under avail).
-	panelBottom := panelTop + 9
+	// inner lines = title + filter + 6 visible rows (24/2−6) + footer = 9.
+	// The panel = the top-padding line + min(9, avail) inner lines (the
+	// viewModal clamp, avail = 24−panelTop−1): home avail = 24−14−1 = 9 →
+	// 9 lines (the footer hint row is clamped out); session avail = 24−6−1
+	// = 17 → 10 lines (unclamped, the footer hint shown).
+	const inner = 9
+	avail := 24 - panelTop - 1
+	if avail < 1 {
+		avail = 1
+	}
+	n := min(inner+1, avail)
+	clamped := n < inner+1
+	panelBottom := panelTop + n - 1
 	assertDim := func(i int, what string) {
 		if !strings.Contains(lines[i], dimSGR) {
 			t.Fatalf("%s line %d lacks the dim SGR %s:\n%s", what, i, dimSGR, lines[i])
@@ -451,9 +461,14 @@ func testPaletteModalDim(t *testing.T, route route) {
 	if !strings.Contains(lines[panelTop+1], "38;2;128;128;128") {
 		t.Fatalf("esc hint not textMuted (#808080):\n%s", lines[panelTop+1])
 	}
-	footerPlain := strings.TrimRight(stripANSI(lines[panelBottom]), " ")
-	if !strings.HasSuffix(footerPlain, "ctrl+p commands") {
-		t.Fatalf("footer row = %q, want the ctrl+p commands hint right-aligned", footerPlain)
+	// the footer hint (ctrl+p commands) is the panel's last inner line —
+	// shown only when the panel is not clamped (the home 80x24 case clamps
+	// it out; the session route is unclamped).
+	if !clamped {
+		footerPlain := strings.TrimRight(stripANSI(lines[panelBottom]), " ")
+		if !strings.HasSuffix(footerPlain, "ctrl+p commands") {
+			t.Fatalf("footer row = %q, want the ctrl+p commands hint right-aligned", footerPlain)
+		}
 	}
 	if strings.Contains(a.view(), "\u2191/\u2193 move") {
 		t.Fatal("the generic nav hint must be replaced by the palette footer hint")

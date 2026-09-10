@@ -471,7 +471,7 @@ func placeRow(left int, content string, w int) string {
 }
 
 // homeView renders the 0.8.0 start-screen frame: exactly size.Height rows of
-// width w — top spacer, the fixed stack (4 pad, 4 logo, 1 pad, 1 box pad,
+// width w — top spacer, the fixed stack (4 pad, 8 logo, 1 pad, 1 box pad,
 // 5 box, 1 hint, 3 tip pad, the tip rows), the overlay rows (perm, toasts,
 // dlg, wk, lastErr — in that order, left-aligned per the existing overlay
 // rendering; the slash + @ dropdowns anchor above the box top edge), the
@@ -480,7 +480,7 @@ func placeRow(left int, content string, w int) string {
 // Spacers split the free rows ceil-first (top gets the odd row — the fixture
 // convention). When fixed content exceeds the terminal the spacers clamp to
 // 0 and the frame drops the TOP rows (the alt-screen anchor is the bottom —
-// the Q9 note); the full stack fits from 24 rows up.
+// the Q9 note); the full stack fits from 27 rows up.
 func (a *App) homeView(items []protocol.Command, acMenu, perm, toasts, dlg, wk string) string {
 	w := a.termWidth()
 	h := a.size.Height
@@ -503,7 +503,7 @@ func (a *App) homeView(items []protocol.Command, acMenu, perm, toasts, dlg, wk s
 	// the fixed stack (each row w-wide).
 	var stack []string
 	stack = append(stack, blankRow(w), blankRow(w), blankRow(w), blankRow(w)) // 4 pad
-	for _, l := range strings.Split(renderLogo(a.theme), "\n") {              // 4 logo
+	for _, l := range strings.Split(renderLogo(a.theme), "\n") {              // 8 logo
 		stack = append(stack, placeRow(logoPad, l, w))
 	}
 	stack = append(stack, blankRow(w)) // 1 pad

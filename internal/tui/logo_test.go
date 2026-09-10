@@ -11,9 +11,9 @@ import (
 
 // wantLogoBlockSHA256 pins the 8 logo lines in logo.go (root principle 3:
 // the pin records the current intended content; an intentional change
-// re-baselines the pin in the same commit). Canonical form: logoLeft[0..3]
-// then logoRight[0..3], each line followed by "\n".
-const wantLogoBlockSHA256 = "28e0cc7552c758278e14383691c19889e010f1f41c2911b7e25ea76f3f3ff681"
+// re-baselines the pin in the same commit). Canonical form: logoLeft[0..7]
+// then logoRight[0..7], each line followed by "\n".
+const wantLogoBlockSHA256 = "a3b0c26dc9d727d7e22a7cf353afb80234260cb9867653c7c65abec93b12fa43"
 
 func logoBlockText() string {
 	var b strings.Builder
@@ -36,8 +36,8 @@ func TestLogoBlockPinned(t *testing.T) {
 	}
 }
 
-// logoPlainLines are the 4 combined (left + gap + right) plain lines —
-// the zero-Theme render; TestHomeRenderLockedLayout composes the layout
+// logoPlainLines are the 8 combined (left + gap + right) plain lines —
+// the zero-Theme render; the homeView geometry tests compose the layout
 // over them.
 func logoPlainLines() []string {
 	var zero theme.Theme
@@ -45,17 +45,21 @@ func logoPlainLines() []string {
 }
 
 // TestRenderLogoZeroThemeIsPlain pins the mark translation with no theme
-// (nil-engine runs, S0.7): the plain translated glyphs, no SGR, never a
-// panic.
+// (nil-engine runs, S0.7): the plain translated glyphs (the hollow '_'
+// counters render as spaces), no SGR, never a panic.
 func TestRenderLogoZeroThemeIsPlain(t *testing.T) {
 	t.Parallel()
 	var zero theme.Theme
 	got := renderLogo(zero)
 	want := strings.Join([]string{
-		"         " + " " + "         ",
-		"█  █ █▀▀█" + " " + "█    █▀▀█",
-		" ██  █  █" + " " + "█    █  █",
-		" ██  ▀▀▀▀" + " " + "█▀▀▀ ▀▀▀▀",
+		"██      ██ █████████" + " " + "██      █████████",
+		"██      ██ █████████" + " " + "██      █████████",
+		"██      ██ ██     ██" + " " + "██      ██     ██",
+		"██      ██ ██     ██" + " " + "██      ██     ██",
+		"██████████ ██     ██" + " " + "██      ██     ██",
+		"██████████ ██     ██" + " " + "██      ██     ██",
+		"    ██     █████████" + " " + "███████ █████████",
+		"    ██     █████████" + " " + "███████ █████████",
 	}, "\n")
 	if got != want {
 		t.Fatalf("zero-theme logo = %q, want the plain translated glyphs:\n%q", got, want)

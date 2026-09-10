@@ -8,28 +8,40 @@ import (
 	"github.com/kido5217/yolo/internal/tui/theme"
 )
 
-// The 8 logo lines — YOLO re-lettered in the upstream mark style
-// (packages/tui/src/logo.ts; each half 9 columns). sha256-pinned in
-// logo_test.go (root principle 3).
+// The 8 logo lines — the 38×8 pixel-font YOLO mark: the left half
+// (Y+O, cols 0-19, 20 cols) renders muted (non-bold), the right half
+// (L+O, cols 21-37, 17 cols) bold, one gap column (col 20) between them.
+// Every non-space cell is plain except the two O counters (rows 2-5, the
+// center 5 cols of each O — left cols 13-17, right cols 31-35), which are
+// hollow ('_' → " " + the shadow bg tint); the background is plain space.
+// sha256-pinned in logo_test.go (root principle 3).
 var (
 	logoLeft = []string{
-		"         ",
-		"█  █ █▀▀█",
-		" ██  █__█",
-		" ██  ▀▀▀▀",
+		"██      ██ █████████",
+		"██      ██ █████████",
+		"██      ██ ██_____██",
+		"██      ██ ██_____██",
+		"██████████ ██_____██",
+		"██████████ ██_____██",
+		"    ██     █████████",
+		"    ██     █████████",
 	}
 	logoRight = []string{
-		"         ",
-		"█    █▀▀█",
-		"█    █__█",
-		"█▀▀▀ ▀▀▀▀",
+		"██      █████████",
+		"██      █████████",
+		"██      ██_____██",
+		"██      ██_____██",
+		"██      ██_____██",
+		"██      ██_____██",
+		"███████ █████████",
+		"███████ █████████",
 	}
 )
 
-// logoWidth is the fixed block width (left 9 + gap 1 + right 9). The
-// logo never wraps or shrinks — on a <19-column terminal the
-// alt-screen frame clips it (the upstream look).
-const logoWidth = 19
+// logoWidth is the fixed block width (left 20 + gap 1 + right 17). The
+// logo never wraps or shrinks — on a narrow terminal the alt-screen
+// frame clips it (deviation 265 contract, now at 38 cols).
+const logoWidth = 38
 
 // Mark classes (upstream marks "_^~,"). The glyph is always translated;
 // the paint follows the class.
@@ -39,11 +51,10 @@ const (
 	markShadow        // '~',',' -> "▀"/"▄": fg(shadow)
 )
 
-// renderLogo renders the 4-line logo block (the port of
-// logo.tsx:49–60): the left lines in textMuted (non-bold), the right
-// lines in text (bold), one unstyled gap column between them. A zero
-// Theme (nil-engine runs, S0.7) degrades to the plain translated
-// glyphs — never a panic.
+// renderLogo renders the 8-line logo block: the left lines in textMuted
+// (non-bold), the right lines in text (bold), one unstyled gap column
+// between them. A zero Theme (nil-engine runs, S0.7) degrades to the
+// plain translated glyphs — never a panic.
 func renderLogo(th theme.Theme) string {
 	fgLeft, leftOK := th.Color("textMuted")
 	fgRight, rightOK := th.Color("text")
@@ -60,10 +71,9 @@ func renderLogo(th theme.Theme) string {
 	return b.String()
 }
 
-// logoLine renders one 9-column line (the port of renderLine,
-// logo.tsx:9–47). The mark glyphs are always translated ('_' -> " ",
-// '^' -> "▀", '~' -> "▀", ',' -> "▄"); the paint follows the mark class
-// with shadow = Tint(background, fg, 0.25) (logo.tsx:10). Consecutive
+// logoLine renders one logo line. The mark glyphs are always translated
+// ('_' -> " ", '^' -> "▀", '~' -> "▀", ',' -> "▄"); the paint follows the
+// mark class with shadow = Tint(background, fg, 0.25). Consecutive
 // same-class cells emit as one styled run; a missing token (zero Theme)
 // renders the plain glyphs.
 func logoLine(line string, fg theme.RGBA, fgOK bool, bg theme.RGBA, bgOK bool, bold bool) string {
