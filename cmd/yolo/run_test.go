@@ -362,6 +362,46 @@ func TestRunNDJSONIntegration(t *testing.T) {
 	}
 }
 
+// TestRunTimeout pins the --timeout flag (spec §11): a slow scripted turn
+// (2000ms delay) run with a 200ms bound — the bound fires while the turn is
+// still in flight, the server-side turn is aborted (the fake driver's delay
+// is ctx-cancellable, so the abort settles quickly), and the run exits 1.
+// The essential assertions are the exit code and that the turn was aborted
+// before emitting its text (a completed turn would print "slow\n"); the
+// wall-clock seals it: every in-process run pays a ~2s graceful-shutdown
+// grace, so a fired run measures ~2.2s against ~4s for a no-timeout run, and
+// 3s splits them with margin.
+func TestRunTimeout(t *testing.T) {
+	root := t.TempDir()
+	wd := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
+	t.Setenv("YOLO_LLM", "fake")
+	script := filepath.Join(root, "script.json")
+	// a slow turn: the stream stays open well past the 200ms timeout
+	data := `[{"parts":[{"kind":"text","text":"slow","finish":"stop","usage":{"input":1,"output":1}}],"delay_ms":2000}]`
+	if err := os.WriteFile(script, []byte(data), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("YOLO_FAKE_SCRIPT", script)
+
+	start := time.Now()
+	code, out, errOut := captureRun(t, "run", "go", "--dir", wd, "--timeout", "200ms")
+	elapsed := time.Since(start)
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1 (stderr: %s)", code, errOut)
+	}
+	if out != "" {
+		t.Errorf("stdout = %q, want empty (the aborted turn must not emit its text)", out)
+	}
+	// Fired: ~200ms bound + ~2s shutdown grace ≈ 2.2s. Not fired: the full
+	// 2000ms scripted delay + ~2s grace ≈ 4s. 3s splits them with margin.
+	if elapsed >= 3*time.Second {
+		t.Errorf("run took %s, want well below a no-timeout run (~4s: 2000ms turn + shutdown grace) — the timeout did not fire (stderr: %s)", elapsed, errOut)
+	}
+}
+
 // waitForStatus polls client.Status until the session reports want.
 func waitForStatus(t *testing.T, cl *client.Service, sessionID, want string) {
 	t.Helper()
