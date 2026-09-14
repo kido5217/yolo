@@ -43,6 +43,7 @@ func newRunCmd() *cobra.Command {
 	c.Flags().String("format", "default", "output format: default | json (NDJSON)")
 	c.Flags().Bool("auto", false, "answer permission asks with once instead of reject")
 	c.Flags().Bool("thinking", false, "print reasoning output (off by default)")
+	c.Flags().Duration("timeout", 0, "max turn duration (0 = no limit)")
 	return c
 }
 
@@ -255,12 +256,16 @@ func runRunE(cmd *cobra.Command, args []string) error {
 	// Event loop until idle (spec §2 step 10 / §6 / §6.3).
 	thinking, _ := cmd.Flags().GetBool("thinking")
 	auto, _ := cmd.Flags().GetBool("auto")
+	timeout, err := cmd.Flags().GetDuration("timeout")
+	if err != nil {
+		return err
+	}
 	header := ""
 	if format == formatDefault {
 		header = runHeader(ses)
 	}
 	r := newRenderer(format, thinking, ses.ID, header, time.Now().UnixMilli, os.Stdout, os.Stderr)
-	turnErr := runEvents(ctx, cl, ses.ID, r, auto)
+	turnErr := runEvents(ctx, cl, ses.ID, r, auto, timeout)
 	r.finish()
 	// Settle read: the persisted rows are the source of truth — this
 	// catches a turn-error event lost to an SSE drop (spec §6.3).
@@ -277,14 +282,28 @@ func runRunE(cmd *cobra.Command, args []string) error {
 // idle (or a resync status check finds it idle — spec §6.3), answering
 // the run's permission asks per the policy (reject by default, once with
 // --auto). It returns the turn-error flag observed on events; the caller
-// settles it with the final ListMessages read.
-func runEvents(ctx context.Context, cl *client.Service, sessionID string, r *renderer, auto bool) bool {
+// settles it with the final ListMessages read. timeout > 0 bounds the
+// turn's wall-clock duration: on expiry the server-side turn is aborted
+// (the firstSigint mechanism) and the run fails.
+func runEvents(ctx context.Context, cl *client.Service, sessionID string, r *renderer, auto bool, timeout time.Duration) bool {
 	events, resync := cl.Events(ctx)
 	turnErr := false
+	var timer <-chan time.Time
+	if timeout > 0 {
+		timer = time.After(timeout)
+	}
 	for {
 		select {
 		case <-ctx.Done():
 			return turnErr
+		case <-timer:
+			// Spec §11: bounds the turn from send to idle. Abort the
+			// server-side turn (same mechanism as the SIGINT handler),
+			// then fail the run (exit 1).
+			ac, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			_, _ = cl.Abort(ac, sessionID)
+			cancel()
+			return true
 		case ev, ok := <-events:
 			if !ok {
 				return turnErr
