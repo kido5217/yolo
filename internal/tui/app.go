@@ -18,8 +18,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/kido5217/yolo/internal/client"
 	"github.com/kido5217/yolo/internal/protocol"
-	"github.com/kido5217/yolo/internal/tui/client"
 	"github.com/kido5217/yolo/internal/tui/store"
 	"github.com/kido5217/yolo/internal/tui/theme"
 )

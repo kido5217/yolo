@@ -7,8 +7,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/kido5217/yolo/internal/client"
 	"github.com/kido5217/yolo/internal/protocol"
-	"github.com/kido5217/yolo/internal/tui/client"
 )
 
 // HydrateMsg asks the app to re-hydrate its current route over REST. It is

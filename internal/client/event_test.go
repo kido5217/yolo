@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kido5217/yolo/internal/client"
 	"github.com/kido5217/yolo/internal/protocol"
-	"github.com/kido5217/yolo/internal/tui/client"
 )
 
 func TestEventsDecodeAndReconnect(t *testing.T) {

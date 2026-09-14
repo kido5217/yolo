@@ -277,7 +277,7 @@ by the reader):
 carry no text column content). The existing `default` case (text/
 reasoning) and the `tool` case are untouched.
 
-### 4.4 TUI client (internal/tui/client)
+### 4.4 TUI client (internal/client)
 
 `SendMessage` becomes request-struct based:
 
@@ -292,15 +292,13 @@ response decode and sentinel mapping (`ErrNotFound`/`ErrBusy`/
 with a text-only request — the TUI senders (`internal/tui/commands.go`
 `sendMessageCmd`, `homeSubmitCmd`) pass
 `protocol.SendMessageRequest{Text: text}`; test call sites
-(`cmd/yolo/main_test.go`, `internal/tui/client/client_test.go`,
+(`cmd/yolo/main_test.go`, `internal/client/client_test.go`,
 `internal/tui/app_test.go`, `permission_test.go`, `resync_test.go`)
 likewise. All other client methods (`CreateSessionWith`,
 `ListSessions`, `GetSession`, `ReplyPermission`, `Events`, `Abort`,
-`Status`, `ListMessages`) are reused as-is. A neutral-package extraction
-of this client is a DEFERRED follow-up (§11); cmd importing
-`internal/tui/client` is accepted for v1 (cmd already imports it — no
-purity violation; the purity rule binds `internal/tui` non-test files,
-not cmd).
+`Status`, `ListMessages`) are reused as-is. The client package has been
+extracted to `internal/client/` (neutral package, not under `internal/tui/`);
+the purity rule was updated to allow `internal/client` imports.
 
 ## 5. Engine and model consumption
 
@@ -687,9 +685,9 @@ send:
 | `internal/session/engine.go` | `Send(ctx, sessionID, text string, files []protocol.FileRef, onDone)` + the file-part persist/publish loop (§5.1) |
 | `internal/session/history.go` | `userContent(parts)` (§5.2 rule + block format + placeholder) replacing the `joinTextParts` call in the user case; `joinTextParts` unchanged |
 | `internal/storage/part_convert.go` | the `"file"` case both directions (§4.3) |
-| `internal/tui/client/client.go` | `SendMessage` request-struct surface (§4.4) |
+| `internal/client/client.go` | `SendMessage` request-struct surface (§4.4) |
 | `internal/tui/session.go` | `renderUser` gains a minimal `"file"` render case — one chip line per file part, in part order, rendered AFTER the message's text lines (yolo's own client always sends a text part with file parts, so a file-only message — reachable only via the direct API — renders the `User:` line plus chips): byte-exactly `file: <filename> (<mime>)`, plain/unstyled (`renderUser` produces plain text), e.g. `file: notes.txt (text/plain)` — so resumed sessions don't silently drop attachments from view. TUI layering rule UNCHANGED (no new imports; `renderUser` already takes `protocol.MessageWithParts`) |
-| call-site ripple | `internal/tui/commands.go` (2 sends → `SendMessageRequest{Text}`); test call sites: `cmd/yolo/main_test.go`, `internal/tui/client/client_test.go`, `internal/tui/app_test.go`, `permission_test.go`, `resync_test.go`; `internal/session/*_test.go` harness `Send` calls gain `nil` files |
+| call-site ripple | `internal/tui/commands.go` (2 sends → `SendMessageRequest{Text}`); test call sites: `cmd/yolo/main_test.go`, `internal/client/client_test.go`, `internal/tui/app_test.go`, `permission_test.go`, `resync_test.go`; `internal/session/*_test.go` harness `Send` calls gain `nil` files |
 
 The TUI detail-dialog part switch (`messagedlg.go` `messageView`) is
 intentionally NOT touched (its `default: continue` skips file parts
@@ -858,9 +856,8 @@ creates them):
   replaces the §5.2 placeholder for non-text mimes).
 - Run timeout flag (a max-turn-duration bound; v1 has none, upstream
   has none).
-- Neutral client package extraction (moving `internal/tui/client` out
-  from under `internal/tui/` so cmd owns it directly; v1 reuses it in
-  place — accepted, no purity violation).
+- Neutral client package extraction (DONE: `internal/tui/client` →
+  `internal/client/`; purity rule updated to allow `internal/client`).
 
 ## 12. Zero telemetry
 

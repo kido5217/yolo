@@ -1028,7 +1028,7 @@ flat files ignored; data dir shared.
 the scripted fake driver; zen fixture gate = 57 models (42 openai + 15 anthropic,
 7 google excluded).
 - TUI import rule: non-test files under `internal/tui/` import only `internal/protocol` +
-`internal/tui/*`; `_test.go` may use `internal/server/testutil` (escape hatch).
+`internal/client` + `internal/tui/*`; `_test.go` may use `internal/server/testutil` (escape hatch).
 - TUI transcript word-wrap (2026-08-24, bead `yolo-0ca`): the bubbles
 viewport hard-CLIPS over-width lines and the TUI binds no horizontal
 scroll, so pre-wrap the transcript lost everything past the right edge

@@ -8,8 +8,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/kido5217/yolo/internal/client"
 	"github.com/kido5217/yolo/internal/protocol"
-	"github.com/kido5217/yolo/internal/tui/client"
 )
 
 // testCommands mirrors the server's locked command set (T20).

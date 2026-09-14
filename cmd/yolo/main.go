@@ -24,11 +24,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/kido5217/yolo/internal/auth"
+	"github.com/kido5217/yolo/internal/client"
 	"github.com/kido5217/yolo/internal/config"
 	"github.com/kido5217/yolo/internal/log"
 	"github.com/kido5217/yolo/internal/server"
 	"github.com/kido5217/yolo/internal/tui"
-	"github.com/kido5217/yolo/internal/tui/client"
 	"github.com/kido5217/yolo/internal/tui/store"
 	"github.com/kido5217/yolo/internal/tui/theme"
 )

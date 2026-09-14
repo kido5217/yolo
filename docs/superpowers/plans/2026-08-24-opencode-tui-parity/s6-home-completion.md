@@ -414,7 +414,7 @@ import (
 
 	"charm.land/bubbletea/v2"
 	"github.com/kido5217/yolo/internal/tui/store"
-	"github.com/kido5217/yolo/internal/tui/client"
+	"github.com/kido5217/yolo/internal/client"
 	"github.com/kido5217/yolo/internal/server/testutil"
 )
 
@@ -920,7 +920,7 @@ import (
 	"github.com/kido5217/yolo/internal/server/testutil"
 	"github.com/kido5217/yolo/internal/tui/store"
 	"github.com/kido5217/yolo/internal/tui/theme"
-	"github.com/kido5217/yolo/internal/tui/client"
+	"github.com/kido5217/yolo/internal/client"
 )
 
 // TestTipsVisibilityMatrix pins the ported visibility (upstream

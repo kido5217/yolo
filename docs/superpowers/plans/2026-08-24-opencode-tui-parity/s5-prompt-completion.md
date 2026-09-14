@@ -318,7 +318,7 @@ import (
 	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/kido5217/yolo/internal/server/testutil"
-	"github.com/kido5217/yolo/internal/tui/client"
+	"github.com/kido5217/yolo/internal/client"
 	"github.com/kido5217/yolo/internal/tui/store"
 )
 
@@ -473,7 +473,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/kido5217/yolo/internal/tui/client"
+	"github.com/kido5217/yolo/internal/client"
 	"github.com/kido5217/yolo/internal/tui/store"
 	"github.com/kido5217/yolo/internal/tui/theme"
 )
@@ -648,7 +648,7 @@ import (
 	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/kido5217/yolo/internal/server/testutil"
-	"github.com/kido5217/yolo/internal/tui/client"
+	"github.com/kido5217/yolo/internal/client"
 	"github.com/kido5217/yolo/internal/tui/store"
 )
 
@@ -877,7 +877,7 @@ import (
 	"github.com/kido5217/yolo/internal/llm/fake"
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/server/testutil"
-	"github.com/kido5217/yolo/internal/tui/client"
+	"github.com/kido5217/yolo/internal/client"
 	"github.com/kido5217/yolo/internal/tui/store"
 )
 

@@ -9,9 +9,9 @@ not a contract (root principle 2; spec
 
 ## Ownership
 
-The 14 packages under `internal/`: `protocol`, `server`, `session`, `llm`,
+The 15 packages under `internal/`: `protocol`, `server`, `session`, `llm`,
 `provider`, `tool`, `permission`, `config`, `auth`, `storage`, `bus`, `glob`,
-`log`, `tui`.
+`log`, `client`, `tui`.
 
 Cross-cutting principles (zero telemetry, pinned text, TUI purity) stay
 owned by the root AGENTS.md; this doc owns the package map and per-boundary
@@ -50,6 +50,9 @@ contracts.
   - `auth` — key resolution: env → auth.json → config
   - `storage` — SQLite DAOs + migrations (`modernc.org/sqlite`, pure Go, no cgo)
   - `bus` — event bus
+  - `client` — neutral HTTP + SSE wire-contract client (moved from
+    `tui/client`; depended on by `cmd` and `tui` non-test files;
+    purity rule in `tui/imports_test.go` allows `internal/client`)
   - `glob`, `log` — path glob, slog-based leveled file logger (rotating `<dataDir>/log/yolo.log`, `YOLO_LOG_LEVEL`, opt-in `YOLO_PRINT_LOGS=1` stderr mirror; local-only, zero telemetry)
 - Zero telemetry (root principle 1): no OTEL/OTLP code, no telemetry-identity
   field anywhere in these packages; the config schema omits
