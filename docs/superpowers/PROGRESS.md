@@ -1003,6 +1003,15 @@ the narrow-terminal clip at 38 cols.
 `agent/agent.ts` (build/plan/yolo verbatim, Task 10).
 - Doom loop = sliding 3-identical window; wildcard-deny hides tool iff last matching rule
 is `*` deny; `write`+`edit` both map to permission `edit`.
+- Image attachments in `yolo run` (2026-09-14, bead `yolo-5m2`, deviation 327): an
+attached image file (a non-UTF-8 file whose extension maps to an image/* mime via
+`mime.TypeByExtension`; UTF-8 content is always `text/plain`) renders as a driver-native
+image block, NOT the `[Attached …]` placeholder (301's deferral): `llm.Message.Media`
+(`[]llm.MediaBlock{MIME,Data}`, bytes decoded from the stored data URL) → OpenAI content
+array `{"type":"image_url",…}` with the full `data:image/png;base64,…` URL, Anthropic
+`{"type":"image","source":{type base64, media_type, data}}`. Non-image non-text mimes
+keep the placeholder; text mimes keep the inline block. Media-less messages keep the
+plain string content wire shape (existing driver shape pins hold).
  - Pinned deps (2026-08-24 update, all allowlisted, gate green):
  `charm.land/bubbletea/v2` v2.0.9, `charm.land/lipgloss/v2` v2.0.6,
  `charm.land/bubbles/v2` v2.2.1, `modernc.org/sqlite` v1.57.0 (pure Go, no

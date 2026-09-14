@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -145,5 +146,50 @@ func TestAnthropicRequestShape(t *testing.T) {
 	}
 	if _, ok := tm["input_schema"].(map[string]any); !ok {
 		t.Fatalf("input_schema missing: %v", tm)
+	}
+}
+
+// TestAnthropicRequestShapeImage pins the media image block (bead
+// yolo-5m2): a user message with Media renders the content array with a
+// text block plus an image block whose source is base64-encoded; a
+// message WITHOUT media keeps the plain-string content (pinned by
+// TestAnthropicRequestShape).
+func TestAnthropicRequestShapeImage(t *testing.T) {
+	t.Parallel()
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		_, _ = w.Write([]byte("event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"))
+	}))
+	defer srv.Close()
+	png := []byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a}
+	stream(t, NewAnthropic(srv.Client()), Request{
+		Model: "claude", APIKey: "k", BaseURL: srv.URL,
+		Messages: []Message{{Role: RoleUser, Content: "what is this", Media: []MediaBlock{{MIME: "image/png", Data: png}}}},
+	})
+	msgs, _ := got["messages"].([]any)
+	if len(msgs) != 1 {
+		t.Fatalf("messages = %v", got["messages"])
+	}
+	m0 := msgs[0].(map[string]any)
+	if m0["role"] != "user" {
+		t.Fatalf("role = %v", m0["role"])
+	}
+	content, _ := m0["content"].([]any)
+	if len(content) != 2 { // text block + image block
+		t.Fatalf("content = %v", m0["content"])
+	}
+	tb := content[0].(map[string]any)
+	if tb["type"] != "text" || tb["text"] != "what is this" {
+		t.Fatalf("text block = %v", tb)
+	}
+	ib := content[1].(map[string]any)
+	if ib["type"] != "image" {
+		t.Fatalf("image block = %v", ib)
+	}
+	src := ib["source"].(map[string]any)
+	want := base64.StdEncoding.EncodeToString(png)
+	if src["type"] != "base64" || src["media_type"] != "image/png" || src["data"] != want {
+		t.Fatalf("source = %v", src)
 	}
 }

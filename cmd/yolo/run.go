@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -68,14 +69,24 @@ func resolveFiles(base string, paths []string) ([]protocol.FileRef, error) {
 		if err != nil {
 			return nil, fmt.Errorf("File not found: %s", p)
 		}
-		mime := "text/plain"
-		if !utf8.Valid(data) {
-			mime = "application/octet-stream"
+		// MIME classification (spec §11 follow-up, bead yolo-5m2): a known
+		// extension wins for binary content (an image/* mime later becomes a
+		// driver image block), UTF-8 text is always text/plain (the pinned
+		// data URL and inline-block format), and anything else stays the
+		// literal-attachment octet-stream fallback.
+		mimeType := "application/octet-stream"
+		if ext := filepath.Ext(abs); ext != "" {
+			if mt := mime.TypeByExtension(ext); mt != "" {
+				mimeType = mt
+			}
+		}
+		if utf8.Valid(data) {
+			mimeType = "text/plain"
 		}
 		out = append(out, protocol.FileRef{
-			MIME:     mime,
+			MIME:     mimeType,
 			Filename: filepath.Base(abs),
-			URL:      "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data),
+			URL:      "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(data),
 		})
 	}
 	return out, nil

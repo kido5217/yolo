@@ -175,6 +175,28 @@ func TestResolveFiles(t *testing.T) {
 			t.Fatalf("order = %+v", got)
 		}
 	})
+	t.Run("binary with a known image extension is image/png", func(t *testing.T) {
+		pic, err := filepath.Abs(filepath.Join("testdata", "1x1.png"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		png, err := os.ReadFile(pic)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := resolveFiles(base, []string{pic})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := protocol.FileRef{
+			MIME:     "image/png",
+			Filename: "1x1.png",
+			URL:      "data:image/png;base64," + base64.StdEncoding.EncodeToString(png),
+		}
+		if len(got) != 1 || got[0] != want {
+			t.Fatalf("ref = %+v, want %+v", got, want)
+		}
+	})
 }
 
 // TestRunPreflight pins the pre-boot legs (spec §2 order + §7.3 rows):
@@ -232,6 +254,27 @@ func TestRunCleanTurn(t *testing.T) {
 	}
 	if !strings.Contains(errOut, "> build · kido/q") {
 		t.Fatalf("stderr missing the header:\n%s", errOut)
+	}
+}
+
+// TestRunImageFile pins the image leg end to end (bead yolo-5m2):
+// in-process boot + fake driver + a real .png attachment resolve to
+// image/png and the run completes on the fake's "ok". The driver-received
+// Media block is proven at the session engine level
+// (TestSendImageFileBecomesMedia); here the cheap leg is exit 0 + the
+// pinned stdout.
+func TestRunImageFile(t *testing.T) {
+	_, wd := runEnv(t)
+	pic, err := filepath.Abs(filepath.Join("testdata", "1x1.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, out, errOut := captureRun(t, "run", "hi", "--dir", wd, "--file", pic)
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0 (stderr: %s)", code, errOut)
+	}
+	if want := "ok\n"; out != want {
+		t.Fatalf("stdout = %q, want %q", out, want)
 	}
 }
 

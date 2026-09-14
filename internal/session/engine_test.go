@@ -1,6 +1,7 @@
 package session_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -1029,5 +1030,59 @@ func TestSendFilesReplayFromStoredDataURL(t *testing.T) {
 	}
 	if !replayed {
 		t.Fatal("turn 2 history did not replay the inlined block from the stored data URL")
+	}
+}
+
+// TestSendImageFileBecomesMedia proves the driver receives the image as a
+// Media block (bead yolo-5m2): an image FileRef never reaches the user
+// content string (no placeholder, no inline block) — it travels as
+// llm.Message.Media on the shipped request, while a text file in the same
+// message still inlines normally.
+func TestSendImageFileBecomesMedia(t *testing.T) {
+	h := newHarness(t)
+	h.build(t)
+	d := t.TempDir()
+	png := []byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a}
+	h.drv.Turns = []fake.Turn{
+		{Parts: []llm.Part{{Kind: "text", Text: "ok", Finish: "stop", Usage: &llm.Usage{Input: 1, Output: 1}}}},
+	}
+	ses := h.startSession(t, d)
+	url := func(mime string, b []byte) string {
+		return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(b)
+	}
+	waitIdle(t, h, ses, func() {
+		if _, err := h.eng.Send(t.Context(), ses, "what is this",
+			[]protocol.FileRef{
+				{MIME: "image/png", Filename: "pic.png", URL: url("image/png", png)},
+				{MIME: "text/plain", Filename: "a.txt", URL: url("text/plain", []byte("hello"))},
+			}, nil); err != nil {
+			t.Fatalf("send: %v", err)
+		}
+	})
+	reqs := nonTitle(h.drv.Requests())
+	if len(reqs) != 1 {
+		t.Fatalf("rounds = %d, want 1", len(reqs))
+	}
+	found := false
+	for _, m := range reqs[0].Messages {
+		if m.Role != llm.RoleUser {
+			continue
+		}
+		found = true
+		if !strings.Contains(m.Content, "--- BEGIN FILE a.txt ---\nhello\n--- END FILE a.txt ---") {
+			t.Fatalf("text file must stay an inline block:\n%q", m.Content)
+		}
+		if strings.Contains(m.Content, "[Attached") {
+			t.Fatalf("image must not degrade to the placeholder:\n%q", m.Content)
+		}
+		if len(m.Media) != 1 {
+			t.Fatalf("media = %d blocks, want 1", len(m.Media))
+		}
+		if m.Media[0].MIME != "image/png" || !bytes.Equal(m.Media[0].Data, png) {
+			t.Fatalf("media = %+v", m.Media)
+		}
+	}
+	if !found {
+		t.Fatalf("user message missing:\n%+v", reqs[0].Messages)
 	}
 }

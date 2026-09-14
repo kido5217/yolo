@@ -3,6 +3,7 @@ package llm
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -77,9 +78,22 @@ func upstreamError(resp *http.Response) error {
 
 type oaMsg struct {
 	Role       string       `json:"role"`
-	Content    string       `json:"content"`
+	Content    any          `json:"content"`
 	ToolCallID string       `json:"tool_call_id,omitempty"`
 	ToolCalls  []oaToolCall `json:"tool_calls,omitempty"`
+}
+
+// oaContentBlock is the multi-part content element (bead yolo-5m2): a
+// plain string content keeps the pinned wire shape, while image
+// attachments render as text/image_url block arrays.
+type oaContentBlock struct {
+	Type     string      `json:"type"`
+	Text     string      `json:"text,omitempty"`
+	ImageURL *oaImageURL `json:"image_url,omitempty"`
+}
+
+type oaImageURL struct {
+	URL string `json:"url"`
 }
 
 type oaToolCall struct {
@@ -127,7 +141,24 @@ func oaRequest(req Request) oaReq {
 		Temperature:   req.Temperature,
 	}
 	for _, m := range req.Messages {
-		om := oaMsg{Role: string(m.Role), Content: m.Content, ToolCallID: m.ToolCallID}
+		om := oaMsg{Role: string(m.Role), ToolCallID: m.ToolCallID}
+		if len(m.Media) > 0 {
+			var blocks []any
+			if m.Content != "" {
+				blocks = append(blocks, oaContentBlock{Type: "text", Text: m.Content})
+			}
+			for _, b := range m.Media {
+				blocks = append(blocks, oaContentBlock{
+					Type: "image_url",
+					ImageURL: &oaImageURL{
+						URL: "data:" + b.MIME + ";base64," + base64.StdEncoding.EncodeToString(b.Data),
+					},
+				})
+			}
+			om.Content = blocks
+		} else {
+			om.Content = m.Content
+		}
 		for _, tc := range m.ToolCalls {
 			om.ToolCalls = append(om.ToolCalls, oaToolCall{
 				ID:       tc.ID,

@@ -1,10 +1,12 @@
 package session
 
 import (
+	"bytes"
 	"encoding/base64"
 	"testing"
 	"time"
 
+	"github.com/kido5217/yolo/internal/llm"
 	"github.com/kido5217/yolo/internal/protocol"
 )
 
@@ -121,23 +123,29 @@ func TestMapHistoryPinsLockedMapping(t *testing.T) {
 
 // TestUserContentBlocks pins the spec §5.2 rule: block format, the
 // placeholder, the blank-line joins, the no-files zero-change guarantee,
-// and the malformed-URL degradation.
+// and the malformed-URL degradation. Image mimes (spec §11 follow-up:
+// bead yolo-5m2) split off into llm.MediaBlock instead of a placeholder.
 func TestUserContentBlocks(t *testing.T) {
 	b64 := func(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
+	png := []byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a}
 	mk := func(filename, mime, url string) protocol.Part {
 		return protocol.Part{Type: protocol.PartTypeFile, Filename: filename, MIME: mime, URL: url}
 	}
 	text := func(s string) protocol.Part { return protocol.Part{Type: "text", Text: s} }
+	media := func(mime string, data []byte) llm.MediaBlock {
+		return llm.MediaBlock{MIME: mime, Data: data}
+	}
 	cases := []struct {
-		name  string
-		parts []protocol.Part
-		want  string
+		name      string
+		parts     []protocol.Part
+		want      string
+		wantMedia []llm.MediaBlock
 	}{
-		{"no files is joinTextParts", []protocol.Part{text("a"), text("b")}, "a\nb"},
+		{"no files is joinTextParts", []protocol.Part{text("a"), text("b")}, "a\nb", nil},
 		{"single file, no trailing newline", []protocol.Part{
 			mk("a.txt", "text/plain", "data:text/plain;base64,"+b64("hello")),
 			text("What do these say?"),
-		}, "--- BEGIN FILE a.txt ---\nhello\n--- END FILE a.txt ---\n\nWhat do these say?"},
+		}, "--- BEGIN FILE a.txt ---\nhello\n--- END FILE a.txt ---\n\nWhat do these say?", nil},
 		{"the spec §5.2 full example", []protocol.Part{
 			mk("a.txt", "text/plain", "data:text/plain;base64,"+b64("hello")),
 			mk("b.txt", "text/plain", "data:text/plain;base64,"+b64("world\n")),
@@ -145,18 +153,45 @@ func TestUserContentBlocks(t *testing.T) {
 			text("What do these say?"),
 		}, "--- BEGIN FILE a.txt ---\nhello\n--- END FILE a.txt ---\n\n" +
 			"--- BEGIN FILE b.txt ---\nworld\n--- END FILE b.txt ---\n\n" +
-			"[Attached application/octet-stream: bin.dat]\n\nWhat do these say?"},
+			"[Attached application/octet-stream: bin.dat]\n\nWhat do these say?", nil},
 		{"files only, no text", []protocol.Part{
 			mk("a.txt", "text/plain", "data:text/plain;base64,"+b64("hello")),
-		}, "--- BEGIN FILE a.txt ---\nhello\n--- END FILE a.txt ---"},
+		}, "--- BEGIN FILE a.txt ---\nhello\n--- END FILE a.txt ---", nil},
 		{"malformed data url degrades to the placeholder", []protocol.Part{
 			mk("a.txt", "text/plain", "data:text/plain;base64,!!!"),
-		}, "[Attached text/plain: a.txt]"},
+		}, "[Attached text/plain: a.txt]", nil},
+		{"image file becomes a Media block, no placeholder", []protocol.Part{
+			mk("pic.png", "image/png", "data:image/png;base64,"+base64.StdEncoding.EncodeToString(png)),
+			text("What is this?"),
+		}, "What is this?", []llm.MediaBlock{media("image/png", png)}},
+		{"image file only, no text", []protocol.Part{
+			mk("pic.png", "image/png", "data:image/png;base64,"+base64.StdEncoding.EncodeToString(png)),
+		}, "", []llm.MediaBlock{media("image/png", png)}},
+		{"malformed image data url degrades to the placeholder", []protocol.Part{
+			mk("pic.png", "image/png", "data:image/png;base64,!!!"),
+			text("x"),
+		}, "[Attached image/png: pic.png]\n\nx", nil},
+		{"text inline block plus image Media block", []protocol.Part{
+			mk("a.txt", "text/plain", "data:text/plain;base64,"+b64("hello")),
+			mk("pic.png", "image/png", "data:image/png;base64,"+base64.StdEncoding.EncodeToString(png)),
+			text("What"),
+		}, "--- BEGIN FILE a.txt ---\nhello\n--- END FILE a.txt ---\n\nWhat",
+			[]llm.MediaBlock{media("image/png", png)}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := userContent(c.parts); got != c.want {
+			got, gotMedia := userContent(c.parts)
+			if got != c.want {
 				t.Fatalf("userContent =\n%q\nwant\n%q", got, c.want)
+			}
+			if len(gotMedia) != len(c.wantMedia) {
+				t.Fatalf("media blocks = %d, want %d", len(gotMedia), len(c.wantMedia))
+			}
+			for i, wm := range c.wantMedia {
+				gm := gotMedia[i]
+				if gm.MIME != wm.MIME || !bytes.Equal(gm.Data, wm.Data) {
+					t.Fatalf("media[%d] = %+v, want %+v", i, gm, wm)
+				}
 			}
 		})
 	}

@@ -3,6 +3,7 @@ package llm
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -48,11 +49,21 @@ func (a *Anthropic) Stream(ctx context.Context, req Request) (PartStream, error)
 type anBlock struct {
 	Type      string          `json:"type"`
 	Text      string          `json:"text,omitempty"`
+	Source    *anImageSource  `json:"source,omitempty"`
 	ID        string          `json:"id,omitempty"`
 	Name      string          `json:"name,omitempty"`
 	Input     json.RawMessage `json:"input,omitempty"`
 	ToolUseID string          `json:"tool_use_id,omitempty"`
 	Content   string          `json:"content,omitempty"`
+}
+
+// anImageSource is the base64 image block source (bead yolo-5m2): an
+// image/* attachment renders as {"type":"image","source":{type base64,
+// media_type, data}} instead of a text placeholder.
+type anImageSource struct {
+	Type      string `json:"type"`
+	MediaType string `json:"media_type"`
+	Data      string `json:"data"`
 }
 
 type anMsg struct {
@@ -118,6 +129,23 @@ func toAnMsg(m Message) anMsg {
 		}
 		return anMsg{Role: "assistant", Content: m.Content}
 	default:
+		if len(m.Media) > 0 {
+			blocks := []anBlock{}
+			if m.Content != "" {
+				blocks = append(blocks, anBlock{Type: "text", Text: m.Content})
+			}
+			for _, b := range m.Media {
+				blocks = append(blocks, anBlock{
+					Type: "image",
+					Source: &anImageSource{
+						Type:      "base64",
+						MediaType: b.MIME,
+						Data:      base64.StdEncoding.EncodeToString(b.Data),
+					},
+				})
+			}
+			return anMsg{Role: string(m.Role), Content: blocks}
+		}
 		return anMsg{Role: string(m.Role), Content: m.Content}
 	}
 }
