@@ -48,11 +48,11 @@ func mapHistory(hist []protocol.MessageWithParts, agent string, sys []string) []
 	for i, mw := range hist {
 		switch mw.Info.Role {
 		case "user":
-			content := userContent(mw.Parts)
+			content, media := userContent(mw.Parts)
 			if i == lastUserIdx {
 				content = appendReminders(content, reminders)
 			}
-			out = append(out, llm.Message{Role: llm.RoleUser, Content: content})
+			out = append(out, llm.Message{Role: llm.RoleUser, Content: content, Media: media})
 		case "assistant":
 			var texts []string
 			var calls []llm.ToolCall
@@ -105,9 +105,13 @@ func joinTextParts(parts []protocol.Part) string {
 // §5.2): the file parts' inline blocks (or placeholder lines) joined with
 // blank lines, then the text parts, separated by one blank line. With no
 // file parts the result is joinTextParts' bytes — the zero-change
-// guarantee for every file-less session.
-func userContent(parts []protocol.Part) string {
+// guarantee for every file-less session. Image attachments (image/*
+// mimes, spec §11 follow-up — bead yolo-5m2) never inline: each decoded
+// raw data URL is returned as one llm.MediaBlock for the driver's native
+// image-block rendering.
+func userContent(parts []protocol.Part) (string, []llm.MediaBlock) {
 	var blocks []string
+	var media []llm.MediaBlock
 	for _, p := range parts {
 		if p.Type != protocol.PartTypeFile {
 			continue
@@ -118,16 +122,22 @@ func userContent(parts []protocol.Part) string {
 				continue
 			}
 		}
+		if strings.HasPrefix(p.MIME, "image/") {
+			if raw, ok := decodeDataURLBytes(p.URL); ok {
+				media = append(media, llm.MediaBlock{MIME: p.MIME, Data: raw})
+				continue
+			}
+		}
 		blocks = append(blocks, fmt.Sprintf("[Attached %s: %s]", p.MIME, p.Filename))
 	}
 	text := joinTextParts(parts)
 	if len(blocks) == 0 {
-		return text
+		return text, media
 	}
 	if text == "" {
-		return strings.Join(blocks, "\n\n")
+		return strings.Join(blocks, "\n\n"), media
 	}
-	return strings.Join(blocks, "\n\n") + "\n\n" + text
+	return strings.Join(blocks, "\n\n") + "\n\n" + text, media
 }
 
 // fileBlock is the inline block format pin (spec §5.2):
@@ -148,20 +158,28 @@ func fileBlock(filename, content string) string {
 // an invariant violation, since client and server both validate, never a
 // turn failure).
 func decodeDataURL(url string) (string, bool) {
+	raw, ok := decodeDataURLBytes(url)
+	return string(raw), ok
+}
+
+// decodeDataURLBytes decodes a data:<mime>;base64,<b64> URL's raw bytes
+// (the media branch of userContent — image data must stay bytes, not be
+// round-tripped through a string).
+func decodeDataURLBytes(url string) ([]byte, bool) {
 	const prefix = "data:"
 	if !strings.HasPrefix(url, prefix) {
-		return "", false
+		return nil, false
 	}
 	rest := url[len(prefix):]
 	comma := strings.IndexByte(rest, ',')
 	if comma < 0 || !strings.HasSuffix(rest[:comma], ";base64") {
-		return "", false
+		return nil, false
 	}
 	raw, err := base64.StdEncoding.DecodeString(rest[comma+1:])
 	if err != nil {
-		return "", false
+		return nil, false
 	}
-	return string(raw), true
+	return raw, true
 }
 
 func appendReminders(content string, reminders []string) string {

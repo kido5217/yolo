@@ -3,6 +3,7 @@ package llm
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -263,6 +264,68 @@ func TestOpenAIRequestShape(t *testing.T) {
 	fn := tools[0].(map[string]any)["function"].(map[string]any)
 	if fn["name"] != "read" {
 		t.Fatalf("fn = %v", fn)
+	}
+}
+
+// TestOpenAIRequestShapeMedia pins the media image_url block (bead
+// yolo-5m2): a non-empty user content renders a text block followed by an
+// image_url block carrying the full data URL; media-only renders just the
+// image block; a message WITHOUT media keeps the plain-string content.
+func TestOpenAIRequestShapeMedia(t *testing.T) {
+	t.Parallel()
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer srv.Close()
+	png := []byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a}
+	stream(t, NewOpenAI(srv.Client()), Request{
+		Model: "m", APIKey: "k", BaseURL: srv.URL,
+		Messages: []Message{{Role: RoleUser, Content: "describe", Media: []MediaBlock{{MIME: "image/png", Data: png}}}},
+	})
+	msgs, _ := got["messages"].([]any)
+	if len(msgs) != 1 {
+		t.Fatalf("messages = %v", got["messages"])
+	}
+	m0 := msgs[0].(map[string]any)
+	if m0["role"] != "user" {
+		t.Fatalf("msg0 = %v", m0)
+	}
+	content, _ := m0["content"].([]any)
+	if len(content) != 2 { // text block + image block
+		t.Fatalf("content = %v", m0["content"])
+	}
+	tb := content[0].(map[string]any)
+	if tb["type"] != "text" || tb["text"] != "describe" {
+		t.Fatalf("text block = %v", tb)
+	}
+	ib := content[1].(map[string]any)
+	if ib["type"] != "image_url" {
+		t.Fatalf("image block = %v", ib)
+	}
+	iu := ib["image_url"].(map[string]any)
+	want := "data:image/png;base64," + base64.StdEncoding.EncodeToString(png)
+	if iu["url"] != want {
+		t.Fatalf("image_url.url = %v, want %v", iu["url"], want)
+	}
+
+	// media-only: no text block, content is just the image block
+	got = nil
+	stream(t, NewOpenAI(srv.Client()), Request{
+		Model: "m", APIKey: "k", BaseURL: srv.URL,
+		Messages: []Message{{Role: RoleUser, Media: []MediaBlock{{MIME: "image/png", Data: png}}}},
+	})
+	msgs, _ = got["messages"].([]any)
+	m0 = msgs[0].(map[string]any)
+	content, _ = m0["content"].([]any)
+	if len(content) != 1 {
+		t.Fatalf("media-only content = %v", m0["content"])
+	}
+	ib = content[0].(map[string]any)
+	if ib["type"] != "image_url" {
+		t.Fatalf("media-only block = %v", ib)
 	}
 }
 

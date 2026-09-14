@@ -29,12 +29,22 @@ type ToolCall struct {
 	Args json.RawMessage `json:"args"` // raw JSON object
 }
 
+// MediaBlock is one attached media item of a user message. Image
+// attachments (image/* mimes) render as driver-native image blocks
+// (OpenAI image_url, Anthropic image source) instead of text; spec §11
+// follow-up (bead yolo-5m2).
+type MediaBlock struct {
+	MIME string
+	Data []byte
+}
+
 // Message is one chat message.
 type Message struct {
 	Role       Role
 	Content    string
-	ToolCallID string     // RoleTool
-	ToolCalls  []ToolCall // RoleAssistant
+	Media      []MediaBlock // RoleUser image attachments (driver image blocks)
+	ToolCallID string       // RoleTool
+	ToolCalls  []ToolCall   // RoleAssistant
 }
 
 // ToolDef describes a callable tool for the model.
