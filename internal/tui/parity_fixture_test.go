@@ -7,11 +7,13 @@
 package tui
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -92,7 +94,45 @@ func TestParityFixturesPinned(t *testing.T) {
 	}
 }
 
-// TestParityCannedConsistent pins the yolo-side Go canned constants
+// TestWhichKeyDistinctFromHome — the which-key fixture must never be a
+// byte-identical copy of home again (yolo-218): the S8.2 capture reaps the
+// held-leader overlay before the upstream 2s leader_timeout repaints home,
+// so the two fixtures differ. This pins that the committed fixture pair is
+// genuinely distinct, in the CI gate — if a capture ever regresses to
+// capturing home for which-key, this fails instead of silently pinning a
+// duplicate screen.
+func TestWhichKeyDistinctFromHome(t *testing.T) {
+	wk, err := os.ReadFile(filepath.Join("testdata", "parity", "upstream", "which-key.screen.json"))
+	if err != nil {
+		t.Fatalf("which-key.screen.json: %v (run the S8.2 capture first: just parity-capture)", err)
+	}
+	home, err := os.ReadFile(filepath.Join("testdata", "parity", "upstream", "home.screen.json"))
+	if err != nil {
+		t.Fatalf("home.screen.json: %v (run the S8.2 capture first: just parity-capture)", err)
+	}
+	if bytes.Equal(wk, home) {
+		t.Fatal("which-key.screen.json is byte-identical to home.screen.json — the held-leader overlay is not being captured (leader_timeout repaints home); recapture with the which-key settle in scripts/parity/capture.py")
+	}
+	var wkDoc map[string]json.RawMessage
+	if err := json.Unmarshal(wk, &wkDoc); err != nil {
+		t.Fatalf("which-key.screen.json: %v", err)
+	}
+	var homeDoc map[string]json.RawMessage
+	if err := json.Unmarshal(home, &homeDoc); err != nil {
+		t.Fatalf("home.screen.json: %v", err)
+	}
+	if wkRaw, ok := wkDoc["cells"]; ok {
+		if homeRaw, ok := homeDoc["cells"]; ok {
+			var wkCells, homeCells any
+			json.Unmarshal(wkRaw, &wkCells)
+			json.Unmarshal(homeRaw, &homeCells)
+			if reflect.DeepEqual(wkCells, homeCells) {
+				t.Fatal("which-key.cells equals home.cells — recapture the held-leader overlay via the SETTLES timing in scripts/parity/capture.py")
+			}
+		}
+	}
+}
+
 // (parity_test.go, S8.3) against the shared canned.json (the S8.1
 // mock's source) — a drift would surface as a false parity gap (D1).
 func TestParityCannedConsistent(t *testing.T) {
