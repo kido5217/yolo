@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kido5217/yolo/internal/client"
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/server/testutil"
-	"github.com/kido5217/yolo/internal/tui/client"
 )
 
 func TestClientScopingAndErrors(t *testing.T) {

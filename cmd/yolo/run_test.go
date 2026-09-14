@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kido5217/yolo/internal/client"
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/server"
 	"github.com/kido5217/yolo/internal/storage"
-	"github.com/kido5217/yolo/internal/tui/client"
 )
 
 // captureRun runs run(args) with stdout/stderr swapped for pipes and

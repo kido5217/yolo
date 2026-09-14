@@ -229,7 +229,7 @@ Pure HTTP/SSE client (imports only `internal/protocol` + its own client). Stack:
 
 **Root model state:**
 
-- `client` — small HTTP client for the Section-3 endpoints (`internal/tui/client`)
+- `client` — small HTTP client for the Section-3 endpoints (`internal/client`)
 - `store` — REST state snapshot (providers, config, sessions, current session + messages/parts, permissions) hydrated on route entry, then updated **only** via SSE (reader goroutine → `tea.Msg`, batched)
 - `route` — `home` | `session` (mirrors opencode's two routes)
 - `dialogs` — modal stack: model picker, agent picker, permission, help, quit-confirm

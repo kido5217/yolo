@@ -13,10 +13,11 @@ import (
 const internalPrefix = "github.com/kido5217/yolo/internal/"
 
 // TestImportsDirection guards TUI purity (AGENTS.md core principle 4):
-// non-test files under internal/tui/ import only internal/protocol and
-// internal/tui/* from within the module; _test.go files may additionally
-// use the test escape hatches (internal/server/testutil for the real-stack
-// blackbox suites, internal/llm{,/fake} for scripted fake turns).
+// non-test files under internal/tui/ import only internal/protocol,
+// internal/client and internal/tui/* from within the module; _test.go files
+// may additionally use the test escape hatches (internal/server/testutil
+// for the real-stack blackbox suites, internal/llm{,/fake} for scripted
+// fake turns).
 func TestImportsDirection(t *testing.T) {
 	var goFiles []string
 	err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
@@ -53,9 +54,9 @@ func TestImportsDirection(t *testing.T) {
 			if importAllowed(path, p) {
 				continue
 			}
-			rule := "non-test files: internal/protocol + internal/tui/*"
+			rule := "non-test files: internal/protocol + internal/client + internal/tui/*"
 			if isTest {
-				rule = "test files: internal/protocol + internal/tui/* + server/testutil + llm{,/fake}"
+				rule = "test files: internal/protocol + internal/client + internal/tui/* + server/testutil + llm{,/fake}"
 			}
 			t.Errorf("%s imports %q (rule: %s)", path, p, rule)
 		}
@@ -63,7 +64,8 @@ func TestImportsDirection(t *testing.T) {
 }
 
 func importAllowed(path, imp string) bool {
-	if imp == "github.com/kido5217/yolo/internal/protocol" {
+	if imp == "github.com/kido5217/yolo/internal/protocol" ||
+		imp == "github.com/kido5217/yolo/internal/client" {
 		return true
 	}
 	if strings.HasPrefix(imp, "github.com/kido5217/yolo/internal/tui") {

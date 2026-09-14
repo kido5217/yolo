@@ -18,9 +18,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/kido5217/yolo/internal/client"
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/server"
-	"github.com/kido5217/yolo/internal/tui/client"
 )
 
 // newRunCmd is the `yolo run` leaf (0.9.0): runs a prompt headlessly

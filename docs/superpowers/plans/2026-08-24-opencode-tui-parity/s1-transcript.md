@@ -804,7 +804,7 @@ import (
 	"github.com/kido5217/yolo/internal/llm/fake"
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/server/testutil"
-	"github.com/kido5217/yolo/internal/tui/client"
+	"github.com/kido5217/yolo/internal/client"
 	"github.com/kido5217/yolo/internal/tui/store"
 	"github.com/kido5217/yolo/internal/tui/theme"
 )
@@ -1655,7 +1655,7 @@ import (
 	"github.com/kido5217/yolo/internal/llm/fake"
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/server/testutil"
-	"github.com/kido5217/yolo/internal/tui/client"
+	"github.com/kido5217/yolo/internal/client"
 	"github.com/kido5217/yolo/internal/tui/store"
 	"github.com/kido5217/yolo/internal/tui/theme"
 )
@@ -2341,7 +2341,7 @@ import (
 
 	"github.com/kido5217/yolo/internal/protocol"
 	"github.com/kido5217/yolo/internal/server/testutil"
-	"github.com/kido5217/yolo/internal/tui/client"
+	"github.com/kido5217/yolo/internal/client"
 	"github.com/kido5217/yolo/internal/tui/store"
 	"github.com/kido5217/yolo/internal/tui/theme"
 )

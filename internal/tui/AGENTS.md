@@ -11,18 +11,20 @@ Everything under `internal/tui/`: the app and its concern files (app,
 attention, commands, deletefailed, destination, dialog, footer, frecency, home, huhdlg,
 hydrate, keymap, keys, locale, logo, mention, permission, prompt, providerdlg,
 rename, retrydlg, select, session, sessionsdlg, startup, statusdlg, style,
-themecmds, themedlg, tips, toast, view, whichkey, wrap), `client/` (HTTP + SSE client, backoff),
+themecmds, themedlg, tips, toast, view, whichkey, wrap),
 `store/` (display state), `theme/` (theme engine — 33 embedded upstream
 themes, resolution, system-theme generation, OSC palette detection, custom
 discovery, selection chain over the TUI-local KV file; TUI-local by root
 principle 4, all filesystem paths injected by cmd/yolo), `imports_test.go`,
-and the teatest suites.
+and the teatest suites. The HTTP + SSE client lives in `internal/client/`
+(wire-contract layer, neutral — not under `internal/tui/`).
 
 ## Local Contracts
 
 - Import purity (root principle 4, enforced by `TestImportsDirection` in
-  `imports_test.go`): non-test files import only `internal/protocol` and
-  `internal/tui/*` from within the module. `_test.go` may additionally
+  `imports_test.go`): non-test files import only `internal/protocol`,
+  `internal/client` (the neutral wire-contract client) and `internal/tui/*`
+  from within the module. `_test.go` may additionally
   import `internal/server/testutil` (real-stack blackbox suites) and
   `internal/llm` / `internal/llm/fake` (scripted fake turns).
 - V1 behavior pins (PROGRESS.md "Key verified facts"): keymap is pgup/pgdn

@@ -22,6 +22,7 @@ import (
 
 	"github.com/kido5217/yolo/internal/auth"
 	"github.com/kido5217/yolo/internal/bus"
+	"github.com/kido5217/yolo/internal/client"
 	"github.com/kido5217/yolo/internal/config"
 	"github.com/kido5217/yolo/internal/llm"
 	"github.com/kido5217/yolo/internal/log"
@@ -32,7 +33,6 @@ import (
 	"github.com/kido5217/yolo/internal/session"
 	"github.com/kido5217/yolo/internal/storage"
 	"github.com/kido5217/yolo/internal/tool"
-	"github.com/kido5217/yolo/internal/tui/client"
 )
 
 var (
