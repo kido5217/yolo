@@ -170,7 +170,12 @@ SURFACES = [
         "which-key",
         (80, 24),
         "text",
-        [("wait", 8.0), ("keys", b"\x18", "leader held"), ("wait", 3.0)],
+        # the leader overlay (ctrl+x held) is transient: upstream's
+        # leader_timeout defaults to 2000ms, after which the app repaints
+        # home over it. Reap the pty BEFORE that fires — post-key wait plus
+        # the final settle below must stay under ~2.0s — so the replayed
+        # stream converges on the which-key overlay, not home (yolo-218).
+        [("wait", 8.0), ("keys", b"\x18", "leader held"), ("wait", 0.5)],
     ),
     ("sidebar", (140, 30), "todo", _turn()),
     (
@@ -192,6 +197,14 @@ SURFACES = [
         _turn() + [("keys", b"\x03", "ctrl+c exit"), ("wait", 4.0)],
     ),
 ]
+
+
+SETTLES = {
+    # the which-key overlay is transient: the upstream leader_timeout (2s)
+    # repaints home over it, so the final settle must stay under ~1.5s to
+    # reap the pty while the held-leader overlay is still on screen.
+    "which-key": 1.0,
+}
 
 
 def sha256(path):
@@ -297,7 +310,7 @@ def reap(pid, fd):
         pass
 
 
-def run_pty(cols, rows, steps, rundir):
+def run_pty(cols, rows, steps, rundir, settle=2.0):
     proj = os.path.join(rundir, "proj")
     pid, fd = pty.fork()
     if pid == 0:
@@ -314,12 +327,12 @@ def run_pty(cols, rows, steps, rundir):
             pump(fd, step[1], raw)
         elif step[0] == "keys":
             os.write(fd, step[1])
-    pump(fd, 2.0, raw)  # the final settle
+    pump(fd, settle, raw)  # the final settle
     reap(pid, fd)
     return bytes(raw)
 
 
-def run_once(cols, rows, steps, turn):
+def run_once(cols, rows, steps, turn, settle=2.0):
     # the FRESH hermetic HOME + project scratch the docstring promises
     # (deviation 254): the pinned fixed rundir leaked the previous run's
     # sessions into the next one (D5 double-run mismatch).
@@ -329,7 +342,7 @@ def run_once(cols, rows, steps, turn):
     mock, port = start_mock(turn)
     try:
         write_project(rundir, port)
-        raw = run_pty(cols, rows, steps, rundir)
+        raw = run_pty(cols, rows, steps, rundir, settle)
     finally:
         mock.kill()
         mock.wait()
@@ -346,11 +359,11 @@ def expand(steps, prompt):
     ]
 
 
-def capture_surface(name, size, steps, turn, prompt):
+def capture_surface(name, size, steps, turn, prompt, settle=2.0):
     """The D5 double-run: two fresh pty runs must normalize identically."""
     st = expand(steps, prompt)
-    a = normalize.screen(run_once(size[0], size[1], st, turn), size[0], size[1])
-    b = normalize.screen(run_once(size[0], size[1], st, turn), size[0], size[1])
+    a = normalize.screen(run_once(size[0], size[1], st, turn, settle), size[0], size[1])
+    b = normalize.screen(run_once(size[0], size[1], st, turn, settle), size[0], size[1])
     if a != b:
         ka = set(a["cells"])
         kb = set(b["cells"])
@@ -374,10 +387,20 @@ def main():
     else:
         man = {"npm_version": NPM_VERSION, "surfaces": []}
     changed = []
+    blobs = {}
     for name, size, turn, steps in SURFACES:
         prompt = book[turn]["prompt"]
-        screen = capture_surface(name, size, steps, turn, prompt)
+        screen = capture_surface(
+            name, size, steps, turn, prompt, SETTLES.get(name, 2.0)
+        )
         blob = json.dumps(screen, sort_keys=True, separators=(",", ":")).encode()
+        if name == "which-key" and blobs.get("home") == blob:
+            raise SystemExit(
+                "FAIL: which-key still captured home — the held leader "
+                "overlay is not surviving the capture window. Re-tune the "
+                "which-key settle in SETTLES / the step timing."
+            )
+        blobs[name] = blob
         path = os.path.join(UPSTREAM, "%s.screen.json" % name)
         old = open(path, "rb").read() if os.path.exists(path) else None
         if old != blob:
